@@ -223,12 +223,13 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
     }
 
     // =========================================================================
-    // 5. RETREAT THREATENED PIECES
+    // 5. RETREAT THREATENED PIECES (or counter-capture the attacker)
     //    Non-king pieces sitting on enemy-threatened squares are at risk of
     //    being captured for free. Evaluate each one:
     //      - Find the cheapest enemy attacker that can reach our piece.
     //      - If undefended, or if the cheapest attacker is cheaper than us,
-    //        retreat the piece to the best safe square.
+    //        try to: (a) retreat to a safe square, (b) capture the attacker
+    //        with a DIFFERENT friendly piece, or (c) interpose a cheap piece.
     //    Prioritize by piece value (save the most valuable first).
     // =========================================================================
     {
@@ -236,6 +237,8 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
             int pieceId;
             float value;
             sf::Vector2i pos;
+            int cheapestAttackerId = -1; // enemy piece that threatens us most cheaply
+            float cheapestAttackerValue = 99999.0f;
         };
         std::vector<ThreatenedInfo> threatened;
 
@@ -250,13 +253,17 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
 
             // Find cheapest enemy attacker that can reach this square
             float cheapestAttacker = 99999.0f;
+            int cheapestAttackerId = -1;
             for (const auto& [enemyId, moves] : ctx.enemyMoves) {
                 for (const auto& m : moves) {
                     if (m == piece.position) {
                         const Piece* ep = enemy.getPieceById(enemyId);
                         if (ep) {
                             float av = AITacticalEngine::pieceValue(ep->type);
-                            cheapestAttacker = std::min(cheapestAttacker, av);
+                            if (av < cheapestAttacker) {
+                                cheapestAttacker = av;
+                                cheapestAttackerId = enemyId;
+                            }
                         }
                         break; // this enemy piece can reach us, check next enemy
                     }
@@ -276,7 +283,8 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
             }
 
             if (atRisk) {
-                threatened.push_back({piece.id, myVal, piece.position});
+                threatened.push_back({piece.id, myVal, piece.position,
+                                      cheapestAttackerId, cheapestAttacker});
             }
         }
 
@@ -337,6 +345,52 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
                               << ") to (" << bestRetreat.x << "," << bestRetreat.y << ")" << std::endl;
                     commands.push_back(makeMoveCmd(t.pieceId, p->position, bestRetreat));
                     return commands;
+                }
+            }
+
+            // Retreat failed (no safe square). Try counter-capture:
+            // Can a DIFFERENT friendly piece safely capture the attacker?
+            if (t.cheapestAttackerId >= 0) {
+                const Piece* attacker = enemy.getPieceById(t.cheapestAttackerId);
+                if (attacker) {
+                    sf::Vector2i attackerPos = attacker->position;
+                    float bestCounterScore = -std::numeric_limits<float>::max();
+                    int bestCounterId = -1;
+                    sf::Vector2i bestCounterFrom = {0, 0};
+
+                    for (const auto& [friendId, friendMoves] : ctx.selfMoves) {
+                        if (friendId == t.pieceId) continue; // can't counter with the threatened piece itself
+                        const Piece* fp = self.getPieceById(friendId);
+                        if (!fp || fp->type == PieceType::King) continue;
+
+                        for (const auto& fm : friendMoves) {
+                            if (fm != attackerPos) continue; // can't reach the attacker
+                            // Check if the counter-capture square is safe after capture
+                            // (enemy threats minus the attacker itself; approximate)
+                            float counterVal = AITacticalEngine::pieceValue(fp->type);
+                            float capturedVal = t.cheapestAttackerValue;
+                            // Only counter if we don't lose material:
+                            // safe trade or winning trade
+                            bool counterSafe = !ctx.enemyThreats.isSet(attackerPos) ||
+                                               capturedVal >= counterVal;
+                            if (!counterSafe) continue;
+
+                            float score = capturedVal - counterVal * 0.1f;
+                            if (score > bestCounterScore) {
+                                bestCounterScore = score;
+                                bestCounterId = friendId;
+                                bestCounterFrom = fp->position;
+                            }
+                        }
+                    }
+
+                    if (bestCounterId >= 0) {
+                        std::cerr << "    [Move] COUNTER-CAPTURE: piece " << bestCounterId
+                                  << " captures attacker at (" << attackerPos.x << "," << attackerPos.y
+                                  << ") to protect piece " << t.pieceId << std::endl;
+                        commands.push_back(makeMoveCmd(bestCounterId, bestCounterFrom, attackerPos));
+                        return commands;
+                    }
                 }
             }
         }
@@ -542,18 +596,23 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
                 continue;
             }
 
+            // If this piece is currently under threat and retreat section
+            // couldn't save it, don't advance it further into danger.
+            if (ctx.enemyThreats.isSet(piece.position)) {
+                std::cerr << "    [Move] Piece " << piece.id << " already threatened, skip advance" << std::endl;
+                continue;
+            }
+
             auto it = ctx.selfMoves.find(piece.id);
             if (it == ctx.selfMoves.end()) continue;
 
             for (const auto& move : it->second) {
                 bool safe = engine.isMoveSafe(move, ctx);
-                if (!safe) {
-                    bool attackMode = (phase == AIPhase::AGGRESSION || phase == AIPhase::MID_GAME
-                                       || phase == AIPhase::ENDGAME);
-                    bool strongPiece = (piece.type == PieceType::Knight || piece.type == PieceType::Bishop
-                                        || piece.type == PieceType::Rook || piece.type == PieceType::Queen);
-                    if (!attackMode || !strongPiece) continue;
-                }
+                // NEVER advance to a threatened square — piece will be
+                // captured for free. Tactical captures (section 3) already
+                // handle profitable trades; the advance section is purely
+                // positional and must stay safe.
+                if (!safe) continue;
 
                 float dx = static_cast<float>(move.x - targetPos.x);
                 float dy = static_cast<float>(move.y - targetPos.y);
@@ -609,7 +668,6 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
                 // Prefer strong pieces + pieces already near enemy
                 score += AITacticalEngine::pieceValue(piece.type) * 0.01f;
                 score += std::max(0.0f, 50.0f - currentDist) * 0.5f;
-                if (!safe) score -= 15.0f;
 
                 // === LOOP DETECTION PENALTY ===
                 // Check global move history — penalize any (piece, dest) that
