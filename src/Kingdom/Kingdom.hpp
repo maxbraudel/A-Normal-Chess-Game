@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <deque>
 #include <SFML/System/Vector2.hpp>
 #include "Kingdom/KingdomId.hpp"
 #include "Units/Piece.hpp"
@@ -9,7 +10,7 @@ class Kingdom {
 public:
     KingdomId id;
     int gold;
-    std::vector<Piece> pieces;
+    std::deque<Piece> pieces;
     std::vector<Building> buildings;
 
     Kingdom();

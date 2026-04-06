@@ -71,6 +71,7 @@ std::vector<TurnCommand> AIStrategyEcon::decide(const Board& board, Kingdom& sel
             TurnCommand cmd;
             cmd.type = TurnCommand::Move;
             cmd.pieceId = bestPiece->id;
+            cmd.origin = bestPiece->position;
             cmd.destination = bestTarget;
             commands.push_back(cmd);
         }

@@ -120,7 +120,7 @@ void Renderer::drawPieces(sf::RenderWindow& window, const Camera& camera,
                             const Kingdom& white, const Kingdom& black) {
     if (!m_assets) return;
 
-    auto drawPieceList = [&](const std::vector<Piece>& pieces) {
+    auto drawPieceList = [&](const std::deque<Piece>& pieces) {
         for (const auto& piece : pieces) {
             sf::Sprite sprite;
             sprite.setTexture(m_assets->getPieceTexture(piece.type, piece.kingdom));

@@ -41,6 +41,7 @@ std::vector<TurnCommand> AIStrategyMove::decide(const Board& board, Kingdom& sel
                 TurnCommand cmd;
                 cmd.type = TurnCommand::Move;
                 cmd.pieceId = king->id;
+                cmd.origin = king->position;
                 cmd.destination = move;
                 commands.push_back(cmd);
                 return commands;
@@ -52,6 +53,7 @@ std::vector<TurnCommand> AIStrategyMove::decide(const Board& board, Kingdom& sel
             TurnCommand cmd;
             cmd.type = TurnCommand::Move;
             cmd.pieceId = king->id;
+            cmd.origin = king->position;
             cmd.destination = kingMoves[0];
             commands.push_back(cmd);
             return commands;
@@ -80,9 +82,11 @@ std::vector<TurnCommand> AIStrategyMove::decide(const Board& board, Kingdom& sel
 
     if (bestAttackValue >= aiConfig.attackPriority * 3.0f &&
         static_cast<int>(self.pieces.size()) >= aiConfig.minPiecesBeforeAttack) {
+        Piece* atkPiece = self.getPieceById(bestAttackPieceId);
         TurnCommand cmd;
         cmd.type = TurnCommand::Move;
         cmd.pieceId = bestAttackPieceId;
+        cmd.origin = atkPiece ? atkPiece->position : sf::Vector2i{0,0};
         cmd.destination = bestAttackTarget;
         commands.push_back(cmd);
         return commands;
@@ -112,6 +116,7 @@ std::vector<TurnCommand> AIStrategyMove::decide(const Board& board, Kingdom& sel
                 TurnCommand cmd;
                 cmd.type = TurnCommand::Move;
                 cmd.pieceId = king->id;
+                cmd.origin = king->position;
                 cmd.destination = bestSafe;
                 commands.push_back(cmd);
                 return commands;
@@ -160,9 +165,11 @@ std::vector<TurnCommand> AIStrategyMove::decide(const Board& board, Kingdom& sel
         }
 
         if (bestPieceId >= 0 && bestDist < 20.0f) {
+            Piece* movPiece = self.getPieceById(bestPieceId);
             TurnCommand cmd;
             cmd.type = TurnCommand::Move;
             cmd.pieceId = bestPieceId;
+            cmd.origin = movPiece ? movPiece->position : sf::Vector2i{0,0};
             cmd.destination = bestMove;
             commands.push_back(cmd);
             return commands;
@@ -194,9 +201,11 @@ std::vector<TurnCommand> AIStrategyMove::decide(const Board& board, Kingdom& sel
         }
 
         if (bestPieceId >= 0) {
+            Piece* advPiece = self.getPieceById(bestPieceId);
             TurnCommand cmd;
             cmd.type = TurnCommand::Move;
             cmd.pieceId = bestPieceId;
+            cmd.origin = advPiece ? advPiece->position : sf::Vector2i{0,0};
             cmd.destination = bestMove;
             commands.push_back(cmd);
             return commands;

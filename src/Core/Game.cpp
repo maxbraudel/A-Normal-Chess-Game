@@ -244,6 +244,16 @@ void Game::loadGame(const std::string& saveName) {
 
     m_publicBuildings = data.publicBuildings;
 
+    // Sync board cell piece pointers (pieces stored in kingdom, board needs raw ptrs)
+    for (auto& p : m_whiteKingdom.pieces) {
+        if (m_board.isInBounds(p.position.x, p.position.y))
+            m_board.getCell(p.position.x, p.position.y).piece = &p;
+    }
+    for (auto& p : m_blackKingdom.pieces) {
+        if (m_board.isInBounds(p.position.x, p.position.y))
+            m_board.getCell(p.position.x, p.position.y).piece = &p;
+    }
+
     // Restore turn system
     m_turnSystem = TurnSystem();
     m_turnSystem.setActiveKingdom(data.activeKingdom);
@@ -285,12 +295,12 @@ void Game::saveGame() {
 
     data.whiteKingdom.id = KingdomId::White;
     data.whiteKingdom.gold = m_whiteKingdom.gold;
-    data.whiteKingdom.pieces = m_whiteKingdom.pieces;
+    data.whiteKingdom.pieces.assign(m_whiteKingdom.pieces.begin(), m_whiteKingdom.pieces.end());
     data.whiteKingdom.buildings = m_whiteKingdom.buildings;
 
     data.blackKingdom.id = KingdomId::Black;
     data.blackKingdom.gold = m_blackKingdom.gold;
-    data.blackKingdom.pieces = m_blackKingdom.pieces;
+    data.blackKingdom.pieces.assign(m_blackKingdom.pieces.begin(), m_blackKingdom.pieces.end());
     data.blackKingdom.buildings = m_blackKingdom.buildings;
 
     data.publicBuildings = m_publicBuildings;
