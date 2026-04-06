@@ -1,10 +1,17 @@
 #pragma once
-#include <SFML/Graphics.hpp>
+#include "Core/LiveResizeRenderWindow.hpp"
 #include <TGUI/Backend/SFML-Graphics.hpp>
 #include <TGUI/AllWidgets.hpp>
 #include <array>
 #include <vector>
 #include <string>
+
+#ifdef _WIN32
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
 
 #include "Core/GameState.hpp"
 #include "Core/GameClock.hpp"
@@ -28,6 +35,10 @@
 
 enum class ControllerType { Human, AI };
 
+#ifdef _WIN32
+LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
+#endif
+
 class Game {
 public:
     Game();
@@ -38,6 +49,7 @@ private:
     void handleInput();
     void update();
     void render();
+    void handleWindowResize(sf::Vector2u newSize);
 
     void startNewGame(const std::string& gameName);
     void loadGame(const std::string& saveName);
@@ -47,6 +59,12 @@ private:
 
     void setupUICallbacks();
     void updateUIState();
+
+#ifdef _WIN32
+    friend LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
+    void installWindowProcHook();
+    void handleNativeResize(sf::Vector2u newSize);
+#endif
 
     // ---- Kingdom helpers (generic, side-agnostic) ----
     Kingdom&       kingdom(KingdomId id)       { return m_kingdoms[kingdomIndex(id)]; }
@@ -65,8 +83,10 @@ private:
     KingdomId humanKingdomId() const;
 
     // SFML / TGUI
-    sf::RenderWindow m_window;
+    LiveResizeRenderWindow m_window;
     tgui::Gui m_gui;
+    sf::View m_hudView;
+    sf::Vector2u m_windowSize{1280u, 720u};
 
     // State
     GameState m_state;
@@ -99,4 +119,9 @@ private:
     AssetManager m_assets;
     UIManager m_uiManager;
     SaveManager m_saveManager;
+
+#ifdef _WIN32
+    WNDPROC m_originalWndProc = nullptr;
+    bool m_isInNativeSizeMove = false;
+#endif
 };

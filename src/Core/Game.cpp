@@ -7,6 +7,52 @@
 #include <iostream>
 #include <ctime>
 
+#ifdef _WIN32
+namespace {
+Game* s_windowProcGame = nullptr;
+}
+
+LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    if (message == WM_ERASEBKGND && s_windowProcGame && s_windowProcGame->m_isInNativeSizeMove) {
+        return 1;
+    }
+
+    if (!s_windowProcGame || !s_windowProcGame->m_originalWndProc) {
+        return DefWindowProc(hwnd, message, wParam, lParam);
+    }
+
+    const LRESULT result = CallWindowProc(s_windowProcGame->m_originalWndProc,
+                                          hwnd, message, wParam, lParam);
+
+    switch (message) {
+        case WM_ENTERSIZEMOVE:
+            s_windowProcGame->m_isInNativeSizeMove = true;
+            break;
+
+        case WM_EXITSIZEMOVE:
+            s_windowProcGame->m_isInNativeSizeMove = false;
+            break;
+
+        case WM_SIZE:
+            if (wParam != SIZE_MINIMIZED) {
+                const sf::Vector2u newSize(static_cast<unsigned int>(LOWORD(lParam)),
+                                           static_cast<unsigned int>(HIWORD(lParam)));
+                s_windowProcGame->handleNativeResize(newSize);
+
+                if (s_windowProcGame->m_isInNativeSizeMove && s_windowProcGame->m_window.isOpen()) {
+                    s_windowProcGame->render();
+                }
+            }
+            break;
+
+        default:
+            break;
+    }
+
+    return result;
+}
+#endif
+
 Game::Game()
     : m_state(GameState::MainMenu),
       m_kingdoms{Kingdom(KingdomId::White), Kingdom(KingdomId::Black)},
@@ -24,6 +70,13 @@ void Game::run() {
     while (m_window.isOpen()) {
         m_clock.update();
         handleInput();
+
+#ifdef _WIN32
+        if (m_isInNativeSizeMove) {
+            continue;
+        }
+#endif
+
         update();
         render();
     }
@@ -38,6 +91,11 @@ void Game::init() {
     // Create window
     m_window.create(sf::VideoMode(1280, 720), "A Normal Chess Game", sf::Style::Default);
     m_window.setFramerateLimit(60);
+    m_windowSize = m_window.getSize();
+
+#ifdef _WIN32
+    installWindowProcHook();
+#endif
 
     m_gui.setTarget(m_window);
 
@@ -49,6 +107,7 @@ void Game::init() {
 
     // Init camera
     m_camera.init(m_window);
+    handleWindowResize(m_windowSize);
 
     // Init UI
     m_uiManager.init(m_gui, m_assets);
@@ -58,6 +117,32 @@ void Game::init() {
     m_state = GameState::MainMenu;
     m_uiManager.showMainMenu();
 }
+
+void Game::handleWindowResize(sf::Vector2u newSize) {
+    if (newSize.x == 0 || newSize.y == 0) {
+        return;
+    }
+
+    m_windowSize = newSize;
+    m_window.forceResizeCache(newSize);
+    m_camera.handleWindowResize(newSize);
+
+    m_hudView = sf::View(sf::FloatRect(0.f, 0.f,
+        static_cast<float>(newSize.x), static_cast<float>(newSize.y)));
+}
+
+#ifdef _WIN32
+void Game::installWindowProcHook() {
+    s_windowProcGame = this;
+    const HWND hwnd = m_window.getSystemHandle();
+    m_originalWndProc = reinterpret_cast<WNDPROC>(
+        SetWindowLongPtr(hwnd, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(GameWindowProc)));
+}
+
+void Game::handleNativeResize(sf::Vector2u newSize) {
+    handleWindowResize(newSize);
+}
+#endif
 
 void Game::handleInput() {
     sf::Event event;
@@ -70,11 +155,8 @@ void Game::handleInput() {
         }
 
         if (event.type == sf::Event::Resized) {
-            const sf::Vector2u newSize(event.size.width, event.size.height);
-            m_window.setView(sf::View(sf::FloatRect(0.f, 0.f,
-                static_cast<float>(event.size.width),
-                static_cast<float>(event.size.height))));
-            m_camera.handleWindowResize(newSize);
+            sf::Vector2u newSize(event.size.width, event.size.height);
+            handleWindowResize(newSize);
             continue;
         }
 
@@ -163,7 +245,8 @@ void Game::render() {
         if (m_input.getCurrentTool() == ToolState::Select) {
             if (m_input.getSelectedPiece()) {
                 m_renderer.getOverlay().drawSelectedPieceMarker(m_window, m_camera,
-                    m_input.getSelectedPiece()->position, m_config.getCellSizePx());
+                    m_hudView, m_windowSize, m_input.getSelectedPiece()->position,
+                    m_config.getCellSizePx());
                 m_renderer.getOverlay().drawReachableCells(m_window, m_camera,
                     m_input.getValidMoves(), m_config.getCellSizePx());
                 // Show red overlay on king moves that are under enemy threat
@@ -188,15 +271,12 @@ void Game::render() {
             m_renderer.getOverlay().drawBuildPreview(m_window, m_camera,
                 m_input.getBuildPreviewOrigin(), bw, bh, m_config.getCellSizePx(), valid);
         }
-        m_renderer.getOverlay().drawZoneIndicators(m_window, m_camera, m_board,
+        m_renderer.getOverlay().drawZoneIndicators(m_window, m_camera, m_hudView,
+            m_windowSize, m_board,
             m_publicBuildings, m_kingdoms, m_config.getCellSizePx(), m_assets);
-
-        // Reset to a screen-space view matching the current window size for GUI
-        const sf::Vector2u windowSize = m_window.getSize();
-        m_window.setView(sf::View(sf::FloatRect(0.f, 0.f,
-            static_cast<float>(windowSize.x), static_cast<float>(windowSize.y))));
     }
 
+    m_window.setView(m_hudView);
     m_gui.draw();
     m_window.display();
 }

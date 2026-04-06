@@ -52,6 +52,22 @@ sf::Vector2f Camera::worldToScreen(sf::Vector2f worldPos, const sf::RenderWindow
     return sf::Vector2f(static_cast<float>(px.x), static_cast<float>(px.y));
 }
 
+sf::Vector2f Camera::worldToScreen(sf::Vector2f worldPos, sf::Vector2u windowSize) const {
+    if (windowSize.x == 0 || windowSize.y == 0) {
+        return {0.f, 0.f};
+    }
+
+    const sf::Vector2f center = m_view.getCenter();
+    const sf::Vector2f size = m_view.getSize();
+    const float normalizedX = (worldPos.x - (center.x - size.x * 0.5f)) / size.x;
+    const float normalizedY = (worldPos.y - (center.y - size.y * 0.5f)) / size.y;
+
+    return {
+        normalizedX * static_cast<float>(windowSize.x),
+        normalizedY * static_cast<float>(windowSize.y)
+    };
+}
+
 sf::Vector2i Camera::worldToCell(sf::Vector2f worldPos, int cellSize) const {
     int cx = static_cast<int>(worldPos.x) / cellSize;
     int cy = static_cast<int>(worldPos.y) / cellSize;

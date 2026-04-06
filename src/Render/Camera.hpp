@@ -17,6 +17,7 @@ public:
     sf::FloatRect getViewBounds() const;
     sf::Vector2f screenToWorld(sf::Vector2i screenPos, const sf::RenderWindow& window) const;
     sf::Vector2f worldToScreen(sf::Vector2f worldPos, const sf::RenderWindow& window) const;
+    sf::Vector2f worldToScreen(sf::Vector2f worldPos, sf::Vector2u windowSize) const;
     sf::Vector2i worldToCell(sf::Vector2f worldPos, int cellSize) const;
 
     float getZoomLevel() const;

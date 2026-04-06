@@ -9,12 +9,13 @@
 #include "Assets/AssetManager.hpp"
 
 void OverlayRenderer::drawSelectedPieceMarker(sf::RenderWindow& window, const Camera& camera,
+                                                const sf::View& hudView, sf::Vector2u windowSize,
                                                 sf::Vector2i piecePos, int cellSize) {
     static constexpr float DOT_RADIUS = 6.f;
 
     const float worldX = static_cast<float>(piecePos.x * cellSize + cellSize / 2);
     const float worldY = static_cast<float>(piecePos.y * cellSize) - 10.f;
-    const sf::Vector2f screenPos = camera.worldToScreen({worldX, worldY}, window);
+    const sf::Vector2f screenPos = camera.worldToScreen({worldX, worldY}, windowSize);
 
     sf::CircleShape dot(DOT_RADIUS);
     dot.setFillColor(sf::Color(80, 160, 255, 230));
@@ -23,9 +24,7 @@ void OverlayRenderer::drawSelectedPieceMarker(sf::RenderWindow& window, const Ca
     dot.setPosition(screenPos.x - DOT_RADIUS, screenPos.y - DOT_RADIUS);
 
     const sf::View savedView = window.getView();
-    const sf::Vector2u windowSize = window.getSize();
-    window.setView(sf::View(sf::FloatRect(0.f, 0.f,
-        static_cast<float>(windowSize.x), static_cast<float>(windowSize.y))));
+    window.setView(hudView);
     window.draw(dot);
     window.setView(savedView);
 }
@@ -75,6 +74,7 @@ void OverlayRenderer::drawBuildPreview(sf::RenderWindow& window, const Camera& c
 }
 
 void OverlayRenderer::drawZoneIndicators(sf::RenderWindow& window, const Camera& camera,
+                                           const sf::View& hudView, sf::Vector2u windowSize,
                                            const Board& board, const std::vector<Building>& publicBuildings,
                                            const std::array<Kingdom, kNumKingdoms>& kingdoms,
                                            int cellSize, const AssetManager& assets) {
@@ -108,7 +108,7 @@ void OverlayRenderer::drawZoneIndicators(sf::RenderWindow& window, const Camera&
         float worldY = static_cast<float>(building.origin.y * cellSize - cellSize / 2);
 
         // Convert that world point to screen pixels (respects camera pan + zoom)
-        sf::Vector2f screenPos = camera.worldToScreen({worldX, worldY}, window);
+        sf::Vector2f screenPos = camera.worldToScreen({worldX, worldY}, windowSize);
 
         // Pick texture
         const sf::Texture* tex = nullptr;
@@ -130,9 +130,7 @@ void OverlayRenderer::drawZoneIndicators(sf::RenderWindow& window, const Camera&
         spr.setPosition(screenPos.x - ICON_SIZE * 0.5f, screenPos.y - ICON_SIZE * 0.5f);
 
         // Draw in screen space (default view = no zoom scaling)
-        const sf::Vector2u windowSize = window.getSize();
-        window.setView(sf::View(sf::FloatRect(0.f, 0.f,
-            static_cast<float>(windowSize.x), static_cast<float>(windowSize.y))));
+        window.setView(hudView);
         window.draw(spr);
         window.setView(cameraView);  // Restore camera view immediately after
     }
