@@ -223,9 +223,130 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
     }
 
     // =========================================================================
-    // 5. MARRIAGE PURSUIT — move pieces toward church to create a Queen
+    // 5. RETREAT THREATENED PIECES
+    //    Non-king pieces sitting on enemy-threatened squares are at risk of
+    //    being captured for free. Evaluate each one:
+    //      - Find the cheapest enemy attacker that can reach our piece.
+    //      - If undefended, or if the cheapest attacker is cheaper than us,
+    //        retreat the piece to the best safe square.
+    //    Prioritize by piece value (save the most valuable first).
+    // =========================================================================
+    {
+        struct ThreatenedInfo {
+            int pieceId;
+            float value;
+            sf::Vector2i pos;
+        };
+        std::vector<ThreatenedInfo> threatened;
+
+        for (const auto& piece : self.pieces) {
+            if (piece.type == PieceType::King) continue; // king handled in section 4
+            if (!ctx.enemyThreats.isSet(piece.position)) continue;
+
+            float myVal = AITacticalEngine::pieceValue(piece.type);
+
+            // Check if piece is defended (our own threats cover the square)
+            bool defended = ctx.selfThreats.isSet(piece.position);
+
+            // Find cheapest enemy attacker that can reach this square
+            float cheapestAttacker = 99999.0f;
+            for (const auto& [enemyId, moves] : ctx.enemyMoves) {
+                for (const auto& m : moves) {
+                    if (m == piece.position) {
+                        const Piece* ep = enemy.getPieceById(enemyId);
+                        if (ep) {
+                            float av = AITacticalEngine::pieceValue(ep->type);
+                            cheapestAttacker = std::min(cheapestAttacker, av);
+                        }
+                        break; // this enemy piece can reach us, check next enemy
+                    }
+                }
+            }
+
+            // Decide if at risk:
+            //  - Undefended piece → always at risk
+            //  - Defended but cheapest attacker is cheaper → at risk (bad trade)
+            //  - Defended and attacker is equal or more expensive → probably safe
+            bool atRisk = false;
+            if (!defended) {
+                atRisk = true;
+            } else if (cheapestAttacker < myVal * 0.9f) {
+                // Attacker is significantly cheaper — trade is losing for us
+                atRisk = true;
+            }
+
+            if (atRisk) {
+                threatened.push_back({piece.id, myVal, piece.position});
+            }
+        }
+
+        // Sort by value descending — retreat the most valuable piece first
+        std::sort(threatened.begin(), threatened.end(),
+                  [](const ThreatenedInfo& a, const ThreatenedInfo& b) {
+                      return a.value > b.value;
+                  });
+
+        for (const auto& t : threatened) {
+            auto it = ctx.selfMoves.find(t.pieceId);
+            if (it == ctx.selfMoves.end()) continue;
+
+            sf::Vector2i bestRetreat = t.pos;
+            float bestRetreatScore = -std::numeric_limits<float>::max();
+
+            for (const auto& move : it->second) {
+                if (ctx.enemyThreats.isSet(move)) continue; // not safe either
+
+                float score = 0.0f;
+
+                // Prefer staying close to the action (don't run to the corner)
+                if (enemyKing) {
+                    float dx = static_cast<float>(move.x - targetPos.x);
+                    float dy = static_cast<float>(move.y - targetPos.y);
+                    float dist = std::sqrt(dx * dx + dy * dy);
+                    score -= dist * 0.5f; // slight penalty for running too far
+                }
+
+                // Bonus for landing on a resource
+                const Cell& mc = board.getCell(move.x, move.y);
+                if (mc.building) {
+                    if (mc.building->type == BuildingType::Mine) score += 50.0f;
+                    if (mc.building->type == BuildingType::Farm) score += 25.0f;
+                }
+
+                // Bonus for defended squares (our threats cover it)
+                if (ctx.selfThreats.isSet(move)) score += 30.0f;
+
+                // Loop penalty
+                Piece* p = self.getPieceById(t.pieceId);
+                if (p) {
+                    int repeats = countRecentOccurrences(t.pieceId, move);
+                    if (repeats > 0) score -= 200.0f * repeats;
+                }
+
+                if (score > bestRetreatScore) {
+                    bestRetreatScore = score;
+                    bestRetreat = move;
+                }
+            }
+
+            if (bestRetreat != t.pos) {
+                Piece* p = self.getPieceById(t.pieceId);
+                if (p) {
+                    std::cerr << "    [Move] RETREAT: piece " << t.pieceId
+                              << " (val=" << t.value << ") from (" << t.pos.x << "," << t.pos.y
+                              << ") to (" << bestRetreat.x << "," << bestRetreat.y << ")" << std::endl;
+                    commands.push_back(makeMoveCmd(t.pieceId, p->position, bestRetreat));
+                    return commands;
+                }
+            }
+        }
+    }
+
+    // =========================================================================
+    // 6. MARRIAGE PURSUIT — move pieces toward church to create a Queen
     //    Only in non-attack phases, and only if pieces are CLOSE to the church.
     //    In AGGRESSION/ENDGAME, the army should be attacking, not chasing marriage.
+    //    (was section 5 before retreat logic was added)
     // =========================================================================
     if (!self.hasQueen() && nonKingPieces >= 2
         && phase != AIPhase::AGGRESSION && phase != AIPhase::ENDGAME) {
@@ -342,7 +463,7 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
     }
 
     // =========================================================================
-    // 6. ADVANCE ARMY TOWARD ENEMY — SURROUND & BLOCKADE STRATEGY
+    // 7. ADVANCE ARMY TOWARD ENEMY — SURROUND & BLOCKADE STRATEGY
     //    Key insight: pieces already near the enemy king HOLD POSITION
     //    and let far-away pieces catch up. Only move a nearby piece if it
     //    can give check or cover a new escape square it doesn't already cover.
@@ -533,7 +654,7 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
     }
 
     // =========================================================================
-    // 7. RESOURCE GATHERING (when we need more workers)
+    // 8. RESOURCE GATHERING (when we need more workers)
     // =========================================================================
     if (priorities.economy >= 0.3f && !ctx.freeResourceCells.empty()
         && piecesOnResources < desiredWorkers + 1) {
@@ -576,7 +697,7 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
     }
 
     // =========================================================================
-    // 8. KING POSITIONING FALLBACK
+    // 9. KING POSITIONING FALLBACK
     // =========================================================================
     if (king) {
         bool onResource = isOnResource(*king, board);

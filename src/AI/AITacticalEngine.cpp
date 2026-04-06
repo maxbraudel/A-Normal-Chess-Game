@@ -100,9 +100,11 @@ float AITacticalEngine::scoreMove(const Piece& piece, sf::Vector2i dest,
     float distToCenter = std::sqrt(dx * dx + dy * dy);
     score += std::max(0.0f, 10.0f - distToCenter * 0.5f);
 
-    // 7. LEAVING ATTACKED SQUARE — bonus for escaping danger
+    // 7. LEAVING ATTACKED SQUARE — strong bonus for escaping danger
+    //    A piece under threat that can reach a safe square should strongly
+    //    prefer to move. Scaled by piece value so high-value pieces flee urgently.
     if (ctx.enemyThreats.isSet(piece.position) && destSafe) {
-        score += pieceValue(piece.type) * 1.0f;
+        score += pieceValue(piece.type) * 5.0f;
     }
 
     return score;
