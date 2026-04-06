@@ -24,6 +24,7 @@ public:
     Piece* getPieceAt(sf::Vector2i pos);
     const Piece* getPieceAt(sf::Vector2i pos) const;
     Piece* getPieceById(int pieceId);
+    const Piece* getPieceById(int pieceId) const;
     Building* getBuildingAt(sf::Vector2i pos);
 
     void addPiece(const Piece& piece);

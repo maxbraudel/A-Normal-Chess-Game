@@ -23,7 +23,7 @@ set(TGUI_BUILD_GUI_BUILDER OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(TGUI)
 
 # Collect source files
-file(GLOB_RECURSE SOURCES
+file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
     src/*.cpp
 )
 

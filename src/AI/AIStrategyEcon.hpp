@@ -6,12 +6,15 @@ class Board;
 class Kingdom;
 class GameConfig;
 class AIConfig;
-class EventLog;
+class AIBrain;
+class AITacticalEngine;
+struct AITurnContext;
 
 class AIStrategyEcon {
 public:
-    static std::vector<TurnCommand> decide(const Board& board, Kingdom& self,
-                                            const Kingdom& enemy, const GameConfig& config,
-                                            const AIConfig& aiConfig, bool hasMoved,
-                                            bool hasBuilt, bool hasProduced);
+    static std::vector<TurnCommand> decide(Board& board, Kingdom& self,
+                                            Kingdom& enemy, const GameConfig& config,
+                                            const AIConfig& aiConfig, const AIBrain& brain,
+                                            AITacticalEngine& engine, const AITurnContext& ctx,
+                                            bool hasMoved, bool hasBuilt, bool hasProduced);
 };

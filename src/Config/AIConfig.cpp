@@ -5,7 +5,8 @@ AIConfig::AIConfig()
     : farmPriority(0.8f), attackPriority(0.6f), defensePriority(0.7f),
       buildPriority(0.5f), upgradePriority(0.4f), marriagePriority(0.3f),
       minGoldBeforeAttack(100), minPiecesBeforeAttack(3), wallDefenseRadius(5),
-      randomness(0.1f) {}
+      searchDepth(3), aggressionMaterialRatio(1.4f),
+      randomness(0.05f) {}
 
 std::string AIConfig::readFile(const std::string& path) {
     std::ifstream file(path);
@@ -86,6 +87,12 @@ bool AIConfig::loadFromFile(const std::string& filepath) {
         minGoldBeforeAttack = extractInt(thresholdsSec, "min_gold_before_attack", minGoldBeforeAttack);
         minPiecesBeforeAttack = extractInt(thresholdsSec, "min_pieces_before_attack", minPiecesBeforeAttack);
         wallDefenseRadius = extractInt(thresholdsSec, "wall_defense_radius", wallDefenseRadius);
+    }
+
+    std::string tacticalSec = extractSection(json, "tactical");
+    if (!tacticalSec.empty()) {
+        searchDepth = extractInt(tacticalSec, "search_depth", searchDepth);
+        aggressionMaterialRatio = extractFloat(tacticalSec, "aggression_material_ratio", aggressionMaterialRatio);
     }
 
     randomness = extractFloat(json, "randomness", randomness);

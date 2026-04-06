@@ -7,7 +7,7 @@ class Building;
 class Kingdom;
 class GameConfig;
 class AIConfig;
-class EventLog;
+class AIBrain;
 
 class AIStrategySpecial {
 public:
@@ -15,5 +15,5 @@ public:
                                             const Kingdom& enemy,
                                             const std::vector<Building>& publicBuildings,
                                             const GameConfig& config, const AIConfig& aiConfig,
-                                            bool hasMarried);
+                                            const AIBrain& brain, bool hasMarried);
 };

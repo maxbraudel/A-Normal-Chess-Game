@@ -1,5 +1,6 @@
 #include "Systems/CombatSystem.hpp"
 #include "Units/Piece.hpp"
+#include "Units/PieceType.hpp"
 #include "Board/Board.hpp"
 #include "Board/Cell.hpp"
 #include "Kingdom/Kingdom.hpp"
@@ -19,6 +20,10 @@ CombatSystem::CombatResult CombatSystem::resolve(
 
     // Check if target has an enemy piece
     if (targetCell.piece && targetCell.piece->kingdom != attacker.kingdom) {
+        // Kings can never be captured — game ends on checkmate, not capture
+        if (targetCell.piece->type == PieceType::King) {
+            return result;
+        }
         result.occurred = true;
         result.targetWasPiece = true;
         Piece* victim = targetCell.piece;

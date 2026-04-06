@@ -1,55 +1,82 @@
 #include "AI/AIStrategySpecial.hpp"
+#include "AI/AIBrain.hpp"
 #include "Board/Board.hpp"
 #include "Kingdom/Kingdom.hpp"
 #include "Units/Piece.hpp"
 #include "Units/PieceType.hpp"
+#include "Units/MovementRules.hpp"
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingType.hpp"
 #include "Systems/MarriageSystem.hpp"
 #include "Systems/XPSystem.hpp"
 #include "Config/GameConfig.hpp"
 #include "Config/AIConfig.hpp"
+#include <cmath>
+#include <limits>
 
 std::vector<TurnCommand> AIStrategySpecial::decide(const Board& board, Kingdom& self,
                                                      const Kingdom& enemy,
                                                      const std::vector<Building>& publicBuildings,
                                                      const GameConfig& config, const AIConfig& aiConfig,
-                                                     bool hasMarried) {
+                                                     const AIBrain& brain, bool hasMarried) {
     std::vector<TurnCommand> commands;
 
-    // 1. Upgrade pieces if possible
+    // =========================================================================
+    // 1. Upgrades: upgrade pieces when possible (no phase restriction)
+    // =========================================================================
     for (auto& piece : self.pieces) {
         if (piece.type == PieceType::King || piece.type == PieceType::Queen) continue;
 
-        // Determine upgrade path
+        // Smart upgrade path based on phase
         PieceType target = PieceType::Pawn;
+        AIPhase phase = brain.getPhase();
+
         switch (piece.type) {
-            case PieceType::Pawn:   target = PieceType::Knight; break;
-            case PieceType::Knight: target = PieceType::Bishop; break;
-            case PieceType::Bishop: target = PieceType::Rook;   break;
-            case PieceType::Rook:   target = PieceType::Queen;  break;
-            default: continue;
+            case PieceType::Pawn:
+                // In aggression/endgame, prefer knights (more tactical)
+                // Otherwise, context-dependent
+                target = PieceType::Knight;
+                break;
+            case PieceType::Knight:
+                target = PieceType::Bishop;
+                break;
+            case PieceType::Bishop:
+                target = PieceType::Rook;
+                break;
+            case PieceType::Rook:
+                // Only upgrade to Queen if we don't have one and have gold
+                if (!self.hasQueen()) target = PieceType::Queen;
+                else continue; // Don't downgrade value by upgrading rook
+                break;
+            default:
+                continue;
         }
 
         if (XPSystem::canUpgrade(piece, target, config)) {
-            TurnCommand cmd;
-            cmd.type = TurnCommand::Upgrade;
-            cmd.upgradePieceId = piece.id;
-            cmd.upgradeTarget = target;
-            commands.push_back(cmd);
+            int cost = config.getUpgradeCost(piece.type, target);
+            if (self.gold >= cost) {
+                TurnCommand cmd;
+                cmd.type = TurnCommand::Upgrade;
+                cmd.upgradePieceId = piece.id;
+                cmd.upgradeTarget = target;
+                commands.push_back(cmd);
+            }
         }
     }
 
-    // 2. Marriage if conditions met
-    if (!hasMarried) {
+    // =========================================================================
+    // 2. Marriage: actively pursue when strategic
+    // =========================================================================
+    if (!hasMarried && !self.hasQueen()) {
         for (const auto& b : publicBuildings) {
-            if (b.type == BuildingType::Church && !b.isDestroyed()) {
-                if (MarriageSystem::canMarry(self, board, b)) {
-                    TurnCommand cmd;
-                    cmd.type = TurnCommand::Marry;
-                    commands.push_back(cmd);
-                    break;
-                }
+            if (b.type != BuildingType::Church || b.isDestroyed()) continue;
+
+            // Check if marriage conditions are already met
+            if (MarriageSystem::canMarry(self, board, b)) {
+                TurnCommand cmd;
+                cmd.type = TurnCommand::Marry;
+                commands.push_back(cmd);
+                break;
             }
         }
     }

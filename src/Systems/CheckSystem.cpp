@@ -1,12 +1,44 @@
 #include "Systems/CheckSystem.hpp"
 #include "Board/Board.hpp"
 #include "Board/Cell.hpp"
+#include "Kingdom/Kingdom.hpp"
 #include "Units/Piece.hpp"
 #include "Units/MovementRules.hpp"
 #include "Config/GameConfig.hpp"
 
+// ---- Fast overloads (O(pieces) instead of O(diameter^2)) ----
+
+ThreatMap CheckSystem::buildThreatMap(const Kingdom& attacker,
+                                       const Board& board, const GameConfig& config) {
+    ThreatMap map;
+    for (const auto& piece : attacker.pieces) {
+        auto moves = MovementRules::getValidMoves(piece, board, config);
+        for (const auto& m : moves) {
+            map.mark(m);
+        }
+    }
+    return map;
+}
+
+bool CheckSystem::isInCheckFast(const Kingdom& kingdom, const Kingdom& enemy,
+                                 const Board& board, const GameConfig& config) {
+    const Piece* king = kingdom.getKing();
+    if (!king) return false;
+
+    // Check directly: can any enemy piece reach the king?
+    for (const auto& ep : enemy.pieces) {
+        auto moves = MovementRules::getValidMoves(ep, board, config);
+        for (const auto& m : moves) {
+            if (m == king->position) return true;
+        }
+    }
+    return false;
+}
+
+// ---- Legacy signatures (delegate or use Board scan for Game.cpp) ----
+
 bool CheckSystem::isInCheck(KingdomId kingdomId, const Board& board, const GameConfig& config) {
-    // Find the king
+    // Find king position directly from board (legacy path for Game.cpp)
     const Piece* king = nullptr;
     KingdomId enemyId = (kingdomId == KingdomId::White) ? KingdomId::Black : KingdomId::White;
 
@@ -20,15 +52,24 @@ bool CheckSystem::isInCheck(KingdomId kingdomId, const Board& board, const GameC
         }
     }
 
-    if (!king) return false; // No king = initial pawn case handled differently
+    if (!king) return false;
 
-    // Check if any enemy piece can reach the king
-    auto threatened = getThreatenedSquares(enemyId, board, config);
-    return threatened.count(king->position) > 0;
+    // Check if any enemy piece can reach the king (no full threat map needed)
+    for (int y = 0; y < diameter; ++y) {
+        for (int x = 0; x < diameter; ++x) {
+            const Cell& cell = board.getCell(x, y);
+            if (cell.piece && cell.piece->kingdom == enemyId) {
+                auto moves = MovementRules::getValidMoves(*cell.piece, board, config);
+                for (const auto& m : moves) {
+                    if (m == king->position) return true;
+                }
+            }
+        }
+    }
+    return false;
 }
 
 bool CheckSystem::isCheckmate(KingdomId kingdomId, Board& board, const GameConfig& config) {
-    // Find the king
     const Piece* king = nullptr;
     int diameter = board.getDiameter();
 
@@ -41,11 +82,11 @@ bool CheckSystem::isCheckmate(KingdomId kingdomId, Board& board, const GameConfi
         }
     }
 
-    if (!king) return true; // No king means initial pawn was killed
+    if (!king) return true;
 
     if (!isInCheck(kingdomId, board, config)) return false;
 
-    // Collect all kingdom pieces
+    // Collect all kingdom pieces from board
     std::vector<Piece*> pieces;
     for (int y = 0; y < diameter; ++y) {
         for (int x = 0; x < diameter; ++x) {
@@ -60,24 +101,16 @@ bool CheckSystem::isCheckmate(KingdomId kingdomId, Board& board, const GameConfi
     for (Piece* piece : pieces) {
         auto moves = MovementRules::getValidMoves(*piece, board, config);
         for (const auto& move : moves) {
-            // Simulate the move
             sf::Vector2i oldPos = piece->position;
             Cell& oldCell = board.getCell(oldPos.x, oldPos.y);
             Cell& newCell = board.getCell(move.x, move.y);
 
-            Piece* capturedPiece = newCell.piece;
-            Building* capturedBuilding = newCell.building;
+            Piece* oldPieceAtTarget = newCell.piece;
 
             // Apply move temporarily
             oldCell.piece = nullptr;
-            Piece* oldPieceAtTarget = newCell.piece;
             newCell.piece = piece;
             piece->position = move;
-
-            // Remove captured piece from check consideration
-            if (capturedPiece && capturedPiece->kingdom != kingdomId) {
-                newCell.piece = piece; // attacker takes the spot
-            }
 
             bool stillInCheck = isInCheck(kingdomId, board, config);
 
@@ -86,11 +119,11 @@ bool CheckSystem::isCheckmate(KingdomId kingdomId, Board& board, const GameConfi
             newCell.piece = oldPieceAtTarget;
             oldCell.piece = piece;
 
-            if (!stillInCheck) return false; // Found an escape
+            if (!stillInCheck) return false;
         }
     }
 
-    return true; // No move saves the king
+    return true;
 }
 
 bool CheckSystem::isSafeSquare(sf::Vector2i pos, KingdomId kingdomId, const Board& board, const GameConfig& config) {

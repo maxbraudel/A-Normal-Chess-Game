@@ -96,12 +96,22 @@ void Game::update() {
             if (m_turnSystem.getActiveKingdom() == KingdomId::Black) {
                 m_ai.playTurn(m_board, m_blackKingdom, m_whiteKingdom,
                                m_publicBuildings, m_turnSystem, m_config, m_eventLog);
+
+                // Check if white is already in checkmate BEFORE committing
+                // (prevents the king from being captured — game ends on checkmate)
+                if (CheckSystem::isCheckmate(KingdomId::White, m_board, m_config)) {
+                    m_state = GameState::GameOver;
+                    m_eventLog.log(m_turnSystem.getTurnNumber(), KingdomId::Black,
+                                    "Checkmate! Black wins!");
+                    break;
+                }
+
                 m_turnSystem.commitTurn(m_board, m_blackKingdom, m_whiteKingdom,
                                          m_publicBuildings, m_config, m_eventLog,
                                          m_pieceFactory, m_buildingFactory);
                 m_turnSystem.advanceTurn();
 
-                // Check game over
+                // Also check after commit in case the committed moves create checkmate
                 if (CheckSystem::isCheckmate(KingdomId::White, m_board, m_config)) {
                     m_state = GameState::GameOver;
                     m_eventLog.log(m_turnSystem.getTurnNumber(), KingdomId::Black,

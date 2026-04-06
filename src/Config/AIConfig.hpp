@@ -21,6 +21,10 @@ public:
     int minPiecesBeforeAttack;
     int wallDefenseRadius;
 
+    // Tactical engine
+    int searchDepth;          // Minimax search depth (default 3)
+    float aggressionMaterialRatio; // Material ratio to trigger aggression (default 1.4)
+
     float randomness;
 
 private:

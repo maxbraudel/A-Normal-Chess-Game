@@ -52,6 +52,12 @@ Piece* Kingdom::getPieceById(int pieceId) {
     return nullptr;
 }
 
+const Piece* Kingdom::getPieceById(int pieceId) const {
+    for (const auto& p : pieces)
+        if (p.id == pieceId) return &p;
+    return nullptr;
+}
+
 Building* Kingdom::getBuildingAt(sf::Vector2i pos) {
     for (auto& b : buildings)
         if (b.containsCell(pos.x, pos.y)) return &b;

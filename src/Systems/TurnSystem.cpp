@@ -82,6 +82,13 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                 Piece* piece = activeKingdom.getPieceById(cmd.pieceId);
                 if (!piece) break;
 
+                // Prevent moving onto enemy king — game should end on checkmate, not capture
+                Cell& destCheck = board.getCell(cmd.destination.x, cmd.destination.y);
+                if (destCheck.piece && destCheck.piece->kingdom != piece->kingdom
+                    && destCheck.piece->type == PieceType::King) {
+                    break; // Illegal move — skip entirely
+                }
+
                 // Clear the origin cell (use cmd.origin, not piece->position, because
                 // the piece may have been pre-applied live by InputHandler already)
                 Cell& oldCell = board.getCell(cmd.origin.x, cmd.origin.y);
@@ -176,6 +183,9 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
 
                     log.log(m_turnNumber, m_activeKingdom, "Unit produced!");
                     b.isProducing = false;
+                } else {
+                    // Spawn cell blocked — keep trying each turn
+                    // (turnsRemaining is already 0, so we'll retry next turn)
                 }
             }
         }
