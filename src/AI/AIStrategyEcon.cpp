@@ -18,6 +18,21 @@
 #include <algorithm>
 #include <iostream>
 
+static int chebyshevDistance(sf::Vector2i a, sf::Vector2i b) {
+    return std::max(std::abs(a.x - b.x), std::abs(a.y - b.y));
+}
+
+static int countPiecesNearBuilding(const Kingdom& kingdom, const Building& building, int radius) {
+    int count = 0;
+    for (const auto& piece : kingdom.pieces) {
+        if (piece.type == PieceType::King) continue;
+        if (chebyshevDistance(piece.position, building.origin) <= radius) {
+            ++count;
+        }
+    }
+    return count;
+}
+
 std::vector<TurnCommand> AIStrategyEcon::decide(Board& board, Kingdom& self,
                                                   Kingdom& enemy, const GameConfig& config,
                                                   const AIConfig& aiConfig, const AIBrain& brain,
@@ -26,6 +41,9 @@ std::vector<TurnCommand> AIStrategyEcon::decide(Board& board, Kingdom& self,
     std::vector<TurnCommand> commands;
     const auto& priorities = brain.getPriorities();
     AIPhase phase = brain.getPhase();
+    const int enemyCombat = brain.countCombatPieces(enemy);
+    const bool enemyLoneKing = (enemyCombat == 0);
+    const bool matingMaterialReady = brain.hasSufficientMatingMaterial(self);
 
     // =========================================================================
     // 1. Resource gathering: use cached resource cells + cached moves
@@ -102,7 +120,7 @@ std::vector<TurnCommand> AIStrategyEcon::decide(Board& board, Kingdom& self,
             }
         }
 
-        if (!hasBarracks && self.gold >= config.getBarracksCost()) {
+            if (!hasBarracks && self.gold >= config.getBarracksCost()) {
             Piece* king = self.getKing();
             if (king) {
                 // Try adjacent cells, expanding outward
@@ -154,10 +172,50 @@ std::vector<TurnCommand> AIStrategyEcon::decide(Board& board, Kingdom& self,
                 }
             }
 
+            const int unitsNearBarracks = countPiecesNearBuilding(self, b, 3);
+            const int unitsInBacklog = countPiecesNearBuilding(self, b, 5);
+
+            // With only one movement command per turn, producing more low-value
+            // units than we can mobilize just clogs the barracks area.
+            if ((phase == AIPhase::AGGRESSION || phase == AIPhase::ENDGAME || enemyLoneKing)
+                && unitsNearBarracks >= 3 && matingMaterialReady) {
+                continue;
+            }
+            if (enemyLoneKing && unitsInBacklog >= 5) {
+                continue;
+            }
+
             // Phase-based production targets
             PieceType toProduce = PieceType::Pawn;
 
-            if (phase == AIPhase::EARLY_GAME) {
+            if (enemyLoneKing) {
+                // Against a lone king, stop pawn spam and rush the minimum
+                // practical mating toolkit. Spare gold is better saved for
+                // strong pieces or upgrades than converted into more traffic.
+                if (!matingMaterialReady) {
+                    if (rooks < 1 && self.gold >= config.getRecruitCost(PieceType::Rook))
+                        toProduce = PieceType::Rook;
+                    else if (bishops < 1)
+                        toProduce = PieceType::Bishop;
+                    else if (knights < 1)
+                        toProduce = PieceType::Knight;
+                    else if (bishops + knights < 2)
+                        toProduce = (bishops <= knights) ? PieceType::Bishop : PieceType::Knight;
+                    else
+                        continue;
+                } else {
+                    if (rooks < 1 && self.gold >= config.getRecruitCost(PieceType::Rook))
+                        toProduce = PieceType::Rook;
+                    else if (knights < 1)
+                        toProduce = PieceType::Knight;
+                    else if (bishops < 1)
+                        toProduce = PieceType::Bishop;
+                    else if (rooks < 2 && self.gold >= config.getRecruitCost(PieceType::Rook) && unitsNearBarracks < 2)
+                        toProduce = PieceType::Rook;
+                    else
+                        continue;
+                }
+            } else if (phase == AIPhase::EARLY_GAME) {
                 // Rush: Pawns first for economy, then a knight
                 if (pawns < 2) toProduce = PieceType::Pawn;
                 else if (knights < 1) toProduce = PieceType::Knight;
@@ -208,7 +266,8 @@ std::vector<TurnCommand> AIStrategyEcon::decide(Board& board, Kingdom& self,
                 }
             }
             // Fallback: try a cheaper unit if we can't afford the preferred one
-            if (toProduce != PieceType::Pawn && self.gold >= config.getRecruitCost(PieceType::Pawn)) {
+            if (!enemyLoneKing && toProduce != PieceType::Pawn
+                && self.gold >= config.getRecruitCost(PieceType::Pawn)) {
                 if (ProductionSystem::canStartProduction(b, PieceType::Pawn, self, config)) {
                     TurnCommand cmd;
                     cmd.type = TurnCommand::Produce;

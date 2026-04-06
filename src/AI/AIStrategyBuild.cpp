@@ -51,6 +51,7 @@ std::vector<TurnCommand> AIStrategyBuild::decide(const Board& board, Kingdom& se
     bool hasBarracks = false;
     bool hasArena = false;
     int wallCount = 0;
+    const bool enemyLoneKing = (brain.countCombatPieces(enemy) == 0);
     for (const auto& b : self.buildings) {
         if (b.isDestroyed()) continue;
         if (b.type == BuildingType::Barracks) hasBarracks = true;
@@ -73,6 +74,10 @@ std::vector<TurnCommand> AIStrategyBuild::decide(const Board& board, Kingdom& se
     if (!hasBarracks && self.gold >= config.getBarracksCost()) {
         // Priority #1: always need a barracks
         toBuild = BuildingType::Barracks;
+    } else if (enemyLoneKing) {
+        // Once a barracks exists, don't waste turns on walls/arena against a
+        // defenseless king-only opponent.
+        return commands;
     } else if (nearestEnemyDist < static_cast<float>(aiConfig.wallDefenseRadius) &&
                priorities.defense >= 0.5f && wallCount < 4) {
         // Priority #2: defensive walls when enemy is close

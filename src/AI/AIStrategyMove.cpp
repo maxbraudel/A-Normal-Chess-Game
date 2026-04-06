@@ -504,7 +504,8 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
     //    (was section 5 before retreat logic was added)
     // =========================================================================
     if (!self.hasQueen() && nonKingPieces >= 2
-        && phase != AIPhase::AGGRESSION && phase != AIPhase::ENDGAME) {
+        && phase != AIPhase::AGGRESSION && phase != AIPhase::ENDGAME
+        && !(brain.countCombatPieces(enemy) == 0 && brain.hasSufficientMatingMaterial(self))) {
         // Find a church
         const Building* church = nullptr;
         for (const auto& b : publicBuildings) {
