@@ -1,0 +1,69 @@
+{
+    "map": {
+        "radius": 25,
+        "cell_size_px": 16,
+        "num_mines": 2,
+        "num_farms": 3,
+        "min_public_building_distance": 10,
+        "player_spawn_zone_percent": 25,
+        "ai_spawn_zone_percent": 25,
+        "num_dirt_blobs": 30,
+        "dirt_blob_min_radius": 5,
+        "dirt_blob_max_radius": 20,
+        "num_lakes": 8,
+        "lake_min_radius": 3,
+        "lake_max_radius": 10
+    },
+    "economy": {
+        "starting_gold": 0,
+        "mine_income_per_cell_per_turn": 10,
+        "farm_income_per_cell_per_turn": 5,
+        "barracks_cost": 50,
+        "wood_wall_cost": 20,
+        "stone_wall_cost": 40,
+        "arena_cost": 60,
+        "pawn_recruit_cost": 10,
+        "knight_recruit_cost": 30,
+        "bishop_recruit_cost": 30,
+        "rook_recruit_cost": 60,
+        "upgrade_pawn_to_knight_cost": 20,
+        "upgrade_pawn_to_bishop_cost": 20,
+        "upgrade_to_rook_cost": 50
+    },
+    "production": {
+        "pawn_turns": 2,
+        "knight_turns": 4,
+        "bishop_turns": 4,
+        "rook_turns": 6
+    },
+    "xp": {
+        "kill_pawn": 20,
+        "kill_knight": 50,
+        "kill_bishop": 50,
+        "kill_rook": 100,
+        "kill_queen": 300,
+        "destroy_block": 10,
+        "arena_per_turn": 10,
+        "threshold_pawn_to_knight_or_bishop": 100,
+        "threshold_to_rook": 300
+    },
+    "combat": {
+        "wood_wall_hp": 1,
+        "stone_wall_hp": 3,
+        "barracks_cell_hp": 1,
+        "global_max_range": 8
+    },
+    "buildings": {
+        "barracks_width": 4,
+        "barracks_height": 2,
+        "church_width": 4,
+        "church_height": 3,
+        "mine_width": 6,
+        "mine_height": 6,
+        "farm_width": 4,
+        "farm_height": 3,
+        "arena_size": 9,
+        "arena_width": 3,
+        "arena_height": 3
+    }
+}

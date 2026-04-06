@@ -1,0 +1,71 @@
+#include "Systems/CombatSystem.hpp"
+#include "Units/Piece.hpp"
+#include "Board/Board.hpp"
+#include "Board/Cell.hpp"
+#include "Kingdom/Kingdom.hpp"
+#include "Buildings/Building.hpp"
+#include "Buildings/BuildingType.hpp"
+#include "Config/GameConfig.hpp"
+#include "Systems/EventLog.hpp"
+#include "Systems/XPSystem.hpp"
+
+CombatSystem::CombatResult CombatSystem::resolve(
+    Piece& attacker, Board& board, sf::Vector2i target,
+    Kingdom& attackerKingdom, Kingdom& defenderKingdom,
+    const GameConfig& config, EventLog& log, int turnNumber) {
+
+    CombatResult result{false, false, 0};
+    Cell& targetCell = board.getCell(target.x, target.y);
+
+    // Check if target has an enemy piece
+    if (targetCell.piece && targetCell.piece->kingdom != attacker.kingdom) {
+        result.occurred = true;
+        result.targetWasPiece = true;
+        Piece* victim = targetCell.piece;
+        int xp = config.getKillXP(victim->type);
+        attacker.xp += xp;
+        result.xpGained = xp;
+
+        log.log(turnNumber, attacker.kingdom, "Captured enemy piece!");
+
+        // Remove victim
+        targetCell.piece = nullptr;
+        defenderKingdom.removePiece(victim->id);
+        return result;
+    }
+
+    // Check if target has an enemy wall/building to attack
+    if (targetCell.building && !targetCell.building->isNeutral &&
+        targetCell.building->owner != attacker.kingdom) {
+        auto bt = targetCell.building->type;
+        if (bt == BuildingType::WoodWall || bt == BuildingType::StoneWall ||
+            bt == BuildingType::Barracks) {
+            result.occurred = true;
+            result.targetWasPiece = false;
+
+            int localX = target.x - targetCell.building->origin.x;
+            int localY = target.y - targetCell.building->origin.y;
+            targetCell.building->damageCellAt(localX, localY);
+
+            int xp = config.getDestroyBlockXP();
+            attacker.xp += xp;
+            result.xpGained = xp;
+
+            log.log(turnNumber, attacker.kingdom, "Damaged enemy building!");
+
+            // Check if building fully destroyed
+            if (targetCell.building->isDestroyed()) {
+                auto cells = targetCell.building->getOccupiedCells();
+                int buildingId = targetCell.building->id;
+                for (auto& pos : cells) {
+                    board.getCell(pos.x, pos.y).building = nullptr;
+                }
+                defenderKingdom.removeBuilding(buildingId);
+                log.log(turnNumber, attacker.kingdom, "Enemy building destroyed!");
+            }
+            return result;
+        }
+    }
+
+    return result;
+}

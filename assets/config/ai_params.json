@@ -1,0 +1,16 @@
+{
+    "weights": {
+        "farm_priority": 0.8,
+        "attack_priority": 0.6,
+        "defense_priority": 0.7,
+        "build_priority": 0.5,
+        "upgrade_priority": 0.4,
+        "marriage_priority": 0.3
+    },
+    "thresholds": {
+        "min_gold_before_attack": 100,
+        "min_pieces_before_attack": 3,
+        "wall_defense_radius": 5
+    },
+    "randomness": 0.1
+}
