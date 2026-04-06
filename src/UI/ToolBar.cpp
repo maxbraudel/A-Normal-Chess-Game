@@ -1,26 +1,27 @@
 #include "UI/ToolBar.hpp"
+#include "UI/HUDLayout.hpp"
 
 void ToolBar::init(tgui::Gui& gui) {
-    m_panel = tgui::Panel::create({300, 40});
-    m_panel->setPosition({0, "&.height - 40"});
-    m_panel->getRenderer()->setBackgroundColor(tgui::Color(40, 40, 40, 220));
+    m_panel = tgui::Panel::create(HUDLayout::stackSize(3));
+    m_panel->setPosition(HUDLayout::anchorPosition(HUDAnchor::BottomLeft, 3));
+    HUDLayout::makeTransparentPanel(m_panel);
     gui.add(m_panel, "ToolBarPanel");
 
     auto btnSelect = tgui::Button::create("Select");
-    btnSelect->setPosition({5, 5});
-    btnSelect->setSize({85, 30});
+    HUDLayout::styleHudButton(btnSelect);
+    HUDLayout::placeStackChild(btnSelect, 0);
     btnSelect->onPress([this]() { if (m_onSelect) m_onSelect(); });
     m_panel->add(btnSelect);
 
     auto btnBuild = tgui::Button::create("Build");
-    btnBuild->setPosition({100, 5});
-    btnBuild->setSize({85, 30});
+    HUDLayout::styleHudButton(btnBuild);
+    HUDLayout::placeStackChild(btnBuild, 1);
     btnBuild->onPress([this]() { if (m_onBuild) m_onBuild(); });
     m_panel->add(btnBuild);
 
     auto btnLog = tgui::Button::create("Log");
-    btnLog->setPosition({195, 5});
-    btnLog->setSize({85, 30});
+    HUDLayout::styleHudButton(btnLog);
+    HUDLayout::placeStackChild(btnLog, 2);
     btnLog->onPress([this]() { if (m_onLog) m_onLog(); });
     m_panel->add(btnLog);
 

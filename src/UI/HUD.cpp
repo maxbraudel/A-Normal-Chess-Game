@@ -1,51 +1,64 @@
 #include "UI/HUD.hpp"
 #include "Assets/AssetManager.hpp"
+#include "UI/HUDLayout.hpp"
 
 void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
-    m_panel = tgui::Panel::create({"100%", "40"});
-    m_panel->setPosition({0, 0});
-    m_panel->getRenderer()->setBackgroundColor(tgui::Color(40, 40, 40, 220));
+    (void) assets;
+
+    m_indicatorPanel = tgui::Panel::create(HUDLayout::stackSize(3));
+    m_indicatorPanel->setPosition(HUDLayout::anchorPosition(HUDAnchor::TopLeft, 3));
+    HUDLayout::makeTransparentPanel(m_indicatorPanel);
+    gui.add(m_indicatorPanel, "HUDIndicatorsPanel");
+
+    m_panel = tgui::Panel::create(HUDLayout::stackSize(2));
+    m_panel->setPosition(HUDLayout::anchorPosition(HUDAnchor::TopRight, 2));
+    HUDLayout::makeTransparentPanel(m_panel);
     gui.add(m_panel, "HUDPanel");
 
     m_turnLabel = tgui::Label::create("Turn 1");
-    m_turnLabel->setPosition({10, 8});
-    m_turnLabel->setTextSize(16);
-    m_turnLabel->getRenderer()->setTextColor(tgui::Color::White);
-    m_panel->add(m_turnLabel);
+    HUDLayout::styleHudIndicator(m_turnLabel, tgui::Color::White);
+    HUDLayout::placeStackChild(m_turnLabel, 0);
+    m_indicatorPanel->add(m_turnLabel);
 
     m_playerLabel = tgui::Label::create("White's turn");
-    m_playerLabel->setPosition({150, 8});
-    m_playerLabel->setTextSize(16);
-    m_playerLabel->getRenderer()->setTextColor(tgui::Color::White);
-    m_panel->add(m_playerLabel);
+    HUDLayout::styleHudIndicator(m_playerLabel, tgui::Color::White);
+    HUDLayout::placeStackChild(m_playerLabel, 1);
+    m_indicatorPanel->add(m_playerLabel);
 
     m_goldLabel = tgui::Label::create("Gold: 0");
-    m_goldLabel->setPosition({350, 8});
-    m_goldLabel->setTextSize(16);
-    m_goldLabel->getRenderer()->setTextColor(tgui::Color(255, 215, 0));
-    m_panel->add(m_goldLabel);
+    HUDLayout::styleHudIndicator(m_goldLabel, tgui::Color(255, 215, 0));
+    HUDLayout::placeStackChild(m_goldLabel, 2);
+    m_indicatorPanel->add(m_goldLabel);
 
     auto btnReset = tgui::Button::create("Reset");
-    btnReset->setPosition({"&.width - 180", "4"});
-    btnReset->setSize({75, 30});
+    HUDLayout::styleHudButton(btnReset);
+    HUDLayout::placeStackChild(btnReset, 0);
     btnReset->onPress([this]() {
         if (m_onReset) m_onReset();
     });
     m_panel->add(btnReset);
 
     auto btnPlay = tgui::Button::create("Play");
-    btnPlay->setPosition({"&.width - 90", "4"});
-    btnPlay->setSize({75, 30});
+    HUDLayout::styleHudButton(btnPlay);
+    HUDLayout::placeStackChild(btnPlay, 1);
     btnPlay->onPress([this]() {
         if (m_onPlay) m_onPlay();
     });
     m_panel->add(btnPlay);
 
+    m_indicatorPanel->setVisible(false);
     m_panel->setVisible(false);
 }
 
-void HUD::show() { if (m_panel) m_panel->setVisible(true); }
-void HUD::hide() { if (m_panel) m_panel->setVisible(false); }
+void HUD::show() {
+    if (m_indicatorPanel) m_indicatorPanel->setVisible(true);
+    if (m_panel) m_panel->setVisible(true);
+}
+
+void HUD::hide() {
+    if (m_indicatorPanel) m_indicatorPanel->setVisible(false);
+    if (m_panel) m_panel->setVisible(false);
+}
 
 void HUD::update(int turnNumber, const std::string& activePlayer, int gold) {
     if (m_turnLabel) m_turnLabel->setText("Turn " + std::to_string(turnNumber));

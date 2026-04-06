@@ -18,6 +18,7 @@ public:
     void setOnPlay(std::function<void()> callback);
 
 private:
+    tgui::Panel::Ptr m_indicatorPanel;
     tgui::Panel::Ptr m_panel;
     tgui::Label::Ptr m_turnLabel;
     tgui::Label::Ptr m_playerLabel;
