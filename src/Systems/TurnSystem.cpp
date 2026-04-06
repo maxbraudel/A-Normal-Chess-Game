@@ -62,8 +62,24 @@ void TurnSystem::cancelMoveCommand() {
     m_hasMoved = false;
 }
 
+void TurnSystem::cancelBuildCommand() {
+    auto it = std::remove_if(m_pendingCommands.begin(), m_pendingCommands.end(),
+        [](const TurnCommand& c) { return c.type == TurnCommand::Build; });
+    m_pendingCommands.erase(it, m_pendingCommands.end());
+    m_hasBuilt = false;
+}
+
 const std::vector<TurnCommand>& TurnSystem::getPendingCommands() const {
     return m_pendingCommands;
+}
+
+const TurnCommand* TurnSystem::getPendingBuildCommand() const {
+    for (const auto& cmd : m_pendingCommands) {
+        if (cmd.type == TurnCommand::Build) {
+            return &cmd;
+        }
+    }
+    return nullptr;
 }
 
 bool TurnSystem::hasPendingMove() const { return m_hasMoved; }

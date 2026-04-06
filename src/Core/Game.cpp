@@ -276,6 +276,12 @@ void Game::render() {
             m_renderer.getOverlay().drawBuildPreview(m_window, m_camera,
                 m_input.getBuildPreviewOrigin(), bw, bh, m_config.getCellSizePx(), valid);
         }
+        if (const TurnCommand* pendingBuild = m_turnSystem.getPendingBuildCommand()) {
+            int bw = m_config.getBuildingWidth(pendingBuild->buildingType);
+            int bh = m_config.getBuildingHeight(pendingBuild->buildingType);
+            m_renderer.getOverlay().drawBuildPreview(m_window, m_camera,
+                pendingBuild->buildOrigin, bw, bh, m_config.getCellSizePx(), true);
+        }
         m_renderer.getOverlay().drawZoneIndicators(m_window, m_camera, m_hudView,
             m_windowSize, m_board,
             m_publicBuildings, m_kingdoms, m_config.getCellSizePx(), m_assets);

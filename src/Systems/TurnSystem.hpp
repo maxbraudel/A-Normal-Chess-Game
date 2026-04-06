@@ -29,7 +29,9 @@ public:
     bool queueCommand(const TurnCommand& cmd);
     void resetPendingCommands();
     void cancelMoveCommand();   // undo a live-applied move: removes the Move command only
+    void cancelBuildCommand();  // removes the queued Build command only
     const std::vector<TurnCommand>& getPendingCommands() const;
+    const TurnCommand* getPendingBuildCommand() const;
 
     bool hasPendingMove() const;
     bool hasPendingBuild() const;

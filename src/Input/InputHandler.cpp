@@ -261,6 +261,16 @@ void InputHandler::handleBuildTool(const sf::Event& event, sf::RenderWindow& win
         }
 
         if (BuildSystem::canBuild(m_buildPreviewType, cellPos, *king, board, activeKingdom, config)) {
+            const TurnCommand* pendingBuild = turnSystem.getPendingBuildCommand();
+            if (pendingBuild) {
+                bool samePlacement = pendingBuild->buildingType == m_buildPreviewType
+                    && pendingBuild->buildOrigin == cellPos;
+                turnSystem.cancelBuildCommand();
+                if (samePlacement) {
+                    return;
+                }
+            }
+
             TurnCommand cmd;
             cmd.type = TurnCommand::Build;
             cmd.buildingType = m_buildPreviewType;
