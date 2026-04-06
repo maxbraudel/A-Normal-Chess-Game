@@ -21,6 +21,7 @@ public:
               const TurnSystem& turnSystem);
 
     OverlayRenderer& getOverlay();
+    void setSkipPieceId(int id); // hide a piece from rendering (used for capture preview)
 
 private:
     void drawBoard(sf::RenderWindow& window, const Camera& camera, const Board& board);
@@ -33,5 +34,6 @@ private:
 
     const AssetManager* m_assets;
     int m_cellSize;
+    int m_skipPieceId = -1;
     OverlayRenderer m_overlay;
 };

@@ -135,6 +135,7 @@ void Game::render() {
 
     if (m_state == GameState::Playing || m_state == GameState::Paused || m_state == GameState::GameOver) {
         m_camera.applyTo(m_window);
+        m_renderer.setSkipPieceId(m_input.getCapturePreviewPieceId());
         m_renderer.draw(m_window, m_camera, m_board, m_whiteKingdom, m_blackKingdom,
                           m_publicBuildings, m_turnSystem);
 
@@ -145,6 +146,11 @@ void Game::render() {
                     m_input.getSelectedPiece()->position, m_config.getCellSizePx());
                 m_renderer.getOverlay().drawReachableCells(m_window, m_camera,
                     m_input.getValidMoves(), m_config.getCellSizePx());
+                // Show red overlay on king moves that are under enemy threat
+                if (!m_input.getDangerMoves().empty()) {
+                    m_renderer.getOverlay().drawDangerCells(m_window, m_camera,
+                        m_input.getDangerMoves(), m_config.getCellSizePx());
+                }
             }
             if (m_input.getSelectedPiece() && m_input.hasMovePreview()) {
                 m_renderer.getOverlay().drawOriginCell(m_window, m_camera,

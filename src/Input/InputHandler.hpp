@@ -32,6 +32,8 @@ public:
     Piece* getSelectedPiece() const;
     Building* getSelectedBuilding() const;
     const std::vector<sf::Vector2i>& getValidMoves() const;
+    const std::vector<sf::Vector2i>& getDangerMoves() const; // king squares under enemy threat
+    int getCapturePreviewPieceId() const; // id of enemy piece visually hidden during move preview (-1 if none)
     bool hasMovePreview() const;
     sf::Vector2i getMoveFrom() const;
     sf::Vector2i getMoveTo() const;
@@ -51,6 +53,8 @@ private:
     Piece* m_selectedPiece;
     Building* m_selectedBuilding;
     std::vector<sf::Vector2i> m_validMoves;
+    std::vector<sf::Vector2i> m_dangerMoves; // king moves onto threatened squares (shown red, blocked)
+    int m_capturePreviewPieceId = -1; // enemy piece hidden during move preview
 
     bool m_hasMovePreview;
     sf::Vector2i m_moveFrom;
@@ -76,4 +80,6 @@ private:
                           TurnSystem& turnSystem, Kingdom& activeKingdom,
                           const GameConfig& config);
     void handleCameraInput(const sf::Event& event, sf::RenderWindow& window, Camera& camera);
+    // Recompute m_validMoves / m_dangerMoves for piece given current preview board state
+    void refreshPieceMoves(Piece* piece, const Board& board, const Kingdom& enemyKingdom, const GameConfig& config);
 };

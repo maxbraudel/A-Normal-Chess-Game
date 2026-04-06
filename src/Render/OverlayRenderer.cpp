@@ -41,11 +41,19 @@ void OverlayRenderer::drawReachableCells(sf::RenderWindow& window, const Camera&
 void OverlayRenderer::drawOriginCell(sf::RenderWindow& window, const Camera& camera,
                                        sf::Vector2i origin, int cellSize) {
     sf::RectangleShape rect(sf::Vector2f(static_cast<float>(cellSize), static_cast<float>(cellSize)));
-    rect.setFillColor(sf::Color(255, 60, 60, 130));
-    rect.setOutlineColor(sf::Color(220, 0, 0, 200));
-    rect.setOutlineThickness(2.f);
+    rect.setFillColor(sf::Color(40, 120, 255, 130));
     rect.setPosition(static_cast<float>(origin.x * cellSize), static_cast<float>(origin.y * cellSize));
     window.draw(rect);
+}
+
+void OverlayRenderer::drawDangerCells(sf::RenderWindow& window, const Camera& camera,
+                                        const std::vector<sf::Vector2i>& cells, int cellSize) {
+    sf::RectangleShape overlay(sf::Vector2f(static_cast<float>(cellSize), static_cast<float>(cellSize)));
+    overlay.setFillColor(sf::Color(255, 40, 40, 90));
+    for (const auto& pos : cells) {
+        overlay.setPosition(static_cast<float>(pos.x * cellSize), static_cast<float>(pos.y * cellSize));
+        window.draw(overlay);
+    }
 }
 
 void OverlayRenderer::drawBuildPreview(sf::RenderWindow& window, const Camera& camera,

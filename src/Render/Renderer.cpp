@@ -116,12 +116,15 @@ void Renderer::drawSingleBuilding(sf::RenderWindow& window, const Building& buil
     }
 }
 
+void Renderer::setSkipPieceId(int id) { m_skipPieceId = id; }
+
 void Renderer::drawPieces(sf::RenderWindow& window, const Camera& camera,
                             const Kingdom& white, const Kingdom& black) {
     if (!m_assets) return;
 
     auto drawPieceList = [&](const std::deque<Piece>& pieces) {
         for (const auto& piece : pieces) {
+            if (piece.id == m_skipPieceId) continue;
             sf::Sprite sprite;
             sprite.setTexture(m_assets->getPieceTexture(piece.type, piece.kingdom));
             sprite.setPosition(static_cast<float>(piece.position.x * m_cellSize),

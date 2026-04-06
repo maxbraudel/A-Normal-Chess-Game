@@ -4,6 +4,7 @@
 #include "Board/Cell.hpp"
 #include "Kingdom/Kingdom.hpp"
 #include "Units/Piece.hpp"
+#include "Units/PieceType.hpp"
 #include "Units/MovementRules.hpp"
 #include "Buildings/Building.hpp"
 #include "Systems/TurnSystem.hpp"
@@ -28,6 +29,8 @@ void InputHandler::setTool(ToolState tool) {
 Piece* InputHandler::getSelectedPiece() const { return m_selectedPiece; }
 Building* InputHandler::getSelectedBuilding() const { return m_selectedBuilding; }
 const std::vector<sf::Vector2i>& InputHandler::getValidMoves() const { return m_validMoves; }
+const std::vector<sf::Vector2i>& InputHandler::getDangerMoves() const { return m_dangerMoves; }
+int InputHandler::getCapturePreviewPieceId() const { return m_capturePreviewPieceId; }
 bool InputHandler::hasMovePreview() const { return m_hasMovePreview; }
 sf::Vector2i InputHandler::getMoveFrom() const { return m_moveFrom; }
 sf::Vector2i InputHandler::getMoveTo() const { return m_moveTo; }
@@ -41,8 +44,31 @@ void InputHandler::clearSelection() {
     m_selectedPiece = nullptr;
     m_selectedBuilding = nullptr;
     m_validMoves.clear();
+    m_dangerMoves.clear();
     // NOTE: does NOT clear move preview — call cancelLiveMove() / clearMovePreview() separately
     m_hasBuildPreview = false;
+}
+
+void InputHandler::refreshPieceMoves(Piece* piece, const Board& board, const Kingdom& enemyKingdom, const GameConfig& config) {
+    m_validMoves.clear();
+    m_dangerMoves.clear();
+    auto allMoves = MovementRules::getValidMoves(*piece, board, config);
+    if (piece->type == PieceType::King) {
+        // Build threat set from enemy pieces, excluding any preview-captured piece
+        std::vector<sf::Vector2i> threatened;
+        for (const auto& ep : enemyKingdom.pieces) {
+            if (ep.id == m_capturePreviewPieceId) continue;
+            auto eMoves = MovementRules::getValidMoves(ep, board, config);
+            for (const auto& em : eMoves) threatened.push_back(em);
+        }
+        for (const auto& mv : allMoves) {
+            bool danger = std::find(threatened.begin(), threatened.end(), mv) != threatened.end();
+            if (danger) m_dangerMoves.push_back(mv);
+            else        m_validMoves.push_back(mv);
+        }
+    } else {
+        m_validMoves = std::move(allMoves);
+    }
 }
 
 void InputHandler::cancelLiveMove() {
@@ -51,11 +77,13 @@ void InputHandler::cancelLiveMove() {
         m_movedPiece = nullptr;
     }
     m_hasMovePreview = false;
+    m_capturePreviewPieceId = -1;
 }
 
 void InputHandler::clearMovePreview() {
     m_movedPiece = nullptr;
     m_hasMovePreview = false;
+    m_capturePreviewPieceId = -1;
 }
 
 void InputHandler::handleEvent(const sf::Event& event, sf::RenderWindow& window,
@@ -119,11 +147,12 @@ void InputHandler::handleSelectTool(const sf::Event& event, sf::RenderWindow& wi
                 Piece* restoredPiece = m_movedPiece;
                 m_movedPiece = nullptr;
                 m_hasMovePreview = false;
+                m_capturePreviewPieceId = -1;
                 m_moveTo = m_moveFrom;
 
                 m_selectedPiece = restoredPiece;
                 m_selectedBuilding = nullptr;
-                m_validMoves = MovementRules::getValidMoves(*m_selectedPiece, board, config);
+                refreshPieceMoves(restoredPiece, board, enemyKingdom, config);
                 return;
             }
 
@@ -148,6 +177,10 @@ void InputHandler::handleSelectTool(const sf::Event& event, sf::RenderWindow& wi
                 // Apply move visually (piece draws at new position immediately)
                 m_selectedPiece->position = cellPos;
 
+                // Track any enemy piece at the destination for preview-hide
+                Piece* captured = enemyKingdom.getPieceAt(cellPos);
+                m_capturePreviewPieceId = captured ? captured->id : -1;
+
                 // Queue the command (includes origin for commitTurn)
                 TurnCommand cmd;
                 cmd.type = TurnCommand::Move;
@@ -162,9 +195,11 @@ void InputHandler::handleSelectTool(const sf::Event& event, sf::RenderWindow& wi
                     m_selectedPiece = m_movedPiece;
                     m_selectedBuilding = nullptr;
                     m_validMoves.clear();
+                    m_dangerMoves.clear();
                 } else {
                     // Couldn't queue (already moved this turn): revert visual move
                     m_selectedPiece->position = origin;
+                    m_capturePreviewPieceId = -1;
                 }
                 return;
             }
@@ -175,7 +210,7 @@ void InputHandler::handleSelectTool(const sf::Event& event, sf::RenderWindow& wi
         if (piece) {
             m_selectedPiece = piece;
             m_selectedBuilding = nullptr;
-            m_validMoves = MovementRules::getValidMoves(*piece, board, config);
+            refreshPieceMoves(piece, board, enemyKingdom, config);
             m_hasMovePreview = false;
             return;
         }
