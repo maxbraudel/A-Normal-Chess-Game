@@ -129,6 +129,11 @@ void Game::handleWindowResize(sf::Vector2u newSize) {
 
     m_hudView = sf::View(sf::FloatRect(0.f, 0.f,
         static_cast<float>(newSize.x), static_cast<float>(newSize.y)));
+
+    const tgui::FloatRect guiRect(0.f, 0.f,
+        static_cast<float>(newSize.x), static_cast<float>(newSize.y));
+    m_gui.setAbsoluteViewport(guiRect);
+    m_gui.setAbsoluteView(guiRect);
 }
 
 #ifdef _WIN32
