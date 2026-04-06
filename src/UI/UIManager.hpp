@@ -23,9 +23,10 @@ public:
     void showHUD();
     void showPauseMenu();
     void hidePauseMenu();
-    void showPiecePanel(const Piece& piece, const GameConfig& config);
+    void showPiecePanel(const Piece& piece, const GameConfig& config, bool allowUpgrade);
     void showBuildingPanel(const Building& building);
-    void showBarracksPanel(const Building& barracks, const Kingdom& kingdom, const GameConfig& config);
+    void showBarracksPanel(const Building& barracks, const Kingdom& kingdom, const GameConfig& config,
+                           bool allowProduce);
     void showBuildToolPanel(const Kingdom& kingdom, const GameConfig& config);
     void showEventLogPanel(const EventLog& log);
     void hideAllPanels();

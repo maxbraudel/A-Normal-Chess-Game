@@ -3,6 +3,7 @@
 #include <TGUI/AllWidgets.hpp>
 #include <functional>
 #include <string>
+#include "Core/TurnPhase.hpp"
 
 class AssetManager;
 class Kingdom;
@@ -12,7 +13,7 @@ public:
     void init(tgui::Gui& gui, const AssetManager& assets);
     void show();
     void hide();
-    void update(int turnNumber, const std::string& activePlayer, int gold);
+    void update(int turnNumber, TurnPhase turnPhase, int gold);
 
     void setOnReset(std::function<void()> callback);
     void setOnPlay(std::function<void()> callback);

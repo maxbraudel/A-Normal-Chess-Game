@@ -52,7 +52,7 @@ void PiecePanel::init(tgui::Gui& gui) {
     m_panel->setVisible(false);
 }
 
-void PiecePanel::show(const Piece& piece, const GameConfig& config) {
+void PiecePanel::show(const Piece& piece, const GameConfig& config, bool allowUpgrade) {
     if (!m_panel) return;
     m_currentPieceId = piece.id;
     m_typeLabel->setText("Type: " + pieceTypeName(piece.type));
@@ -66,6 +66,7 @@ void PiecePanel::show(const Piece& piece, const GameConfig& config) {
         piece.type == PieceType::Rook ? PieceType::Queen : PieceType::King,
         config);
     m_upgradeBtn->setVisible(canUpgrade);
+    m_upgradeBtn->setEnabled(canUpgrade && allowUpgrade);
 
     m_panel->setVisible(true);
 }

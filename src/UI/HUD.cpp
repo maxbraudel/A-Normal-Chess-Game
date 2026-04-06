@@ -60,9 +60,10 @@ void HUD::hide() {
     if (m_panel) m_panel->setVisible(false);
 }
 
-void HUD::update(int turnNumber, const std::string& activePlayer, int gold) {
+void HUD::update(int turnNumber, TurnPhase turnPhase, int gold) {
+    const char* turnText = (turnPhase == TurnPhase::WhiteTurn) ? "Player turn" : "Black turn";
     if (m_turnLabel) m_turnLabel->setText("Turn " + std::to_string(turnNumber));
-    if (m_playerLabel) m_playerLabel->setText(activePlayer + "'s turn");
+    if (m_playerLabel) m_playerLabel->setText(turnText);
     if (m_goldLabel) m_goldLabel->setText("Gold: " + std::to_string(gold));
 }
 

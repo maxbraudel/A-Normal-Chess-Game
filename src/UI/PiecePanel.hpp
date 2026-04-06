@@ -9,7 +9,7 @@ class GameConfig;
 class PiecePanel {
 public:
     void init(tgui::Gui& gui);
-    void show(const Piece& piece, const GameConfig& config);
+    void show(const Piece& piece, const GameConfig& config, bool allowUpgrade);
     void hide();
 
     void setOnUpgrade(std::function<void(int pieceId)> callback);

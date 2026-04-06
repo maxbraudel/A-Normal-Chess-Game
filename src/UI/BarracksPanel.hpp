@@ -10,7 +10,8 @@ class GameConfig;
 class BarracksPanel {
 public:
     void init(tgui::Gui& gui);
-    void show(const Building& barracks, const Kingdom& kingdom, const GameConfig& config);
+    void show(const Building& barracks, const Kingdom& kingdom, const GameConfig& config,
+              bool allowProduce);
     void hide();
 
     void setOnProduce(std::function<void(int barracksId, int pieceType)> callback);

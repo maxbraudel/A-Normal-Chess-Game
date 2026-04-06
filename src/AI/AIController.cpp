@@ -25,9 +25,11 @@ const AIBrain& AIController::getBrain() const {
     return m_brain;
 }
 
-void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
-                              const std::vector<Building>& publicBuildings,
-                              TurnSystem& turnSystem, const GameConfig& config, EventLog& log) {
+AITurnPlan AIController::computeTurnPlan(Board& board, Kingdom& self, Kingdom& enemy,
+                                         const std::vector<Building>& publicBuildings,
+                                         int turnNumber, const GameConfig& config) {
+    AITurnPlan plan;
+
     // === Step 0: Build the cached turn context (computed ONCE) ===
     AITurnContext ctx;
     ctx.build(board, self, enemy, config);
@@ -45,13 +47,17 @@ void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
         m_enemyKingStaticTurns = 0;
     }
 
+    plan.lastEnemyKingPos = m_lastEnemyKingPos;
+    plan.enemyKingStaticTurns = m_enemyKingStaticTurns;
+
     // === Step 1: Update brain using cached threat maps ===
     m_brain.update(board, self, enemy, config, m_config, ctx,
-                   turnSystem.getTurnNumber(), m_enemyKingStaticTurns);
+                   turnNumber, m_enemyKingStaticTurns);
     const auto& priorities = m_brain.getPriorities();
     const bool forcePressure = (m_enemyKingStaticTurns >= 4 && m_brain.hasSufficientMatingMaterial(self));
+    plan.phaseName = m_brain.getPhaseName();
 
-    int turn = turnSystem.getTurnNumber();
+    int turn = turnNumber;
     std::cerr << "\n========== AI TURN " << turn << " ==========" << std::endl;
     std::cerr << "  Phase: " << m_brain.getPhaseName() << std::endl;
     std::cerr << "  Priorities: econ=" << priorities.economy
@@ -80,8 +86,16 @@ void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
             std::cerr << "  King has " << kit->second.size() << " legal moves" << std::endl;
     }
 
-    log.log(turnSystem.getTurnNumber(), self.id,
-            "AI Phase: " + m_brain.getPhaseName());
+    TurnSystem planningTurnSystem;
+    planningTurnSystem.setActiveKingdom(self.id);
+
+    auto queuePlanned = [&](const TurnCommand& cmd) {
+        if (planningTurnSystem.queueCommand(cmd)) {
+            plan.commands.push_back(cmd);
+            return true;
+        }
+        return false;
+    };
 
     bool hasMoved = false;
     bool hasBuilt = false;
@@ -101,12 +115,11 @@ void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
                                                 publicBuildings, hasMoved);
         std::cerr << "  >> CRISIS move commands: " << moveCmds.size() << std::endl;
         for (auto& cmd : moveCmds) {
-            if (turnSystem.queueCommand(cmd)) {
+            if (queuePlanned(cmd)) {
                 if (cmd.type == TurnCommand::Move) hasMoved = true;
             }
         }
         // Don't return — fall through to allow production/building
-        log.log(turnSystem.getTurnNumber(), self.id, "AI escaped crisis, continuing turn.");
     }
 
     // === Normal turn: Special → [Move OR Econ first, based on phase] → Build ===
@@ -118,7 +131,7 @@ void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
         auto specialCmds = AIStrategySpecial::decide(board, self, enemy, publicBuildings,
                                                        config, m_config, m_brain, hasMarried);
         for (auto& cmd : specialCmds) {
-            if (turnSystem.queueCommand(cmd)) {
+            if (queuePlanned(cmd)) {
                 if (cmd.type == TurnCommand::Marry) hasMarried = true;
             }
         }
@@ -140,7 +153,7 @@ void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
             std::cerr << "  >> Move returned " << moveCmds.size() << " commands" << std::endl;
             for (auto& cmd : moveCmds) {
                 std::cerr << "     Move cmd piece=" << cmd.pieceId << " from=(" << cmd.origin.x << "," << cmd.origin.y << ") to=(" << cmd.destination.x << "," << cmd.destination.y << ")" << std::endl;
-                if (turnSystem.queueCommand(cmd)) {
+                if (queuePlanned(cmd)) {
                     hasMoved = true;
                 }
             }
@@ -158,7 +171,7 @@ void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
                 if (cmd.type == TurnCommand::Build) std::cerr << " building=" << static_cast<int>(cmd.buildingType);
                 if (cmd.type == TurnCommand::Produce) std::cerr << " unit=" << static_cast<int>(cmd.produceType);
                 std::cerr << std::endl;
-                if (turnSystem.queueCommand(cmd)) {
+                if (queuePlanned(cmd)) {
                     if (cmd.type == TurnCommand::Move) hasMoved = true;
                     if (cmd.type == TurnCommand::Build) hasBuilt = true;
                     if (cmd.type == TurnCommand::Produce) hasProduced = true;
@@ -181,7 +194,7 @@ void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
                 if (cmd.type == TurnCommand::Build) std::cerr << " building=" << static_cast<int>(cmd.buildingType);
                 if (cmd.type == TurnCommand::Produce) std::cerr << " unit=" << static_cast<int>(cmd.produceType);
                 std::cerr << std::endl;
-                if (turnSystem.queueCommand(cmd)) {
+                if (queuePlanned(cmd)) {
                     if (cmd.type == TurnCommand::Move) hasMoved = true;
                     if (cmd.type == TurnCommand::Build) hasBuilt = true;
                     if (cmd.type == TurnCommand::Produce) hasProduced = true;
@@ -197,7 +210,7 @@ void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
             std::cerr << "  >> Move returned " << moveCmds.size() << " commands" << std::endl;
             for (auto& cmd : moveCmds) {
                 std::cerr << "     Move cmd piece=" << cmd.pieceId << " from=(" << cmd.origin.x << "," << cmd.origin.y << ") to=(" << cmd.destination.x << "," << cmd.destination.y << ")" << std::endl;
-                if (turnSystem.queueCommand(cmd)) {
+                if (queuePlanned(cmd)) {
                     hasMoved = true;
                 }
             }
@@ -213,7 +226,7 @@ void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
         for (auto& cmd : buildCmds) {
             std::cerr << "     Build cmd: type=" << static_cast<int>(cmd.buildingType)
                       << " at=(" << cmd.buildOrigin.x << "," << cmd.buildOrigin.y << ")" << std::endl;
-            if (turnSystem.queueCommand(cmd)) {
+            if (queuePlanned(cmd)) {
                 hasBuilt = true;
             }
         }
@@ -231,15 +244,33 @@ void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
         for (auto& cmd : econCmds) {
             if (cmd.type == TurnCommand::Produce) {
                 std::cerr << "     Produce cmd: unit=" << static_cast<int>(cmd.produceType) << std::endl;
-                if (turnSystem.queueCommand(cmd)) {
+                if (queuePlanned(cmd)) {
                     hasProduced = true;
                 }
             }
         }
     }
 
-    log.log(turnSystem.getTurnNumber(), self.id, "AI completed turn planning.");
     std::cerr << "  >> FINAL: hasMoved=" << hasMoved << " hasBuilt=" << hasBuilt
               << " hasProduced=" << hasProduced << " hasMarried=" << hasMarried << std::endl;
     std::cerr << "========== END AI TURN ==========" << std::endl;
+    return plan;
+}
+
+void AIController::applyTurnPlanMetadata(const AITurnPlan& plan) {
+    m_lastEnemyKingPos = plan.lastEnemyKingPos;
+    m_enemyKingStaticTurns = plan.enemyKingStaticTurns;
+}
+
+void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
+                              const std::vector<Building>& publicBuildings,
+                              TurnSystem& turnSystem, const GameConfig& config, EventLog& log) {
+    AITurnPlan plan = computeTurnPlan(board, self, enemy, publicBuildings,
+                                      turnSystem.getTurnNumber(), config);
+    applyTurnPlanMetadata(plan);
+    log.log(turnSystem.getTurnNumber(), self.id, "AI Phase: " + plan.phaseName);
+    for (const auto& cmd : plan.commands) {
+        turnSystem.queueCommand(cmd);
+    }
+    log.log(turnSystem.getTurnNumber(), self.id, "AI completed turn planning.");
 }

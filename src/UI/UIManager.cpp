@@ -37,12 +37,12 @@ void UIManager::hidePauseMenu() {
     m_pauseMenu.hide();
 }
 
-void UIManager::showPiecePanel(const Piece& piece, const GameConfig& config) {
+void UIManager::showPiecePanel(const Piece& piece, const GameConfig& config, bool allowUpgrade) {
     m_buildingPanel.hide();
     m_barracksPanel.hide();
     m_buildToolPanel.hide();
     m_eventLogPanel.hide();
-    m_piecePanel.show(piece, config);
+    m_piecePanel.show(piece, config, allowUpgrade);
 }
 
 void UIManager::showBuildingPanel(const Building& building) {
@@ -53,12 +53,13 @@ void UIManager::showBuildingPanel(const Building& building) {
     m_buildingPanel.show(building);
 }
 
-void UIManager::showBarracksPanel(const Building& barracks, const Kingdom& kingdom, const GameConfig& config) {
+void UIManager::showBarracksPanel(const Building& barracks, const Kingdom& kingdom, const GameConfig& config,
+                                  bool allowProduce) {
     m_piecePanel.hide();
     m_buildingPanel.hide();
     m_buildToolPanel.hide();
     m_eventLogPanel.hide();
-    m_barracksPanel.show(barracks, kingdom, config);
+    m_barracksPanel.show(barracks, kingdom, config, allowProduce);
 }
 
 void UIManager::showBuildToolPanel(const Kingdom& kingdom, const GameConfig& config) {

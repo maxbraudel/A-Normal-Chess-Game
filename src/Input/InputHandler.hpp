@@ -24,7 +24,8 @@ public:
                       TurnSystem& turnSystem, Kingdom& activeKingdom,
                       Kingdom& enemyKingdom,
                       const std::vector<Building>& publicBuildings,
-                      UIManager& uiManager, const GameConfig& config);
+                      UIManager& uiManager, const GameConfig& config,
+                      bool allowCommands = true);
 
     ToolState getCurrentTool() const;
     void setTool(ToolState tool);
@@ -74,11 +75,13 @@ private:
                            TurnSystem& turnSystem, Kingdom& activeKingdom,
                            Kingdom& enemyKingdom,
                            const std::vector<Building>& publicBuildings,
-                           const GameConfig& config);
+                           const GameConfig& config,
+                           bool allowCommands);
     void handleBuildTool(const sf::Event& event, sf::RenderWindow& window,
                           Camera& camera, Board& board,
                           TurnSystem& turnSystem, Kingdom& activeKingdom,
-                          const GameConfig& config);
+                          const GameConfig& config,
+                          bool allowCommands);
     void handleCameraInput(const sf::Event& event, sf::RenderWindow& window, Camera& camera);
     // Recompute m_validMoves / m_dangerMoves for piece given current preview board state
     void refreshPieceMoves(Piece* piece, const Board& board, const Kingdom& enemyKingdom, const GameConfig& config);

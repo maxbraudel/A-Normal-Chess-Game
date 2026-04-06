@@ -91,7 +91,8 @@ void InputHandler::handleEvent(const sf::Event& event, sf::RenderWindow& window,
                                 TurnSystem& turnSystem, Kingdom& activeKingdom,
                                 Kingdom& enemyKingdom,
                                 const std::vector<Building>& publicBuildings,
-                                UIManager& uiManager, const GameConfig& config) {
+                                UIManager& uiManager, const GameConfig& config,
+                                bool allowCommands) {
     // Camera input (always active)
     handleCameraInput(event, window, camera);
 
@@ -113,10 +114,17 @@ void InputHandler::handleEvent(const sf::Event& event, sf::RenderWindow& window,
     switch (m_currentTool) {
         case ToolState::Select:
             handleSelectTool(event, window, camera, board, turnSystem,
-                              activeKingdom, enemyKingdom, publicBuildings, config);
+                              activeKingdom, enemyKingdom, publicBuildings, config,
+                              allowCommands);
             break;
         case ToolState::Build:
-            handleBuildTool(event, window, camera, board, turnSystem, activeKingdom, config);
+            if (allowCommands) {
+                handleBuildTool(event, window, camera, board, turnSystem, activeKingdom, config,
+                    true);
+            } else {
+                handleSelectTool(event, window, camera, board, turnSystem,
+                    activeKingdom, enemyKingdom, publicBuildings, config, false);
+            }
             break;
         case ToolState::Journal:
             // Journal mode: no map interaction
@@ -129,7 +137,8 @@ void InputHandler::handleSelectTool(const sf::Event& event, sf::RenderWindow& wi
                                       TurnSystem& turnSystem, Kingdom& activeKingdom,
                                       Kingdom& enemyKingdom,
                                       const std::vector<Building>& publicBuildings,
-                                      const GameConfig& config) {
+                                      const GameConfig& config,
+                                      bool allowCommands) {
     if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
         sf::Vector2f worldPos = camera.screenToWorld({event.mouseButton.x, event.mouseButton.y}, window);
         sf::Vector2i cellPos = camera.worldToCell(worldPos, config.getCellSizePx());
@@ -137,6 +146,37 @@ void InputHandler::handleSelectTool(const sf::Event& event, sf::RenderWindow& wi
         if (!board.isInBounds(cellPos.x, cellPos.y)) return;
         Cell& cell = board.getCell(cellPos.x, cellPos.y);
         if (!cell.isInCircle) return;
+
+        if (!allowCommands) {
+            Piece* piece = activeKingdom.getPieceAt(cellPos);
+            if (piece) {
+                m_selectedPiece = piece;
+                m_selectedBuilding = nullptr;
+                m_validMoves.clear();
+                m_dangerMoves.clear();
+                return;
+            }
+
+            Building* building = activeKingdom.getBuildingAt(cellPos);
+            if (!building) {
+                for (auto& b : const_cast<std::vector<Building>&>(publicBuildings)) {
+                    if (b.containsCell(cellPos.x, cellPos.y)) {
+                        building = &b;
+                        break;
+                    }
+                }
+            }
+            if (building) {
+                m_selectedBuilding = building;
+                m_selectedPiece = nullptr;
+                m_validMoves.clear();
+                m_dangerMoves.clear();
+                return;
+            }
+
+            clearSelection();
+            return;
+        }
 
         // ---- Live move preview: allow retargeting to any original legal move or cancel on origin ----
         if (m_hasMovePreview) {
@@ -269,7 +309,13 @@ void InputHandler::handleSelectTool(const sf::Event& event, sf::RenderWindow& wi
 void InputHandler::handleBuildTool(const sf::Event& event, sf::RenderWindow& window,
                                      Camera& camera, Board& board,
                                      TurnSystem& turnSystem, Kingdom& activeKingdom,
-                                     const GameConfig& config) {
+                                     const GameConfig& config,
+                                     bool allowCommands) {
+    if (!allowCommands) {
+        m_hasBuildPreview = false;
+        return;
+    }
+
     if (event.type == sf::Event::MouseMoved) {
         sf::Vector2f worldPos = camera.screenToWorld({event.mouseMove.x, event.mouseMove.y}, window);
         sf::Vector2i cellPos = camera.worldToCell(worldPos, config.getCellSizePx());

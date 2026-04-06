@@ -65,7 +65,8 @@ void BarracksPanel::init(tgui::Gui& gui) {
     m_panel->setVisible(false);
 }
 
-void BarracksPanel::show(const Building& barracks, const Kingdom& kingdom, const GameConfig& config) {
+void BarracksPanel::show(const Building& barracks, const Kingdom& kingdom, const GameConfig& config,
+                         bool allowProduce) {
     if (!m_panel) return;
     m_currentBarracksId = barracks.id;
 
@@ -83,10 +84,10 @@ void BarracksPanel::show(const Building& barracks, const Kingdom& kingdom, const
         int knightCost = config.getRecruitCost(PieceType::Knight);
         int bishopCost = config.getRecruitCost(PieceType::Bishop);
         int rookCost = config.getRecruitCost(PieceType::Rook);
-        m_producePawnBtn->setEnabled(kingdom.gold >= pawnCost);
-        m_produceKnightBtn->setEnabled(kingdom.gold >= knightCost);
-        m_produceBishopBtn->setEnabled(kingdom.gold >= bishopCost);
-        m_produceRookBtn->setEnabled(kingdom.gold >= rookCost);
+        m_producePawnBtn->setEnabled(allowProduce && kingdom.gold >= pawnCost);
+        m_produceKnightBtn->setEnabled(allowProduce && kingdom.gold >= knightCost);
+        m_produceBishopBtn->setEnabled(allowProduce && kingdom.gold >= bishopCost);
+        m_produceRookBtn->setEnabled(allowProduce && kingdom.gold >= rookCost);
         m_producePawnBtn->setText("Pawn (" + std::to_string(pawnCost) + "g)");
         m_produceKnightBtn->setText("Knight (" + std::to_string(knightCost) + "g)");
         m_produceBishopBtn->setText("Bishop (" + std::to_string(bishopCost) + "g)");

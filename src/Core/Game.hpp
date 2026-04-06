@@ -3,6 +3,10 @@
 #include <TGUI/Backend/SFML-Graphics.hpp>
 #include <TGUI/AllWidgets.hpp>
 #include <array>
+#include <atomic>
+#include <memory>
+#include <mutex>
+#include <thread>
 #include <vector>
 #include <string>
 
@@ -14,6 +18,7 @@
 #endif
 
 #include "Core/GameState.hpp"
+#include "Core/TurnPhase.hpp"
 #include "Core/GameClock.hpp"
 #include "Config/GameConfig.hpp"
 #include "Config/AIConfig.hpp"
@@ -56,6 +61,10 @@ private:
     void saveGame();
     void commitPlayerTurn();
     void resetPlayerTurn();
+    void startAITurnIfNeeded();
+    void pollAITurn();
+    void discardPendingAITurn();
+    void refreshTurnPhase();
 
     void setupUICallbacks();
     void updateUIState();
@@ -90,8 +99,21 @@ private:
 
     // State
     GameState m_state;
+    TurnPhase m_turnPhase = TurnPhase::WhiteTurn;
     GameClock m_clock;
     std::string m_gameName;
+
+    struct AsyncAITaskState {
+        std::mutex mutex;
+        bool ready = false;
+        std::uint64_t generation = 0;
+        KingdomId activeKingdom = KingdomId::Black;
+        int turnNumber = 0;
+        AITurnPlan plan;
+    };
+
+    std::shared_ptr<AsyncAITaskState> m_aiTask;
+    std::atomic<std::uint64_t> m_aiTaskGeneration{0};
 
     // Config
     GameConfig m_config;
