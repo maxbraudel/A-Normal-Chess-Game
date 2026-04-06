@@ -13,13 +13,9 @@
 #include "Systems/EventLog.hpp"
 #include "Config/GameConfig.hpp"
 #include "Buildings/Building.hpp"
-#include <cstdlib>
-#include <ctime>
 #include <iostream>
 
-AIController::AIController() {
-    std::srand(static_cast<unsigned>(std::time(nullptr)));
-}
+AIController::AIController() = default;
 
 bool AIController::loadConfig(const std::string& filepath) {
     return m_config.loadFromFile(filepath);
@@ -36,9 +32,24 @@ void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
     AITurnContext ctx;
     ctx.build(board, self, enemy, config);
 
+    const Piece* trackedEnemyKing = enemy.getKing();
+    if (trackedEnemyKing) {
+        if (trackedEnemyKing->position == m_lastEnemyKingPos) {
+            ++m_enemyKingStaticTurns;
+        } else {
+            m_lastEnemyKingPos = trackedEnemyKing->position;
+            m_enemyKingStaticTurns = 0;
+        }
+    } else {
+        m_lastEnemyKingPos = {-9999, -9999};
+        m_enemyKingStaticTurns = 0;
+    }
+
     // === Step 1: Update brain using cached threat maps ===
-    m_brain.update(board, self, enemy, config, ctx, turnSystem.getTurnNumber());
+    m_brain.update(board, self, enemy, config, m_config, ctx,
+                   turnSystem.getTurnNumber(), m_enemyKingStaticTurns);
     const auto& priorities = m_brain.getPriorities();
+    const bool forcePressure = (m_enemyKingStaticTurns >= 4 && m_brain.hasSufficientMatingMaterial(self));
 
     int turn = turnSystem.getTurnNumber();
     std::cerr << "\n========== AI TURN " << turn << " ==========" << std::endl;
@@ -58,6 +69,8 @@ void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
     }
     std::cerr << "  Gold: " << self.gold << std::endl;
     std::cerr << "  Free resource cells: " << ctx.freeResourceCells.size() << std::endl;
+    std::cerr << "  Enemy king static turns: " << m_enemyKingStaticTurns
+              << " forcePressure=" << forcePressure << std::endl;
     Piece* dbgKing = self.getKing();
     if (dbgKing) {
         std::cerr << "  King @ (" << dbgKing->position.x << "," << dbgKing->position.y << ")";
@@ -76,9 +89,8 @@ void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
     bool hasMarried = false;
 
     auto shouldSkip = [&]() -> bool {
-        if (m_config.randomness <= 0.0f) return false;
-        float roll = static_cast<float>(std::rand()) / static_cast<float>(RAND_MAX);
-        return roll < m_config.randomness * 0.5f;
+        (void)forcePressure;
+        return false;
     };
 
     // === Step 2: CRISIS — escape check, but still allow production afterwards ===
@@ -102,7 +114,7 @@ void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
     // In eco phases, Econ first to gather resources.
 
     // 1. Special actions (upgrades, marriage)
-    if (!shouldSkip()) {
+    if (!forcePressure && !shouldSkip()) {
         auto specialCmds = AIStrategySpecial::decide(board, self, enemy, publicBuildings,
                                                        config, m_config, m_brain, hasMarried);
         for (auto& cmd : specialCmds) {
@@ -114,7 +126,8 @@ void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
 
     bool attackPhase = (m_brain.getPhase() == AIPhase::AGGRESSION
                      || m_brain.getPhase() == AIPhase::MID_GAME
-                     || m_brain.getPhase() == AIPhase::ENDGAME);
+                     || m_brain.getPhase() == AIPhase::ENDGAME
+                     || forcePressure);
 
     // 2a. In ATTACK phases: Move FIRST, then Econ
     if (attackPhase) {
@@ -133,7 +146,7 @@ void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
             }
         }
         // Then economy (if move slot not used)
-        if (!shouldSkip() && priorities.economy >= 0.2f) {
+        if (!forcePressure && !shouldSkip() && priorities.economy >= 0.2f) {
             std::cerr << "  >> Econ: hasMoved=" << hasMoved << " hasBuilt=" << hasBuilt << " hasProduced=" << hasProduced << std::endl;
             auto econCmds = AIStrategyEcon::decide(board, self, enemy, config, m_config,
                                                      m_brain, m_tacticalEngine, ctx,
@@ -192,7 +205,7 @@ void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
     }
 
     // 3. Building decisions
-    if (!hasBuilt && !shouldSkip() && priorities.building >= 0.2f) {
+    if (!forcePressure && !hasBuilt && !shouldSkip() && priorities.building >= 0.2f) {
         std::cerr << "  >> Build: entering (gold=" << self.gold << " building=" << priorities.building << ")" << std::endl;
         auto buildCmds = AIStrategyBuild::decide(board, self, enemy, config, m_config,
                                                    m_brain, hasBuilt);

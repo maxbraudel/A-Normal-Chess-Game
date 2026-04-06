@@ -31,7 +31,8 @@ public:
 
     // Evaluate game state and determine current phase (uses cached context)
     void update(const Board& board, const Kingdom& self, const Kingdom& enemy,
-                const GameConfig& config, const AITurnContext& ctx, int turnNumber);
+                const GameConfig& config, const AIConfig& aiConfig,
+                const AITurnContext& ctx, int turnNumber, int enemyKingStaticTurns);
 
     AIPhase getPhase() const;
     const PhasePriorities& getPriorities() const;
@@ -50,6 +51,7 @@ private:
     int m_turnNumber;
 
     void determinePhase(const Board& board, const Kingdom& self, const Kingdom& enemy,
-                        const GameConfig& config, const AITurnContext& ctx);
+                        const GameConfig& config, const AIConfig& aiConfig,
+                        const AITurnContext& ctx, int enemyKingStaticTurns);
     void setPrioritiesForPhase();
 };

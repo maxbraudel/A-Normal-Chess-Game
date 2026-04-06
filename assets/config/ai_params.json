@@ -16,6 +16,6 @@
         "search_depth": 3,
         "aggression_material_ratio": 1.4
     },
-    "randomness": 0.05
+    "randomness": 0.0
 }
 }

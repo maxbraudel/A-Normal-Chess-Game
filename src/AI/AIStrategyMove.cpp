@@ -711,9 +711,9 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
             //   (a) ALL non-king pieces are already in position (final assault), OR
             //   (b) This move gives CHECK (sets up checkmate)
             bool pieceInPosition = (currentMd <= 4);
-            if (pieceInPosition && !allInPosition) {
-                std::cerr << "    [Move] Piece " << piece.id << " HOLDING at md=" << currentMd << std::endl;
-                continue;
+            bool holdUnlessImproving = (pieceInPosition && !allInPosition);
+            if (holdUnlessImproving) {
+                std::cerr << "    [Move] Piece " << piece.id << " holding unless net improves (md=" << currentMd << ")" << std::endl;
             }
 
             // If this piece is currently under threat and retreat section
@@ -744,10 +744,11 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
                 int newCoverage = 0;
                 int moveSectorLoad = 0;
                 int slotDistance = 999;
+                AssaultEval moveAssault;
 
                 // === SURROUND BONUS ===
                 if (enemyK) {
-                    AssaultEval moveAssault = evaluateAssaultPosition(piece, move, self,
+                    moveAssault = evaluateAssaultPosition(piece, move, self,
                         *enemyK, assaultSlots, sectorLoads, ctx);
                     score += (moveAssault.value - currentAssault.value) * 1.2f;
                     moveSectorLoad = moveAssault.sectorLoad;
@@ -773,6 +774,17 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
                     float moveMd = static_cast<float>(
                         std::abs(move.x - enemyK->position.x) + std::abs(move.y - enemyK->position.y));
                     if (moveMd <= 2.0f) score += 20.0f;
+                }
+
+                if (holdUnlessImproving && enemyK) {
+                    const bool coversNewEscape = (newCoverage > 0);
+                    const bool improvesAssault = (moveAssault.value > currentAssault.value + 18.0f);
+                    const bool closerSlot = (moveAssault.slotDistance + 1 < currentAssault.slotDistance);
+                    if (!(coversNewEscape || improvesAssault || closerSlot)) {
+                        score -= 140.0f;
+                    } else {
+                        score += 30.0f;
+                    }
                 }
 
                 // Prefer strong pieces + pieces already near enemy

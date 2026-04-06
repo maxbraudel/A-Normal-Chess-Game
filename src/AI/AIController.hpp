@@ -2,6 +2,7 @@
 #include "Config/AIConfig.hpp"
 #include "AI/AIBrain.hpp"
 #include "AI/AITacticalEngine.hpp"
+#include <SFML/System/Vector2.hpp>
 
 class Board;
 class Kingdom;
@@ -26,4 +27,6 @@ private:
     AIConfig m_config;
     AIBrain m_brain;
     AITacticalEngine m_tacticalEngine;
+    sf::Vector2i m_lastEnemyKingPos{-9999, -9999};
+    int m_enemyKingStaticTurns = 0;
 };

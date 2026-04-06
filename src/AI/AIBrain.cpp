@@ -7,6 +7,7 @@
 #include "Units/PieceType.hpp"
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingType.hpp"
+#include "Config/AIConfig.hpp"
 #include "Config/GameConfig.hpp"
 #include <cmath>
 
@@ -14,9 +15,10 @@ AIBrain::AIBrain()
     : m_phase(AIPhase::EARLY_GAME), m_turnNumber(0) {}
 
 void AIBrain::update(const Board& board, const Kingdom& self, const Kingdom& enemy,
-                     const GameConfig& config, const AITurnContext& ctx, int turnNumber) {
+                     const GameConfig& config, const AIConfig& aiConfig,
+                     const AITurnContext& ctx, int turnNumber, int enemyKingStaticTurns) {
     m_turnNumber = turnNumber;
-    determinePhase(board, self, enemy, config, ctx);
+    determinePhase(board, self, enemy, config, aiConfig, ctx, enemyKingStaticTurns);
     setPrioritiesForPhase();
 }
 
@@ -84,7 +86,8 @@ bool AIBrain::hasSufficientMatingMaterial(const Kingdom& kingdom) const {
 }
 
 void AIBrain::determinePhase(const Board& board, const Kingdom& self, const Kingdom& enemy,
-                             const GameConfig& config, const AITurnContext& ctx) {
+                             const GameConfig& config, const AIConfig& aiConfig,
+                             const AITurnContext& ctx, int enemyKingStaticTurns) {
     // CRISIS: only when king is actually in check (standing on a threatened square)
     const Piece* king = self.getKing();
     if (king && ctx.enemyThreats.isSet(king->position)) {
@@ -96,9 +99,12 @@ void AIBrain::determinePhase(const Board& board, const Kingdom& self, const King
     int enemyCombat = countCombatPieces(enemy);
     float myMaterial = getMaterialScore(self);
     float enemyMaterial = getMaterialScore(enemy);
+    const bool enemyKingPassive = (enemyKingStaticTurns >= 4);
+    const bool enemyIsWeak = (enemyCombat <= 2 || enemyMaterial <= 330.0f);
+    const int minAttackPieces = std::max(2, aiConfig.minPiecesBeforeAttack);
 
     // ENDGAME: few pieces on both sides — but only if we actually built up first
-    if (myCombat <= 3 && enemyCombat <= 3 && m_turnNumber > 15) {
+    if (myCombat <= 4 && enemyCombat <= 3 && m_turnNumber > 10) {
         bool hasBarracks = false;
         for (const auto& b : self.buildings) {
             if (b.type == BuildingType::Barracks && !b.isDestroyed()) { hasBarracks = true; break; }
@@ -109,11 +115,15 @@ void AIBrain::determinePhase(const Board& board, const Kingdom& self, const King
         }
     }
 
-    // AGGRESSION: material advantage OR large army — but must have mating material
+    // AGGRESSION: material advantage, passive enemy king, or enough force against
+    // a weak defender. This intentionally triggers earlier than before so the
+    // AI stops over-investing in economy when a mating plan is already viable.
     if (hasSufficientMatingMaterial(self) &&
-        ((myMaterial > enemyMaterial * 1.3f && myCombat >= 3)
-        || (myCombat >= 5)
-        || (myCombat >= 3 && m_turnNumber > 25))) {
+        ((myMaterial > enemyMaterial * aiConfig.aggressionMaterialRatio && myCombat >= minAttackPieces)
+        || (enemyKingPassive && myCombat >= std::max(2, minAttackPieces - 1))
+        || (enemyIsWeak && myCombat >= std::max(2, minAttackPieces - 1))
+        || (myCombat >= minAttackPieces + 2)
+        || (myCombat >= minAttackPieces && m_turnNumber > 16))) {
         m_phase = AIPhase::AGGRESSION;
         return;
     }
@@ -125,7 +135,10 @@ void AIBrain::determinePhase(const Board& board, const Kingdom& self, const King
     }
 
     // MID_GAME: have reasonable army AND mating material
-    if (hasSufficientMatingMaterial(self) && (myCombat >= 3 || (myCombat >= 2 && m_turnNumber > 15))) {
+    if (hasSufficientMatingMaterial(self)
+        && (myCombat >= std::max(2, minAttackPieces - 1)
+            || (myCombat >= 2 && m_turnNumber > 12)
+            || enemyKingPassive)) {
         m_phase = AIPhase::MID_GAME;
         return;
     }
@@ -143,13 +156,13 @@ void AIBrain::setPrioritiesForPhase() {
             m_priorities = {0.7f, 0.9f, 0.6f, 0.2f, 0.5f};
             break;
         case AIPhase::MID_GAME:
-            m_priorities = {0.4f, 0.7f, 0.4f, 0.7f, 0.6f};
+            m_priorities = {0.2f, 0.8f, 0.2f, 0.85f, 0.6f};
             break;
         case AIPhase::AGGRESSION:
-            m_priorities = {0.2f, 0.5f, 0.2f, 1.0f, 0.4f};
+            m_priorities = {0.05f, 0.85f, 0.05f, 1.0f, 0.4f};
             break;
         case AIPhase::ENDGAME:
-            m_priorities = {0.3f, 0.3f, 0.3f, 1.0f, 0.8f};
+            m_priorities = {0.0f, 0.6f, 0.0f, 1.0f, 0.85f};
             break;
         case AIPhase::CRISIS:
             m_priorities = {0.0f, 0.0f, 0.0f, 0.3f, 1.0f};

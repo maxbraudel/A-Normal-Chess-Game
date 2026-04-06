@@ -6,7 +6,7 @@ AIConfig::AIConfig()
       buildPriority(0.5f), upgradePriority(0.4f), marriagePriority(0.3f),
       minGoldBeforeAttack(100), minPiecesBeforeAttack(3), wallDefenseRadius(5),
       searchDepth(3), aggressionMaterialRatio(1.4f),
-      randomness(0.05f) {}
+    randomness(0.0f) {}
 
 std::string AIConfig::readFile(const std::string& path) {
     std::ifstream file(path);
@@ -95,6 +95,6 @@ bool AIConfig::loadFromFile(const std::string& filepath) {
         aggressionMaterialRatio = extractFloat(tacticalSec, "aggression_material_ratio", aggressionMaterialRatio);
     }
 
-    randomness = extractFloat(json, "randomness", randomness);
+    randomness = 0.0f;
     return true;
 }
