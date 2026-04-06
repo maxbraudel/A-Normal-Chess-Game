@@ -138,7 +138,7 @@ void InputHandler::handleSelectTool(const sf::Event& event, sf::RenderWindow& wi
         Cell& cell = board.getCell(cellPos.x, cellPos.y);
         if (!cell.isInCircle) return;
 
-        // ---- Move already applied: the moved piece must be selected to undo it ----
+        // ---- Live move preview: allow retargeting to any original legal move or cancel on origin ----
         if (m_hasMovePreview) {
             if (m_selectedPiece == m_movedPiece && cellPos == m_moveFrom) {
                 m_movedPiece->position = m_moveFrom;
@@ -152,18 +152,49 @@ void InputHandler::handleSelectTool(const sf::Event& event, sf::RenderWindow& wi
 
                 m_selectedPiece = restoredPiece;
                 m_selectedBuilding = nullptr;
-                refreshPieceMoves(restoredPiece, board, enemyKingdom, config);
+                return;
+            }
+
+            auto validMoveIt = std::find(m_validMoves.begin(), m_validMoves.end(), cellPos);
+            if (m_movedPiece && validMoveIt != m_validMoves.end()) {
+                if (cellPos == m_movedPiece->position) {
+                    m_selectedPiece = m_movedPiece;
+                    m_selectedBuilding = nullptr;
+                    return;
+                }
+
+                m_movedPiece->position = cellPos;
+
+                Piece* captured = enemyKingdom.getPieceAt(cellPos);
+                m_capturePreviewPieceId = captured ? captured->id : -1;
+
+                turnSystem.cancelMoveCommand();
+
+                TurnCommand cmd;
+                cmd.type = TurnCommand::Move;
+                cmd.pieceId = m_movedPiece->id;
+                cmd.origin = m_moveFrom;
+                cmd.destination = cellPos;
+                if (turnSystem.queueCommand(cmd)) {
+                    m_moveTo = cellPos;
+                    m_selectedPiece = m_movedPiece;
+                    m_selectedBuilding = nullptr;
+                } else {
+                    m_movedPiece->position = m_moveTo;
+                    Piece* previousCapture = enemyKingdom.getPieceAt(m_moveTo);
+                    m_capturePreviewPieceId = previousCapture ? previousCapture->id : -1;
+                }
                 return;
             }
 
             if (m_movedPiece && cellPos == m_movedPiece->position) {
                 m_selectedPiece = m_movedPiece;
                 m_selectedBuilding = nullptr;
-                m_validMoves.clear();
                 return;
             }
 
-            clearSelection();
+            m_selectedPiece = m_movedPiece;
+            m_selectedBuilding = nullptr;
             return;
         }
 
@@ -194,8 +225,6 @@ void InputHandler::handleSelectTool(const sf::Event& event, sf::RenderWindow& wi
                     m_moveTo = cellPos;
                     m_selectedPiece = m_movedPiece;
                     m_selectedBuilding = nullptr;
-                    m_validMoves.clear();
-                    m_dangerMoves.clear();
                 } else {
                     // Couldn't queue (already moved this turn): revert visual move
                     m_selectedPiece->position = origin;

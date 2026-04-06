@@ -25,9 +25,22 @@ void Renderer::draw(sf::RenderWindow& window, const Camera& camera,
                      const Board& board, const std::array<Kingdom, kNumKingdoms>& kingdoms,
                      const std::vector<Building>& publicBuildings,
                      const TurnSystem& turnSystem) {
+    (void)turnSystem;
+    drawWorldBase(window, camera, board, kingdoms, publicBuildings);
+    drawPiecesLayer(window, camera, kingdoms);
+}
+
+void Renderer::drawWorldBase(sf::RenderWindow& window, const Camera& camera,
+                              const Board& board, const std::array<Kingdom, kNumKingdoms>& kingdoms,
+                              const std::vector<Building>& publicBuildings) {
     camera.applyTo(window);
     drawBoard(window, camera, board);
     drawBuildings(window, camera, kingdoms, publicBuildings);
+}
+
+void Renderer::drawPiecesLayer(sf::RenderWindow& window, const Camera& camera,
+                                const std::array<Kingdom, kNumKingdoms>& kingdoms) {
+    camera.applyTo(window);
     drawPieces(window, camera, kingdoms);
 }
 

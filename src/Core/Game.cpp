@@ -243,26 +243,38 @@ void Game::render() {
     if (m_state == GameState::Playing || m_state == GameState::Paused || m_state == GameState::GameOver) {
         m_camera.applyTo(m_window);
         m_renderer.setSkipPieceId(m_input.getCapturePreviewPieceId());
-        m_renderer.draw(m_window, m_camera, m_board, m_kingdoms,
-                          m_publicBuildings, m_turnSystem);
+        m_renderer.drawWorldBase(m_window, m_camera, m_board, m_kingdoms,
+            m_publicBuildings);
+
+        if (m_input.getCurrentTool() == ToolState::Select && m_input.getSelectedPiece()) {
+            sf::Vector2i highlightedOrigin = m_input.hasMovePreview()
+                ? m_input.getMoveFrom()
+                : m_input.getSelectedPiece()->position;
+            m_renderer.getOverlay().drawOriginCell(m_window, m_camera,
+                highlightedOrigin, m_config.getCellSizePx());
+            m_renderer.getOverlay().drawReachableCells(m_window, m_camera,
+                m_input.getValidMoves(), m_config.getCellSizePx());
+            if (!m_input.getDangerMoves().empty()) {
+                m_renderer.getOverlay().drawDangerCells(m_window, m_camera,
+                    m_input.getDangerMoves(), m_config.getCellSizePx());
+            }
+        }
+
+        m_renderer.drawPiecesLayer(m_window, m_camera, m_kingdoms);
 
         // Draw overlays based on input state
         if (m_input.getCurrentTool() == ToolState::Select) {
             if (m_input.getSelectedPiece()) {
-                m_renderer.getOverlay().drawSelectedPieceMarker(m_window, m_camera,
+                m_renderer.getOverlay().drawSelectionFrame(m_window, m_camera,
                     m_hudView, m_windowSize, m_input.getSelectedPiece()->position,
-                    m_config.getCellSizePx());
-                m_renderer.getOverlay().drawReachableCells(m_window, m_camera,
-                    m_input.getValidMoves(), m_config.getCellSizePx());
-                // Show red overlay on king moves that are under enemy threat
-                if (!m_input.getDangerMoves().empty()) {
-                    m_renderer.getOverlay().drawDangerCells(m_window, m_camera,
-                        m_input.getDangerMoves(), m_config.getCellSizePx());
-                }
+                    1, 1, m_config.getCellSizePx());
             }
-            if (m_input.getSelectedPiece() && m_input.hasMovePreview()) {
-                m_renderer.getOverlay().drawOriginCell(m_window, m_camera,
-                    m_input.getMoveFrom(), m_config.getCellSizePx());
+            if (m_input.getSelectedBuilding()) {
+                const Building* selectedBuilding = m_input.getSelectedBuilding();
+                m_renderer.getOverlay().drawSelectionFrame(m_window, m_camera,
+                    m_hudView, m_windowSize, selectedBuilding->origin,
+                    selectedBuilding->width, selectedBuilding->height,
+                    m_config.getCellSizePx());
             }
         }
         if (m_input.hasBuildPreview()) {

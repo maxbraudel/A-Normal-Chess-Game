@@ -21,6 +21,11 @@ public:
               const Board& board, const std::array<Kingdom, kNumKingdoms>& kingdoms,
               const std::vector<Building>& publicBuildings,
               const TurnSystem& turnSystem);
+    void drawWorldBase(sf::RenderWindow& window, const Camera& camera,
+                       const Board& board, const std::array<Kingdom, kNumKingdoms>& kingdoms,
+                       const std::vector<Building>& publicBuildings);
+    void drawPiecesLayer(sf::RenderWindow& window, const Camera& camera,
+                         const std::array<Kingdom, kNumKingdoms>& kingdoms);
 
     OverlayRenderer& getOverlay();
     void setSkipPieceId(int id); // hide a piece from rendering (used for capture preview)
@@ -31,7 +36,7 @@ private:
                         const std::array<Kingdom, kNumKingdoms>& kingdoms,
                         const std::vector<Building>& publicBuildings);
     void drawPieces(sf::RenderWindow& window, const Camera& camera,
-                     const std::array<Kingdom, kNumKingdoms>& kingdoms);
+                    const std::array<Kingdom, kNumKingdoms>& kingdoms);
     void drawSingleBuilding(sf::RenderWindow& window, const Building& building);
 
     const AssetManager* m_assets;

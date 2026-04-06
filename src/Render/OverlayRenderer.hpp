@@ -13,9 +13,9 @@ class TurnSystem;
 
 class OverlayRenderer {
 public:
-    void drawSelectedPieceMarker(sf::RenderWindow& window, const Camera& camera,
-                                  const sf::View& hudView, sf::Vector2u windowSize,
-                                  sf::Vector2i piecePos, int cellSize);
+    void drawSelectionFrame(sf::RenderWindow& window, const Camera& camera,
+                             const sf::View& hudView, sf::Vector2u windowSize,
+                             sf::Vector2i origin, int width, int height, int cellSize);
     void drawReachableCells(sf::RenderWindow& window, const Camera& camera,
                              const std::vector<sf::Vector2i>& cells, int cellSize);
     void drawOriginCell(sf::RenderWindow& window, const Camera& camera,

@@ -7,25 +7,89 @@
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingType.hpp"
 #include "Assets/AssetManager.hpp"
+#include <algorithm>
 
-void OverlayRenderer::drawSelectedPieceMarker(sf::RenderWindow& window, const Camera& camera,
-                                                const sf::View& hudView, sf::Vector2u windowSize,
-                                                sf::Vector2i piecePos, int cellSize) {
-    static constexpr float DOT_RADIUS = 6.f;
+namespace {
 
-    const float worldX = static_cast<float>(piecePos.x * cellSize + cellSize / 2);
-    const float worldY = static_cast<float>(piecePos.y * cellSize) - 10.f;
-    const sf::Vector2f screenPos = camera.worldToScreen({worldX, worldY}, windowSize);
+const sf::Color kSelectionBlue(80, 160, 255, 240);
 
-    sf::CircleShape dot(DOT_RADIUS);
-    dot.setFillColor(sf::Color(80, 160, 255, 230));
-    dot.setOutlineColor(sf::Color(180, 220, 255, 255));
-    dot.setOutlineThickness(2.f);
-    dot.setPosition(screenPos.x - DOT_RADIUS, screenPos.y - DOT_RADIUS);
+void drawDot(sf::RenderWindow& window, float x, float y, float diameter) {
+    sf::RectangleShape dot({diameter, diameter});
+    dot.setFillColor(kSelectionBlue);
+    dot.setPosition(x, y);
+    window.draw(dot);
+}
+
+void drawHorizontalDotRow(sf::RenderWindow& window, float startX, float endX,
+                          float y, float diameter, float gapLength) {
+    if (endX < startX) {
+        return;
+    }
+
+    const float step = diameter + gapLength;
+    float lastX = startX;
+    for (float x = startX; x <= endX; x += step) {
+        drawDot(window, x, y, diameter);
+        lastX = x;
+    }
+
+    if (endX - lastX > 0.5f) {
+        drawDot(window, endX, y, diameter);
+    }
+}
+
+void drawVerticalDotColumn(sf::RenderWindow& window, float x, float startY, float endY,
+                           float diameter, float gapLength) {
+    if (endY < startY) {
+        return;
+    }
+
+    const float step = diameter + gapLength;
+    float lastY = startY;
+    for (float y = startY; y <= endY; y += step) {
+        drawDot(window, x, y, diameter);
+        lastY = y;
+    }
+
+    if (endY - lastY > 0.5f) {
+        drawDot(window, x, endY, diameter);
+    }
+}
+
+} // namespace
+
+void OverlayRenderer::drawSelectionFrame(sf::RenderWindow& window, const Camera& camera,
+                                           const sf::View& hudView, sf::Vector2u windowSize,
+                                           sf::Vector2i origin, int width, int height, int cellSize) {
+    const float dotDiameter = 4.f;
+    const float gapLength = 4.f;
+
+    const sf::Vector2f worldTopLeft(
+        static_cast<float>(origin.x * cellSize),
+        static_cast<float>(origin.y * cellSize));
+    const sf::Vector2f worldBottomRight(
+        static_cast<float>((origin.x + width) * cellSize),
+        static_cast<float>((origin.y + height) * cellSize));
+
+    sf::Vector2f screenTopLeft = camera.worldToScreen(worldTopLeft, windowSize);
+    sf::Vector2f screenBottomRight = camera.worldToScreen(worldBottomRight, windowSize);
+
+    const float leftEdge = std::min(screenTopLeft.x, screenBottomRight.x);
+    const float topEdge = std::min(screenTopLeft.y, screenBottomRight.y);
+    const float rightEdge = std::max(screenTopLeft.x, screenBottomRight.x);
+    const float bottomEdge = std::max(screenTopLeft.y, screenBottomRight.y);
+
+    const float left = leftEdge;
+    const float top = topEdge;
+    const float right = std::max(leftEdge, rightEdge - dotDiameter);
+    const float bottom = std::max(topEdge, bottomEdge - dotDiameter);
 
     const sf::View savedView = window.getView();
     window.setView(hudView);
-    window.draw(dot);
+    drawHorizontalDotRow(window, left, right, top, dotDiameter, gapLength);
+    drawHorizontalDotRow(window, left, right, bottom, dotDiameter, gapLength);
+    drawVerticalDotColumn(window, left, top, bottom, dotDiameter, gapLength);
+    drawVerticalDotColumn(window, right, top, bottom, dotDiameter, gapLength);
     window.setView(savedView);
 }
 
