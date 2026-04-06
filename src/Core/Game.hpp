@@ -2,6 +2,7 @@
 #include <SFML/Graphics.hpp>
 #include <TGUI/Backend/SFML-Graphics.hpp>
 #include <TGUI/AllWidgets.hpp>
+#include <array>
 #include <vector>
 #include <string>
 
@@ -25,6 +26,8 @@
 #include "UI/UIManager.hpp"
 #include "Save/SaveManager.hpp"
 
+enum class ControllerType { Human, AI };
+
 class Game {
 public:
     Game();
@@ -45,6 +48,22 @@ private:
     void setupUICallbacks();
     void updateUIState();
 
+    // ---- Kingdom helpers (generic, side-agnostic) ----
+    Kingdom&       kingdom(KingdomId id)       { return m_kingdoms[kingdomIndex(id)]; }
+    const Kingdom& kingdom(KingdomId id) const { return m_kingdoms[kingdomIndex(id)]; }
+
+    Kingdom&       activeKingdom()       { return kingdom(m_turnSystem.getActiveKingdom()); }
+    const Kingdom& activeKingdom() const { return kingdom(m_turnSystem.getActiveKingdom()); }
+
+    Kingdom&       enemyKingdom()       { return kingdom(opponent(m_turnSystem.getActiveKingdom())); }
+    const Kingdom& enemyKingdom() const { return kingdom(opponent(m_turnSystem.getActiveKingdom())); }
+
+    bool isHumanControlled(KingdomId id) const { return m_controllers[kingdomIndex(id)] == ControllerType::Human; }
+    bool isActiveHuman() const { return isHumanControlled(m_turnSystem.getActiveKingdom()); }
+    bool isActiveAI()    const { return !isActiveHuman(); }
+
+    KingdomId humanKingdomId() const;
+
     // SFML / TGUI
     sf::RenderWindow m_window;
     tgui::Gui m_gui;
@@ -60,8 +79,8 @@ private:
 
     // Game data
     Board m_board;
-    Kingdom m_whiteKingdom;
-    Kingdom m_blackKingdom;
+    std::array<Kingdom, kNumKingdoms> m_kingdoms;
+    std::array<ControllerType, kNumKingdoms> m_controllers;
     std::vector<Building> m_publicBuildings;
     PieceFactory m_pieceFactory;
     BuildingFactory m_buildingFactory;

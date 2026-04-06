@@ -1,6 +1,8 @@
 #pragma once
 #include <SFML/Graphics.hpp>
+#include <array>
 #include <vector>
+#include "Kingdom/KingdomId.hpp"
 
 class AssetManager;
 class Camera;
@@ -23,6 +25,6 @@ public:
                            sf::Vector2i origin, int width, int height, int cellSize, bool valid);
     void drawZoneIndicators(sf::RenderWindow& window, const Camera& camera,
                              const Board& board, const std::vector<Building>& publicBuildings,
-                             const Kingdom& white, const Kingdom& black,
+                             const std::array<Kingdom, kNumKingdoms>& kingdoms,
                              int cellSize, const AssetManager& assets);
 };

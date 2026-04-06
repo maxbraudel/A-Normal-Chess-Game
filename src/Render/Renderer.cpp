@@ -5,6 +5,7 @@
 #include "Board/Board.hpp"
 #include "Board/Cell.hpp"
 #include "Kingdom/Kingdom.hpp"
+#include "Kingdom/KingdomId.hpp"
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingType.hpp"
 #include "Units/Piece.hpp"
@@ -21,13 +22,13 @@ void Renderer::init(const AssetManager& assets, int cellSize) {
 OverlayRenderer& Renderer::getOverlay() { return m_overlay; }
 
 void Renderer::draw(sf::RenderWindow& window, const Camera& camera,
-                     const Board& board, const Kingdom& white, const Kingdom& black,
+                     const Board& board, const std::array<Kingdom, kNumKingdoms>& kingdoms,
                      const std::vector<Building>& publicBuildings,
                      const TurnSystem& turnSystem) {
     camera.applyTo(window);
     drawBoard(window, camera, board);
-    drawBuildings(window, camera, white, black, publicBuildings);
-    drawPieces(window, camera, white, black);
+    drawBuildings(window, camera, kingdoms, publicBuildings);
+    drawPieces(window, camera, kingdoms);
 }
 
 void Renderer::drawBoard(sf::RenderWindow& window, const Camera& camera, const Board& board) {
@@ -66,7 +67,7 @@ void Renderer::drawBoard(sf::RenderWindow& window, const Camera& camera, const B
 }
 
 void Renderer::drawBuildings(sf::RenderWindow& window, const Camera& camera,
-                               const Kingdom& white, const Kingdom& black,
+                               const std::array<Kingdom, kNumKingdoms>& kingdoms,
                                const std::vector<Building>& publicBuildings) {
     if (!m_assets) return;
 
@@ -76,11 +77,10 @@ void Renderer::drawBuildings(sf::RenderWindow& window, const Camera& camera,
     }
 
     // Draw private buildings
-    for (const auto& b : white.buildings) {
-        drawSingleBuilding(window, b);
-    }
-    for (const auto& b : black.buildings) {
-        drawSingleBuilding(window, b);
+    for (const auto& k : kingdoms) {
+        for (const auto& b : k.buildings) {
+            drawSingleBuilding(window, b);
+        }
     }
 }
 
@@ -119,11 +119,11 @@ void Renderer::drawSingleBuilding(sf::RenderWindow& window, const Building& buil
 void Renderer::setSkipPieceId(int id) { m_skipPieceId = id; }
 
 void Renderer::drawPieces(sf::RenderWindow& window, const Camera& camera,
-                            const Kingdom& white, const Kingdom& black) {
+                            const std::array<Kingdom, kNumKingdoms>& kingdoms) {
     if (!m_assets) return;
 
-    auto drawPieceList = [&](const std::deque<Piece>& pieces) {
-        for (const auto& piece : pieces) {
+    for (const auto& k : kingdoms) {
+        for (const auto& piece : k.pieces) {
             if (piece.id == m_skipPieceId) continue;
             sf::Sprite sprite;
             sprite.setTexture(m_assets->getPieceTexture(piece.type, piece.kingdom));
@@ -140,8 +140,5 @@ void Renderer::drawPieces(sf::RenderWindow& window, const Camera& camera,
 
             window.draw(sprite);
         }
-    };
-
-    drawPieceList(white.pieces);
-    drawPieceList(black.pieces);
+    }
 }

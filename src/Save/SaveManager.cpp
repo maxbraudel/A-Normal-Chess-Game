@@ -208,37 +208,26 @@ bool SaveManager::save(const std::string& filepath, const SaveData& data) {
     }
     file << "  ],\n";
 
-    // White kingdom
-    file << "  \"whiteKingdom\": {\n";
-    file << "    \"gold\": " << data.whiteKingdom.gold << ",\n";
-    file << "    \"pieces\": [";
-    for (std::size_t i = 0; i < data.whiteKingdom.pieces.size(); ++i) {
-        if (i > 0) file << ", ";
-        file << serializePiece(data.whiteKingdom.pieces[i]);
+    // Kingdoms (JSON keys "whiteKingdom"/"blackKingdom" kept for backward compatibility)
+    static const char* kingdomKeys[] = {"whiteKingdom", "blackKingdom"};
+    for (int k = 0; k < kNumKingdoms; ++k) {
+        const auto& kd = data.kingdoms[k];
+        file << "  \"" << kingdomKeys[k] << "\": {\n";
+        file << "    \"gold\": " << kd.gold << ",\n";
+        file << "    \"pieces\": [";
+        for (std::size_t i = 0; i < kd.pieces.size(); ++i) {
+            if (i > 0) file << ", ";
+            file << serializePiece(kd.pieces[i]);
+        }
+        file << "],\n";
+        file << "    \"buildings\": [";
+        for (std::size_t i = 0; i < kd.buildings.size(); ++i) {
+            if (i > 0) file << ", ";
+            file << serializeBuilding(kd.buildings[i]);
+        }
+        file << "]\n  }";
+        file << ",\n";
     }
-    file << "],\n";
-    file << "    \"buildings\": [";
-    for (std::size_t i = 0; i < data.whiteKingdom.buildings.size(); ++i) {
-        if (i > 0) file << ", ";
-        file << serializeBuilding(data.whiteKingdom.buildings[i]);
-    }
-    file << "]\n  },\n";
-
-    // Black kingdom
-    file << "  \"blackKingdom\": {\n";
-    file << "    \"gold\": " << data.blackKingdom.gold << ",\n";
-    file << "    \"pieces\": [";
-    for (std::size_t i = 0; i < data.blackKingdom.pieces.size(); ++i) {
-        if (i > 0) file << ", ";
-        file << serializePiece(data.blackKingdom.pieces[i]);
-    }
-    file << "],\n";
-    file << "    \"buildings\": [";
-    for (std::size_t i = 0; i < data.blackKingdom.buildings.size(); ++i) {
-        if (i > 0) file << ", ";
-        file << serializeBuilding(data.blackKingdom.buildings[i]);
-    }
-    file << "]\n  },\n";
 
     // Public buildings
     file << "  \"publicBuildings\": [";
@@ -276,37 +265,26 @@ bool SaveManager::load(const std::string& filepath, SaveData& outData) {
     outData.mapRadius = extractInt(json, "mapRadius", 50);
 
     // Parse kingdoms
-    std::string whiteSection = extractSection(json, "whiteKingdom");
-    outData.whiteKingdom.id = KingdomId::White;
-    outData.whiteKingdom.gold = extractInt(whiteSection, "gold", 0);
+    // Parse kingdoms (JSON keys kept for backward compatibility)
+    static const char* kingdomKeys[] = {"whiteKingdom", "blackKingdom"};
+    for (int k = 0; k < kNumKingdoms; ++k) {
+        KingdomId id = static_cast<KingdomId>(k);
+        std::string section = extractSection(json, kingdomKeys[k]);
+        outData.kingdoms[k].id = id;
+        outData.kingdoms[k].gold = extractInt(section, "gold", 0);
 
-    std::string whitePieces = extractArray(whiteSection, "pieces");
-    auto wpElements = splitArrayElements(whitePieces);
-    outData.whiteKingdom.pieces.clear();
-    for (const auto& elem : wpElements)
-        outData.whiteKingdom.pieces.push_back(parsePiece(elem));
+        std::string piecesArr = extractArray(section, "pieces");
+        auto pieceElems = splitArrayElements(piecesArr);
+        outData.kingdoms[k].pieces.clear();
+        for (const auto& elem : pieceElems)
+            outData.kingdoms[k].pieces.push_back(parsePiece(elem));
 
-    std::string whiteBuildings = extractArray(whiteSection, "buildings");
-    auto wbElements = splitArrayElements(whiteBuildings);
-    outData.whiteKingdom.buildings.clear();
-    for (const auto& elem : wbElements)
-        outData.whiteKingdom.buildings.push_back(parseBuilding(elem));
-
-    std::string blackSection = extractSection(json, "blackKingdom");
-    outData.blackKingdom.id = KingdomId::Black;
-    outData.blackKingdom.gold = extractInt(blackSection, "gold", 0);
-
-    std::string blackPieces = extractArray(blackSection, "pieces");
-    auto bpElements = splitArrayElements(blackPieces);
-    outData.blackKingdom.pieces.clear();
-    for (const auto& elem : bpElements)
-        outData.blackKingdom.pieces.push_back(parsePiece(elem));
-
-    std::string blackBuildings = extractArray(blackSection, "buildings");
-    auto bbElements = splitArrayElements(blackBuildings);
-    outData.blackKingdom.buildings.clear();
-    for (const auto& elem : bbElements)
-        outData.blackKingdom.buildings.push_back(parseBuilding(elem));
+        std::string buildingsArr = extractArray(section, "buildings");
+        auto buildingElems = splitArrayElements(buildingsArr);
+        outData.kingdoms[k].buildings.clear();
+        for (const auto& elem : buildingElems)
+            outData.kingdoms[k].buildings.push_back(parseBuilding(elem));
+    }
 
     // Public buildings
     std::string pubArr = extractArray(json, "publicBuildings");

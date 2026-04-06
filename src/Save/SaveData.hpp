@@ -1,4 +1,5 @@
 #pragma once
+#include <array>
 #include <vector>
 #include <string>
 #include "Kingdom/KingdomId.hpp"
@@ -21,15 +22,17 @@ struct SaveData {
     };
     std::vector<std::vector<CellData>> grid;
 
-    // Kingdom data
+    // Kingdom data (indexed by KingdomId: 0=White, 1=Black)
     struct KingdomData {
         KingdomId id = KingdomId::White;
         int gold = 0;
         std::vector<Piece> pieces;
         std::vector<Building> buildings;
     };
-    KingdomData whiteKingdom;
-    KingdomData blackKingdom;
+    std::array<KingdomData, kNumKingdoms> kingdoms{
+        KingdomData{KingdomId::White, 0, {}, {}},
+        KingdomData{KingdomId::Black, 0, {}, {}}
+    };
 
     // Public buildings
     std::vector<Building> publicBuildings;

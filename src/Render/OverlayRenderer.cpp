@@ -3,6 +3,7 @@
 #include "Board/Board.hpp"
 #include "Board/Cell.hpp"
 #include "Kingdom/Kingdom.hpp"
+#include "Kingdom/KingdomId.hpp"
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingType.hpp"
 #include "Assets/AssetManager.hpp"
@@ -73,7 +74,7 @@ void OverlayRenderer::drawBuildPreview(sf::RenderWindow& window, const Camera& c
 
 void OverlayRenderer::drawZoneIndicators(sf::RenderWindow& window, const Camera& camera,
                                            const Board& board, const std::vector<Building>& publicBuildings,
-                                           const Kingdom& white, const Kingdom& black,
+                                           const std::array<Kingdom, kNumKingdoms>& kingdoms,
                                            int cellSize, const AssetManager& assets) {
     // Fixed icon size in screen pixels — independent of camera zoom
     static constexpr float ICON_SIZE = 28.f;
@@ -86,17 +87,18 @@ void OverlayRenderer::drawZoneIndicators(sf::RenderWindow& window, const Camera&
             building.type != BuildingType::Farm &&
             building.type != BuildingType::Church) continue;
 
-        bool whitePresent = false;
-        bool blackPresent = false;
+        // Track which kingdoms have a piece on this building
+        bool present[kNumKingdoms] = {};
 
         for (const auto& pos : building.getOccupiedCells()) {
             const Cell& cell = board.getCell(pos.x, pos.y);
             if (cell.piece) {
-                if (cell.piece->kingdom == KingdomId::White) whitePresent = true;
-                else blackPresent = true;
+                present[kingdomIndex(cell.piece->kingdom)] = true;
             }
         }
 
+        bool whitePresent = present[kingdomIndex(KingdomId::White)];
+        bool blackPresent = present[kingdomIndex(KingdomId::Black)];
         if (!whitePresent && !blackPresent) continue;
 
         // World-space anchor: horizontally centered above the building, one cell above top edge

@@ -1,7 +1,9 @@
 #pragma once
 #include <SFML/Graphics.hpp>
+#include <array>
 #include <vector>
 #include "Render/OverlayRenderer.hpp"
+#include "Kingdom/KingdomId.hpp"
 
 class AssetManager;
 class Camera;
@@ -16,7 +18,7 @@ public:
     void init(const AssetManager& assets, int cellSize);
 
     void draw(sf::RenderWindow& window, const Camera& camera,
-              const Board& board, const Kingdom& white, const Kingdom& black,
+              const Board& board, const std::array<Kingdom, kNumKingdoms>& kingdoms,
               const std::vector<Building>& publicBuildings,
               const TurnSystem& turnSystem);
 
@@ -26,10 +28,10 @@ public:
 private:
     void drawBoard(sf::RenderWindow& window, const Camera& camera, const Board& board);
     void drawBuildings(sf::RenderWindow& window, const Camera& camera,
-                        const Kingdom& white, const Kingdom& black,
+                        const std::array<Kingdom, kNumKingdoms>& kingdoms,
                         const std::vector<Building>& publicBuildings);
     void drawPieces(sf::RenderWindow& window, const Camera& camera,
-                     const Kingdom& white, const Kingdom& black);
+                     const std::array<Kingdom, kNumKingdoms>& kingdoms);
     void drawSingleBuilding(sf::RenderWindow& window, const Building& building);
 
     const AssetManager* m_assets;
