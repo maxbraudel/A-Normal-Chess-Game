@@ -17,6 +17,7 @@
 #include <limits>
 #include <algorithm>
 #include <iostream>
+#include <array>
 #include <unordered_map>
 #include <deque>
 
@@ -79,6 +80,106 @@ static int countPiecesOnResources(const Kingdom& self, const Board& board) {
         if (isOnResource(p, board)) ++count;
     }
     return count;
+}
+
+static int manhattanDistance(sf::Vector2i a, sf::Vector2i b) {
+    return std::abs(a.x - b.x) + std::abs(a.y - b.y);
+}
+
+static int octantIndex(sf::Vector2i center, sf::Vector2i pos) {
+    const float dx = static_cast<float>(pos.x - center.x);
+    const float dy = static_cast<float>(pos.y - center.y);
+    float angle = std::atan2(dy, dx);
+    if (angle < 0.0f) {
+        angle += 6.28318530718f;
+    }
+    return static_cast<int>(std::floor((angle + 0.39269908169f) / 0.78539816339f)) % 8;
+}
+
+struct AssaultSlot {
+    sf::Vector2i pos;
+    bool isEscape = false;
+    int sector = 0;
+};
+
+struct AssaultEval {
+    float value = -std::numeric_limits<float>::max();
+    int slotDistance = 999;
+    int sectorLoad = 999;
+    int uncoveredEscapePressure = 0;
+};
+
+static std::vector<AssaultSlot> buildAssaultSlots(const Piece& enemyKing, const Board& board) {
+    std::vector<AssaultSlot> slots;
+
+    auto addRing = [&](int radius, bool isEscape) {
+        for (int dy = -radius; dy <= radius; ++dy) {
+            for (int dx = -radius; dx <= radius; ++dx) {
+                if (dx == 0 && dy == 0) continue;
+                if (std::max(std::abs(dx), std::abs(dy)) != radius) continue;
+
+                sf::Vector2i pos = enemyKing.position + sf::Vector2i(dx, dy);
+                if (!board.isInBounds(pos.x, pos.y)) continue;
+
+                const Cell& cell = board.getCell(pos.x, pos.y);
+                if (!cell.isInCircle || cell.type == CellType::Water) continue;
+
+                slots.push_back({pos, isEscape, octantIndex(enemyKing.position, pos)});
+            }
+        }
+    };
+
+    addRing(1, true);
+    addRing(2, false);
+    return slots;
+}
+
+static AssaultEval evaluateAssaultPosition(const Piece& piece,
+                                          sf::Vector2i pos,
+                                          const Kingdom& self,
+                                          const Piece& enemyKing,
+                                          const std::vector<AssaultSlot>& slots,
+                                          const std::array<int, 8>& sectorLoads,
+                                          const AITurnContext& ctx) {
+    AssaultEval best;
+
+    const int currentSector = octantIndex(enemyKing.position, piece.position);
+    const bool subtractCurrentSector = (manhattanDistance(piece.position, enemyKing.position) <= 6);
+    const int moveSector = octantIndex(enemyKing.position, pos);
+
+    for (const auto& slot : slots) {
+        int slotSectorLoad = sectorLoads[slot.sector];
+        int moveSectorLoad = sectorLoads[moveSector];
+        if (subtractCurrentSector && currentSector == slot.sector) {
+            slotSectorLoad = std::max(0, slotSectorLoad - 1);
+        }
+        if (subtractCurrentSector && currentSector == moveSector) {
+            moveSectorLoad = std::max(0, moveSectorLoad - 1);
+        }
+
+        const Piece* occupant = self.getPieceAt(slot.pos);
+        const bool occupiedByFriend = occupant && occupant->id != piece.id;
+        const int slotDistance = manhattanDistance(pos, slot.pos);
+        const bool exactSlot = (pos == slot.pos);
+        const int uncoveredEscapePressure = (slot.isEscape && !ctx.selfThreats.isSet(slot.pos)) ? 1 : 0;
+
+        float value = 0.0f;
+        value += uncoveredEscapePressure ? 80.0f : (slot.isEscape ? 26.0f : 14.0f);
+        value += exactSlot ? (slot.isEscape ? 24.0f : 10.0f) : 0.0f;
+        value -= static_cast<float>(slotDistance) * 8.0f;
+        value -= static_cast<float>(slotSectorLoad) * 20.0f;
+        value -= static_cast<float>(moveSectorLoad) * 12.0f;
+        if (occupiedByFriend) value -= 140.0f;
+
+        if (value > best.value) {
+            best.value = value;
+            best.slotDistance = slotDistance;
+            best.sectorLoad = moveSectorLoad;
+            best.uncoveredEscapePressure = uncoveredEscapePressure;
+        }
+    }
+
+    return best;
 }
 
 std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
@@ -531,6 +632,7 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
 
         // Compute escape squares around the enemy king (1-cell radius)
         std::vector<sf::Vector2i> escapeSquares;
+        std::vector<AssaultSlot> assaultSlots;
         if (enemyK) {
             for (int dy = -1; dy <= 1; ++dy) {
                 for (int dx = -1; dx <= 1; ++dx) {
@@ -543,6 +645,17 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
                         }
                     }
                 }
+            }
+
+            assaultSlots = buildAssaultSlots(*enemyK, board);
+        }
+
+        std::array<int, 8> sectorLoads{};
+        if (enemyK) {
+            for (const auto& p : self.pieces) {
+                if (p.type == PieceType::King) continue;
+                if (manhattanDistance(p.position, enemyK->position) > 6) continue;
+                ++sectorLoads[octantIndex(enemyK->position, p.position)];
             }
         }
 
@@ -563,6 +676,10 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
         float bestScore = -std::numeric_limits<float>::max();
         int bestPieceId = -1;
         sf::Vector2i bestMovePos = {0, 0};
+        int bestNewCoverage = -1;
+        int bestSectorLoad = std::numeric_limits<int>::max();
+        int bestSlotDistance = std::numeric_limits<int>::max();
+        float bestProgress = -std::numeric_limits<float>::max();
 
         for (const auto& piece : self.pieces) {
             // King: only advance if it's the sole piece
@@ -577,12 +694,15 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
 
             float currentDist = 0.0f;
             int currentMd = 0;
+            AssaultEval currentAssault;
             if (enemyK) {
                 currentDist = std::sqrt(
                     static_cast<float>((piece.position.x - targetPos.x) * (piece.position.x - targetPos.x) +
                                        (piece.position.y - targetPos.y) * (piece.position.y - targetPos.y)));
                 currentMd = std::abs(piece.position.x - enemyK->position.x)
                           + std::abs(piece.position.y - enemyK->position.y);
+                currentAssault = evaluateAssaultPosition(piece, piece.position, self,
+                    *enemyK, assaultSlots, sectorLoads, ctx);
             }
 
             // === KEY FIX: Pieces already near the king HOLD POSITION ===
@@ -620,12 +740,20 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
                 float progress = currentDist - dist;
 
                 // Base score: getting closer to enemy king
-                float score = progress * 10.0f;
+                float score = progress * 4.0f;
+                int newCoverage = 0;
+                int moveSectorLoad = 0;
+                int slotDistance = 999;
 
                 // === SURROUND BONUS ===
                 if (enemyK) {
+                    AssaultEval moveAssault = evaluateAssaultPosition(piece, move, self,
+                        *enemyK, assaultSlots, sectorLoads, ctx);
+                    score += (moveAssault.value - currentAssault.value) * 1.2f;
+                    moveSectorLoad = moveAssault.sectorLoad;
+                    slotDistance = moveAssault.slotDistance;
+
                     // Count escape squares this move would newly threaten
-                    int newCoverage = 0;
                     for (const auto& esc : escapeSquares) {
                         if (!ctx.selfThreats.isSet(esc)) {
                             int escDist = std::abs(move.x - esc.x) + std::abs(move.y - esc.y);
@@ -640,24 +768,6 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
                         }
                     }
                     score += newCoverage * 25.0f;
-
-                    // Angle diversity: bonus for approaching from an unoccupied direction
-                    if (dist > 0.1f) {
-                        float angle = std::atan2(dy, dx);
-                        bool angleOccupied = false;
-                        for (const auto& other : self.pieces) {
-                            if (other.id == piece.id || other.type == PieceType::King) continue;
-                            float odx = static_cast<float>(other.position.x - targetPos.x);
-                            float ody = static_cast<float>(other.position.y - targetPos.y);
-                            float otherDist = std::sqrt(odx * odx + ody * ody);
-                            if (otherDist > dist + 2.0f) continue;
-                            float otherAngle = std::atan2(ody, odx);
-                            float angleDiff = std::abs(angle - otherAngle);
-                            if (angleDiff > 3.14159f) angleDiff = 6.28318f - angleDiff;
-                            if (angleDiff < 0.5f) { angleOccupied = true; break; }
-                        }
-                        if (!angleOccupied) score += 15.0f;
-                    }
 
                     // Proximity bonus: getting very close to king is good
                     float moveMd = static_cast<float>(
@@ -685,10 +795,35 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
                     score -= 50.0f;
                 }
 
-                if (score > bestScore) {
+                bool better = false;
+                if (score > bestScore + 0.001f) {
+                    better = true;
+                } else if (std::abs(score - bestScore) <= 0.001f) {
+                    if (newCoverage > bestNewCoverage) {
+                        better = true;
+                    } else if (newCoverage == bestNewCoverage && moveSectorLoad < bestSectorLoad) {
+                        better = true;
+                    } else if (newCoverage == bestNewCoverage && moveSectorLoad == bestSectorLoad
+                               && slotDistance < bestSlotDistance) {
+                        better = true;
+                    } else if (newCoverage == bestNewCoverage && moveSectorLoad == bestSectorLoad
+                               && slotDistance == bestSlotDistance && progress > bestProgress + 0.001f) {
+                        better = true;
+                    } else if (newCoverage == bestNewCoverage && moveSectorLoad == bestSectorLoad
+                               && slotDistance == bestSlotDistance && std::abs(progress - bestProgress) <= 0.001f
+                               && (bestPieceId < 0 || piece.id < bestPieceId)) {
+                        better = true;
+                    }
+                }
+
+                if (better) {
                     bestScore = score;
                     bestPieceId = piece.id;
                     bestMovePos = move;
+                    bestNewCoverage = newCoverage;
+                    bestSectorLoad = moveSectorLoad;
+                    bestSlotDistance = slotDistance;
+                    bestProgress = progress;
                 }
             }
         }
