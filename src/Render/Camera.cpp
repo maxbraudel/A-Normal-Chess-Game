@@ -8,6 +8,17 @@ void Camera::init(sf::RenderWindow& window) {
     m_zoomLevel = 1.0f;
 }
 
+void Camera::handleWindowResize(sf::Vector2u newSize) {
+    if (newSize.x == 0 || newSize.y == 0) {
+        return;
+    }
+
+    const sf::Vector2f center = m_view.getCenter();
+    m_view.setSize(static_cast<float>(newSize.x) * m_zoomLevel,
+                   static_cast<float>(newSize.y) * m_zoomLevel);
+    m_view.setCenter(center);
+}
+
 void Camera::zoom(float factor) {
     m_zoomLevel *= factor;
     m_zoomLevel = std::max(0.1f, std::min(m_zoomLevel, 20.0f));

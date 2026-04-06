@@ -69,6 +69,15 @@ void Game::handleInput() {
             return;
         }
 
+        if (event.type == sf::Event::Resized) {
+            const sf::Vector2u newSize(event.size.width, event.size.height);
+            m_window.setView(sf::View(sf::FloatRect(0.f, 0.f,
+                static_cast<float>(event.size.width),
+                static_cast<float>(event.size.height))));
+            m_camera.handleWindowResize(newSize);
+            continue;
+        }
+
         if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Escape) {
             if (m_state == GameState::Playing) {
                 m_state = GameState::Paused;
@@ -182,8 +191,10 @@ void Game::render() {
         m_renderer.getOverlay().drawZoneIndicators(m_window, m_camera, m_board,
             m_publicBuildings, m_kingdoms, m_config.getCellSizePx(), m_assets);
 
-        // Reset to default view for GUI
-        m_window.setView(m_window.getDefaultView());
+        // Reset to a screen-space view matching the current window size for GUI
+        const sf::Vector2u windowSize = m_window.getSize();
+        m_window.setView(sf::View(sf::FloatRect(0.f, 0.f,
+            static_cast<float>(windowSize.x), static_cast<float>(windowSize.y))));
     }
 
     m_gui.draw();

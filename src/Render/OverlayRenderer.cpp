@@ -23,7 +23,9 @@ void OverlayRenderer::drawSelectedPieceMarker(sf::RenderWindow& window, const Ca
     dot.setPosition(screenPos.x - DOT_RADIUS, screenPos.y - DOT_RADIUS);
 
     const sf::View savedView = window.getView();
-    window.setView(window.getDefaultView());
+    const sf::Vector2u windowSize = window.getSize();
+    window.setView(sf::View(sf::FloatRect(0.f, 0.f,
+        static_cast<float>(windowSize.x), static_cast<float>(windowSize.y))));
     window.draw(dot);
     window.setView(savedView);
 }
@@ -128,7 +130,9 @@ void OverlayRenderer::drawZoneIndicators(sf::RenderWindow& window, const Camera&
         spr.setPosition(screenPos.x - ICON_SIZE * 0.5f, screenPos.y - ICON_SIZE * 0.5f);
 
         // Draw in screen space (default view = no zoom scaling)
-        window.setView(window.getDefaultView());
+        const sf::Vector2u windowSize = window.getSize();
+        window.setView(sf::View(sf::FloatRect(0.f, 0.f,
+            static_cast<float>(windowSize.x), static_cast<float>(windowSize.y))));
         window.draw(spr);
         window.setView(cameraView);  // Restore camera view immediately after
     }

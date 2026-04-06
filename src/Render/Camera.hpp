@@ -7,6 +7,7 @@ class Camera {
 public:
     Camera();
     void init(sf::RenderWindow& window);
+    void handleWindowResize(sf::Vector2u newSize);
 
     void zoom(float factor);
     void pan(sf::Vector2f delta);
