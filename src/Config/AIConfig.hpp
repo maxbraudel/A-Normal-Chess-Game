@@ -27,9 +27,13 @@ public:
 
     float randomness;
 
+    // New AI toggle
+    bool useNewAI = true;
+
 private:
     static std::string readFile(const std::string& path);
     static float extractFloat(const std::string& json, const std::string& key, float defaultVal);
     static int extractInt(const std::string& json, const std::string& key, int defaultVal);
+    static bool extractBool(const std::string& json, const std::string& key, bool defaultVal);
     static std::string extractSection(const std::string& json, const std::string& key);
 };

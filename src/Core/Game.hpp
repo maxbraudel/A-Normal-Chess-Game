@@ -7,6 +7,7 @@
 #include <memory>
 #include <mutex>
 #include <thread>
+#include <ctime>
 #include <vector>
 #include <string>
 
@@ -22,6 +23,7 @@
 #include "Core/GameClock.hpp"
 #include "Config/GameConfig.hpp"
 #include "Config/AIConfig.hpp"
+#include "Debug/GameStateDebugRecorder.hpp"
 #include "Board/Board.hpp"
 #include "Kingdom/Kingdom.hpp"
 #include "Buildings/Building.hpp"
@@ -31,6 +33,7 @@
 #include "Systems/EventLog.hpp"
 #include "Systems/CheckSystem.hpp"
 #include "AI/AIController.hpp"
+#include "AI/AIDirector.hpp"
 #include "Input/InputHandler.hpp"
 #include "Render/Camera.hpp"
 #include "Render/Renderer.hpp"
@@ -110,6 +113,8 @@ private:
         KingdomId activeKingdom = KingdomId::Black;
         int turnNumber = 0;
         AITurnPlan plan;
+        AIDirectorPlan directorPlan;
+        bool usedDirector = false;
     };
 
     std::shared_ptr<AsyncAITaskState> m_aiTask;
@@ -130,9 +135,12 @@ private:
     // Systems
     TurnSystem m_turnSystem;
     EventLog m_eventLog;
+    GameStateDebugRecorder m_debugRecorder;
 
     // AI
     AIController m_ai;
+    AIDirector m_aiDirector;
+    bool m_useNewAI = true;
 
     // Input/Render/UI
     InputHandler m_input;

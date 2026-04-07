@@ -1,4 +1,5 @@
 {
+    "use_new_ai": true,
     "weights": {
         "farm_priority": 0.8,
         "attack_priority": 0.7,
@@ -16,6 +17,10 @@
         "search_depth": 3,
         "aggression_material_ratio": 1.4
     },
-    "randomness": 0.0
-}
+    "randomness": 0.0,
+    "timing": {
+        "max_turn_time_ms": 300,
+        "mcts_budget_fraction": 0.6,
+        "checkmate_solver_budget_fraction": 0.2
+    }
 }

@@ -33,7 +33,11 @@ bool TurnSystem::queueCommand(const TurnCommand& cmd) {
             m_hasBuilt = true;
             break;
         case TurnCommand::Produce:
-            if (m_hasProduced) return false;
+            // Allow 1 production per barracks (instead of 1 global)
+            if (cmd.barracksId >= 0 && m_producedBarracks.count(cmd.barracksId))
+                return false; // this barracks already has a production queued
+            if (cmd.barracksId >= 0)
+                m_producedBarracks.insert(cmd.barracksId);
             m_hasProduced = true;
             break;
         case TurnCommand::Marry:
@@ -52,6 +56,7 @@ void TurnSystem::resetPendingCommands() {
     m_hasMoved = false;
     m_hasBuilt = false;
     m_hasProduced = false;
+    m_producedBarracks.clear();
     m_hasMarried = false;
 }
 
@@ -228,6 +233,7 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
     m_hasMoved = false;
     m_hasBuilt = false;
     m_hasProduced = false;
+    m_producedBarracks.clear();
     m_hasMarried = false;
 }
 

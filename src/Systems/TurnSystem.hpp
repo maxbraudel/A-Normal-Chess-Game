@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <set>
 #include "Systems/TurnCommand.hpp"
 #include "Kingdom/KingdomId.hpp"
 
@@ -52,6 +53,7 @@ private:
 
     bool m_hasMoved;
     bool m_hasBuilt;
-    bool m_hasProduced;
+    bool m_hasProduced;           // true if at least 1 production queued (legacy compat)
+    std::set<int> m_producedBarracks;  // barracks IDs that have a produce queued
     bool m_hasMarried;
 };

@@ -65,6 +65,19 @@ int AIConfig::extractInt(const std::string& json, const std::string& key, int de
     }
 }
 
+bool AIConfig::extractBool(const std::string& json, const std::string& key, bool defaultVal) {
+    std::string search = "\"" + key + "\"";
+    auto pos = json.find(search);
+    if (pos == std::string::npos) return defaultVal;
+    pos = json.find(':', pos);
+    if (pos == std::string::npos) return defaultVal;
+    ++pos;
+    while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t')) ++pos;
+    if (pos < json.size() && json[pos] == 't') return true;
+    if (pos < json.size() && json[pos] == 'f') return false;
+    return defaultVal;
+}
+
 bool AIConfig::loadFromFile(const std::string& filepath) {
     std::string json = readFile(filepath);
     if (json.empty()) {
@@ -96,5 +109,6 @@ bool AIConfig::loadFromFile(const std::string& filepath) {
     }
 
     randomness = 0.0f;
+    useNewAI = extractBool(json, "use_new_ai", useNewAI);
     return true;
 }

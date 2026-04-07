@@ -13,6 +13,49 @@
 namespace {
 Game* s_windowProcGame = nullptr;
 
+const char* pieceTypeName(PieceType type) {
+    switch (type) {
+        case PieceType::Pawn: return "Pawn";
+        case PieceType::Knight: return "Knight";
+        case PieceType::Bishop: return "Bishop";
+        case PieceType::Rook: return "Rook";
+        case PieceType::Queen: return "Queen";
+        case PieceType::King: return "King";
+    }
+    return "Unknown";
+}
+
+const char* buildingTypeName(BuildingType type) {
+    switch (type) {
+        case BuildingType::Church: return "Church";
+        case BuildingType::Mine: return "Mine";
+        case BuildingType::Farm: return "Farm";
+        case BuildingType::Barracks: return "Barracks";
+        case BuildingType::WoodWall: return "WoodWall";
+        case BuildingType::StoneWall: return "StoneWall";
+        case BuildingType::Bridge: return "Bridge";
+        case BuildingType::Arena: return "Arena";
+    }
+    return "Unknown";
+}
+
+const char* kingdomName(KingdomId id) {
+    return id == KingdomId::White ? "White" : "Black";
+}
+
+const char* turnCommandName(TurnCommand::Type type) {
+    switch (type) {
+        case TurnCommand::Move: return "Move";
+        case TurnCommand::Build: return "Build";
+        case TurnCommand::Produce: return "Produce";
+        case TurnCommand::Upgrade: return "Upgrade";
+        case TurnCommand::Marry: return "Marry";
+        case TurnCommand::FormGroup: return "FormGroup";
+        case TurnCommand::BreakGroup: return "BreakGroup";
+    }
+    return "Unknown";
+}
+
 struct AIWorldSnapshot {
     Board board;
     std::array<Kingdom, kNumKingdoms> kingdoms;
@@ -139,6 +182,8 @@ void Game::init() {
     m_config.loadFromFile("assets/config/game_params.json");
     m_aiConfig.loadFromFile("assets/config/ai_params.json");
     m_ai.loadConfig("assets/config/ai_params.json");
+    m_aiDirector.loadConfig("assets/config/ai_params.json");
+    m_useNewAI = m_aiConfig.useNewAI;
 
     // Create window
     m_window.create(sf::VideoMode(1280, 720), "A Normal Chess Game", sf::Style::Default);
@@ -224,6 +269,14 @@ void Game::handleInput() {
             } else if (m_state == GameState::Paused) {
                 m_state = GameState::Playing;
                 m_uiManager.hidePauseMenu();
+            }
+        }
+
+        if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::P) {
+            if (m_state == GameState::Playing || m_state == GameState::Paused || m_state == GameState::GameOver) {
+                m_debugRecorder.exportHistory(m_gameName,
+                                             m_turnSystem.getTurnNumber(),
+                                             m_turnSystem.getActiveKingdom());
             }
         }
 
@@ -367,6 +420,11 @@ void Game::startNewGame(const std::string& gameName) {
     // Event log
     m_eventLog.clear();
     m_eventLog.log(1, KingdomId::White, "Game started: " + gameName);
+    m_debugRecorder.reset();
+    m_debugRecorder.recordSnapshot(m_turnSystem.getTurnNumber(),
+                                   m_turnSystem.getActiveKingdom(),
+                                   m_kingdoms,
+                                   "initial_state_new_game");
 
     // Center camera on player spawn
     float cx = static_cast<float>(spawnResult.playerSpawn.x * m_config.getCellSizePx() + m_config.getCellSizePx() / 2);
@@ -434,6 +492,11 @@ void Game::loadGame(const std::string& saveName) {
     // Restore events
     m_eventLog.clear();
     for (const auto& e : data.events) m_eventLog.log(e.turnNumber, e.kingdom, e.message);
+    m_debugRecorder.reset();
+    m_debugRecorder.recordSnapshot(m_turnSystem.getTurnNumber(),
+                                   m_turnSystem.getActiveKingdom(),
+                                   m_kingdoms,
+                                   "initial_state_loaded_game");
 
     // Center camera on human player's king
     Piece* king = kingdom(humanKingdomId()).getKing();
@@ -490,6 +553,11 @@ void Game::commitPlayerTurn() {
     m_turnSystem.commitTurn(m_board, activeKingdom(), enemyKingdom(),
                              m_publicBuildings, m_config, m_eventLog,
                              m_pieceFactory, m_buildingFactory);
+    m_debugRecorder.logTurnState(m_turnSystem.getTurnNumber(), m_kingdoms, "after player commit");
+    m_debugRecorder.recordSnapshot(m_turnSystem.getTurnNumber(),
+                                   m_turnSystem.getActiveKingdom(),
+                                   m_kingdoms,
+                                   "after_player_commit");
 
     // Check if opponent is in checkmate
     if (CheckSystem::isCheckmate(enemyId, m_board, m_config)) {
@@ -652,18 +720,33 @@ void Game::startAITurnIfNeeded() {
     m_aiTask = task;
 
     AIWorldSnapshot snapshot = makeAIWorldSnapshot(m_board, m_kingdoms, m_publicBuildings);
-    AIController aiWorker = m_ai;
     GameConfig configCopy = m_config;
 
-    std::thread([task, snapshot = std::move(snapshot), aiWorker = std::move(aiWorker), configCopy]() mutable {
-        Kingdom& self = snapshot.kingdoms[kingdomIndex(task->activeKingdom)];
-        Kingdom& enemy = snapshot.kingdoms[kingdomIndex(opponent(task->activeKingdom))];
-        AITurnPlan plan = aiWorker.computeTurnPlan(snapshot.board, self, enemy,
-            snapshot.publicBuildings, task->turnNumber, configCopy);
-        std::scoped_lock lock(task->mutex);
-        task->plan = std::move(plan);
-        task->ready = true;
-    }).detach();
+    if (m_useNewAI) {
+        AIDirector directorWorker = m_aiDirector;
+        std::thread([task, snapshot = std::move(snapshot), directorWorker = std::move(directorWorker), configCopy]() mutable {
+            Kingdom& self = snapshot.kingdoms[kingdomIndex(task->activeKingdom)];
+            Kingdom& enemy = snapshot.kingdoms[kingdomIndex(opponent(task->activeKingdom))];
+            AIDirectorPlan plan = directorWorker.computeTurn(snapshot.board, self, enemy,
+                snapshot.publicBuildings, task->turnNumber, configCopy);
+            std::scoped_lock lock(task->mutex);
+            task->directorPlan = std::move(plan);
+            task->usedDirector = true;
+            task->ready = true;
+        }).detach();
+    } else {
+        AIController aiWorker = m_ai;
+        std::thread([task, snapshot = std::move(snapshot), aiWorker = std::move(aiWorker), configCopy]() mutable {
+            Kingdom& self = snapshot.kingdoms[kingdomIndex(task->activeKingdom)];
+            Kingdom& enemy = snapshot.kingdoms[kingdomIndex(opponent(task->activeKingdom))];
+            AITurnPlan plan = aiWorker.computeTurnPlan(snapshot.board, self, enemy,
+                snapshot.publicBuildings, task->turnNumber, configCopy);
+            std::scoped_lock lock(task->mutex);
+            task->plan = std::move(plan);
+            task->usedDirector = false;
+            task->ready = true;
+        }).detach();
+    }
 }
 
 void Game::pollAITurn() {
@@ -692,15 +775,63 @@ void Game::pollAITurn() {
     }
 
     AITurnPlan plan;
+    AIDirectorPlan directorPlan;
+    bool usedDirector = false;
     {
         std::scoped_lock lock(task->mutex);
-        plan = task->plan;
+        usedDirector = task->usedDirector;
+        if (usedDirector)
+            directorPlan = task->directorPlan;
+        else
+            plan = task->plan;
     }
 
-    m_ai.applyTurnPlanMetadata(plan);
-    m_eventLog.log(task->turnNumber, task->activeKingdom, "AI Phase: " + plan.phaseName);
-    for (const auto& cmd : plan.commands) {
-        m_turnSystem.queueCommand(cmd);
+    if (usedDirector) {
+        m_aiDirector.applyPlanMetadata(directorPlan);
+        std::cout << "AI PLAN | objective=" << directorPlan.objectiveName
+                  << " | commands=" << directorPlan.commands.size() << '\n';
+        for (const auto& cmd : directorPlan.commands) {
+            std::cout << "  - " << turnCommandName(cmd.type);
+            if (cmd.type == TurnCommand::Move) {
+                std::cout << " piece=" << cmd.pieceId
+                          << " from=(" << cmd.origin.x << "," << cmd.origin.y << ")"
+                          << " to=(" << cmd.destination.x << "," << cmd.destination.y << ")";
+            } else if (cmd.type == TurnCommand::Build) {
+                std::cout << " building=" << buildingTypeName(cmd.buildingType)
+                          << " origin=(" << cmd.buildOrigin.x << "," << cmd.buildOrigin.y << ")";
+            } else if (cmd.type == TurnCommand::Produce) {
+                std::cout << " barracks=" << cmd.barracksId
+                          << " unit=" << pieceTypeName(cmd.produceType);
+            }
+            std::cout << '\n';
+        }
+        m_eventLog.log(task->turnNumber, task->activeKingdom, "AI Objective: " + directorPlan.objectiveName);
+        for (const auto& cmd : directorPlan.commands) {
+            m_turnSystem.queueCommand(cmd);
+        }
+    } else {
+        m_ai.applyTurnPlanMetadata(plan);
+        std::cout << "AI PLAN | phase=" << plan.phaseName
+                  << " | commands=" << plan.commands.size() << '\n';
+        for (const auto& cmd : plan.commands) {
+            std::cout << "  - " << turnCommandName(cmd.type);
+            if (cmd.type == TurnCommand::Move) {
+                std::cout << " piece=" << cmd.pieceId
+                          << " from=(" << cmd.origin.x << "," << cmd.origin.y << ")"
+                          << " to=(" << cmd.destination.x << "," << cmd.destination.y << ")";
+            } else if (cmd.type == TurnCommand::Build) {
+                std::cout << " building=" << buildingTypeName(cmd.buildingType)
+                          << " origin=(" << cmd.buildOrigin.x << "," << cmd.buildOrigin.y << ")";
+            } else if (cmd.type == TurnCommand::Produce) {
+                std::cout << " barracks=" << cmd.barracksId
+                          << " unit=" << pieceTypeName(cmd.produceType);
+            }
+            std::cout << '\n';
+        }
+        m_eventLog.log(task->turnNumber, task->activeKingdom, "AI Phase: " + plan.phaseName);
+        for (const auto& cmd : plan.commands) {
+            m_turnSystem.queueCommand(cmd);
+        }
     }
     m_eventLog.log(task->turnNumber, task->activeKingdom, "AI completed turn planning.");
 
@@ -709,6 +840,11 @@ void Game::pollAITurn() {
     m_turnSystem.commitTurn(m_board, activeKingdom(), enemyKingdom(),
         m_publicBuildings, m_config, m_eventLog,
         m_pieceFactory, m_buildingFactory);
+    m_debugRecorder.logTurnState(m_turnSystem.getTurnNumber(), m_kingdoms, "after ai commit");
+    m_debugRecorder.recordSnapshot(m_turnSystem.getTurnNumber(),
+                                   m_turnSystem.getActiveKingdom(),
+                                   m_kingdoms,
+                                   "after_ai_commit");
     m_turnSystem.advanceTurn();
     refreshTurnPhase();
 
