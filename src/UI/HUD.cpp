@@ -96,13 +96,11 @@ void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
         m_metricsPanel->add(m_metricLabels[index]);
     }
 
-    static const std::array<tgui::Color, 3> pointColors = {
-        tgui::Color(255, 224, 168),
+    static const std::array<tgui::Color, 2> pointColors = {
         tgui::Color(168, 232, 255),
         tgui::Color(191, 255, 191)
     };
-    static const std::array<std::string, 3> pointLabels = {
-        "Action Points",
+    static const std::array<std::string, 2> pointLabels = {
         "Movement Points",
         "Build Points"
     };
@@ -198,20 +196,15 @@ void HUD::update(const InGameViewModel& model) {
     if (m_metricLabels[1]) m_metricLabels[1]->setText(metricText(1, model.activeOccupiedCells));
     if (m_metricLabels[2]) m_metricLabels[2]->setText(metricText(2, model.activeTroops));
     if (m_metricLabels[3]) m_metricLabels[3]->setText(metricText(3, model.activeIncome));
-    if (m_pointLabels[0]) {
-        m_pointLabels[0]->setText(pointText("Action Points",
-                                            model.activeActionPointsAvailable,
-                                            model.activeActionPointsTotal));
-    }
     if (m_pointLabels[1]) {
-        m_pointLabels[1]->setText(pointText("Movement Points",
-                                            model.activeMovementPointsAvailable,
-                                            model.activeMovementPointsTotal));
-    }
-    if (m_pointLabels[2]) {
-        m_pointLabels[2]->setText(pointText("Build Points",
+        m_pointLabels[1]->setText(pointText("Build Points",
                                             model.activeBuildPointsAvailable,
                                             model.activeBuildPointsTotal));
+    }
+    if (m_pointLabels[0]) {
+        m_pointLabels[0]->setText(pointText("Movement Points",
+                                            model.activeMovementPointsAvailable,
+                                            model.activeMovementPointsTotal));
     }
 
     if (m_statusLabel) {

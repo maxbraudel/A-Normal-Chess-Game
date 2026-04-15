@@ -93,7 +93,7 @@ inline tgui::Vector2f metricsPanelSize() {
 inline tgui::Vector2f pointPanelSize() {
     return {
         kPointIndicatorWidth,
-        (kPointIndicatorHeight * 3.f) + (kComponentGap * 2.f)
+        (kPointIndicatorHeight * 2.f) + kComponentGap
     };
 }
 

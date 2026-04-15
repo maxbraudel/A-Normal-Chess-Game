@@ -21,6 +21,7 @@ private:
     tgui::Label::Ptr m_typeLabel;
     tgui::Label::Ptr m_xpLabel;
     tgui::Label::Ptr m_levelLabel;
+    tgui::Label::Ptr m_moveCostLabel;
     tgui::Button::Ptr m_primaryUpgradeBtn;
     tgui::Button::Ptr m_secondaryUpgradeBtn;
     std::function<void(int, int)> m_onUpgrade;

@@ -38,7 +38,7 @@ private:
     tgui::Panel::Ptr m_actionPanel;
     tgui::Panel::Ptr m_networkPanel;
     std::array<tgui::Label::Ptr, 4> m_metricLabels{};
-    std::array<tgui::Label::Ptr, 3> m_pointLabels{};
+    std::array<tgui::Label::Ptr, 2> m_pointLabels{};
     tgui::Label::Ptr m_statusLabel;
     tgui::Label::Ptr m_networkStatusLabel;
     tgui::Button::Ptr m_menuButton;

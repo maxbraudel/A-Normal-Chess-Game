@@ -19,6 +19,12 @@ static std::string pieceTypeName(PieceType type) {
     }
 }
 
+static std::string moveCostText(PieceType type, const GameConfig& config) {
+    const int moveCost = config.getMovePointCost(type);
+    return "Movement Cost: " + std::to_string(moveCost)
+        + (moveCost == 1 ? " point" : " points");
+}
+
 void PiecePanel::init(const tgui::Panel::Ptr& parent) {
     m_panel = tgui::Panel::create({"&.width", "&.height"});
     HUDLayout::styleEmbeddedPanel(m_panel);
@@ -59,8 +65,14 @@ void PiecePanel::init(const tgui::Panel::Ptr& parent) {
     HUDLayout::styleSidebarBody(m_levelLabel);
     m_panel->add(m_levelLabel);
 
+    m_moveCostLabel = tgui::Label::create("Movement Cost: 0 points");
+    m_moveCostLabel->setPosition({10, 200});
+    m_moveCostLabel->setSize({316, 22});
+    HUDLayout::styleSidebarBody(m_moveCostLabel);
+    m_panel->add(m_moveCostLabel);
+
     m_primaryUpgradeBtn = tgui::Button::create("Upgrade");
-    m_primaryUpgradeBtn->setPosition({10, 220});
+    m_primaryUpgradeBtn->setPosition({10, 250});
     m_primaryUpgradeBtn->setSize({316, 36});
     m_primaryUpgradeBtn->onPress([this]() {
         if (m_onUpgrade && m_currentPieceId >= 0) {
@@ -70,7 +82,7 @@ void PiecePanel::init(const tgui::Panel::Ptr& parent) {
     m_panel->add(m_primaryUpgradeBtn);
 
     m_secondaryUpgradeBtn = tgui::Button::create("Upgrade");
-    m_secondaryUpgradeBtn->setPosition({10, 264});
+    m_secondaryUpgradeBtn->setPosition({10, 294});
     m_secondaryUpgradeBtn->setSize({316, 36});
     m_secondaryUpgradeBtn->onPress([this]() {
         if (m_onUpgrade && m_currentPieceId >= 0) {
@@ -92,6 +104,7 @@ void PiecePanel::show(const Piece& piece, const GameConfig& config, bool allowUp
     m_typeLabel->setText("Type: " + pieceTypeName(piece.type));
     m_xpLabel->setText("XP: " + std::to_string(piece.xp));
     m_levelLabel->setText("Level: " + std::to_string(piece.getLevel()));
+    m_moveCostLabel->setText(moveCostText(piece.type, config));
 
     std::vector<PieceType> upgradeTargets;
     if (piece.type == PieceType::Pawn) {

@@ -67,8 +67,6 @@ InGameViewModel buildInGameViewModel(const GameEngine& engine,
                                                                  engine.board(),
                                                                  engine.publicBuildings(),
                                                                  config);
-    model.activeActionPointsAvailable = engine.turnSystem().getDerivedActionPointsRemaining();
-    model.activeActionPointsTotal = engine.turnSystem().getDerivedActionPointsMax();
     model.activeMovementPointsAvailable = engine.turnSystem().getMovementPointsRemaining();
     model.activeMovementPointsTotal = engine.turnSystem().getMovementPointsMax();
     model.activeBuildPointsAvailable = engine.turnSystem().getBuildPointsRemaining();

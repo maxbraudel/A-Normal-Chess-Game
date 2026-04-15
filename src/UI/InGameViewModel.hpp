@@ -44,8 +44,6 @@ struct InGameViewModel {
     int activeOccupiedCells = 0;
     int activeTroops = 0;
     int activeIncome = 0;
-    int activeActionPointsAvailable = 0;
-    int activeActionPointsTotal = 0;
     int activeMovementPointsAvailable = 0;
     int activeMovementPointsTotal = 0;
     int activeBuildPointsAvailable = 0;

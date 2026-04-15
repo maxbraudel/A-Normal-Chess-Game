@@ -64,8 +64,6 @@ public:
     int getMovementPointsRemaining() const;
     int getBuildPointsMax() const;
     int getBuildPointsRemaining() const;
-    int getDerivedActionPointsMax() const;
-    int getDerivedActionPointsRemaining() const;
     int getMoveCountForPiece(int pieceId) const;
 
     void commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemyKingdom,

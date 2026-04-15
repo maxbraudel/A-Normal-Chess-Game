@@ -348,10 +348,6 @@ int TurnSystem::getMovementPointsMax() const { return m_movementPointsMax; }
 int TurnSystem::getMovementPointsRemaining() const { return m_movementPointsRemaining; }
 int TurnSystem::getBuildPointsMax() const { return m_buildPointsMax; }
 int TurnSystem::getBuildPointsRemaining() const { return m_buildPointsRemaining; }
-int TurnSystem::getDerivedActionPointsMax() const { return m_movementPointsMax + m_buildPointsMax; }
-int TurnSystem::getDerivedActionPointsRemaining() const {
-    return m_movementPointsRemaining + m_buildPointsRemaining;
-}
 int TurnSystem::getMoveCountForPiece(int pieceId) const {
     const auto it = m_pieceMoveCounts.find(pieceId);
     return (it == m_pieceMoveCounts.end()) ? 0 : it->second;
