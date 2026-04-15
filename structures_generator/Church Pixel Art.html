@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pixel Church 64x48 (Perfect 4x3 Chunks)</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  body {
+    background: #111;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    margin: 0;
+    gap: 20px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(64, 10px);
+    grid-template-rows: repeat(48, 10px);
+  }
+  .cell { width: 10px; height: 10px; }
+  button { padding: 10px 20px; cursor: pointer; }
+</style>
+</head>
+<body>
+<button onclick="downloadChunks()">Download Chunks</button>
+<div class="grid" id="grid"></div>
+
+<script>
+const grid = document.getElementById('grid');
+
+const colors = {
+  floor: '#6f6f6f',
+  floorAlt: '#7a7a7a',
+  wall: '#c8c8c8',
+  wallDark: '#8f8f8f',
+  aisle: '#8b5a2b',
+  aisleEdge: '#6e4522',
+  carpetRed: '#7a1f1f',
+  carpetGold: '#c9b037',
+  altar: '#ece3b8',
+  altarEdge: '#cfc48f',
+  step: '#b5ab7a',
+  pew: '#5a3b1a',
+  pewTop: '#7a5226',
+  column: '#dddddd',
+  door: '#3b2a1a',
+  glassR: '#9c2f2f',
+  glassB: '#3a5f8a',
+  candle: '#f5d97a',
+  shadow: '#4a4a4a'
+};
+
+// FULL 64x48 CHURCH (NO OFFSET)
+let map = Array.from({ length: 48 }, () => Array(64).fill('floor'));
+
+// Walls
+for (let x = 0; x < 64; x++) {
+  map[0][x] = 'wall';
+  map[47][x] = 'wall';
+}
+for (let y = 0; y < 48; y++) {
+  map[y][0] = 'wall';
+  map[y][63] = 'wall';
+}
+
+// Wall shading
+for (let x = 1; x < 63; x++) map[1][x] = 'wallDark';
+
+// Central aisle
+for (let y = 2; y < 46; y++) {
+  for (let x = 30; x <= 33; x++) map[y][x] = 'aisle';
+  map[y][29] = 'aisleEdge';
+  map[y][34] = 'aisleEdge';
+}
+
+// Carpet
+for (let y = 4; y < 44; y++) {
+  if (y % 2 === 0) {
+    map[y][31] = 'carpetRed';
+    map[y][32] = 'carpetGold';
+  }
+}
+
+// Pews
+for (let y = 4; y < 44; y += 4) {
+  for (let x = 4; x < 28; x++) {
+    map[y][x] = 'pew';
+    map[y+1][x] = 'pewTop';
+  }
+  for (let x = 36; x < 60; x++) {
+    map[y][x] = 'pew';
+    map[y+1][x] = 'pewTop';
+  }
+}
+
+// Columns
+for (let y = 6; y < 44; y += 6) {
+  map[y][26] = 'column';
+  map[y][37] = 'column';
+}
+
+// Stained glass
+for (let y = 6; y < 44; y += 6) {
+  map[y][1] = 'glassR';
+  map[y][2] = 'glassB';
+  map[y][62] = 'glassR';
+  map[y][61] = 'glassB';
+}
+
+// Altar area (top full width center)
+for (let y = 2; y < 10; y++) {
+  for (let x = 24; x < 40; x++) map[y][x] = 'altar';
+}
+
+// Steps
+for (let x = 26; x <= 37; x++) {
+  map[10][x] = 'step';
+  map[11][x] = 'step';
+}
+
+// Pedestal
+for (let y = 4; y <= 7; y++) {
+  for (let x = 29; x <= 34; x++) map[y][x] = 'altarEdge';
+}
+
+// Proper cross
+for (let y = 3; y <= 8; y++) map[y][31] = 'carpetGold';
+map[5][29] = 'carpetGold';
+map[5][30] = 'carpetGold';
+map[5][31] = 'carpetGold';
+map[5][32] = 'carpetGold';
+map[5][33] = 'carpetGold';
+
+// Candles
+map[6][28] = 'candle';
+map[6][35] = 'candle';
+
+// Entrance
+for (let x = 30; x <= 33; x++) map[47][x] = 'door';
+
+// Render
+for (let y = 0; y < 48; y++) {
+  for (let x = 0; x < 64; x++) {
+    const div = document.createElement('div');
+    div.classList.add('cell');
+    div.style.background = colors[map[y][x]];
+    grid.appendChild(div);
+  }
+}
+
+// PERFECT CHUNK EXPORT (no offset needed anymore)
+function downloadChunks() {
+  const zip = new JSZip();
+
+  for (let cy = 0; cy < 3; cy++) {
+    for (let cx = 0; cx < 4; cx++) {
+      const canvas = document.createElement('canvas');
+      canvas.width = 16;
+      canvas.height = 16;
+      const ctx = canvas.getContext('2d');
+
+      for (let y = 0; y < 16; y++) {
+        for (let x = 0; x < 16; x++) {
+          const mapX = cx * 16 + x;
+          const mapY = cy * 16 + y;
+
+          ctx.fillStyle = colors[map[mapY][mapX]];
+          ctx.fillRect(x, y, 1, 1);
+        }
+      }
+
+      const dataURL = canvas.toDataURL("image/png");
+      const base64 = dataURL.split(',')[1];
+
+      zip.file(`church_${cx+1}_${cy+1}.png`, base64, { base64: true });
+    }
+  }
+
+  zip.generateAsync({ type: "blob" }).then(content => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(content);
+    a.download = "church_chunks.zip";
+    a.click();
+  });
+}
+</script>
+</body>
+</html>

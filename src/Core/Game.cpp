@@ -430,6 +430,13 @@ void Game::handleInput() {
 }
 
 void Game::update() {
+    if ((m_state == GameState::Playing || m_state == GameState::Paused || m_state == GameState::GameOver)
+        && !m_uiManager.isMultiplayerAlertVisible()
+        && !m_uiManager.isMultiplayerWaitingOverlayVisible()
+        && !m_uiManager.isGameMenuVisible()) {
+        m_input.updateCameraMovement(m_clock.getDeltaTime(), m_camera);
+    }
+
     if (m_state == GameState::Playing || m_state == GameState::Paused || isLanClient() || isLanHost()) {
         updateMultiplayer();
     }

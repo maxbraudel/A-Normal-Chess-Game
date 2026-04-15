@@ -20,6 +20,7 @@ public:
     InputHandler();
 
     void handleEvent(const sf::Event& event, const InputContext& context);
+    void updateCameraMovement(float deltaTime, Camera& camera);
 
     ToolState getCurrentTool() const;
     void setTool(ToolState tool);

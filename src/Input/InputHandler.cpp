@@ -13,6 +13,13 @@
 #include "Config/GameConfig.hpp"
 #include "UI/UIManager.hpp"
 #include <algorithm>
+#include <cmath>
+
+namespace {
+
+constexpr float kKeyboardPanSpeed = 900.f;
+
+} // namespace
 
 InputHandler::InputHandler()
     : m_currentTool(ToolState::Select), m_selectedPiece(nullptr), m_selectedBuilding(nullptr),
@@ -137,6 +144,34 @@ void InputHandler::handleEvent(const sf::Event& event, const InputContext& conte
             }
             break;
     }
+}
+
+void InputHandler::updateCameraMovement(float deltaTime, Camera& camera) {
+    if (deltaTime <= 0.f) {
+        return;
+    }
+
+    sf::Vector2f direction{0.f, 0.f};
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Z)) {
+        direction.y -= 1.f;
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) {
+        direction.y += 1.f;
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Q)) {
+        direction.x -= 1.f;
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) {
+        direction.x += 1.f;
+    }
+
+    const float length = std::sqrt(direction.x * direction.x + direction.y * direction.y);
+    if (length <= 0.f) {
+        return;
+    }
+
+    const float speed = kKeyboardPanSpeed * camera.getZoomLevel() * deltaTime;
+    camera.pan({(direction.x / length) * speed, (direction.y / length) * speed});
 }
 
 void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& context) {
