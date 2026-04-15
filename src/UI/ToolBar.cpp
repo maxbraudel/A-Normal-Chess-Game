@@ -2,12 +2,12 @@
 #include "UI/HUDLayout.hpp"
 
 void ToolBar::init(tgui::Gui& gui) {
-    m_panel = tgui::Panel::create(HUDLayout::stackSize(3,
+    m_panel = tgui::Panel::create(HUDLayout::stackSize(2,
                                                        HUDLayout::kToolbarButtonWidth,
                                                        HUDLayout::kComponentGap,
                                                        HUDLayout::kToolbarHeight));
     m_panel->setPosition(HUDLayout::anchorPosition(HUDAnchor::BottomLeft,
-                                                   3,
+                                                   2,
                                                    HUDLayout::kToolbarButtonWidth,
                                                    HUDLayout::kComponentGap,
                                                    HUDLayout::kToolbarHeight));
@@ -28,13 +28,6 @@ void ToolBar::init(tgui::Gui& gui) {
     btnBuild->onPress([this]() { if (m_onBuild) m_onBuild(); });
     m_panel->add(btnBuild);
 
-    auto btnLog = tgui::Button::create("Journal");
-    HUDLayout::styleHudButton(btnLog, HUDLayout::kToolbarButtonWidth, HUDLayout::kToolbarHeight, 15);
-    HUDLayout::placeStackChild(btnLog, 2, HUDLayout::kToolbarButtonWidth,
-                               HUDLayout::kComponentGap, HUDLayout::kToolbarHeight);
-    btnLog->onPress([this]() { if (m_onLog) m_onLog(); });
-    m_panel->add(btnLog);
-
     m_panel->setVisible(false);
 }
 
@@ -43,4 +36,3 @@ void ToolBar::hide() { if (m_panel) m_panel->setVisible(false); }
 
 void ToolBar::setOnSelect(std::function<void()> callback) { m_onSelect = std::move(callback); }
 void ToolBar::setOnBuild(std::function<void()> callback) { m_onBuild = std::move(callback); }
-void ToolBar::setOnLog(std::function<void()> callback) { m_onLog = std::move(callback); }

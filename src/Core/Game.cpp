@@ -581,10 +581,6 @@ void Game::setupUICallbacks() {
         m_input.setTool(ToolState::Build);
         m_uiManager.showBuildToolPanel(activeKingdom(), m_config, true);
     });
-    m_uiManager.toolBar().setOnLog([this]() {
-        m_input.setTool(ToolState::Journal);
-        m_uiManager.showJournalContext();
-    });
 
     // Build tool panel
     m_uiManager.buildToolPanel().setOnSelectBuildType([this](int type) {
@@ -631,10 +627,6 @@ void Game::updateUIState() {
             } else {
                 m_uiManager.showSelectionEmptyState();
             }
-            break;
-
-        case ToolState::Journal:
-            m_uiManager.showJournalContext();
             break;
 
         case ToolState::Select:

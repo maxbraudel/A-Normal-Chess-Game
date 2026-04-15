@@ -127,9 +127,6 @@ void InputHandler::handleEvent(const sf::Event& event, const InputContext& conte
                 handleSelectTool(event, context);
             }
             break;
-        case ToolState::Journal:
-            // Journal mode: no map interaction
-            break;
     }
 }
 
@@ -138,9 +135,15 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
         sf::Vector2f worldPos = context.camera.screenToWorld({event.mouseButton.x, event.mouseButton.y}, context.window);
         sf::Vector2i cellPos = context.camera.worldToCell(worldPos, context.config.getCellSizePx());
 
-        if (!context.board.isInBounds(cellPos.x, cellPos.y)) return;
+        if (!context.board.isInBounds(cellPos.x, cellPos.y)) {
+            clearSelection();
+            return;
+        }
         Cell& cell = context.board.getCell(cellPos.x, cellPos.y);
-        if (!cell.isInCircle) return;
+        if (!cell.isInCircle) {
+            clearSelection();
+            return;
+        }
 
         if (!context.allowCommands) {
             Piece* piece = context.controlledKingdom.getPieceAt(cellPos);
@@ -177,12 +180,7 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
                 return;
             }
 
-            m_selectedPiece = nullptr;
-            m_selectedBuilding = nullptr;
-            m_selectedCell = cellPos;
-            m_hasSelectedCell = true;
-            m_validMoves.clear();
-            m_dangerMoves.clear();
+            clearSelection();
             return;
         }
 
@@ -244,9 +242,7 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
                 return;
             }
 
-            m_selectedPiece = m_movedPiece;
-            m_selectedBuilding = nullptr;
-            m_hasSelectedCell = false;
+            clearSelection();
             return;
         }
 
@@ -331,12 +327,7 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
             return;
         }
 
-        m_selectedPiece = nullptr;
-        m_selectedBuilding = nullptr;
-        m_selectedCell = cellPos;
-        m_hasSelectedCell = true;
-        m_validMoves.clear();
-        m_dangerMoves.clear();
+        clearSelection();
     }
 }
 

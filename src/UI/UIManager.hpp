@@ -17,7 +17,6 @@ class Piece;
 class Building;
 class Kingdom;
 class GameConfig;
-class EventLog;
 struct Cell;
 
 class UIManager {
@@ -35,8 +34,6 @@ public:
     void showBuildToolPanel(const Kingdom& kingdom, const GameConfig& config, bool allowBuild);
     void showCellPanel(const Cell& cell);
     void showSelectionEmptyState();
-    void showJournalContext();
-    void showEventLogPanel(const EventLog& log);
     void hideAllPanels();
     void update();
 

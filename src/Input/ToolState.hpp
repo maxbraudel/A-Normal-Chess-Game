@@ -2,6 +2,5 @@
 
 enum class ToolState {
     Select,
-    Build,
-    Journal
+    Build
 };

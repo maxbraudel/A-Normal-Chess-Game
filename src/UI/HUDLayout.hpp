@@ -29,6 +29,8 @@ inline constexpr float kToolbarHeight = 38.f;
 inline constexpr float kComponentGap = 6.f;
 inline constexpr float kLeftSidebarWidth = 360.f;
 inline constexpr float kRightSidebarWidth = 600.f;
+inline constexpr float kEventLogTurnColumnWidth = 56.f;
+inline constexpr float kEventLogKingdomColumnWidth = 136.f;
 inline constexpr float kSidebarInnerMargin = 12.f;
 inline constexpr float kSidebarSectionGap = 12.f;
 

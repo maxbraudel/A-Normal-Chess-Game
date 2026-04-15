@@ -2,6 +2,21 @@
 
 #include "UI/HUDLayout.hpp"
 
+namespace {
+
+constexpr std::size_t kTurnColumnIndex = 0;
+constexpr std::size_t kKingdomColumnIndex = 1;
+constexpr std::size_t kActionColumnIndex = 2;
+
+void configureEventLogColumns(const tgui::ListView::Ptr& listView) {
+    listView->setColumnWidth(kTurnColumnIndex, HUDLayout::kEventLogTurnColumnWidth);
+    listView->setColumnWidth(kKingdomColumnIndex, HUDLayout::kEventLogKingdomColumnWidth);
+    listView->setColumnWidth(kActionColumnIndex, 160.f);
+    listView->setColumnExpanded(kActionColumnIndex, true);
+}
+
+} // namespace
+
 void EventLogPanel::init(const tgui::Panel::Ptr& parent) {
     m_panel = tgui::Panel::create({"&.width", "&.height"});
     HUDLayout::styleEmbeddedPanel(m_panel);
@@ -15,12 +30,17 @@ void EventLogPanel::init(const tgui::Panel::Ptr& parent) {
     m_listView = tgui::ListView::create();
     m_listView->setPosition({8, 34});
     m_listView->setSize({"&.width - 16", "&.height - 42"});
-    m_listView->addColumn("Turn", 48);
-    m_listView->addColumn("Kingdom", 126);
-    m_listView->addColumn("Action", 144);
+    m_listView->addColumn("Turn", HUDLayout::kEventLogTurnColumnWidth);
+    m_listView->addColumn("Kingdom", HUDLayout::kEventLogKingdomColumnWidth);
+    m_listView->addColumn("Action", 160.f);
+    configureEventLogColumns(m_listView);
     m_listView->getRenderer()->setBackgroundColor(tgui::Color(24, 24, 24, 210));
     m_listView->getRenderer()->setTextColor(tgui::Color::White);
     m_panel->add(m_listView);
+
+    m_listView->onSizeChange([this](const tgui::Vector2f&) {
+        configureEventLogColumns(m_listView);
+    });
 
     m_panel->setVisible(false);
 }

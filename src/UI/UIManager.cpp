@@ -5,7 +5,6 @@
 #include "Buildings/Building.hpp"
 #include "Kingdom/Kingdom.hpp"
 #include "Config/GameConfig.hpp"
-#include "Systems/EventLog.hpp"
 #include "UI/HUDLayout.hpp"
 
 void UIManager::init(tgui::Gui& gui, const AssetManager& assets) {
@@ -28,7 +27,7 @@ void UIManager::init(tgui::Gui& gui, const AssetManager& assets) {
     HUDLayout::styleSidebarTitle(m_leftContextTitle);
     m_leftEmptyState->add(m_leftContextTitle);
 
-    m_leftContextHint = tgui::Label::create("Select a piece, building, or cell.");
+    m_leftContextHint = tgui::Label::create("Select a piece or building.");
     m_leftContextHint->setPosition({10, 48});
     m_leftContextHint->setSize({316, 120});
     m_leftContextHint->setAutoSize(false);
@@ -126,17 +125,7 @@ void UIManager::showCellPanel(const Cell& cell) {
 
 void UIManager::showSelectionEmptyState() {
     hideLeftContextPanels();
-    setLeftContextMessage("Selection", "Select a piece, building, or cell.");
-}
-
-void UIManager::showJournalContext() {
-    hideLeftContextPanels();
-    setLeftContextMessage("Journal", "History and kingdom balance stay pinned in the right panel.");
-}
-
-void UIManager::showEventLogPanel(const EventLog& log) {
-    (void) log;
-    showJournalContext();
+    setLeftContextMessage("Selection", "Select a piece or building.");
 }
 
 void UIManager::hideAllPanels() {

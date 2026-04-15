@@ -11,11 +11,9 @@ public:
 
     void setOnSelect(std::function<void()> callback);
     void setOnBuild(std::function<void()> callback);
-    void setOnLog(std::function<void()> callback);
 
 private:
     tgui::Panel::Ptr m_panel;
     std::function<void()> m_onSelect;
     std::function<void()> m_onBuild;
-    std::function<void()> m_onLog;
 };
