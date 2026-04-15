@@ -68,7 +68,6 @@ add_custom_command(
 
 add_custom_target(${PROJECT_NAME}Assets ALL DEPENDS ${ASSET_SYNC_STAMP})
 add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}Assets)
-add_dependencies(${PROJECT_NAME}Tests ${PROJECT_NAME}Assets)
 
 # Copy saves directory
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
@@ -116,5 +115,6 @@ enable_testing()
 add_executable(${PROJECT_NAME}Tests tests/TestMain.cpp)
 target_link_libraries(${PROJECT_NAME}Tests PRIVATE ${PROJECT_NAME}Core)
 target_include_directories(${PROJECT_NAME}Tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+add_dependencies(${PROJECT_NAME}Tests ${PROJECT_NAME}Assets)
 
 add_test(NAME ${PROJECT_NAME}Tests COMMAND ${PROJECT_NAME}Tests)
