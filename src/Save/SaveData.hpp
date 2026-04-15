@@ -2,6 +2,7 @@
 #include <array>
 #include <vector>
 #include <string>
+#include "Core/GameSessionConfig.hpp"
 #include "Kingdom/KingdomId.hpp"
 #include "Board/Cell.hpp"
 #include "Units/Piece.hpp"
@@ -14,6 +15,12 @@ struct SaveData {
     int turnNumber = 1;
     KingdomId activeKingdom = KingdomId::White;
     int mapRadius = 50;
+    GameMode mode = GameMode::HumanVsAI;
+    std::array<ControllerType, kNumKingdoms> controllers{
+        ControllerType::Human,
+        ControllerType::AI
+    };
+    std::array<std::string, kNumKingdoms> participantNames{"Player", "AI"};
 
     // Grid state
     struct CellData {

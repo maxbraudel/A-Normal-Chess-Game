@@ -151,13 +151,28 @@ LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 Game::Game()
     : m_state(GameState::MainMenu),
       m_kingdoms{Kingdom(KingdomId::White), Kingdom(KingdomId::Black)},
-      m_controllers{ControllerType::Human, ControllerType::AI} {}
+    m_controllers(controllersForGameMode(GameMode::HumanVsAI)),
+    m_participantNames(defaultParticipantNames(GameMode::HumanVsAI)) {}
 
 KingdomId Game::humanKingdomId() const {
     for (int i = 0; i < kNumKingdoms; ++i)
         if (m_controllers[i] == ControllerType::Human)
             return m_kingdoms[i].id;
     return KingdomId::White; // fallback
+}
+
+std::string Game::participantName(KingdomId id) const {
+    const std::string& configuredName = m_participantNames[kingdomIndex(id)];
+    if (!configuredName.empty()) {
+        return configuredName;
+    }
+
+    return (id == KingdomId::White) ? "White" : "Black";
+}
+
+std::string Game::activeTurnLabel() const {
+    const KingdomId activeId = m_turnSystem.getActiveKingdom();
+    return participantName(activeId) + " (" + controllerTypeLabel(m_controllers[kingdomIndex(activeId)]) + ")";
 }
 
 void Game::run() {
@@ -282,13 +297,13 @@ void Game::handleInput() {
 
         // Spacebar acts as the Play button (commit turn)
         if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Space) {
-            if (m_state == GameState::Playing && m_turnPhase == TurnPhase::WhiteTurn && isActiveHuman()) {
+            if (m_state == GameState::Playing && isActiveHuman()) {
                 commitPlayerTurn();
             }
         }
 
         if (m_state == GameState::Playing) {
-            const bool allowCommands = (m_turnPhase == TurnPhase::WhiteTurn && isActiveHuman());
+            const bool allowCommands = isActiveHuman();
             Kingdom& selectableKingdom = allowCommands ? activeKingdom() : kingdom(humanKingdomId());
             Kingdom& opposingKingdom = allowCommands ? enemyKingdom() : kingdom(opponent(humanKingdomId()));
             m_input.handleEvent(event, m_window, m_camera, m_board, m_turnSystem,
@@ -301,7 +316,7 @@ void Game::handleInput() {
 void Game::update() {
     switch (m_state) {
         case GameState::Playing: {
-            if (m_turnPhase == TurnPhase::BlackTurn) {
+            if (isActiveAI()) {
                 startAITurnIfNeeded();
                 pollAITurn();
             }
@@ -326,7 +341,7 @@ void Game::render() {
         m_renderer.drawWorldBase(m_window, m_camera, m_board, m_kingdoms,
             m_publicBuildings);
 
-        const bool showActionOverlays = (m_turnPhase == TurnPhase::WhiteTurn && isActiveHuman());
+        const bool showActionOverlays = isActiveHuman();
 
         if (showActionOverlays && m_input.getCurrentTool() == ToolState::Select && m_input.getSelectedPiece()) {
             sf::Vector2i highlightedOrigin = m_input.hasMovePreview()
@@ -363,10 +378,10 @@ void Game::render() {
             BuildingType bt = m_input.getBuildPreviewType();
             int bw = m_config.getBuildingWidth(bt);
             int bh = m_config.getBuildingHeight(bt);
-            Kingdom& human = kingdom(humanKingdomId());
-            Piece* king = human.getKing();
+            Kingdom& builder = activeKingdom();
+            Piece* king = builder.getKing();
             bool valid = king && BuildSystem::canBuild(bt, m_input.getBuildPreviewOrigin(),
-                                                        *king, m_board, human, m_config);
+                                                        *king, m_board, builder, m_config);
             m_renderer.getOverlay().drawBuildPreview(m_window, m_camera,
                 m_input.getBuildPreviewOrigin(), bw, bh, m_config.getCellSizePx(), valid);
         }
@@ -388,9 +403,29 @@ void Game::render() {
     m_window.display();
 }
 
-void Game::startNewGame(const std::string& gameName) {
+bool Game::startNewGame(const GameSessionConfig& session, std::string* errorMessage) {
+    const auto existingSaves = m_saveManager.listSaves("saves");
+    if (std::find(existingSaves.begin(), existingSaves.end(), session.saveName) != existingSaves.end()) {
+        if (errorMessage) {
+            *errorMessage = "A save with this name already exists.";
+        }
+        return false;
+    }
+
     discardPendingAITurn();
-    m_gameName = gameName;
+    m_input.clearMovePreview();
+    m_input.setTool(ToolState::Select);
+    m_turnSystem.resetPendingCommands();
+
+    m_gameName = session.saveName;
+    m_controllers = controllersForGameMode(session.mode);
+    m_participantNames = session.participantNames;
+    const auto defaultNames = defaultParticipantNames(session.mode);
+    for (int i = 0; i < kNumKingdoms; ++i) {
+        if (m_participantNames[i].empty()) {
+            m_participantNames[i] = defaultNames[i];
+        }
+    }
 
     // Init board
     m_board.init(m_config.getMapRadius());
@@ -416,37 +451,51 @@ void Game::startNewGame(const std::string& gameName) {
     // Init turn system
     m_turnSystem = TurnSystem();
     m_turnSystem.setActiveKingdom(KingdomId::White);
+    m_turnSystem.setTurnNumber(1);
 
     // Event log
     m_eventLog.clear();
-    m_eventLog.log(1, KingdomId::White, "Game started: " + gameName);
+    m_eventLog.log(1, KingdomId::White,
+        "Game started: " + m_gameName + " [" + gameModeLabel(session.mode) + "]");
     m_debugRecorder.reset();
     m_debugRecorder.recordSnapshot(m_turnSystem.getTurnNumber(),
                                    m_turnSystem.getActiveKingdom(),
                                    m_kingdoms,
                                    "initial_state_new_game");
 
-    // Center camera on player spawn
-    float cx = static_cast<float>(spawnResult.playerSpawn.x * m_config.getCellSizePx() + m_config.getCellSizePx() / 2);
-    float cy = static_cast<float>(spawnResult.playerSpawn.y * m_config.getCellSizePx() + m_config.getCellSizePx() / 2);
-    m_camera.centerOn({cx, cy});
+    // Center camera on the primary human side, or white when spectating AI vs AI.
+    Piece* focusKing = kingdom(humanKingdomId()).getKing();
+    if (focusKing) {
+        float cx = static_cast<float>(focusKing->position.x * m_config.getCellSizePx() + m_config.getCellSizePx() / 2);
+        float cy = static_cast<float>(focusKing->position.y * m_config.getCellSizePx() + m_config.getCellSizePx() / 2);
+        m_camera.centerOn({cx, cy});
+    }
 
     // Switch to playing
     m_state = GameState::Playing;
     refreshTurnPhase();
     m_uiManager.showHUD();
+    updateUIState();
+    saveGame();
+    return true;
 }
 
-void Game::loadGame(const std::string& saveName) {
+bool Game::loadGame(const std::string& saveName) {
     discardPendingAITurn();
+    m_input.clearMovePreview();
+    m_input.setTool(ToolState::Select);
+    m_turnSystem.resetPendingCommands();
+
     SaveData data;
     std::string path = "saves/" + saveName + ".json";
     if (!m_saveManager.load(path, data)) {
         std::cerr << "Failed to load save: " << path << std::endl;
-        return;
+        return false;
     }
 
-    m_gameName = data.gameName;
+    m_gameName = data.gameName.empty() ? saveName : data.gameName;
+    m_controllers = data.controllers;
+    m_participantNames = data.participantNames;
 
     // Restore board
     m_board.init(data.mapRadius);
@@ -476,18 +525,12 @@ void Game::loadGame(const std::string& saveName) {
     }
 
     m_publicBuildings = data.publicBuildings;
-
-    // Sync board cell piece pointers (pieces stored in kingdom, board needs raw ptrs)
-    for (int i = 0; i < kNumKingdoms; ++i) {
-        for (auto& p : m_kingdoms[i].pieces) {
-            if (m_board.isInBounds(p.position.x, p.position.y))
-                m_board.getCell(p.position.x, p.position.y).piece = &p;
-        }
-    }
+    relinkBoardSnapshot(m_board, m_kingdoms, m_publicBuildings);
 
     // Restore turn system
     m_turnSystem = TurnSystem();
     m_turnSystem.setActiveKingdom(data.activeKingdom);
+    m_turnSystem.setTurnNumber(data.turnNumber);
 
     // Restore events
     m_eventLog.clear();
@@ -509,14 +552,19 @@ void Game::loadGame(const std::string& saveName) {
     m_state = GameState::Playing;
     refreshTurnPhase();
     m_uiManager.showHUD();
+    updateUIState();
+    return true;
 }
 
-void Game::saveGame() {
+bool Game::saveGame() {
     SaveData data;
     data.gameName = m_gameName;
     data.turnNumber = m_turnSystem.getTurnNumber();
     data.activeKingdom = m_turnSystem.getActiveKingdom();
     data.mapRadius = m_board.getRadius();
+    data.mode = gameModeFromControllers(m_controllers);
+    data.controllers = m_controllers;
+    data.participantNames = m_participantNames;
 
     // Grid (only save cell types and circle mask)
     int diam = m_board.getDiameter();
@@ -543,7 +591,10 @@ void Game::saveGame() {
     std::string path = "saves/" + m_gameName + ".json";
     if (!m_saveManager.save(path, data)) {
         std::cerr << "Failed to save game!" << std::endl;
+        return false;
     }
+
+    return true;
 }
 
 void Game::commitPlayerTurn() {
@@ -562,7 +613,7 @@ void Game::commitPlayerTurn() {
     // Check if opponent is in checkmate
     if (CheckSystem::isCheckmate(enemyId, m_board, m_config)) {
         m_state = GameState::GameOver;
-        std::string winner = (activeId == KingdomId::White) ? "White" : "Black";
+        std::string winner = participantName(activeId);
         m_eventLog.log(m_turnSystem.getTurnNumber(), activeId,
                         "Checkmate! " + winner + " wins!");
         m_input.clearMovePreview();
@@ -594,29 +645,47 @@ void Game::setupUICallbacks() {
     });
     m_uiManager.pauseMenu().setOnQuitToMenu([this]() {
         discardPendingAITurn();
+        m_input.clearMovePreview();
+        m_input.setTool(ToolState::Select);
+        m_turnSystem.resetPendingCommands();
         m_state = GameState::MainMenu;
         m_uiManager.hidePauseMenu();
         m_uiManager.showMainMenu();
     });
 
     // Main menu
-    m_uiManager.mainMenu().setOnNewGame([this]() {
-        startNewGame("Game_" + std::to_string(std::time(nullptr)));
+    m_uiManager.mainMenu().setOnLoadSaves([this]() {
+        m_uiManager.mainMenu().setSaves(m_saveManager.listSaveSummaries("saves"));
     });
-    m_uiManager.mainMenu().setOnContinue([this]() {
-        auto saves = m_saveManager.listSaves("saves");
-        if (!saves.empty()) {
-            loadGame(saves.back()); // Load most recent
+    m_uiManager.mainMenu().setOnExitGame([this]() {
+        m_window.close();
+    });
+    m_uiManager.mainMenu().setOnCreateSave([this](const GameSessionConfig& session) {
+        std::string error;
+        if (!startNewGame(session, &error)) {
+            return error;
         }
+        return std::string{};
+    });
+    m_uiManager.mainMenu().setOnPlaySave([this](const std::string& saveName) {
+        loadGame(saveName);
+    });
+    m_uiManager.mainMenu().setOnDeleteSave([this](const std::string& saveName) {
+        if (saveName.empty()) {
+            return;
+        }
+
+        m_saveManager.deleteSave("saves/" + saveName + ".json");
+        m_uiManager.mainMenu().setSaves(m_saveManager.listSaveSummaries("saves"));
     });
 
     // HUD
     m_uiManager.hud().setOnReset([this]() {
-        if (m_turnPhase != TurnPhase::WhiteTurn) return;
+        if (!isActiveHuman()) return;
         resetPlayerTurn();
     });
     m_uiManager.hud().setOnPlay([this]() {
-        if (m_turnPhase != TurnPhase::WhiteTurn) return;
+        if (!isActiveHuman()) return;
         commitPlayerTurn();
     });
 
@@ -627,9 +696,9 @@ void Game::setupUICallbacks() {
         m_uiManager.showHUD();
     });
     m_uiManager.toolBar().setOnBuild([this]() {
-        if (m_turnPhase != TurnPhase::WhiteTurn) return;
+        if (!isActiveHuman()) return;
         m_input.setTool(ToolState::Build);
-        m_uiManager.showBuildToolPanel(kingdom(humanKingdomId()), m_config);
+        m_uiManager.showBuildToolPanel(activeKingdom(), m_config);
     });
     m_uiManager.toolBar().setOnLog([this]() {
         m_input.setTool(ToolState::Journal);
@@ -638,14 +707,14 @@ void Game::setupUICallbacks() {
 
     // Build tool panel
     m_uiManager.buildToolPanel().setOnSelectBuildType([this](int type) {
-        if (m_turnPhase != TurnPhase::WhiteTurn) return;
+        if (!isActiveHuman()) return;
         m_input.setBuildType(static_cast<BuildingType>(type));
     });
 
     // Piece panel upgrade
     m_uiManager.piecePanel().setOnUpgrade([this](int pieceId) {
-        if (m_turnPhase != TurnPhase::WhiteTurn) return;
-        Piece* piece = kingdom(humanKingdomId()).getPieceById(pieceId);
+        if (!isActiveHuman()) return;
+        Piece* piece = activeKingdom().getPieceById(pieceId);
         if (!piece) return;
         TurnCommand cmd;
         cmd.type = TurnCommand::Upgrade;
@@ -663,7 +732,7 @@ void Game::setupUICallbacks() {
 
     // Barracks panel produce
     m_uiManager.barracksPanel().setOnProduce([this](int barracksId, int pieceType) {
-        if (m_turnPhase != TurnPhase::WhiteTurn) return;
+        if (!isActiveHuman()) return;
         TurnCommand cmd;
         cmd.type = TurnCommand::Produce;
         cmd.barracksId = barracksId;
@@ -674,16 +743,17 @@ void Game::setupUICallbacks() {
 
 void Game::updateUIState() {
     int gold = activeKingdom().gold;
-    m_uiManager.hud().update(m_turnSystem.getTurnNumber(), m_turnPhase, gold);
-    const bool allowCommands = (m_turnPhase == TurnPhase::WhiteTurn);
+    const bool allowCommands = isActiveHuman();
+    m_uiManager.hud().update(m_turnSystem.getTurnNumber(), activeTurnLabel(), gold, allowCommands);
+    const KingdomId viewedKingdomId = allowCommands ? activeKingdom().id : humanKingdomId();
 
     // Show contextual panels
     if (m_input.getSelectedPiece()) {
         m_uiManager.showPiecePanel(*m_input.getSelectedPiece(), m_config, allowCommands);
     } else if (m_input.getSelectedBuilding()) {
         Building* bld = m_input.getSelectedBuilding();
-        if (bld->type == BuildingType::Barracks && bld->owner == humanKingdomId()) {
-            m_uiManager.showBarracksPanel(*bld, kingdom(humanKingdomId()), m_config, allowCommands);
+        if (bld->type == BuildingType::Barracks && bld->owner == viewedKingdomId) {
+            m_uiManager.showBarracksPanel(*bld, kingdom(viewedKingdomId), m_config, allowCommands);
         } else {
             m_uiManager.showBuildingPanel(*bld);
         }
@@ -702,7 +772,7 @@ void Game::discardPendingAITurn() {
 }
 
 void Game::startAITurnIfNeeded() {
-    if (m_state != GameState::Playing || m_turnPhase != TurnPhase::BlackTurn || !isActiveAI()) {
+    if (m_state != GameState::Playing || !isActiveAI()) {
         return;
     }
     if (m_aiTask) {
@@ -850,7 +920,7 @@ void Game::pollAITurn() {
 
     if (CheckSystem::isCheckmate(enemyId, m_board, m_config)) {
         m_state = GameState::GameOver;
-        std::string winner = (activeId == KingdomId::White) ? "White" : "Black";
+        std::string winner = participantName(activeId);
         m_eventLog.log(m_turnSystem.getTurnNumber(), activeId,
             "Checkmate! " + winner + " wins!");
     }

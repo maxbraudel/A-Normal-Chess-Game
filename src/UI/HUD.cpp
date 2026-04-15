@@ -30,21 +30,21 @@ void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
     HUDLayout::placeStackChild(m_goldLabel, 2);
     m_indicatorPanel->add(m_goldLabel);
 
-    auto btnReset = tgui::Button::create("Reset");
-    HUDLayout::styleHudButton(btnReset);
-    HUDLayout::placeStackChild(btnReset, 0);
-    btnReset->onPress([this]() {
+    m_resetButton = tgui::Button::create("Reset");
+    HUDLayout::styleHudButton(m_resetButton);
+    HUDLayout::placeStackChild(m_resetButton, 0);
+    m_resetButton->onPress([this]() {
         if (m_onReset) m_onReset();
     });
-    m_panel->add(btnReset);
+    m_panel->add(m_resetButton);
 
-    auto btnPlay = tgui::Button::create("Play");
-    HUDLayout::styleHudButton(btnPlay);
-    HUDLayout::placeStackChild(btnPlay, 1);
-    btnPlay->onPress([this]() {
+    m_playButton = tgui::Button::create("Play");
+    HUDLayout::styleHudButton(m_playButton);
+    HUDLayout::placeStackChild(m_playButton, 1);
+    m_playButton->onPress([this]() {
         if (m_onPlay) m_onPlay();
     });
-    m_panel->add(btnPlay);
+    m_panel->add(m_playButton);
 
     m_indicatorPanel->setVisible(false);
     m_panel->setVisible(false);
@@ -60,11 +60,12 @@ void HUD::hide() {
     if (m_panel) m_panel->setVisible(false);
 }
 
-void HUD::update(int turnNumber, TurnPhase turnPhase, int gold) {
-    const char* turnText = (turnPhase == TurnPhase::WhiteTurn) ? "Player turn" : "Black turn";
+void HUD::update(int turnNumber, const std::string& activePlayerText, int gold, bool allowCommands) {
     if (m_turnLabel) m_turnLabel->setText("Turn " + std::to_string(turnNumber));
-    if (m_playerLabel) m_playerLabel->setText(turnText);
+    if (m_playerLabel) m_playerLabel->setText(activePlayerText);
     if (m_goldLabel) m_goldLabel->setText("Gold: " + std::to_string(gold));
+    if (m_resetButton) m_resetButton->setEnabled(allowCommands);
+    if (m_playButton) m_playButton->setEnabled(allowCommands);
 }
 
 void HUD::setOnReset(std::function<void()> callback) { m_onReset = std::move(callback); }

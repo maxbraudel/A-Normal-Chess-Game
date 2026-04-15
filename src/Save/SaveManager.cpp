@@ -184,6 +184,12 @@ Building SaveManager::parseBuilding(const std::string& json) {
 // --- Save / Load ---
 
 bool SaveManager::save(const std::string& filepath, const SaveData& data) {
+    fs::path target(filepath);
+    if (target.has_parent_path()) {
+        std::error_code mkdirError;
+        fs::create_directories(target.parent_path(), mkdirError);
+    }
+
     std::ofstream file(filepath);
     if (!file.is_open()) return false;
 
@@ -192,6 +198,11 @@ bool SaveManager::save(const std::string& filepath, const SaveData& data) {
     file << "  \"turnNumber\": " << data.turnNumber << ",\n";
     file << "  \"activeKingdom\": " << static_cast<int>(data.activeKingdom) << ",\n";
     file << "  \"mapRadius\": " << data.mapRadius << ",\n";
+    file << "  \"gameMode\": " << static_cast<int>(data.mode) << ",\n";
+    file << "  \"whiteController\": " << static_cast<int>(data.controllers[0]) << ",\n";
+    file << "  \"blackController\": " << static_cast<int>(data.controllers[1]) << ",\n";
+    file << "  \"whiteName\": \"" << data.participantNames[0] << "\",\n";
+    file << "  \"blackName\": \"" << data.participantNames[1] << "\",\n";
 
     // Grid
     file << "  \"grid\": [\n";
@@ -263,6 +274,19 @@ bool SaveManager::load(const std::string& filepath, SaveData& outData) {
     outData.turnNumber = extractInt(json, "turnNumber", 1);
     outData.activeKingdom = static_cast<KingdomId>(extractInt(json, "activeKingdom", 0));
     outData.mapRadius = extractInt(json, "mapRadius", 50);
+    outData.mode = static_cast<GameMode>(extractInt(json, "gameMode", static_cast<int>(outData.mode)));
+
+    const auto defaultControllers = controllersForGameMode(outData.mode);
+    outData.controllers[0] = static_cast<ControllerType>(
+        extractInt(json, "whiteController", static_cast<int>(defaultControllers[0])));
+    outData.controllers[1] = static_cast<ControllerType>(
+        extractInt(json, "blackController", static_cast<int>(defaultControllers[1])));
+
+    const auto defaultNames = defaultParticipantNames(outData.mode);
+    outData.participantNames[0] = extractString(json, "whiteName");
+    outData.participantNames[1] = extractString(json, "blackName");
+    if (outData.participantNames[0].empty()) outData.participantNames[0] = defaultNames[0];
+    if (outData.participantNames[1].empty()) outData.participantNames[1] = defaultNames[1];
 
     // Parse kingdoms
     // Parse kingdoms (JSON keys kept for backward compatibility)
@@ -302,11 +326,47 @@ bool SaveManager::load(const std::string& filepath, SaveData& outData) {
 
 std::vector<std::string> SaveManager::listSaves(const std::string& savesDir) {
     std::vector<std::string> result;
-    if (!fs::exists(savesDir)) return result;
+    for (const auto& save : listSaveSummaries(savesDir)) {
+        result.push_back(save.saveName);
+    }
+    return result;
+}
+
+std::vector<SaveSummary> SaveManager::listSaveSummaries(const std::string& savesDir) {
+    std::vector<std::pair<fs::file_time_type, SaveSummary>> entries;
+    if (!fs::exists(savesDir)) return {};
+
     for (const auto& entry : fs::directory_iterator(savesDir)) {
-        if (entry.is_regular_file() && entry.path().extension() == ".json") {
-            result.push_back(entry.path().stem().string());
+        if (!entry.is_regular_file() || entry.path().extension() != ".json") {
+            continue;
         }
+
+        SaveSummary summary;
+        summary.saveName = entry.path().stem().string();
+
+        SaveData data;
+        if (load(entry.path().string(), data)) {
+            summary.mode = data.mode;
+            summary.participantNames = data.participantNames;
+        }
+
+        std::error_code timeError;
+        fs::file_time_type lastWriteTime = fs::last_write_time(entry.path(), timeError);
+        if (timeError) {
+            lastWriteTime = fs::file_time_type::min();
+        }
+
+        entries.push_back({lastWriteTime, summary});
+    }
+
+    std::sort(entries.begin(), entries.end(), [](const auto& lhs, const auto& rhs) {
+        return lhs.first > rhs.first;
+    });
+
+    std::vector<SaveSummary> result;
+    result.reserve(entries.size());
+    for (const auto& entry : entries) {
+        result.push_back(entry.second);
     }
     return result;
 }

@@ -39,9 +39,8 @@
 #include "Render/Renderer.hpp"
 #include "Assets/AssetManager.hpp"
 #include "UI/UIManager.hpp"
+#include "Core/GameSessionConfig.hpp"
 #include "Save/SaveManager.hpp"
-
-enum class ControllerType { Human, AI };
 
 #ifdef _WIN32
 LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
@@ -59,15 +58,17 @@ private:
     void render();
     void handleWindowResize(sf::Vector2u newSize);
 
-    void startNewGame(const std::string& gameName);
-    void loadGame(const std::string& saveName);
-    void saveGame();
+    bool startNewGame(const GameSessionConfig& session, std::string* errorMessage = nullptr);
+    bool loadGame(const std::string& saveName);
+    bool saveGame();
     void commitPlayerTurn();
     void resetPlayerTurn();
     void startAITurnIfNeeded();
     void pollAITurn();
     void discardPendingAITurn();
     void refreshTurnPhase();
+    std::string participantName(KingdomId id) const;
+    std::string activeTurnLabel() const;
 
     void setupUICallbacks();
     void updateUIState();
@@ -105,6 +106,7 @@ private:
     TurnPhase m_turnPhase = TurnPhase::WhiteTurn;
     GameClock m_clock;
     std::string m_gameName;
+    std::array<std::string, kNumKingdoms> m_participantNames;
 
     struct AsyncAITaskState {
         std::mutex mutex;

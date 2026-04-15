@@ -13,7 +13,7 @@ public:
     void init(tgui::Gui& gui, const AssetManager& assets);
     void show();
     void hide();
-    void update(int turnNumber, TurnPhase turnPhase, int gold);
+    void update(int turnNumber, const std::string& activePlayerText, int gold, bool allowCommands);
 
     void setOnReset(std::function<void()> callback);
     void setOnPlay(std::function<void()> callback);
@@ -24,6 +24,8 @@ private:
     tgui::Label::Ptr m_turnLabel;
     tgui::Label::Ptr m_playerLabel;
     tgui::Label::Ptr m_goldLabel;
+    tgui::Button::Ptr m_resetButton;
+    tgui::Button::Ptr m_playButton;
     std::function<void()> m_onReset;
     std::function<void()> m_onPlay;
 };

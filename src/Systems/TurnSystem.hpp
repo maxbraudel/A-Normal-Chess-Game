@@ -24,6 +24,7 @@ public:
     TurnSystem();
 
     void setActiveKingdom(KingdomId id);
+    void setTurnNumber(int turnNumber);
     KingdomId getActiveKingdom() const;
     int getTurnNumber() const;
 

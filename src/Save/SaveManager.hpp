@@ -8,6 +8,7 @@ public:
     bool save(const std::string& filepath, const SaveData& data);
     bool load(const std::string& filepath, SaveData& outData);
     std::vector<std::string> listSaves(const std::string& savesDir);
+    std::vector<SaveSummary> listSaveSummaries(const std::string& savesDir);
     bool deleteSave(const std::string& filepath);
 
 private:

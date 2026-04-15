@@ -19,6 +19,7 @@ TurnSystem::TurnSystem()
       m_hasMoved(false), m_hasBuilt(false), m_hasProduced(false), m_hasMarried(false) {}
 
 void TurnSystem::setActiveKingdom(KingdomId id) { m_activeKingdom = id; }
+void TurnSystem::setTurnNumber(int turnNumber) { m_turnNumber = std::max(1, turnNumber); }
 KingdomId TurnSystem::getActiveKingdom() const { return m_activeKingdom; }
 int TurnSystem::getTurnNumber() const { return m_turnNumber; }
 
