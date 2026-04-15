@@ -71,7 +71,7 @@
       <div class="panel-header">
         <div>
           <h2>Master Layout</h2>
-          <p>Same church footprint as before, now described with helpers instead of one-off raw loops.</p>
+          <p>A denser cathedral-like church layout with better materials, liturgical props and stronger floor detail.</p>
         </div>
         <label class="toggle"><input id="chunkGuideToggle" type="checkbox" checked> Show chunk guides</label>
       </div>
@@ -95,7 +95,7 @@
 <script>
 const churchConfig = {
   title: "Church Structure Generator",
-  subtitle: "The original 4x3 chunk church rebuilt on a reusable structure engine so new buildings only need config and drawing rules.",
+  subtitle: "A denser 4x3 chunk cathedral-style church with richer floor treatment, chapels, transept accents, choir furnishing and more ornate liturgical detail.",
   buildingName: "church",
   widthChunks: 4,
   heightChunks: 3,
@@ -111,80 +111,222 @@ const churchConfig = {
     "The shared core now handles the main preview, chunk thumbnails, file naming preview and ZIP export."
   ],
   palette: {
-    floor: "#6f6f6f",
-    floorAlt: "#7a7a7a",
-    wall: "#c8c8c8",
-    wallDark: "#8f8f8f",
-    aisle: "#8b5a2b",
-    aisleEdge: "#6e4522",
+    floor: "#77716d",
+    floorAlt: "#837c76",
+    mosaicBlue: "#56708c",
+    mosaicRed: "#8b4f4f",
+    marble: "#bdb6ae",
+    marbleDark: "#918a84",
+    wall: "#d4d0ca",
+    wallDark: "#928b85",
+    buttress: "#b0a8a1",
+    aisle: "#7c5a32",
+    aisleEdge: "#5e4122",
     carpetRed: "#7a1f1f",
     carpetGold: "#c9b037",
     altar: "#ece3b8",
-    altarEdge: "#cfc48f",
+    altarEdge: "#cbc08f",
+    altarCloth: "#6a1122",
     step: "#b5ab7a",
-    pew: "#5a3b1a",
+    pew: "#583817",
     pewTop: "#7a5226",
-    column: "#dddddd",
+    pewShadow: "#3e2610",
+    column: "#e2dfda",
+    columnShadow: "#b0a9a1",
+    rail: "#b79c58",
+    reliquary: "#a47f2b",
+    font: "#9fa8b4",
+    fontWater: "#5d82a7",
     door: "#3b2a1a",
+    doorShadow: "#261b11",
     glassR: "#9c2f2f",
     glassB: "#3a5f8a",
+    glassG: "#55805a",
     candle: "#f5d97a",
+    brass: "#d3a34d",
+    plant: "#4b6a3d",
     shadow: "#4a4a4a"
   },
   draw(structure) {
     const width = structure.widthPixels;
     const height = structure.heightPixels;
 
-    function placePewBank(startX, endX) {
+    function scatterFloorAccent() {
       for (let y = 4; y < 44; y += 4) {
-        structure.fillRect(startX, y, endX - startX, 1, "pew");
-        structure.fillRect(startX, y + 1, endX - startX, 1, "pewTop");
+        for (let x = 4 + ((y / 4) % 2); x < 60; x += 6) {
+          structure.set(x, y, "floorAlt");
+          if (x + 1 < width - 4) {
+            structure.set(x + 1, y + 1, "marbleDark");
+          }
+        }
       }
     }
 
-    function placeStainedGlass() {
-      for (let y = 6; y < 44; y += 6) {
-        structure.points([[1, y], [62, y]], "glassR");
-        structure.points([[2, y], [61, y]], "glassB");
+    function placeOuterButtresses() {
+      const topButtresses = [6, 14, 22, 42, 50, 58];
+      const sideButtresses = [8, 16, 24, 32, 40];
+
+      for (const x of topButtresses) {
+        structure.fillRect(x, 0, 2, 3, "buttress");
+      }
+      for (const y of sideButtresses) {
+        structure.fillRect(0, y, 3, 2, "buttress");
+        structure.fillRect(width - 3, y, 3, 2, "buttress");
+      }
+    }
+
+    function placeWindows() {
+      for (let y = 8; y < 42; y += 6) {
+        structure.points([[2, y], [61, y]], "glassR");
+        structure.points([[2, y + 1], [61, y + 1]], "glassB");
+        structure.points([[2, y + 2], [61, y + 2]], "glassG");
+      }
+
+      for (let x = 26; x <= 37; x += 3) {
+        structure.points([[x, 2]], "glassR");
+        structure.points([[x, 3]], "glassB");
       }
     }
 
     function placeColumns() {
-      for (let y = 6; y < 44; y += 6) {
-        structure.points([[26, y], [37, y]], "column");
+      const columnRows = [10, 16, 22, 28, 34, 40];
+      for (const y of columnRows) {
+        structure.fillRect(20, y, 2, 2, "column");
+        structure.fillRect(42, y, 2, 2, "column");
+        structure.set(21, y + 2, "columnShadow");
+        structure.set(43, y + 2, "columnShadow");
       }
     }
 
-    structure.fillRect(0, 0, width, height, "floor");
-    structure.checkerRect(2, 2, width - 4, height - 4, "floor", "floorAlt", 4);
-    structure.strokeRect(0, 0, width, height, "wall");
+    function placePewBlock(startX, endX, rows) {
+      for (const y of rows) {
+        const widthBlock = endX - startX;
+        structure.fillRect(startX, y, widthBlock, 1, "pewShadow");
+        structure.fillRect(startX, y - 1, widthBlock, 1, "pew");
+        structure.fillRect(startX, y - 2, widthBlock, 1, "pewTop");
+      }
+    }
+
+    function placeChoirStalls() {
+      structure.fillRect(15, 8, 10, 1, "pewTop");
+      structure.fillRect(15, 9, 10, 1, "pew");
+      structure.fillRect(39, 8, 10, 1, "pewTop");
+      structure.fillRect(39, 9, 10, 1, "pew");
+      structure.fillRect(14, 7, 1, 4, "pewShadow");
+      structure.fillRect(49, 7, 1, 4, "pewShadow");
+    }
+
+    function placeSideChapels() {
+      structure.fillRect(5, 7, 11, 8, "marble");
+      structure.fillRect(48, 7, 11, 8, "marble");
+      structure.strokeRect(5, 7, 11, 8, "wallDark");
+      structure.strokeRect(48, 7, 11, 8, "wallDark");
+
+      structure.fillRect(8, 9, 5, 3, "altar");
+      structure.fillRect(51, 9, 5, 3, "altar");
+      structure.fillRect(9, 10, 3, 1, "altarCloth");
+      structure.fillRect(52, 10, 3, 1, "altarCloth");
+      structure.points([[10, 8], [12, 8], [53, 8], [55, 8]], "candle");
+      structure.points([[9, 13], [54, 13]], "plant");
+    }
+
+    function placeFonts() {
+      structure.fillRect(11, 40, 4, 3, "font");
+      structure.fillRect(49, 40, 4, 3, "font");
+      structure.fillRect(12, 41, 2, 1, "fontWater");
+      structure.fillRect(50, 41, 2, 1, "fontWater");
+    }
+
+    function placeAltarComplex() {
+      structure.fillRect(22, 4, 20, 7, "altar");
+      structure.fillRect(24, 11, 16, 2, "step");
+      structure.fillRect(26, 13, 12, 1, "step");
+      structure.fillRect(27, 6, 10, 3, "altarEdge");
+      structure.fillRect(29, 7, 6, 2, "altarCloth");
+      structure.fillRect(30, 5, 4, 1, "rail");
+      structure.points([[28, 6], [35, 6], [28, 9], [35, 9]], "candle");
+      structure.fillRect(31, 3, 1, 6, "brass");
+      structure.fillRect(29, 5, 5, 1, "brass");
+      structure.points([[24, 6], [25, 6], [38, 6], [39, 6]], "reliquary");
+    }
+
+    function placeEntrance() {
+      structure.fillRect(22, 43, 20, 3, "marbleDark");
+      structure.fillRect(24, 46, 6, 2, "doorShadow");
+      structure.fillRect(34, 46, 6, 2, "doorShadow");
+      structure.fillRect(24, 45, 6, 2, "door");
+      structure.fillRect(34, 45, 6, 2, "door");
+      structure.fillRect(31, 43, 2, 5, "brass");
+      structure.points([[30, 44], [33, 44]], "candle");
+    }
+
+    function placeTranseptDetails() {
+      structure.fillRect(6, 20, 10, 8, "marble");
+      structure.fillRect(48, 20, 10, 8, "marble");
+      structure.strokeRect(6, 20, 10, 8, "wallDark");
+      structure.strokeRect(48, 20, 10, 8, "wallDark");
+      structure.fillEllipse(11, 24, 3, 3, "mosaicBlue");
+      structure.fillEllipse(53, 24, 3, 3, "mosaicRed");
+      structure.points([[11, 24], [53, 24]], "reliquary");
+    }
+
+    function placeRunner() {
+      for (let y = 14; y < 43; y += 1) {
+        structure.fillRect(30, y, 4, 1, "aisle");
+        structure.points([[29, y], [34, y]], "aisleEdge");
+      }
+
+      for (let y = 15; y < 42; y += 2) {
+        structure.points([[31, y]], "carpetRed");
+        structure.points([[32, y]], "carpetGold");
+      }
+
+      for (let y = 18; y < 40; y += 6) {
+        structure.fillRect(29, y, 6, 1, "rail");
+      }
+    }
+
+    function placeMosaicBands() {
+      structure.fillRect(4, 15, 15, 2, "mosaicBlue");
+      structure.fillRect(45, 15, 15, 2, "mosaicBlue");
+      structure.fillRect(4, 31, 15, 2, "mosaicRed");
+      structure.fillRect(45, 31, 15, 2, "mosaicRed");
+      structure.fillRect(18, 38, 10, 2, "marble");
+      structure.fillRect(36, 38, 10, 2, "marble");
+    }
+
+    structure.fillRect(0, 0, width, height, "wall");
+    structure.fillRect(3, 3, width - 6, height - 6, "floor");
+    structure.checkerRect(4, 4, width - 8, height - 8, "floor", "floorAlt", 4);
+    structure.fillRect(24, 4, 16, 10, "marble");
+    structure.strokeRect(0, 0, width, height, "wallDark");
+    structure.strokeRect(3, 3, width - 6, height - 6, "wallDark");
     structure.lineH(1, 1, 62, "wallDark");
+    structure.lineV(1, 1, 46, "wallDark");
+    structure.lineV(62, 1, 46, "wallDark");
 
-    for (let y = 2; y < 46; y += 1) {
-      structure.fillRect(30, y, 4, 1, "aisle");
-      structure.points([[29, y], [34, y]], "aisleEdge");
-    }
-
-    for (let y = 4; y < 44; y += 2) {
-      structure.points([[31, y]], "carpetRed");
-      structure.points([[32, y]], "carpetGold");
-    }
-
-    placePewBank(4, 28);
-    placePewBank(36, 60);
+    placeOuterButtresses();
+    scatterFloorAccent();
+    placeMosaicBands();
+    placeWindows();
     placeColumns();
-    placeStainedGlass();
+    placeSideChapels();
+    placeTranseptDetails();
+    placeRunner();
+    placePewBlock(7, 19, [18, 23, 28, 33, 38]);
+    placePewBlock(45, 57, [18, 23, 28, 33, 38]);
+    placePewBlock(23, 29, [18, 23, 28, 33, 38]);
+    placePewBlock(35, 41, [18, 23, 28, 33, 38]);
+    placeChoirStalls();
+    placeAltarComplex();
+    placeFonts();
+    placeEntrance();
 
-    structure.fillRect(24, 2, 16, 8, "altar");
-    structure.fillRect(26, 10, 12, 2, "step");
-    structure.fillRect(29, 4, 6, 4, "altarEdge");
-
-    for (let y = 3; y <= 8; y += 1) {
-      structure.set(31, y, "carpetGold");
-    }
-    structure.fillRect(29, 5, 5, 1, "carpetGold");
-    structure.points([[28, 6], [35, 6]], "candle");
-    structure.fillRect(30, 47, 4, 1, "door");
+    structure.points([
+      [20, 14], [21, 14], [42, 14], [43, 14],
+      [18, 40], [19, 40], [44, 40], [45, 40],
+      [11, 18], [53, 18], [11, 30], [53, 30]
+    ], "candle");
   }
 };
 
