@@ -56,6 +56,89 @@ bool waitUntil(Predicate predicate, int timeoutMs = 1000) {
     return predicate();
 }
 
+unsigned short startLoopbackServerOnFreePort(MultiplayerServer& server,
+                                            const MultiplayerConfig& config,
+                                            const std::string& saveName,
+                                            unsigned short firstPort,
+                                            unsigned short lastPort,
+                                            const std::string& failureMessage) {
+    for (unsigned short port = firstPort; port < lastPort; ++port) {
+        std::string startError;
+        if (server.start(port, saveName, config, &startError)) {
+            return port;
+        }
+    }
+
+    throw std::runtime_error(failureMessage);
+}
+
+void connectAndAuthenticateLoopbackClient(MultiplayerServer& server,
+                                          MultiplayerClient& client,
+                                          unsigned short port,
+                                          const std::string& password,
+                                          const std::string& scenarioLabel) {
+    std::string error;
+    expect(client.connect(sf::IpAddress::LocalHost, port, sf::seconds(1.f), &error),
+           scenarioLabel + " client should connect to the local server.");
+    expect(client.requestServerInfo(&error),
+           scenarioLabel + " client should request server info.");
+
+    MultiplayerServerInfo info;
+    expect(waitUntil([&]() {
+        server.update();
+        client.update();
+
+        while (client.hasPendingEvent()) {
+            const auto event = client.popNextEvent();
+            if (event.type == MultiplayerClient::Event::Type::ServerInfoReceived) {
+                info = event.serverInfo;
+                return true;
+            }
+        }
+
+        return false;
+    }), scenarioLabel + " should receive server info.");
+
+    expect(info.joinable, scenarioLabel + " server should be joinable.");
+    expect(client.sendJoinRequest(MultiplayerPasswordUtils::computePasswordDigest(password, info.passwordSalt), &error),
+           scenarioLabel + " client should send a join request.");
+
+    bool joinAccepted = false;
+    bool serverConnectedEvent = false;
+    bool unexpectedDisconnect = false;
+    expect(waitUntil([&]() {
+        server.update();
+        client.update();
+
+        while (server.hasPendingEvent()) {
+            const auto event = server.popNextEvent();
+            if (event.type == MultiplayerServer::Event::Type::ClientConnected) {
+                serverConnectedEvent = true;
+            }
+            if (event.type == MultiplayerServer::Event::Type::ClientDisconnected
+                || event.type == MultiplayerServer::Event::Type::ClientConnectionInterrupted) {
+                unexpectedDisconnect = true;
+            }
+        }
+
+        while (client.hasPendingEvent()) {
+            const auto event = client.popNextEvent();
+            if (event.type == MultiplayerClient::Event::Type::JoinAccepted) {
+                joinAccepted = true;
+            }
+            if (event.type == MultiplayerClient::Event::Type::JoinRejected
+                || event.type == MultiplayerClient::Event::Type::Disconnected
+                || event.type == MultiplayerClient::Event::Type::Error) {
+                unexpectedDisconnect = true;
+            }
+        }
+
+        return joinAccepted && serverConnectedEvent;
+    }), scenarioLabel + " join handshake should complete.");
+
+    expect(!unexpectedDisconnect, scenarioLabel + " should not drop during the join handshake.");
+}
+
 sf::Vector2i findEmptyTraversableCell(const GameEngine& engine) {
     const Board& board = engine.board();
     const int diameter = board.getDiameter();
@@ -624,106 +707,150 @@ void testSaveManagerRoundTrip() {
             server.stop();
         }
 
-        void testMultiplayerServerAllowsReconnectAfterDisconnect() {
+        void testMultiplayerServerTreatsPreAuthDisconnectAsInterruptedConnection() {
+            MultiplayerConfig config;
+            config.enabled = true;
+            config.passwordSalt = "preauth_salt";
+            config.passwordHash = MultiplayerPasswordUtils::computePasswordDigest("secret", config.passwordSalt);
+
+            MultiplayerServer server;
+            const unsigned short port = startLoopbackServerOnFreePort(
+                server,
+                config,
+                "preauth_interrupt_save",
+                47100,
+                47200,
+                "Pre-auth reconnect test could not find a free local port.");
+
+            MultiplayerClient client;
+            std::string error;
+            expect(client.connect(sf::IpAddress::LocalHost, port, sf::seconds(1.f), &error),
+                   "Pre-auth reconnect test client should connect to the local server.");
+            expect(client.requestServerInfo(&error),
+                   "Pre-auth reconnect test client should request server info.");
+
+            bool receivedInfo = false;
+            expect(waitUntil([&]() {
+                server.update();
+                client.update();
+
+                while (client.hasPendingEvent()) {
+                    const auto event = client.popNextEvent();
+                    if (event.type == MultiplayerClient::Event::Type::ServerInfoReceived) {
+                        receivedInfo = true;
+                        return true;
+                    }
+                }
+
+                return false;
+            }), "Pre-auth reconnect test should receive server info before disconnecting.");
+            expect(receivedInfo, "Pre-auth reconnect test should complete the initial ping stage.");
+
+            client.disconnect();
+
+            MultiplayerServer::Event serverEvent;
+            expect(waitUntil([&]() {
+                server.update();
+                while (server.hasPendingEvent()) {
+                    const auto event = server.popNextEvent();
+                    if (event.type == MultiplayerServer::Event::Type::ClientConnectionInterrupted
+                        || event.type == MultiplayerServer::Event::Type::ClientDisconnected) {
+                        serverEvent = event;
+                        return true;
+                    }
+                }
+
+                return false;
+            }), "Pre-auth reconnect test server should observe the interrupted connection.");
+
+            expect(serverEvent.type == MultiplayerServer::Event::Type::ClientConnectionInterrupted,
+                   "Disconnects before join authentication must not be promoted to gameplay-level client disconnections.");
+
+            server.stop();
+        }
+
+        void testMultiplayerServerReportsAuthenticatedDisconnect() {
+            MultiplayerConfig config;
+            config.enabled = true;
+            config.passwordSalt = "authenticated_disconnect_salt";
+            config.passwordHash = MultiplayerPasswordUtils::computePasswordDigest("secret", config.passwordSalt);
+
+            MultiplayerServer server;
+            const unsigned short port = startLoopbackServerOnFreePort(
+                server,
+                config,
+                "authenticated_disconnect_save",
+                47200,
+                47300,
+                "Authenticated disconnect test could not find a free local port.");
+
+            MultiplayerClient client;
+            connectAndAuthenticateLoopbackClient(server, client, port, "secret", "Authenticated disconnect test");
+            client.disconnect();
+
+            MultiplayerServer::Event serverEvent;
+            expect(waitUntil([&]() {
+                server.update();
+                while (server.hasPendingEvent()) {
+                    const auto event = server.popNextEvent();
+                    if (event.type == MultiplayerServer::Event::Type::ClientConnectionInterrupted
+                        || event.type == MultiplayerServer::Event::Type::ClientDisconnected) {
+                        serverEvent = event;
+                        return true;
+                    }
+                }
+
+                return false;
+            }), "Authenticated disconnect test server should observe the remote disconnect.");
+
+            expect(serverEvent.type == MultiplayerServer::Event::Type::ClientDisconnected,
+                   "Authenticated players disconnecting mid-session must still produce a gameplay disconnect event.");
+
+            server.stop();
+        }
+
+        void testMultiplayerReconnectReusesSameClientInstance() {
             MultiplayerConfig config;
             config.enabled = true;
             config.passwordSalt = "reconnect_salt";
             config.passwordHash = MultiplayerPasswordUtils::computePasswordDigest("secret", config.passwordSalt);
 
             MultiplayerServer server;
-            unsigned short port = 47100;
-            bool started = false;
-            for (; port < 47200; ++port) {
-                std::string startError;
-                if (server.start(port, "reconnect_save", config, &startError)) {
-                    started = true;
-                    break;
-                }
-            }
-            expect(started, "Reconnect smoke test could not find a free local port.");
+            const unsigned short port = startLoopbackServerOnFreePort(
+                server,
+                config,
+                "reconnect_save",
+                47300,
+                47400,
+                "Reconnect smoke test could not find a free local port.");
 
-            auto connectAndJoin = [&](MultiplayerClient& client, std::string* errorMessage) {
-                expect(client.connect(sf::IpAddress::LocalHost, port, sf::seconds(1.f), errorMessage),
-                       "Reconnect smoke test client should connect to the local server.");
-                expect(client.requestServerInfo(errorMessage),
-                       "Reconnect smoke test client should request server info.");
+            MultiplayerClient client;
+            connectAndAuthenticateLoopbackClient(server, client, port, "secret", "Reconnect smoke test initial join");
 
-                MultiplayerServerInfo info;
-                expect(waitUntil([&]() {
-                    server.update();
-                    client.update();
-
-                    while (client.hasPendingEvent()) {
-                        const auto event = client.popNextEvent();
-                        if (event.type == MultiplayerClient::Event::Type::ServerInfoReceived) {
-                            info = event.serverInfo;
-                            return true;
-                        }
-                    }
-
-                    return false;
-                }), "Reconnect smoke test should receive server info.");
-
-                expect(info.joinable, "Reconnect smoke test server should be joinable before each join.");
-                expect(client.sendJoinRequest(
-                           MultiplayerPasswordUtils::computePasswordDigest("secret", info.passwordSalt),
-                           errorMessage),
-                       "Reconnect smoke test client should send a join request.");
-
-                bool joinAccepted = false;
-                bool serverConnectedEvent = false;
-                expect(waitUntil([&]() {
-                    server.update();
-                    client.update();
-
-                    while (server.hasPendingEvent()) {
-                        const auto event = server.popNextEvent();
-                        if (event.type == MultiplayerServer::Event::Type::ClientConnected) {
-                            serverConnectedEvent = true;
-                        }
-                    }
-
-                    while (client.hasPendingEvent()) {
-                        const auto event = client.popNextEvent();
-                        if (event.type == MultiplayerClient::Event::Type::JoinAccepted) {
-                            joinAccepted = true;
-                        }
-                    }
-
-                    return joinAccepted && serverConnectedEvent;
-                }), "Reconnect smoke test join handshake should complete.");
-            };
-
-            MultiplayerClient firstClient;
-            std::string error;
-            connectAndJoin(firstClient, &error);
-
-            firstClient.disconnect();
-            bool serverSawDisconnect = false;
+            client.disconnect();
             expect(waitUntil([&]() {
                 server.update();
                 while (server.hasPendingEvent()) {
                     const auto event = server.popNextEvent();
                     if (event.type == MultiplayerServer::Event::Type::ClientDisconnected) {
-                        serverSawDisconnect = true;
                         return true;
                     }
                 }
 
                 return false;
-            }), "Reconnect smoke test server should detect client disconnects.");
-            expect(serverSawDisconnect, "Reconnect smoke test should observe a disconnect event before rejoining.");
+            }), "Reconnect smoke test should observe the first authenticated disconnect before retrying.");
 
-            MultiplayerClient secondClient;
-            connectAndJoin(secondClient, &error);
+            connectAndAuthenticateLoopbackClient(server, client, port, "secret", "Reconnect smoke test reused client");
+
+            std::string error;
             expect(server.sendSnapshot("{\"reconnected\":true}", &error),
                    "Reconnect smoke test server should send snapshots to the reconnected client.");
 
             bool receivedSnapshot = false;
             expect(waitUntil([&]() {
-                secondClient.update();
-                while (secondClient.hasPendingEvent()) {
-                    const auto event = secondClient.popNextEvent();
+                client.update();
+                while (client.hasPendingEvent()) {
+                    const auto event = client.popNextEvent();
                     if (event.type == MultiplayerClient::Event::Type::SnapshotReceived) {
                         receivedSnapshot = (event.serializedSaveData == "{\"reconnected\":true}");
                         return receivedSnapshot;
@@ -731,9 +858,9 @@ void testSaveManagerRoundTrip() {
                 }
 
                 return false;
-            }), "Reconnect smoke test client should receive a snapshot after reconnecting.");
+            }), "Reconnect smoke test should receive a snapshot after reconnecting with the same client instance.");
 
-            secondClient.disconnect();
+            client.disconnect();
             server.stop();
         }
 
@@ -874,7 +1001,9 @@ int main() {
         {"multiplayer turn packet roundtrip", testMultiplayerTurnSubmissionPacketRoundTrip},
         {"multiplayer turn rejection packet roundtrip", testMultiplayerTurnRejectedPacketRoundTrip},
         {"multiplayer loopback smoke", testMultiplayerLoopbackSmoke},
-        {"multiplayer reconnect smoke", testMultiplayerServerAllowsReconnectAfterDisconnect},
+        {"multiplayer pre-auth disconnect", testMultiplayerServerTreatsPreAuthDisconnectAsInterruptedConnection},
+        {"multiplayer authenticated disconnect", testMultiplayerServerReportsAuthenticatedDisconnect},
+        {"multiplayer reconnect same client", testMultiplayerReconnectReusesSameClientInstance},
         {"turn system affordability", testTurnSystemSkipsUnaffordableBuild},
         {"projected income helper", testProjectedIncomeHelper},
         {"structure chunk registry", testStructureChunkRegistry},
