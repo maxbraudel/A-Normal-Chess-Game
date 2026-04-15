@@ -57,6 +57,9 @@ InGameViewModel buildInGameViewModel(const GameEngine& engine,
     model.turnNumber = engine.turnSystem().getTurnNumber();
     model.activeTurnLabel = engine.activeTurnLabel();
     model.statusLabel = turnStatusLabel(engine, config, state);
+    model.statusTone = CheckSystem::isInCheck(engine.activeKingdom().id, engine.board(), config)
+        ? InGameStatusTone::Danger
+        : InGameStatusTone::Neutral;
     model.activeGold = activeKingdom.gold;
     model.activeOccupiedCells = countOccupiedBuildingCells(activeKingdom);
     model.activeTroops = activeKingdom.pieceCount();
@@ -65,6 +68,7 @@ InGameViewModel buildInGameViewModel(const GameEngine& engine,
                                                                  engine.publicBuildings(),
                                                                  config);
     model.allowCommands = allowCommands;
+    model.canEndTurn = allowCommands;
 
     const auto& events = engine.eventLog().getEvents();
     const std::size_t startIndex = (events.size() > 60) ? (events.size() - 60) : 0;

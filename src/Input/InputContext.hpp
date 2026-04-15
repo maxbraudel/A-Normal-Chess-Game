@@ -23,4 +23,5 @@ struct InputContext {
     UIManager& uiManager;
     const GameConfig& config;
     bool allowCommands = true;
+    bool allowNonMoveActions = true;
 };

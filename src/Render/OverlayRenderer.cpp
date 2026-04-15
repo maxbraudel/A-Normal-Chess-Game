@@ -1,5 +1,7 @@
 #include "Render/OverlayRenderer.hpp"
 #include "Render/Camera.hpp"
+#include "Board/Board.hpp"
+#include "Board/Cell.hpp"
 #include "Buildings/Building.hpp"
 #include "Assets/AssetManager.hpp"
 #include <algorithm>
@@ -20,6 +22,7 @@ constexpr float kOverlayItemGap = 6.f;
 constexpr float kOverlayRowGap = 4.f;
 constexpr float kOverlayMarginAboveBuilding = 8.f;
 constexpr unsigned int kOverlayTextSize = 13;
+const sf::Color kOrientationCheckerColor(70, 70, 70, 110);
 
 void drawDot(sf::RenderWindow& window, float x, float y, float diameter) {
     sf::RectangleShape dot({diameter, diameter});
@@ -287,6 +290,26 @@ void drawOverlayRow(sf::RenderWindow& window, const StructureOverlayRow& row,
 }
 
 } // namespace
+
+void OverlayRenderer::drawOrientationCheckerboard(sf::RenderWindow& window,
+                                                  const Board& board,
+                                                  int cellSize) {
+    sf::RectangleShape overlay(sf::Vector2f(static_cast<float>(cellSize), static_cast<float>(cellSize)));
+    overlay.setFillColor(kOrientationCheckerColor);
+
+    const int diameter = board.getDiameter();
+    for (int y = 0; y < diameter; ++y) {
+        for (int x = 0; x < diameter; ++x) {
+            const Cell& cell = board.getCell(x, y);
+            if (!cell.isInCircle || ((x + y) % 2 != 0)) {
+                continue;
+            }
+
+            overlay.setPosition(static_cast<float>(x * cellSize), static_cast<float>(y * cellSize));
+            window.draw(overlay);
+        }
+    }
+}
 
 void OverlayRenderer::drawSelectionFrame(sf::RenderWindow& window, const Camera& camera,
                                            const sf::View& hudView, sf::Vector2u windowSize,

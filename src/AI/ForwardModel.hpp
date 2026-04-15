@@ -48,6 +48,9 @@ public:
 
 private:
     // Movement helpers
+    static std::vector<sf::Vector2i> getPseudoLegalMoves(const GameSnapshot& s,
+                                                         const SnapPiece& piece,
+                                                         int globalMaxRange);
     static std::vector<sf::Vector2i> getPawnMoves(const SnapPiece& piece,
                                                    const GameSnapshot& s);
     static std::vector<sf::Vector2i> getKnightMoves(const SnapPiece& piece,

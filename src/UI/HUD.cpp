@@ -165,8 +165,12 @@ void HUD::update(const InGameViewModel& model) {
     if (m_statusLabel) {
         m_statusLabel->setText("T" + std::to_string(model.turnNumber) + " | "
                                + model.activeTurnLabel + " : " + model.statusLabel);
+        m_statusLabel->getRenderer()->setTextColor(
+            model.statusTone == InGameStatusTone::Danger
+                ? tgui::Color(255, 120, 120)
+                : tgui::Color::White);
     }
-    if (m_endTurnButton) m_endTurnButton->setEnabled(model.allowCommands);
+    if (m_endTurnButton) m_endTurnButton->setEnabled(model.canEndTurn);
     if (m_resetTurnButton) m_resetTurnButton->setEnabled(model.allowCommands);
 }
 

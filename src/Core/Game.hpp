@@ -38,6 +38,7 @@
 #include "Multiplayer/MultiplayerClient.hpp"
 #include "Multiplayer/MultiplayerServer.hpp"
 #include "Save/SaveManager.hpp"
+#include "Systems/CheckResponseRules.hpp"
 
 #ifdef _WIN32
 LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
@@ -103,6 +104,9 @@ private:
 
     void setupUICallbacks();
     void updateUIState();
+    CheckTurnValidation validateActivePendingTurn();
+    bool isActiveKingInCheckForRules();
+    bool canQueueNonMoveActions();
 
 #ifdef _WIN32
     friend LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);

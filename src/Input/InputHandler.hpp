@@ -84,7 +84,7 @@ private:
     void handleBuildTool(const sf::Event& event, const InputContext& context);
     void handleCameraInput(const sf::Event& event, sf::RenderWindow& window, Camera& camera);
     // Recompute m_validMoves / m_dangerMoves for piece given current preview board state
-    void refreshPieceMoves(Piece* piece, const Board& board, const Kingdom& enemyKingdom, const GameConfig& config);
+    void refreshPieceMoves(Piece* piece, Board& board, const Kingdom& enemyKingdom, const GameConfig& config);
     void selectCell(sf::Vector2i cellPos);
     void activatePieceSelection(Piece* piece, sf::Vector2i cellPos,
                                 const Board& board, const Kingdom& enemyKingdom,

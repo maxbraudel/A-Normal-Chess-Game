@@ -30,15 +30,22 @@ struct KingdomBalanceMetric {
     int blackValue = 0;
 };
 
+enum class InGameStatusTone {
+    Neutral,
+    Danger
+};
+
 struct InGameViewModel {
     int turnNumber = 1;
     std::string activeTurnLabel;
     std::string statusLabel = "Idle";
+    InGameStatusTone statusTone = InGameStatusTone::Neutral;
     int activeGold = 0;
     int activeOccupiedCells = 0;
     int activeTroops = 0;
     int activeIncome = 0;
     bool allowCommands = false;
+    bool canEndTurn = false;
     std::vector<InGameEventRow> eventRows;
     std::array<KingdomBalanceMetric, kInGameMetricCount> balanceMetrics{};
 };

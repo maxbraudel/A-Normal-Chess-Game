@@ -32,6 +32,7 @@
 #include "Multiplayer/Protocol.hpp"
 #include "Multiplayer/MultiplayerServer.hpp"
 #include "Save/SaveManager.hpp"
+#include "Systems/CheckResponseRules.hpp"
 #include "Systems/EconomySystem.hpp"
 #include "Systems/EventLog.hpp"
 #include "Systems/TurnCommand.hpp"
@@ -70,6 +71,18 @@ Building makeTestPublicBuilding(BuildingType type, const sf::Vector2i& origin, i
     building.height = height;
     building.cellHP.assign(width * height, 1);
     return building;
+}
+
+Piece& addPieceToBoard(Kingdom& kingdom,
+                       Board& board,
+                       int id,
+                       PieceType type,
+                       KingdomId owner,
+                       const sf::Vector2i& position) {
+    kingdom.addPiece(Piece(id, type, owner, position));
+    Piece& piece = kingdom.pieces.back();
+    board.getCell(position.x, position.y).piece = &piece;
+    return piece;
 }
 
 template <typename Predicate>
@@ -478,6 +491,95 @@ void testLayeredSelectionStackSupportsPreviewPieceOverride() {
             "The production progress bar should expose completed progress derived from total turns and turns remaining.");
         expect(overlay.rows[1].items[1].text == formatTurnsRemainingLabel(barracks.turnsRemaining),
             "The production progress bar should carry the remaining-turns label.");
+    }
+
+    void testCheckResponseFiltersMovesThatDoNotResolveCheck() {
+        GameConfig config;
+        Board board;
+        board.init(8);
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+
+        Piece& whiteKing = addPieceToBoard(white, board, 100, PieceType::King, KingdomId::White, {8, 8});
+        (void)whiteKing;
+        Piece& whiteKnight = addPieceToBoard(white, board, 101, PieceType::Knight, KingdomId::White, {4, 7});
+        Piece& blackRook = addPieceToBoard(black, board, 200, PieceType::Rook, KingdomId::Black, {8, 4});
+        (void)blackRook;
+
+        const std::vector<sf::Vector2i> legalMoves = CheckResponseRules::filterLegalMovesForPiece(
+            whiteKnight, board, config);
+        expect(legalMoves.empty(),
+               "A non-king piece should have no selectable moves while in check if none of its moves resolve the check.");
+    }
+
+    void testCheckResponseAllowsBlockingMove() {
+        GameConfig config;
+        Board board;
+        board.init(8);
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+
+        addPieceToBoard(white, board, 110, PieceType::King, KingdomId::White, {8, 8});
+        Piece& whiteBishop = addPieceToBoard(white, board, 111, PieceType::Bishop, KingdomId::White, {7, 7});
+        addPieceToBoard(black, board, 210, PieceType::Rook, KingdomId::Black, {8, 4});
+
+        const std::vector<sf::Vector2i> legalMoves = CheckResponseRules::filterLegalMovesForPiece(
+            whiteBishop, board, config);
+        expect(std::find(legalMoves.begin(), legalMoves.end(), sf::Vector2i{8, 6}) != legalMoves.end(),
+               "A friendly piece should keep the blocking move that resolves a line check.");
+    }
+
+    void testCheckResponseRejectsPassWhileInCheck() {
+        GameConfig config;
+        Board board;
+        board.init(8);
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+
+        addPieceToBoard(white, board, 120, PieceType::King, KingdomId::White, {8, 8});
+        addPieceToBoard(black, board, 220, PieceType::Rook, KingdomId::Black, {8, 4});
+
+        const CheckTurnValidation validation = CheckResponseRules::validatePendingTurn(
+            white, board, {}, config);
+        expect(!validation.valid && validation.activeKingInCheck,
+               "An empty pending turn should be rejected while the kingdom is in check.");
+    }
+
+    void testCheckResponseRejectsNonMoveActionsWhileInCheck() {
+        GameConfig config;
+        Board board;
+        board.init(8);
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+
+        addPieceToBoard(white, board, 130, PieceType::King, KingdomId::White, {8, 8});
+        addPieceToBoard(black, board, 230, PieceType::Rook, KingdomId::Black, {8, 4});
+
+        TurnCommand buildCommand;
+        buildCommand.type = TurnCommand::Build;
+        buildCommand.buildingType = BuildingType::Barracks;
+        buildCommand.buildOrigin = {7, 8};
+
+        const CheckTurnValidation validation = CheckResponseRules::validatePendingTurn(
+            white, board, {buildCommand}, config);
+        expect(!validation.valid,
+               "Build and other non-move commands must be rejected while the active kingdom is in check.");
+    }
+
+    void testInGameViewModelShowsDangerToneWhenActiveKingIsInCheck() {
+        GameConfig config;
+        GameEngine engine;
+        engine.board().init(8);
+        engine.kingdom(KingdomId::White) = Kingdom(KingdomId::White);
+        engine.kingdom(KingdomId::Black) = Kingdom(KingdomId::Black);
+        engine.turnSystem().setActiveKingdom(KingdomId::White);
+
+        addPieceToBoard(engine.kingdom(KingdomId::White), engine.board(), 140, PieceType::King, KingdomId::White, {8, 8});
+        addPieceToBoard(engine.kingdom(KingdomId::Black), engine.board(), 240, PieceType::Rook, KingdomId::Black, {8, 4});
+
+        const InGameViewModel model = buildInGameViewModel(engine, config, GameState::Playing, true);
+        expect(model.statusTone == InGameStatusTone::Danger,
+               "The top HUD status indicator should expose the danger tone when the active king is in check.");
     }
 
     void testOverlayPolicyCanHideIndicatorsUntilSelected() {
@@ -1471,6 +1573,11 @@ int main() {
         {"private building overlay owner shield", testSelectedStructureOverlayPrivateBuildingsUseOwnerShield},
         {"public building overlay occupation", testSelectedStructureOverlayPublicBuildingsUseOccupationIndicator},
         {"barracks overlay production row", testSelectedStructureOverlayProducingBarracksAddsProgressRow},
+        {"check response filters illegal moves", testCheckResponseFiltersMovesThatDoNotResolveCheck},
+        {"check response allows blocking move", testCheckResponseAllowsBlockingMove},
+        {"check response rejects pass", testCheckResponseRejectsPassWhileInCheck},
+        {"check response rejects non-move", testCheckResponseRejectsNonMoveActionsWhileInCheck},
+        {"in-game view model check tone", testInGameViewModelShowsDangerToneWhenActiveKingIsInCheck},
         {"overlay policy when selected visibility", testOverlayPolicyCanHideIndicatorsUntilSelected},
         {"overlay policy always visible", testOverlayPolicyAlwaysKeepsCurrentIndicatorsVisible},
         {"save manager roundtrip", testSaveManagerRoundTrip},

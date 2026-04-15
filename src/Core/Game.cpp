@@ -291,6 +291,20 @@ bool Game::canLocalPlayerIssueCommands() const {
         && isLocalPlayerTurn();
 }
 
+CheckTurnValidation Game::validateActivePendingTurn() {
+    return CheckResponseRules::validatePendingTurn(
+        activeKingdom(), board(), turnSystem().getPendingCommands(), m_config);
+}
+
+bool Game::isActiveKingInCheckForRules() {
+    return CheckResponseRules::isActiveKingInCheck(
+        activeKingdom(), board(), turnSystem().getPendingCommands(), m_config);
+}
+
+bool Game::canQueueNonMoveActions() {
+    return !isActiveKingInCheckForRules();
+}
+
 KingdomId Game::localPerspectiveKingdom() const {
     if (isLocalPlayerTurn()) {
         return turnSystem().getActiveKingdom();
@@ -608,6 +622,7 @@ void Game::handleInput() {
 
         if (m_state == GameState::Playing) {
             const bool allowCommands = canLocalPlayerIssueCommands();
+            const bool allowNonMoveActions = allowCommands ? canQueueNonMoveActions() : false;
             const KingdomId perspectiveKingdom = localPerspectiveKingdom();
             Kingdom& selectableKingdom = allowCommands ? activeKingdom() : kingdom(perspectiveKingdom);
             Kingdom& opposingKingdom = allowCommands ? enemyKingdom() : kingdom(opponent(perspectiveKingdom));
@@ -621,7 +636,8 @@ void Game::handleInput() {
                 publicBuildings(),
                 m_uiManager,
                 m_config,
-                allowCommands
+                allowCommands,
+                allowNonMoveActions
             };
             m_input.handleEvent(event, inputContext);
         }
@@ -672,6 +688,11 @@ void Game::render() {
         const bool canShowSelectedPieceActions = showActionOverlays
             && selectedPiece
             && selectedPiece->kingdom == activeKingdom().id;
+
+        if (m_input.getCurrentTool() == ToolState::Select && selectedPiece) {
+            m_renderer.getOverlay().drawOrientationCheckerboard(
+                m_window, board(), m_config.getCellSizePx());
+        }
 
         if (canShowSelectedPieceActions && m_input.getCurrentTool() == ToolState::Select) {
             sf::Vector2i highlightedOrigin = m_input.hasMovePreview()
@@ -876,6 +897,23 @@ void Game::commitAuthoritativeTurn() {
     KingdomId activeId = turnSystem().getActiveKingdom();
     KingdomId enemyId  = opponent(activeId);
 
+    const CheckTurnValidation validation = validateActivePendingTurn();
+    if (!validation.valid) {
+        if (validation.activeKingInCheck && !validation.hasAnyLegalResponse) {
+            m_state = GameState::GameOver;
+            eventLog().log(turnSystem().getTurnNumber(), enemyId,
+                           "Checkmate! " + participantName(enemyId) + " wins!");
+            m_input.clearMovePreview();
+            m_input.clearSelection();
+            if (isLanHost()) {
+                saveGame();
+                pushSnapshotToRemote(nullptr);
+            }
+            updateUIState();
+        }
+        return;
+    }
+
     turnSystem().commitTurn(board(), activeKingdom(), enemyKingdom(),
                             publicBuildings(), m_config, eventLog(),
                             pieceFactory(), buildingFactory());
@@ -885,14 +923,18 @@ void Game::commitAuthoritativeTurn() {
                                    kingdoms(),
                                    "after_player_commit");
 
-    // Check if opponent is in checkmate
-    if (CheckSystem::isCheckmate(enemyId, board(), m_config)) {
+    turnSystem().advanceTurn();
+    m_input.clearMovePreview();
+    m_input.clearSelection();
+    m_waitingForRemoteTurnResult = false;
+    refreshTurnPhase();
+
+    const CheckTurnValidation enemyValidation = validateActivePendingTurn();
+    if (enemyValidation.activeKingInCheck && !enemyValidation.hasAnyLegalResponse) {
         m_state = GameState::GameOver;
         std::string winner = participantName(activeId);
         eventLog().log(turnSystem().getTurnNumber(), activeId,
                        "Checkmate! " + winner + " wins!");
-        m_input.clearMovePreview();
-        m_input.clearSelection();
         if (isLanHost()) {
             saveGame();
             pushSnapshotToRemote(nullptr);
@@ -901,11 +943,6 @@ void Game::commitAuthoritativeTurn() {
         return;
     }
 
-    turnSystem().advanceTurn();
-    m_input.clearMovePreview();
-    m_input.clearSelection();
-    m_waitingForRemoteTurnResult = false;
-    refreshTurnPhase();
     if (isLanHost()) {
         saveGame();
         pushSnapshotToRemote(nullptr);
@@ -1006,6 +1043,14 @@ bool Game::submitClientTurn(std::string* errorMessage) {
         return false;
     }
 
+    const CheckTurnValidation validation = validateActivePendingTurn();
+    if (!validation.valid) {
+        if (errorMessage) {
+            *errorMessage = validation.errorMessage;
+        }
+        return false;
+    }
+
     if (!m_multiplayerClient.sendTurnSubmission(turnSystem().getPendingCommands(), errorMessage)) {
         return false;
     }
@@ -1041,6 +1086,19 @@ bool Game::applyRemoteTurnSubmission(const std::vector<TurnCommand>& commands, s
             }
             return false;
         }
+    }
+
+    const CheckTurnValidation validation = validateActivePendingTurn();
+    if (!validation.valid) {
+        if (validation.activeKingInCheck && !validation.hasAnyLegalResponse) {
+            commitAuthoritativeTurn();
+        } else {
+            turnSystem().resetPendingCommands();
+        }
+        if (errorMessage) {
+            *errorMessage = validation.errorMessage;
+        }
+        return false;
     }
 
     commitAuthoritativeTurn();
@@ -1392,7 +1450,7 @@ void Game::setupUICallbacks() {
         m_uiManager.showSelectionEmptyState();
     });
     m_uiManager.toolBar().setOnBuild([this]() {
-        if (!canLocalPlayerIssueCommands()) return;
+        if (!canLocalPlayerIssueCommands() || !canQueueNonMoveActions()) return;
         m_input.setTool(ToolState::Build);
         m_uiManager.buildToolPanel().setSelectedBuildType(m_input.getBuildPreviewType());
         m_uiManager.showBuildToolPanel(activeKingdom(), m_config, true);
@@ -1400,7 +1458,7 @@ void Game::setupUICallbacks() {
 
     // Build tool panel
     m_uiManager.buildToolPanel().setOnSelectBuildType([this](int type) {
-        if (!canLocalPlayerIssueCommands()) return;
+        if (!canLocalPlayerIssueCommands() || !canQueueNonMoveActions()) return;
         const BuildingType buildingType = static_cast<BuildingType>(type);
         m_input.setBuildType(buildingType);
         m_uiManager.buildToolPanel().setSelectedBuildType(buildingType);
@@ -1408,7 +1466,7 @@ void Game::setupUICallbacks() {
 
     // Piece panel upgrade
     m_uiManager.piecePanel().setOnUpgrade([this](int pieceId, int targetType) {
-        if (!canLocalPlayerIssueCommands()) return;
+        if (!canLocalPlayerIssueCommands() || !canQueueNonMoveActions()) return;
         Piece* piece = activeKingdom().getPieceById(pieceId);
         if (!piece) return;
         TurnCommand cmd;
@@ -1423,7 +1481,7 @@ void Game::setupUICallbacks() {
 
     // Barracks panel produce
     m_uiManager.barracksPanel().setOnProduce([this](int barracksId, int pieceType) {
-        if (!canLocalPlayerIssueCommands()) return;
+        if (!canLocalPlayerIssueCommands() || !canQueueNonMoveActions()) return;
         TurnCommand cmd;
         cmd.type = TurnCommand::Produce;
         cmd.barracksId = barracksId;
@@ -1434,14 +1492,23 @@ void Game::setupUICallbacks() {
 
 void Game::updateUIState() {
     const bool allowCommands = canLocalPlayerIssueCommands();
-    const InGameViewModel viewModel = buildInGameViewModel(m_engine, m_config, m_state, allowCommands);
+    const CheckTurnValidation validation = validateActivePendingTurn();
+    InGameViewModel viewModel = buildInGameViewModel(m_engine, m_config, m_state, allowCommands);
+    viewModel.statusTone = validation.activeKingInCheck ? InGameStatusTone::Danger : InGameStatusTone::Neutral;
+    if (m_state != GameState::GameOver) {
+        viewModel.statusLabel = validation.activeKingInCheck
+            ? (validation.hasAnyLegalResponse ? "Check" : "Checkmate")
+            : "Idle";
+    }
+    viewModel.canEndTurn = allowCommands && validation.valid;
     m_uiManager.updateDashboard(viewModel);
     updateMultiplayerPresentation();
     const KingdomId viewedKingdomId = allowCommands ? activeKingdom().id : localPerspectiveKingdom();
+    const bool allowNonMoveActions = allowCommands && canQueueNonMoveActions();
 
     switch (m_input.getCurrentTool()) {
         case ToolState::Build:
-            if (allowCommands) {
+            if (allowNonMoveActions) {
                 m_uiManager.showBuildToolPanel(activeKingdom(), m_config, true);
             } else {
                 m_uiManager.showSelectionEmptyState();
@@ -1451,13 +1518,13 @@ void Game::updateUIState() {
         case ToolState::Select:
         default:
             if (m_input.getSelectedPiece()) {
-                const bool allowUpgrade = allowCommands
+                const bool allowUpgrade = allowNonMoveActions
                     && (m_input.getSelectedPiece()->kingdom == viewedKingdomId);
                 m_uiManager.showPiecePanel(*m_input.getSelectedPiece(), m_config, allowUpgrade);
             } else if (m_input.getSelectedBuilding()) {
                 Building* building = m_input.getSelectedBuilding();
                 if (building->type == BuildingType::Barracks) {
-                    const bool allowProduce = allowCommands && (building->owner == viewedKingdomId);
+                    const bool allowProduce = allowNonMoveActions && (building->owner == viewedKingdomId);
                     m_uiManager.showBarracksPanel(*building, kingdom(building->owner), m_config, allowProduce);
                 } else {
                     m_uiManager.showBuildingPanel(*building);
@@ -1588,7 +1655,11 @@ void Game::pollAITurn() {
             std::cout << '\n';
         }
         eventLog().log(task->turnNumber, task->activeKingdom, "AI Objective: " + directorPlan.objectiveName);
+        const bool restrictToResponseMove = isActiveKingInCheckForRules();
         for (const auto& cmd : directorPlan.commands) {
+            if (restrictToResponseMove && cmd.type != TurnCommand::Move) {
+                continue;
+            }
             turnSystem().queueCommand(cmd);
         }
     } else {
@@ -1611,32 +1682,35 @@ void Game::pollAITurn() {
             std::cout << '\n';
         }
         eventLog().log(task->turnNumber, task->activeKingdom, "AI Phase: " + plan.phaseName);
+        const bool restrictToResponseMove = isActiveKingInCheckForRules();
         for (const auto& cmd : plan.commands) {
+            if (restrictToResponseMove && cmd.type != TurnCommand::Move) {
+                continue;
+            }
             turnSystem().queueCommand(cmd);
         }
     }
     eventLog().log(task->turnNumber, task->activeKingdom, "AI completed turn planning.");
 
-    const KingdomId activeId = turnSystem().getActiveKingdom();
-    const KingdomId enemyId = opponent(activeId);
-    turnSystem().commitTurn(board(), activeKingdom(), enemyKingdom(),
-        publicBuildings(), m_config, eventLog(),
-        pieceFactory(), buildingFactory());
-    m_debugRecorder.logTurnState(turnSystem().getTurnNumber(), kingdoms(), "after ai commit");
-    m_debugRecorder.recordSnapshot(turnSystem().getTurnNumber(),
-                                   turnSystem().getActiveKingdom(),
-                                   kingdoms(),
-                                   "after_ai_commit");
+    CheckTurnValidation aiValidation = validateActivePendingTurn();
+    if (!aiValidation.valid && aiValidation.hasAnyLegalResponse) {
+        turnSystem().resetPendingCommands();
+        for (Piece& piece : activeKingdom().pieces) {
+            const std::vector<sf::Vector2i> legalMoves = CheckResponseRules::filterLegalMovesForPiece(
+                piece, board(), m_config);
+            if (legalMoves.empty()) {
+                continue;
+            }
 
-    if (CheckSystem::isCheckmate(enemyId, board(), m_config)) {
-        m_state = GameState::GameOver;
-        std::string winner = participantName(activeId);
-        eventLog().log(turnSystem().getTurnNumber(), activeId,
-            "Checkmate! " + winner + " wins!");
-        updateUIState();
-        return;
+            TurnCommand fallbackMove;
+            fallbackMove.type = TurnCommand::Move;
+            fallbackMove.pieceId = piece.id;
+            fallbackMove.origin = piece.position;
+            fallbackMove.destination = legalMoves.front();
+            turnSystem().queueCommand(fallbackMove);
+            break;
+        }
     }
 
-    turnSystem().advanceTurn();
-    refreshTurnPhase();
+    commitAuthoritativeTurn();
 }

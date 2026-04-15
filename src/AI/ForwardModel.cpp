@@ -160,9 +160,9 @@ std::vector<sf::Vector2i> ForwardModel::getKingMoves(const SnapPiece& piece,
     return moves;
 }
 
-std::vector<sf::Vector2i> ForwardModel::getLegalMoves(const GameSnapshot& s,
-                                                       const SnapPiece& piece,
-                                                       int globalMaxRange) {
+std::vector<sf::Vector2i> ForwardModel::getPseudoLegalMoves(const GameSnapshot& s,
+                                                            const SnapPiece& piece,
+                                                            int globalMaxRange) {
     std::vector<sf::Vector2i> moves;
 
     switch (piece.type) {
@@ -198,7 +198,6 @@ std::vector<sf::Vector2i> ForwardModel::getLegalMoves(const GameSnapshot& s,
             break;
     }
 
-    // Filter out moves that capture enemy king (illegal — only checkmate ends game)
     const SnapPiece* enemyKing = s.enemyKingdom(piece.kingdom).getKing();
     if (enemyKing) {
         moves.erase(
@@ -207,6 +206,36 @@ std::vector<sf::Vector2i> ForwardModel::getLegalMoves(const GameSnapshot& s,
     }
 
     return moves;
+}
+
+std::vector<sf::Vector2i> ForwardModel::getLegalMoves(const GameSnapshot& s,
+                                                       const SnapPiece& piece,
+                                                       int globalMaxRange) {
+    std::vector<sf::Vector2i> legalMoves;
+    const std::vector<sf::Vector2i> pseudoLegalMoves = getPseudoLegalMoves(s, piece, globalMaxRange);
+    for (const sf::Vector2i& destination : pseudoLegalMoves) {
+        GameSnapshot sim = s.clone();
+        SnapPiece* simPiece = sim.kingdom(piece.kingdom).getPieceById(piece.id);
+        if (!simPiece) {
+            continue;
+        }
+
+        SnapKingdom& simEnemy = sim.enemyKingdom(piece.kingdom);
+        SnapPiece* victim = simEnemy.getPieceAt(destination);
+        if (victim) {
+            if (victim->type == PieceType::King) {
+                continue;
+            }
+            simEnemy.removePiece(victim->id);
+        }
+
+        simPiece->position = destination;
+        if (!isInCheck(sim, piece.kingdom, globalMaxRange)) {
+            legalMoves.push_back(destination);
+        }
+    }
+
+    return legalMoves;
 }
 
 // ========================================================================
@@ -457,7 +486,7 @@ ThreatMap ForwardModel::buildThreatMap(const GameSnapshot& s, KingdomId attacker
     ThreatMap tm;
     const SnapKingdom& atk = s.kingdom(attacker);
     for (auto& piece : atk.pieces) {
-        auto moves = getLegalMoves(s, piece, globalMaxRange);
+        auto moves = getPseudoLegalMoves(s, piece, globalMaxRange);
         for (auto& m : moves) tm.mark(m);
     }
     return tm;

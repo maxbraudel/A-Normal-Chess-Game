@@ -10,6 +10,7 @@
 #include "Buildings/Building.hpp"
 #include "Systems/TurnSystem.hpp"
 #include "Systems/TurnCommand.hpp"
+#include "Systems/CheckResponseRules.hpp"
 #include "Systems/BuildSystem.hpp"
 #include "Config/GameConfig.hpp"
 #include "UI/UIManager.hpp"
@@ -96,7 +97,7 @@ void InputHandler::activatePieceSelection(Piece* piece, sf::Vector2i cellPos,
     m_selectedBuilding = nullptr;
     m_hasSelectedCell = false;
     if (piece && allowCommands && piece->kingdom != enemyKingdom.id) {
-        refreshPieceMoves(piece, board, enemyKingdom, config);
+        refreshPieceMoves(piece, const_cast<Board&>(board), enemyKingdom, config);
     } else {
         m_validMoves.clear();
         m_dangerMoves.clear();
@@ -203,25 +204,28 @@ void InputHandler::cancelPieceSelectionContext(const InputContext& context) {
     m_dangerMoves.clear();
 }
 
-void InputHandler::refreshPieceMoves(Piece* piece, const Board& board, const Kingdom& enemyKingdom, const GameConfig& config) {
+void InputHandler::refreshPieceMoves(Piece* piece, Board& board, const Kingdom& enemyKingdom, const GameConfig& config) {
     m_validMoves.clear();
     m_dangerMoves.clear();
-    auto allMoves = MovementRules::getValidMoves(*piece, board, config);
+    std::vector<sf::Vector2i> allMoves = MovementRules::getValidMoves(*piece, board, config);
+    std::vector<sf::Vector2i> legalMoves = CheckResponseRules::filterLegalMovesForPiece(*piece, board, config);
     if (piece->type == PieceType::King) {
-        // Build threat set from enemy pieces, excluding any preview-captured piece
-        std::vector<sf::Vector2i> threatened;
-        for (const auto& ep : enemyKingdom.pieces) {
-            if (ep.id == m_capturePreviewPieceId) continue;
-            auto eMoves = MovementRules::getValidMoves(ep, board, config);
-            for (const auto& em : eMoves) threatened.push_back(em);
-        }
         for (const auto& mv : allMoves) {
-            bool danger = std::find(threatened.begin(), threatened.end(), mv) != threatened.end();
-            if (danger) m_dangerMoves.push_back(mv);
-            else        m_validMoves.push_back(mv);
+            const Cell& destinationCell = board.getCell(mv.x, mv.y);
+            if (destinationCell.piece
+                && destinationCell.piece->kingdom != piece->kingdom
+                && destinationCell.piece->type == PieceType::King) {
+                continue;
+            }
+
+            if (std::find(legalMoves.begin(), legalMoves.end(), mv) != legalMoves.end()) {
+                m_validMoves.push_back(mv);
+            } else {
+                m_dangerMoves.push_back(mv);
+            }
         }
     } else {
-        m_validMoves = std::move(allMoves);
+        m_validMoves = std::move(legalMoves);
     }
 }
 
@@ -456,7 +460,7 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
 }
 
 void InputHandler::handleBuildTool(const sf::Event& event, const InputContext& context) {
-    if (!context.allowCommands) {
+    if (!context.allowCommands || !context.allowNonMoveActions) {
         m_hasBuildPreview = false;
         return;
     }

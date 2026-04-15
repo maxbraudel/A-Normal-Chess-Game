@@ -10,6 +10,7 @@
 #include "Kingdom/Kingdom.hpp"
 #include "Systems/TurnSystem.hpp"
 #include "Systems/TurnCommand.hpp"
+#include "Systems/CheckSystem.hpp"
 #include "Systems/EventLog.hpp"
 #include "Config/GameConfig.hpp"
 #include "Buildings/Building.hpp"
@@ -107,7 +108,7 @@ AITurnPlan AIController::computeTurnPlan(Board& board, Kingdom& self, Kingdom& e
         return false;
     };
 
-    // === Step 2: CRISIS — escape check, but still allow production afterwards ===
+    // === Step 2: CRISIS — resolve check and stop. Non-move actions are forbidden while in check. ===
     if (m_brain.getPhase() == AIPhase::CRISIS) {
         std::cerr << "  >> CRISIS branch entered" << std::endl;
         auto moveCmds = AIStrategyMove::decide(board, self, enemy, config, m_config,
@@ -119,7 +120,7 @@ AITurnPlan AIController::computeTurnPlan(Board& board, Kingdom& self, Kingdom& e
                 if (cmd.type == TurnCommand::Move) hasMoved = true;
             }
         }
-        // Don't return — fall through to allow production/building
+        return plan;
     }
 
     // === Normal turn: Special → [Move OR Econ first, based on phase] → Build ===
