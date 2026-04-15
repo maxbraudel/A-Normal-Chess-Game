@@ -15,6 +15,33 @@
 
 namespace {
 
+void drawStructureOverlaysForBuildings(sf::RenderWindow& window,
+                                       Renderer& renderer,
+                                       const Camera& camera,
+                                       const sf::View& hudView,
+                                       sf::Vector2u windowSize,
+                                       const std::vector<Building>& buildings,
+                                       const Board& board,
+                                       const GameConfig& config,
+                                       const AssetManager& assets,
+                                       const StructureOverlayPolicy& overlayPolicy,
+                                       const Building* selectedBuilding) {
+    for (const Building& building : buildings) {
+        StructureOverlayContext overlayContext;
+        overlayContext.isSelected = selectedBuilding == &building;
+
+        const StructureOverlayStack overlay = buildStructureOverlay(
+            building, board, config, overlayContext, overlayPolicy);
+        if (overlay.isEmpty()) {
+            continue;
+        }
+
+        renderer.getOverlay().drawStructureOverlay(
+            window, camera, hudView, windowSize,
+            building, overlay, config.getCellSizePx(), assets);
+    }
+}
+
 bool isBlockedGameplayShortcutKey(sf::Keyboard::Key key) {
     return key == sf::Keyboard::Escape
         || key == sf::Keyboard::P
@@ -705,14 +732,15 @@ void Game::render() {
                 m_config.getCellSizePx(), true, m_assets);
             }
         }
-        if (m_input.getCurrentTool() == ToolState::Select) {
-            if (const Building* selectedBuilding = m_input.getSelectedBuilding()) {
-                const StructureOverlayStack overlay = buildSelectedStructureOverlay(
-                    *selectedBuilding, board(), m_config);
-                m_renderer.getOverlay().drawStructureOverlay(
-                    m_window, m_camera, m_hudView, m_windowSize,
-                    *selectedBuilding, overlay, m_config.getCellSizePx(), m_assets);
-            }
+        const StructureOverlayPolicy overlayPolicy = makeWorldStructureOverlayPolicy();
+        const Building* selectedBuilding = m_input.getSelectedBuilding();
+        drawStructureOverlaysForBuildings(
+            m_window, m_renderer, m_camera, m_hudView, m_windowSize,
+            publicBuildings(), board(), m_config, m_assets, overlayPolicy, selectedBuilding);
+        for (const Kingdom& kingdomState : kingdoms()) {
+            drawStructureOverlaysForBuildings(
+                m_window, m_renderer, m_camera, m_hudView, m_windowSize,
+                kingdomState.buildings, board(), m_config, m_assets, overlayPolicy, selectedBuilding);
         }
     }
 

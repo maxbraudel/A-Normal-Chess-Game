@@ -395,7 +395,10 @@ void testLayeredSelectionStackSupportsPreviewPieceOverride() {
         board.init(5);
 
         const Building barracks = makeTestBarracks(7, KingdomId::Black, {1, 1}, config);
-        const StructureOverlayStack overlay = buildSelectedStructureOverlay(barracks, board, config);
+        StructureOverlayContext overlayContext;
+        overlayContext.isSelected = false;
+        const StructureOverlayStack overlay = buildStructureOverlay(
+            barracks, board, config, overlayContext, makeWorldStructureOverlayPolicy());
 
         expect(overlay.rows.size() == 1,
             "Idle private buildings should expose a single status row.");
@@ -424,7 +427,10 @@ void testLayeredSelectionStackSupportsPreviewPieceOverride() {
         board.getCell(1, 1).piece = &white.pieces.back();
         board.getCell(2, 1).piece = &black.pieces.back();
 
-        const StructureOverlayStack overlay = buildSelectedStructureOverlay(church, board, config);
+        StructureOverlayContext overlayContext;
+        overlayContext.isSelected = false;
+        const StructureOverlayStack overlay = buildStructureOverlay(
+            church, board, config, overlayContext, makeWorldStructureOverlayPolicy());
 
         expect(overlay.rows.size() == 1,
             "Selected public buildings with occupation should expose a single occupation row.");
@@ -445,7 +451,10 @@ void testLayeredSelectionStackSupportsPreviewPieceOverride() {
         const int totalTurns = config.getProductionTurns(PieceType::Knight);
         barracks.turnsRemaining = totalTurns > 1 ? totalTurns - 1 : 0;
 
-        const StructureOverlayStack overlay = buildSelectedStructureOverlay(barracks, board, config);
+        StructureOverlayContext overlayContext;
+        overlayContext.isSelected = false;
+        const StructureOverlayStack overlay = buildStructureOverlay(
+            barracks, board, config, overlayContext, makeWorldStructureOverlayPolicy());
 
         expect(overlay.rows.size() == 2,
             "Producing barracks should expose both the owner row and the production row.");
@@ -469,6 +478,52 @@ void testLayeredSelectionStackSupportsPreviewPieceOverride() {
             "The production progress bar should expose completed progress derived from total turns and turns remaining.");
         expect(overlay.rows[1].items[1].text == formatTurnsRemainingLabel(barracks.turnsRemaining),
             "The production progress bar should carry the remaining-turns label.");
+    }
+
+    void testOverlayPolicyCanHideIndicatorsUntilSelected() {
+        GameConfig config;
+        Board board;
+        board.init(5);
+
+        Building barracks = makeTestBarracks(9, KingdomId::White, {1, 1}, config);
+        barracks.isProducing = true;
+        barracks.producingType = static_cast<int>(PieceType::Pawn);
+        barracks.turnsRemaining = config.getProductionTurns(PieceType::Pawn);
+
+        StructureOverlayPolicy policy;
+        policy.occupationVisibility = StructureOverlayVisibility::WhenSelected;
+        policy.barracksProductionVisibility = StructureOverlayVisibility::WhenSelected;
+
+        StructureOverlayContext hiddenContext;
+        hiddenContext.isSelected = false;
+        expect(buildStructureOverlay(barracks, board, config, hiddenContext, policy).isEmpty(),
+               "WhenSelected visibility should allow callers to hide all current indicators while the building is not selected.");
+
+        StructureOverlayContext visibleContext;
+        visibleContext.isSelected = true;
+        const StructureOverlayStack visibleOverlay = buildStructureOverlay(
+            barracks, board, config, visibleContext, policy);
+        expect(visibleOverlay.rows.size() == 2,
+               "WhenSelected visibility should restore both current indicators once the building becomes selected.");
+    }
+
+    void testOverlayPolicyAlwaysKeepsCurrentIndicatorsVisible() {
+        GameConfig config;
+        Board board;
+        board.init(5);
+
+        Building barracks = makeTestBarracks(10, KingdomId::White, {1, 1}, config);
+        barracks.isProducing = true;
+        barracks.producingType = static_cast<int>(PieceType::Bishop);
+        barracks.turnsRemaining = config.getProductionTurns(PieceType::Bishop);
+
+        StructureOverlayContext overlayContext;
+        overlayContext.isSelected = false;
+        const StructureOverlayStack overlay = buildStructureOverlay(
+            barracks, board, config, overlayContext, makeWorldStructureOverlayPolicy());
+
+        expect(overlay.rows.size() == 2,
+               "The current world-overlay policy should keep both the ownership and production indicators visible even when the building is not selected.");
     }
 
 void testSessionConfigDefaults() {
@@ -1416,6 +1471,8 @@ int main() {
         {"private building overlay owner shield", testSelectedStructureOverlayPrivateBuildingsUseOwnerShield},
         {"public building overlay occupation", testSelectedStructureOverlayPublicBuildingsUseOccupationIndicator},
         {"barracks overlay production row", testSelectedStructureOverlayProducingBarracksAddsProgressRow},
+        {"overlay policy when selected visibility", testOverlayPolicyCanHideIndicatorsUntilSelected},
+        {"overlay policy always visible", testOverlayPolicyAlwaysKeepsCurrentIndicatorsVisible},
         {"save manager roundtrip", testSaveManagerRoundTrip},
         {"save manager string roundtrip", testSaveManagerStringRoundTrip},
         {"multiplayer password digest", testMultiplayerPasswordDigest},

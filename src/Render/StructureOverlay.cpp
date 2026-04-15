@@ -51,6 +51,31 @@ bool StructureOverlayStack::isEmpty() const {
     return rows.empty();
 }
 
+StructureOverlayVisibility StructureOverlayPolicy::visibilityFor(StructureOverlayIndicatorKind kind) const {
+    switch (kind) {
+        case StructureOverlayIndicatorKind::Occupation:
+            return occupationVisibility;
+        case StructureOverlayIndicatorKind::BarracksProduction:
+            return barracksProductionVisibility;
+    }
+
+    return StructureOverlayVisibility::Never;
+}
+
+bool StructureOverlayPolicy::shouldShow(StructureOverlayIndicatorKind kind,
+                                        const StructureOverlayContext& context) const {
+    switch (visibilityFor(kind)) {
+        case StructureOverlayVisibility::Always:
+            return true;
+        case StructureOverlayVisibility::WhenSelected:
+            return context.isSelected;
+        case StructureOverlayVisibility::Never:
+            return false;
+    }
+
+    return false;
+}
+
 PublicBuildingOccupationState resolvePublicBuildingOccupationState(const Building& building,
                                                                    const Board& board) {
     bool whitePresent = false;
@@ -108,36 +133,49 @@ std::string formatTurnsRemainingLabel(int turnsRemaining) {
     return std::to_string(clampedTurns) + (clampedTurns == 1 ? " turn" : " turns");
 }
 
-StructureOverlayStack buildSelectedStructureOverlay(const Building& building,
-                                                    const Board& board,
-                                                    const GameConfig& config) {
+StructureOverlayPolicy makeWorldStructureOverlayPolicy() {
+    StructureOverlayPolicy policy;
+    policy.occupationVisibility = StructureOverlayVisibility::Always;
+    policy.barracksProductionVisibility = StructureOverlayVisibility::Always;
+    return policy;
+}
+
+StructureOverlayStack buildStructureOverlay(const Building& building,
+                                            const Board& board,
+                                            const GameConfig& config,
+                                            const StructureOverlayContext& context,
+                                            const StructureOverlayPolicy& policy) {
     StructureOverlayStack stack;
 
     StructureOverlayRow statusRow;
     statusRow.placement = StructureOverlayRowPlacement::Above;
-    if (building.isPublic()) {
-        switch (resolvePublicBuildingOccupationState(building, board)) {
-            case PublicBuildingOccupationState::WhiteOccupied:
-                statusRow.items.push_back(makeIconItem(makeUITextureIcon("shield_white")));
-                break;
-            case PublicBuildingOccupationState::BlackOccupied:
-                statusRow.items.push_back(makeIconItem(makeUITextureIcon("shield_black")));
-                break;
-            case PublicBuildingOccupationState::Contested:
-                statusRow.items.push_back(makeIconItem(makeUITextureIcon("crossed_swords")));
-                break;
-            case PublicBuildingOccupationState::Unoccupied:
-                break;
+    if (policy.shouldShow(StructureOverlayIndicatorKind::Occupation, context)) {
+        if (building.isPublic()) {
+            switch (resolvePublicBuildingOccupationState(building, board)) {
+                case PublicBuildingOccupationState::WhiteOccupied:
+                    statusRow.items.push_back(makeIconItem(makeUITextureIcon("shield_white")));
+                    break;
+                case PublicBuildingOccupationState::BlackOccupied:
+                    statusRow.items.push_back(makeIconItem(makeUITextureIcon("shield_black")));
+                    break;
+                case PublicBuildingOccupationState::Contested:
+                    statusRow.items.push_back(makeIconItem(makeUITextureIcon("crossed_swords")));
+                    break;
+                case PublicBuildingOccupationState::Unoccupied:
+                    break;
+            }
+        } else {
+            statusRow.items.push_back(makeIconItem(makeOwnerShieldIcon(building.owner)));
         }
-    } else {
-        statusRow.items.push_back(makeIconItem(makeOwnerShieldIcon(building.owner)));
     }
 
     if (!statusRow.items.empty()) {
         stack.rows.push_back(std::move(statusRow));
     }
 
-    if (building.type == BuildingType::Barracks && building.isProducing) {
+    if (building.type == BuildingType::Barracks
+        && building.isProducing
+        && policy.shouldShow(StructureOverlayIndicatorKind::BarracksProduction, context)) {
         StructureOverlayRow productionRow;
         productionRow.placement = StructureOverlayRowPlacement::Below;
         productionRow.items.push_back(makeIconItem(

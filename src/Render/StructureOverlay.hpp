@@ -35,6 +35,29 @@ enum class StructureOverlayItemType {
     ProgressBar
 };
 
+enum class StructureOverlayIndicatorKind {
+    Occupation,
+    BarracksProduction
+};
+
+enum class StructureOverlayVisibility {
+    Always,
+    WhenSelected,
+    Never
+};
+
+struct StructureOverlayContext {
+    bool isSelected = false;
+};
+
+struct StructureOverlayPolicy {
+    StructureOverlayVisibility occupationVisibility = StructureOverlayVisibility::Always;
+    StructureOverlayVisibility barracksProductionVisibility = StructureOverlayVisibility::Always;
+
+    StructureOverlayVisibility visibilityFor(StructureOverlayIndicatorKind kind) const;
+    bool shouldShow(StructureOverlayIndicatorKind kind, const StructureOverlayContext& context) const;
+};
+
 struct StructureOverlayItem {
     StructureOverlayItemType type = StructureOverlayItemType::Icon;
     StructureOverlayIcon icon;
@@ -62,6 +85,9 @@ PublicBuildingOccupationState resolvePublicBuildingOccupationState(const Buildin
                                                                    const Board& board);
 float computeBarracksProductionProgress(const Building& barracks, const GameConfig& config);
 std::string formatTurnsRemainingLabel(int turnsRemaining);
-StructureOverlayStack buildSelectedStructureOverlay(const Building& building,
-                                                    const Board& board,
-                                                    const GameConfig& config);
+StructureOverlayPolicy makeWorldStructureOverlayPolicy();
+StructureOverlayStack buildStructureOverlay(const Building& building,
+                                            const Board& board,
+                                            const GameConfig& config,
+                                            const StructureOverlayContext& context,
+                                            const StructureOverlayPolicy& policy);
