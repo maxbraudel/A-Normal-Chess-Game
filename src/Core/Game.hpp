@@ -33,7 +33,10 @@
 #include "Render/Renderer.hpp"
 #include "Assets/AssetManager.hpp"
 #include "UI/UIManager.hpp"
+#include "Core/LocalPlayerContext.hpp"
 #include "Core/GameSessionConfig.hpp"
+#include "Multiplayer/MultiplayerClient.hpp"
+#include "Multiplayer/MultiplayerServer.hpp"
 #include "Save/SaveManager.hpp"
 
 #ifdef _WIN32
@@ -61,6 +64,26 @@ private:
     void pollAITurn();
     void discardPendingAITurn();
     void refreshTurnPhase();
+    void stopMultiplayer();
+    bool startMultiplayerHostIfNeeded(const GameSessionConfig& session, std::string* errorMessage = nullptr);
+    bool joinMultiplayer(const JoinMultiplayerRequest& request, std::string* errorMessage = nullptr);
+    void updateMultiplayer();
+    void processMultiplayerServerEvent(const MultiplayerServer::Event& event);
+    void processMultiplayerClientEvent(const MultiplayerClient::Event& event);
+    bool submitClientTurn(std::string* errorMessage = nullptr);
+    bool applyRemoteTurnSubmission(const std::vector<TurnCommand>& commands, std::string* errorMessage = nullptr);
+    void commitAuthoritativeTurn();
+    bool pushSnapshotToRemote(std::string* errorMessage = nullptr);
+    void centerCameraOnKingdom(KingdomId kingdom);
+    void configureLocalPlayerContext(const GameSessionConfig& session);
+    bool isLocalPlayerTurn() const;
+    bool canLocalPlayerIssueCommands() const;
+    KingdomId localPerspectiveKingdom() const;
+    bool isMultiplayerSessionReady() const;
+    void updateMultiplayerPresentation();
+    void returnToMainMenu();
+    bool isLanHost() const { return m_localPlayerContext.mode == LocalSessionMode::LanHost; }
+    bool isLanClient() const { return m_localPlayerContext.mode == LocalSessionMode::LanClient; }
     std::string participantName(KingdomId id) const;
     std::string activeTurnLabel() const;
 
@@ -102,12 +125,6 @@ private:
 
     Kingdom&       enemyKingdom()       { return m_engine.enemyKingdom(); }
     const Kingdom& enemyKingdom() const { return m_engine.enemyKingdom(); }
-
-    bool isHumanControlled(KingdomId id) const { return m_engine.isHumanControlled(id); }
-    bool isActiveHuman() const { return m_engine.isActiveHuman(); }
-    bool isActiveAI()    const { return m_engine.isActiveAI(); }
-
-    KingdomId humanKingdomId() const;
 
     // SFML / TGUI
     LiveResizeRenderWindow m_window;
@@ -153,6 +170,11 @@ private:
     AssetManager m_assets;
     UIManager m_uiManager;
     SaveManager m_saveManager;
+    LocalPlayerContext m_localPlayerContext;
+    MultiplayerServer m_multiplayerServer;
+    MultiplayerClient m_multiplayerClient;
+    bool m_waitingForRemoteTurnResult = false;
+    std::string m_multiplayerHostJoinHint;
 
 #ifdef _WIN32
     WNDPROC m_originalWndProc = nullptr;

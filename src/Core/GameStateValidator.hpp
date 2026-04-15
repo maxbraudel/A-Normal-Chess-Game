@@ -25,5 +25,8 @@ public:
 private:
     static bool validateKingdomParticipants(const std::array<KingdomParticipantConfig, kNumKingdoms>& participants,
                                             std::string* errorMessage);
+    static bool validateMultiplayerConfig(const std::array<KingdomParticipantConfig, kNumKingdoms>& participants,
+                                          const MultiplayerConfig& multiplayer,
+                                          std::string* errorMessage);
     static void writeError(std::string* errorMessage, const std::string& message);
 };

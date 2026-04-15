@@ -23,6 +23,7 @@ struct SaveData {
     std::array<std::string, kNumKingdoms> participantNames{"Player", "AI"};
     std::array<KingdomParticipantConfig, kNumKingdoms> sessionKingdoms =
         defaultKingdomParticipants(GameMode::HumanVsAI);
+    MultiplayerConfig multiplayer{};
 
     // Grid state
     struct CellData {

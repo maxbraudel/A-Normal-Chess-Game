@@ -5,6 +5,7 @@
 #include "Systems/BuildSystem.hpp"
 #include "Input/InputContext.hpp"
 #include "UI/InGameViewModelBuilder.hpp"
+#include "Multiplayer/PasswordUtils.hpp"
 #include <algorithm>
 #include <iostream>
 #include <thread>
@@ -116,8 +117,103 @@ LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 Game::Game()
     : m_state(GameState::MainMenu) {}
 
-KingdomId Game::humanKingdomId() const {
-    return m_engine.humanKingdomId();
+void Game::configureLocalPlayerContext(const GameSessionConfig& session) {
+    m_localPlayerContext = makeLocalPlayerContextForSession(session);
+}
+
+bool Game::isLocalPlayerTurn() const {
+    return m_localPlayerContext.isLocallyControlled(turnSystem().getActiveKingdom());
+}
+
+bool Game::canLocalPlayerIssueCommands() const {
+    return (m_state == GameState::Playing)
+        && !m_waitingForRemoteTurnResult
+        && isMultiplayerSessionReady()
+        && isLocalPlayerTurn();
+}
+
+KingdomId Game::localPerspectiveKingdom() const {
+    if (isLocalPlayerTurn()) {
+        return turnSystem().getActiveKingdom();
+    }
+
+    return m_localPlayerContext.perspectiveKingdom;
+}
+
+bool Game::isMultiplayerSessionReady() const {
+    if (isLanHost()) {
+        return m_multiplayerServer.hasAuthenticatedClient();
+    }
+
+    if (isLanClient()) {
+        return m_multiplayerClient.isAuthenticated();
+    }
+
+    return true;
+}
+
+void Game::updateMultiplayerPresentation() {
+    m_uiManager.hud().setPauseEnabled(!m_localPlayerContext.isNetworked());
+
+    if (!m_localPlayerContext.isNetworked()) {
+        m_uiManager.hideMultiplayerWaitingOverlay();
+        m_uiManager.clearMultiplayerStatus();
+        return;
+    }
+
+    if (isLanHost()) {
+        if (!m_multiplayerServer.hasAuthenticatedClient()) {
+            std::string waitingMessage = "Share this endpoint with Black:\n";
+            if (!m_multiplayerHostJoinHint.empty()) {
+                waitingMessage += m_multiplayerHostJoinHint;
+            } else {
+                waitingMessage += "Port " + std::to_string(m_engine.sessionConfig().multiplayer.port);
+            }
+            waitingMessage += "\n\nWhite stays locked until the remote player finishes joining.";
+            m_uiManager.showMultiplayerWaitingOverlay(
+                "Waiting for Black Player",
+                waitingMessage,
+                "Return to Menu",
+                [this]() {
+                    returnToMainMenu();
+                });
+            m_uiManager.setMultiplayerStatus("LAN Host | Waiting for Black", MultiplayerStatusTone::Waiting);
+            return;
+        }
+
+        m_uiManager.hideMultiplayerWaitingOverlay();
+        if (turnSystem().getActiveKingdom() == KingdomId::Black) {
+            m_uiManager.setMultiplayerStatus("LAN Host | Waiting for Black turn", MultiplayerStatusTone::Waiting);
+        } else {
+            m_uiManager.setMultiplayerStatus("LAN Host | Black connected", MultiplayerStatusTone::Connected);
+        }
+        return;
+    }
+
+    m_uiManager.hideMultiplayerWaitingOverlay();
+    if (!m_multiplayerClient.isAuthenticated()) {
+        m_uiManager.setMultiplayerStatus("LAN Client | Finalizing connection", MultiplayerStatusTone::Waiting);
+        return;
+    }
+
+    if (m_waitingForRemoteTurnResult) {
+        m_uiManager.setMultiplayerStatus("LAN Client | Waiting for host confirmation", MultiplayerStatusTone::Waiting);
+    } else if (isLocalPlayerTurn()) {
+        m_uiManager.setMultiplayerStatus("LAN Client | Connected - your turn", MultiplayerStatusTone::Connected);
+    } else {
+        m_uiManager.setMultiplayerStatus("LAN Client | Connected - White is playing", MultiplayerStatusTone::Neutral);
+    }
+}
+
+void Game::returnToMainMenu() {
+    stopMultiplayer();
+    discardPendingAITurn();
+    m_input.clearMovePreview();
+    m_input.setTool(ToolState::Select);
+    turnSystem().resetPendingCommands();
+    m_state = GameState::MainMenu;
+    m_uiManager.hidePauseMenu();
+    m_uiManager.showMainMenu();
 }
 
 std::string Game::participantName(KingdomId id) const {
@@ -143,6 +239,17 @@ void Game::run() {
         update();
         render();
     }
+}
+
+void Game::centerCameraOnKingdom(KingdomId kingdom) {
+    Piece* king = this->kingdom(kingdom).getKing();
+    if (!king) {
+        return;
+    }
+
+    const float centerX = static_cast<float>(king->position.x * m_config.getCellSizePx() + m_config.getCellSizePx() / 2);
+    const float centerY = static_cast<float>(king->position.y * m_config.getCellSizePx() + m_config.getCellSizePx() / 2);
+    m_camera.centerOn({centerX, centerY});
 }
 
 void Game::init() {
@@ -230,7 +337,15 @@ void Game::handleInput() {
             continue;
         }
 
+        if (m_uiManager.isMultiplayerAlertVisible() || m_uiManager.isMultiplayerWaitingOverlayVisible()) {
+            continue;
+        }
+
         if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Escape) {
+            if (m_localPlayerContext.isNetworked()) {
+                continue;
+            }
+
             if (m_state == GameState::Playing) {
                 m_state = GameState::Paused;
                 m_uiManager.showPauseMenu();
@@ -250,15 +365,16 @@ void Game::handleInput() {
 
         // Spacebar acts as the Play button (commit turn)
         if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Space) {
-            if (m_state == GameState::Playing && isActiveHuman()) {
+            if (canLocalPlayerIssueCommands()) {
                 commitPlayerTurn();
             }
         }
 
         if (m_state == GameState::Playing) {
-            const bool allowCommands = isActiveHuman();
-            Kingdom& selectableKingdom = allowCommands ? activeKingdom() : kingdom(humanKingdomId());
-            Kingdom& opposingKingdom = allowCommands ? enemyKingdom() : kingdom(opponent(humanKingdomId()));
+            const bool allowCommands = canLocalPlayerIssueCommands();
+            const KingdomId perspectiveKingdom = localPerspectiveKingdom();
+            Kingdom& selectableKingdom = allowCommands ? activeKingdom() : kingdom(perspectiveKingdom);
+            Kingdom& opposingKingdom = allowCommands ? enemyKingdom() : kingdom(opponent(perspectiveKingdom));
             const InputContext inputContext{
                 m_window,
                 m_camera,
@@ -277,9 +393,13 @@ void Game::handleInput() {
 }
 
 void Game::update() {
+    if (m_state == GameState::Playing || m_state == GameState::Paused || isLanClient() || isLanHost()) {
+        updateMultiplayer();
+    }
+
     switch (m_state) {
         case GameState::Playing: {
-            if (isActiveAI()) {
+            if (m_engine.isActiveAI()) {
                 startAITurnIfNeeded();
                 pollAITurn();
             }
@@ -304,7 +424,7 @@ void Game::render() {
         m_renderer.drawWorldBase(m_window, m_camera, board(), kingdoms(),
             publicBuildings());
 
-        const bool showActionOverlays = isActiveHuman();
+        const bool showActionOverlays = canLocalPlayerIssueCommands();
         const Piece* selectedPiece = m_input.getSelectedPiece();
         const bool canShowSelectedPieceActions = showActionOverlays
             && selectedPiece
@@ -375,6 +495,8 @@ void Game::render() {
 }
 
 bool Game::startNewGame(const GameSessionConfig& session, std::string* errorMessage) {
+    stopMultiplayer();
+
     const auto existingSaves = m_saveManager.listSaves("saves");
     if (std::find(existingSaves.begin(), existingSaves.end(), session.saveName) != existingSaves.end()) {
         if (errorMessage) {
@@ -392,6 +514,13 @@ bool Game::startNewGame(const GameSessionConfig& session, std::string* errorMess
         return false;
     }
 
+    configureLocalPlayerContext(session);
+    m_waitingForRemoteTurnResult = false;
+    if (!startMultiplayerHostIfNeeded(session, errorMessage)) {
+        stopMultiplayer();
+        return false;
+    }
+
     m_debugRecorder.reset();
     m_debugRecorder.recordSnapshot(turnSystem().getTurnNumber(),
                                    turnSystem().getActiveKingdom(),
@@ -399,12 +528,7 @@ bool Game::startNewGame(const GameSessionConfig& session, std::string* errorMess
                                    "initial_state_new_game");
 
     // Center camera on the primary human side, or white when spectating AI vs AI.
-    Piece* focusKing = kingdom(humanKingdomId()).getKing();
-    if (focusKing) {
-        float cx = static_cast<float>(focusKing->position.x * m_config.getCellSizePx() + m_config.getCellSizePx() / 2);
-        float cy = static_cast<float>(focusKing->position.y * m_config.getCellSizePx() + m_config.getCellSizePx() / 2);
-        m_camera.centerOn({cx, cy});
-    }
+    centerCameraOnKingdom(localPerspectiveKingdom());
 
     // Switch to playing
     m_state = GameState::Playing;
@@ -416,6 +540,7 @@ bool Game::startNewGame(const GameSessionConfig& session, std::string* errorMess
 }
 
 bool Game::loadGame(const std::string& saveName) {
+    stopMultiplayer();
     discardPendingAITurn();
     m_input.clearMovePreview();
     m_input.setTool(ToolState::Select);
@@ -437,6 +562,14 @@ bool Game::loadGame(const std::string& saveName) {
         std::cerr << "Failed to restore save: " << error << std::endl;
         return false;
     }
+    configureLocalPlayerContext(m_engine.sessionConfig());
+    m_waitingForRemoteTurnResult = false;
+    if (!startMultiplayerHostIfNeeded(m_engine.sessionConfig(), &error)) {
+        std::cerr << "Failed to start multiplayer host: " << error << std::endl;
+        stopMultiplayer();
+        return false;
+    }
+
     m_debugRecorder.reset();
     m_debugRecorder.recordSnapshot(turnSystem().getTurnNumber(),
                                    turnSystem().getActiveKingdom(),
@@ -444,12 +577,7 @@ bool Game::loadGame(const std::string& saveName) {
                                    "initial_state_loaded_game");
 
     // Center camera on human player's king
-    Piece* king = kingdom(humanKingdomId()).getKing();
-    if (king) {
-        float cx = static_cast<float>(king->position.x * m_config.getCellSizePx() + m_config.getCellSizePx() / 2);
-        float cy = static_cast<float>(king->position.y * m_config.getCellSizePx() + m_config.getCellSizePx() / 2);
-        m_camera.centerOn({cx, cy});
-    }
+    centerCameraOnKingdom(localPerspectiveKingdom());
 
     m_state = GameState::Playing;
     refreshTurnPhase();
@@ -459,6 +587,11 @@ bool Game::loadGame(const std::string& saveName) {
 }
 
 bool Game::saveGame() {
+    if (isLanClient()) {
+        std::cerr << "Client-side multiplayer sessions cannot save authoritative game state." << std::endl;
+        return false;
+    }
+
     SaveData data = m_engine.createSaveData();
     std::string path = "saves/" + gameName() + ".json";
     if (!m_saveManager.save(path, data)) {
@@ -470,6 +603,21 @@ bool Game::saveGame() {
 }
 
 void Game::commitPlayerTurn() {
+    if (isLanClient()) {
+        std::string error;
+        if (!submitClientTurn(&error)) {
+            std::cerr << "Failed to submit multiplayer turn: " << error << std::endl;
+            if (!error.empty()) {
+                m_uiManager.showMultiplayerAlert("Turn Not Sent", error);
+            }
+        }
+        return;
+    }
+
+    commitAuthoritativeTurn();
+}
+
+void Game::commitAuthoritativeTurn() {
     KingdomId activeId = turnSystem().getActiveKingdom();
     KingdomId enemyId  = opponent(activeId);
 
@@ -490,6 +638,10 @@ void Game::commitPlayerTurn() {
                        "Checkmate! " + winner + " wins!");
         m_input.clearMovePreview();
         m_input.clearSelection();
+        if (isLanHost()) {
+            saveGame();
+            pushSnapshotToRemote(nullptr);
+        }
         updateUIState();
         return;
     }
@@ -497,7 +649,12 @@ void Game::commitPlayerTurn() {
     turnSystem().advanceTurn();
     m_input.clearMovePreview();
     m_input.clearSelection();
+    m_waitingForRemoteTurnResult = false;
     refreshTurnPhase();
+    if (isLanHost()) {
+        saveGame();
+        pushSnapshotToRemote(nullptr);
+    }
     startAITurnIfNeeded();
 }
 
@@ -507,9 +664,373 @@ void Game::resetPlayerTurn() {
     m_input.clearSelection();
 }
 
+void Game::stopMultiplayer() {
+    if (m_multiplayerServer.isRunning()) {
+        m_multiplayerServer.sendDisconnectNotice("Host closed the multiplayer session.", nullptr);
+    }
+
+    m_multiplayerServer.stop();
+    m_multiplayerClient.disconnect();
+    m_waitingForRemoteTurnResult = false;
+    m_multiplayerHostJoinHint.clear();
+    m_localPlayerContext = LocalPlayerContext{};
+    m_uiManager.hideMultiplayerWaitingOverlay();
+    m_uiManager.hideMultiplayerAlert();
+    m_uiManager.clearMultiplayerStatus();
+}
+
+bool Game::startMultiplayerHostIfNeeded(const GameSessionConfig& session, std::string* errorMessage) {
+    if (!session.multiplayer.enabled) {
+        return true;
+    }
+
+    if (!m_multiplayerServer.start(static_cast<unsigned short>(session.multiplayer.port),
+                                   session.saveName,
+                                   session.multiplayer,
+                                   errorMessage)) {
+        return false;
+    }
+
+    const sf::IpAddress localAddress = sf::IpAddress::getLocalAddress();
+    if (localAddress == sf::IpAddress::None) {
+        m_multiplayerHostJoinHint = "LAN port " + std::to_string(session.multiplayer.port);
+    } else {
+        m_multiplayerHostJoinHint = localAddress.toString() + ":" + std::to_string(session.multiplayer.port);
+    }
+
+    eventLog().log(turnSystem().getTurnNumber(), KingdomId::White,
+                   "LAN server started on port " + std::to_string(session.multiplayer.port) + ".");
+    return true;
+}
+
+bool Game::pushSnapshotToRemote(std::string* errorMessage) {
+    if (!isLanHost() || !m_multiplayerServer.hasAuthenticatedClient()) {
+        return true;
+    }
+
+    const std::string snapshot = m_saveManager.serialize(m_engine.createSaveData());
+    return m_multiplayerServer.sendSnapshot(snapshot, errorMessage);
+}
+
+bool Game::submitClientTurn(std::string* errorMessage) {
+    if (!isLanClient()) {
+        return false;
+    }
+    if (!m_multiplayerClient.isAuthenticated()) {
+        if (errorMessage) {
+            *errorMessage = "The multiplayer host connection is not authenticated.";
+        }
+        return false;
+    }
+
+    if (!m_multiplayerClient.sendTurnSubmission(turnSystem().getPendingCommands(), errorMessage)) {
+        return false;
+    }
+
+    m_waitingForRemoteTurnResult = true;
+    m_input.clearMovePreview();
+    m_input.clearSelection();
+    turnSystem().resetPendingCommands();
+    return true;
+}
+
+bool Game::applyRemoteTurnSubmission(const std::vector<TurnCommand>& commands, std::string* errorMessage) {
+    if (!isLanHost()) {
+        if (errorMessage) {
+            *errorMessage = "Cannot apply a remote turn submission outside LAN host mode.";
+        }
+        return false;
+    }
+
+    if (turnSystem().getActiveKingdom() != KingdomId::Black) {
+        if (errorMessage) {
+            *errorMessage = "Remote turns are only accepted when Black is the active kingdom.";
+        }
+        return false;
+    }
+
+    turnSystem().resetPendingCommands();
+    for (const auto& command : commands) {
+        if (!turnSystem().queueCommand(command)) {
+            turnSystem().resetPendingCommands();
+            if (errorMessage) {
+                *errorMessage = "The remote player submitted an invalid or conflicting turn command.";
+            }
+            return false;
+        }
+    }
+
+    commitAuthoritativeTurn();
+    return true;
+}
+
+bool Game::joinMultiplayer(const JoinMultiplayerRequest& request, std::string* errorMessage) {
+    stopMultiplayer();
+    discardPendingAITurn();
+    m_input.clearMovePreview();
+    m_input.setTool(ToolState::Select);
+    m_engine.resetPendingTurn();
+
+    const sf::IpAddress address(request.host);
+    if (address == sf::IpAddress::None) {
+        if (errorMessage) {
+            *errorMessage = "Invalid server IP address.";
+        }
+        return false;
+    }
+
+    if (!m_multiplayerClient.connect(address,
+                                     static_cast<unsigned short>(request.port),
+                                     sf::seconds(3.f),
+                                     errorMessage)) {
+        return false;
+    }
+    if (!m_multiplayerClient.requestServerInfo(errorMessage)) {
+        m_multiplayerClient.disconnect();
+        return false;
+    }
+
+    MultiplayerServerInfo serverInfo;
+    bool hasServerInfo = false;
+    sf::Clock clock;
+    while (clock.getElapsedTime() < sf::seconds(3.f) && !hasServerInfo) {
+        m_multiplayerClient.update();
+        while (m_multiplayerClient.hasPendingEvent()) {
+            const auto event = m_multiplayerClient.popNextEvent();
+            if (event.type == MultiplayerClient::Event::Type::ServerInfoReceived) {
+                serverInfo = event.serverInfo;
+                hasServerInfo = true;
+                break;
+            }
+            if (event.type == MultiplayerClient::Event::Type::Disconnected
+                || event.type == MultiplayerClient::Event::Type::Error) {
+                if (errorMessage) {
+                    *errorMessage = event.message.empty() ? "The multiplayer host did not respond." : event.message;
+                }
+                m_multiplayerClient.disconnect();
+                return false;
+            }
+        }
+    }
+
+    if (!hasServerInfo) {
+        if (errorMessage) {
+            *errorMessage = "The multiplayer host did not answer the ping request.";
+        }
+        m_multiplayerClient.disconnect();
+        return false;
+    }
+    if (!serverInfo.multiplayerEnabled) {
+        if (errorMessage) {
+            *errorMessage = "This server is not hosting a multiplayer save.";
+        }
+        m_multiplayerClient.disconnect();
+        return false;
+    }
+    if (serverInfo.protocolVersion != kCurrentMultiplayerProtocolVersion) {
+        if (errorMessage) {
+            *errorMessage = "The multiplayer host uses an incompatible protocol version.";
+        }
+        m_multiplayerClient.disconnect();
+        return false;
+    }
+    if (!serverInfo.joinable) {
+        if (errorMessage) {
+            *errorMessage = "The multiplayer server is already occupied.";
+        }
+        m_multiplayerClient.disconnect();
+        return false;
+    }
+
+    const std::string digest = MultiplayerPasswordUtils::computePasswordDigest(
+        request.password, serverInfo.passwordSalt);
+    if (!m_multiplayerClient.sendJoinRequest(digest, errorMessage)) {
+        m_multiplayerClient.disconnect();
+        return false;
+    }
+
+    bool accepted = false;
+    bool receivedSnapshot = false;
+    SaveData snapshotData;
+    clock.restart();
+    while (clock.getElapsedTime() < sf::seconds(5.f) && !receivedSnapshot) {
+        m_multiplayerClient.update();
+        while (m_multiplayerClient.hasPendingEvent()) {
+            const auto event = m_multiplayerClient.popNextEvent();
+            if (event.type == MultiplayerClient::Event::Type::JoinRejected) {
+                if (errorMessage) {
+                    *errorMessage = event.message.empty() ? "The multiplayer host rejected the join request." : event.message;
+                }
+                m_multiplayerClient.disconnect();
+                return false;
+            }
+            if (event.type == MultiplayerClient::Event::Type::JoinAccepted) {
+                accepted = true;
+                continue;
+            }
+            if (event.type == MultiplayerClient::Event::Type::SnapshotReceived) {
+                if (!m_saveManager.deserialize(event.serializedSaveData, snapshotData)) {
+                    if (errorMessage) {
+                        *errorMessage = "The multiplayer host sent an invalid game snapshot.";
+                    }
+                    m_multiplayerClient.disconnect();
+                    return false;
+                }
+                receivedSnapshot = true;
+                break;
+            }
+            if (event.type == MultiplayerClient::Event::Type::Disconnected
+                || event.type == MultiplayerClient::Event::Type::Error) {
+                if (errorMessage) {
+                    *errorMessage = event.message.empty() ? "Lost connection to the multiplayer host." : event.message;
+                }
+                m_multiplayerClient.disconnect();
+                return false;
+            }
+        }
+    }
+
+    if (!accepted || !receivedSnapshot) {
+        if (errorMessage) {
+            *errorMessage = "The multiplayer host did not complete the join handshake in time.";
+        }
+        m_multiplayerClient.disconnect();
+        return false;
+    }
+
+    std::string restoreError;
+    if (!m_engine.restoreFromSave(snapshotData, m_config, &restoreError)) {
+        if (errorMessage) {
+            *errorMessage = restoreError.empty() ? "Unable to restore the multiplayer snapshot." : restoreError;
+        }
+        m_multiplayerClient.disconnect();
+        return false;
+    }
+
+    m_localPlayerContext = makeLanClientLocalPlayerContext();
+    m_waitingForRemoteTurnResult = false;
+    m_state = GameState::Playing;
+    refreshTurnPhase();
+    centerCameraOnKingdom(KingdomId::Black);
+    m_uiManager.showHUD();
+    updateUIState();
+    return true;
+}
+
+void Game::updateMultiplayer() {
+    if (isLanHost()) {
+        m_multiplayerServer.update();
+        while (m_multiplayerServer.hasPendingEvent()) {
+            processMultiplayerServerEvent(m_multiplayerServer.popNextEvent());
+        }
+    }
+
+    if (isLanClient()) {
+        m_multiplayerClient.update();
+        while (m_multiplayerClient.hasPendingEvent()) {
+            processMultiplayerClientEvent(m_multiplayerClient.popNextEvent());
+        }
+    }
+}
+
+void Game::processMultiplayerServerEvent(const MultiplayerServer::Event& event) {
+    switch (event.type) {
+        case MultiplayerServer::Event::Type::ClientConnected:
+            m_uiManager.hideMultiplayerAlert();
+            eventLog().log(turnSystem().getTurnNumber(), KingdomId::Black, event.message);
+            pushSnapshotToRemote(nullptr);
+            break;
+
+        case MultiplayerServer::Event::Type::ClientDisconnected:
+            eventLog().log(turnSystem().getTurnNumber(), KingdomId::Black, event.message);
+            m_uiManager.showMultiplayerAlert(
+                "Player Disconnected",
+                event.message + "\n\nWhite is locked until Black reconnects.",
+                "Continue");
+            break;
+
+        case MultiplayerServer::Event::Type::TurnSubmitted: {
+            std::string error;
+            if (!applyRemoteTurnSubmission(event.commands, &error)) {
+                m_multiplayerServer.sendTurnRejected(
+                    error.empty() ? "The host rejected the submitted turn." : error,
+                    nullptr);
+                eventLog().log(turnSystem().getTurnNumber(), KingdomId::Black,
+                               error.empty() ? "Rejected remote multiplayer turn." : error);
+                pushSnapshotToRemote(nullptr);
+            }
+            break;
+        }
+
+        case MultiplayerServer::Event::Type::Error:
+            eventLog().log(turnSystem().getTurnNumber(), KingdomId::Black, event.message);
+            m_uiManager.showMultiplayerAlert(
+                "LAN Host Error",
+                event.message.empty() ? "The LAN host encountered a network error." : event.message,
+                "Continue");
+            break;
+    }
+}
+
+void Game::processMultiplayerClientEvent(const MultiplayerClient::Event& event) {
+    switch (event.type) {
+        case MultiplayerClient::Event::Type::SnapshotReceived: {
+            SaveData snapshotData;
+            if (!m_saveManager.deserialize(event.serializedSaveData, snapshotData)) {
+                std::cerr << "Received an invalid multiplayer snapshot from the host." << std::endl;
+                return;
+            }
+
+            std::string restoreError;
+            if (!m_engine.restoreFromSave(snapshotData, m_config, &restoreError)) {
+                std::cerr << "Failed to restore multiplayer snapshot: " << restoreError << std::endl;
+                return;
+            }
+
+            m_localPlayerContext = makeLanClientLocalPlayerContext();
+            m_waitingForRemoteTurnResult = false;
+            m_input.clearMovePreview();
+            m_input.clearSelection();
+            refreshTurnPhase();
+            updateUIState();
+            break;
+        }
+
+        case MultiplayerClient::Event::Type::TurnRejected:
+            m_uiManager.showMultiplayerAlert(
+                "Turn Rejected",
+                (event.message.empty() ? std::string{"The host rejected the submitted turn."} : event.message)
+                    + "\n\nYour client stays synchronized with the host snapshot.",
+                "Continue");
+            break;
+
+        case MultiplayerClient::Event::Type::Disconnected:
+        case MultiplayerClient::Event::Type::Error: {
+            const std::string message = event.message.empty()
+                ? (event.type == MultiplayerClient::Event::Type::Disconnected
+                    ? "Multiplayer host disconnected."
+                    : "The multiplayer client encountered a network error.")
+                : event.message;
+            std::cerr << message << std::endl;
+            m_uiManager.showMultiplayerAlert(
+                event.type == MultiplayerClient::Event::Type::Disconnected ? "Host Disconnected" : "Network Error",
+                message,
+                "Return to Menu",
+                [this]() {
+                    returnToMainMenu();
+                });
+            break;
+        }
+
+        default:
+            break;
+    }
+}
+
 void Game::setupUICallbacks() {
     // Pause menu
     m_uiManager.pauseMenu().setOnResume([this]() {
+        if (m_localPlayerContext.isNetworked()) return;
         m_state = GameState::Playing;
         m_uiManager.hidePauseMenu();
     });
@@ -517,13 +1038,7 @@ void Game::setupUICallbacks() {
         saveGame();
     });
     m_uiManager.pauseMenu().setOnQuitToMenu([this]() {
-        discardPendingAITurn();
-        m_input.clearMovePreview();
-        m_input.setTool(ToolState::Select);
-        turnSystem().resetPendingCommands();
-        m_state = GameState::MainMenu;
-        m_uiManager.hidePauseMenu();
-        m_uiManager.showMainMenu();
+        returnToMainMenu();
     });
 
     // Main menu
@@ -531,6 +1046,7 @@ void Game::setupUICallbacks() {
         m_uiManager.mainMenu().setSaves(m_saveManager.listSaveSummaries("saves"));
     });
     m_uiManager.mainMenu().setOnExitGame([this]() {
+        stopMultiplayer();
         m_window.close();
     });
     m_uiManager.mainMenu().setOnCreateSave([this](const GameSessionConfig& session) {
@@ -543,6 +1059,13 @@ void Game::setupUICallbacks() {
     m_uiManager.mainMenu().setOnPlaySave([this](const std::string& saveName) {
         loadGame(saveName);
     });
+    m_uiManager.mainMenu().setOnJoinMultiplayer([this](const JoinMultiplayerRequest& request) {
+        std::string error;
+        if (!joinMultiplayer(request, &error)) {
+            return error;
+        }
+        return std::string{};
+    });
     m_uiManager.mainMenu().setOnDeleteSave([this](const std::string& saveName) {
         if (saveName.empty()) {
             return;
@@ -554,6 +1077,10 @@ void Game::setupUICallbacks() {
 
     // HUD
     m_uiManager.hud().setOnPause([this]() {
+        if (m_localPlayerContext.isNetworked()) {
+            return;
+        }
+
         if (m_state == GameState::Playing) {
             m_state = GameState::Paused;
             m_uiManager.showPauseMenu();
@@ -563,11 +1090,11 @@ void Game::setupUICallbacks() {
         }
     });
     m_uiManager.hud().setOnResetTurn([this]() {
-        if (!isActiveHuman()) return;
+        if (!canLocalPlayerIssueCommands()) return;
         resetPlayerTurn();
     });
     m_uiManager.hud().setOnEndTurn([this]() {
-        if (!isActiveHuman()) return;
+        if (!canLocalPlayerIssueCommands()) return;
         commitPlayerTurn();
     });
 
@@ -577,20 +1104,20 @@ void Game::setupUICallbacks() {
         m_uiManager.showSelectionEmptyState();
     });
     m_uiManager.toolBar().setOnBuild([this]() {
-        if (!isActiveHuman()) return;
+        if (!canLocalPlayerIssueCommands()) return;
         m_input.setTool(ToolState::Build);
         m_uiManager.showBuildToolPanel(activeKingdom(), m_config, true);
     });
 
     // Build tool panel
     m_uiManager.buildToolPanel().setOnSelectBuildType([this](int type) {
-        if (!isActiveHuman()) return;
+        if (!canLocalPlayerIssueCommands()) return;
         m_input.setBuildType(static_cast<BuildingType>(type));
     });
 
     // Piece panel upgrade
     m_uiManager.piecePanel().setOnUpgrade([this](int pieceId, int targetType) {
-        if (!isActiveHuman()) return;
+        if (!canLocalPlayerIssueCommands()) return;
         Piece* piece = activeKingdom().getPieceById(pieceId);
         if (!piece) return;
         TurnCommand cmd;
@@ -605,7 +1132,7 @@ void Game::setupUICallbacks() {
 
     // Barracks panel produce
     m_uiManager.barracksPanel().setOnProduce([this](int barracksId, int pieceType) {
-        if (!isActiveHuman()) return;
+        if (!canLocalPlayerIssueCommands()) return;
         TurnCommand cmd;
         cmd.type = TurnCommand::Produce;
         cmd.barracksId = barracksId;
@@ -615,10 +1142,11 @@ void Game::setupUICallbacks() {
 }
 
 void Game::updateUIState() {
-    const bool allowCommands = (m_state == GameState::Playing) && isActiveHuman();
+    const bool allowCommands = canLocalPlayerIssueCommands();
     const InGameViewModel viewModel = buildInGameViewModel(m_engine, m_config, m_state, allowCommands);
     m_uiManager.updateDashboard(viewModel);
-    const KingdomId viewedKingdomId = allowCommands ? activeKingdom().id : humanKingdomId();
+    updateMultiplayerPresentation();
+    const KingdomId viewedKingdomId = allowCommands ? activeKingdom().id : localPerspectiveKingdom();
 
     switch (m_input.getCurrentTool()) {
         case ToolState::Build:
@@ -665,7 +1193,7 @@ void Game::discardPendingAITurn() {
 }
 
 void Game::startAITurnIfNeeded() {
-    if (m_state != GameState::Playing || !isActiveAI()) {
+    if (m_state != GameState::Playing || !m_engine.isActiveAI()) {
         return;
     }
     if (m_aiTask) {

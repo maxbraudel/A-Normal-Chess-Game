@@ -12,6 +12,9 @@
 #include "UI/InGameViewModel.hpp"
 #include "UI/ToolBar.hpp"
 
+#include <functional>
+#include <string>
+
 class AssetManager;
 class Piece;
 class Building;
@@ -36,6 +39,20 @@ public:
     void showSelectionEmptyState();
     void hideAllPanels();
     void update();
+    void setMultiplayerStatus(const std::string& text, MultiplayerStatusTone tone);
+    void clearMultiplayerStatus();
+    void showMultiplayerWaitingOverlay(const std::string& title,
+                                       const std::string& message,
+                                       const std::string& buttonLabel = "",
+                                       std::function<void()> onClose = {});
+    void hideMultiplayerWaitingOverlay();
+    bool isMultiplayerWaitingOverlayVisible() const;
+    void showMultiplayerAlert(const std::string& title,
+                              const std::string& message,
+                              const std::string& buttonLabel = "OK",
+                              std::function<void()> onClose = {});
+    void hideMultiplayerAlert();
+    bool isMultiplayerAlertVisible() const;
 
     MainMenuUI&     mainMenu()        { return m_mainMenu; }
     HUD&            hud()             { return m_hud; }
@@ -70,4 +87,14 @@ private:
     tgui::Panel::Ptr m_rightSidebar;
     tgui::Panel::Ptr m_rightHistorySection;
     tgui::Panel::Ptr m_rightBalanceSection;
+    tgui::Panel::Ptr m_multiplayerWaitingOverlay;
+    tgui::Label::Ptr m_multiplayerWaitingTitle;
+    tgui::Label::Ptr m_multiplayerWaitingMessage;
+    tgui::Button::Ptr m_multiplayerWaitingButton;
+    tgui::Panel::Ptr m_multiplayerAlertOverlay;
+    tgui::Label::Ptr m_multiplayerAlertTitle;
+    tgui::Label::Ptr m_multiplayerAlertMessage;
+    tgui::Button::Ptr m_multiplayerAlertButton;
+    std::function<void()> m_onMultiplayerWaitingClose;
+    std::function<void()> m_onMultiplayerAlertClose;
 };

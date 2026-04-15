@@ -8,6 +8,40 @@ std::string metricText(std::size_t index, int value) {
     return inGameMetricLabels()[index] + ": " + std::to_string(value);
 }
 
+void applyMultiplayerStatusTone(const tgui::Label::Ptr& label, MultiplayerStatusTone tone) {
+    if (!label) {
+        return;
+    }
+
+    auto renderer = label->getRenderer();
+    switch (tone) {
+        case MultiplayerStatusTone::Connected:
+            renderer->setTextColor(tgui::Color(178, 255, 196));
+            renderer->setBackgroundColor(tgui::Color(20, 82, 44, 220));
+            renderer->setBorderColor(tgui::Color(98, 189, 118));
+            break;
+
+        case MultiplayerStatusTone::Waiting:
+            renderer->setTextColor(tgui::Color(255, 235, 178));
+            renderer->setBackgroundColor(tgui::Color(110, 74, 10, 220));
+            renderer->setBorderColor(tgui::Color(218, 175, 74));
+            break;
+
+        case MultiplayerStatusTone::Error:
+            renderer->setTextColor(tgui::Color(255, 205, 205));
+            renderer->setBackgroundColor(tgui::Color(118, 24, 24, 225));
+            renderer->setBorderColor(tgui::Color(218, 92, 92));
+            break;
+
+        case MultiplayerStatusTone::Neutral:
+        default:
+            renderer->setTextColor(tgui::Color(220, 235, 255));
+            renderer->setBackgroundColor(tgui::Color(18, 38, 72, 215));
+            renderer->setBorderColor(tgui::Color(110, 148, 210));
+            break;
+    }
+}
+
 } // namespace
 
 void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
@@ -30,6 +64,16 @@ void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
     HUDLayout::makeTransparentPanel(m_actionPanel);
     gui.add(m_actionPanel, "HUDActionPanel");
 
+    m_networkPanel = tgui::Panel::create({HUDLayout::kNetworkStatusWidth, HUDLayout::kNetworkStatusHeight});
+    m_networkPanel->setPosition(HUDLayout::anchorPositionForSize(
+        HUDAnchor::TopCenter,
+        HUDLayout::kNetworkStatusWidth,
+        HUDLayout::kNetworkStatusHeight,
+        HUDLayout::kEdgeMargin,
+        HUDLayout::kEdgeMargin + HUDLayout::kTopComponentHeight + HUDLayout::kComponentGap));
+    HUDLayout::makeTransparentPanel(m_networkPanel);
+    gui.add(m_networkPanel, "HUDNetworkPanel");
+
     for (std::size_t index = 0; index < m_metricLabels.size(); ++index) {
         m_metricLabels[index] = tgui::Label::create(metricText(index, 0));
         HUDLayout::styleHudIndicator(m_metricLabels[index], HUDLayout::metricColors()[index],
@@ -42,6 +86,17 @@ void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
     HUDLayout::styleStatusIndicator(m_statusLabel);
     HUDLayout::placeStackChild(m_statusLabel, 0, HUDLayout::kStatusWidth);
     m_statusPanel->add(m_statusLabel);
+
+    m_networkStatusLabel = tgui::Label::create("");
+    HUDLayout::styleHudIndicator(
+        m_networkStatusLabel,
+        tgui::Color(220, 235, 255),
+        HUDLayout::kNetworkStatusWidth,
+        HUDLayout::kNetworkStatusHeight,
+        13);
+    m_networkStatusLabel->setPosition({0, 0});
+    applyMultiplayerStatusTone(m_networkStatusLabel, MultiplayerStatusTone::Neutral);
+    m_networkPanel->add(m_networkStatusLabel);
 
     m_pauseButton = tgui::Button::create("Pause");
     HUDLayout::styleHudButton(m_pauseButton);
@@ -76,18 +131,25 @@ void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
     m_metricsPanel->setVisible(false);
     m_statusPanel->setVisible(false);
     m_actionPanel->setVisible(false);
+    m_networkPanel->setVisible(false);
 }
 
 void HUD::show() {
+    m_visible = true;
     if (m_metricsPanel) m_metricsPanel->setVisible(true);
     if (m_statusPanel) m_statusPanel->setVisible(true);
     if (m_actionPanel) m_actionPanel->setVisible(true);
+    if (m_networkPanel && m_networkStatusLabel && !m_networkStatusLabel->getText().empty()) {
+        m_networkPanel->setVisible(true);
+    }
 }
 
 void HUD::hide() {
+    m_visible = false;
     if (m_metricsPanel) m_metricsPanel->setVisible(false);
     if (m_statusPanel) m_statusPanel->setVisible(false);
     if (m_actionPanel) m_actionPanel->setVisible(false);
+    if (m_networkPanel) m_networkPanel->setVisible(false);
 }
 
 void HUD::update(const InGameViewModel& model) {
@@ -102,6 +164,31 @@ void HUD::update(const InGameViewModel& model) {
     }
     if (m_endTurnButton) m_endTurnButton->setEnabled(model.allowCommands);
     if (m_resetTurnButton) m_resetTurnButton->setEnabled(model.allowCommands);
+}
+
+void HUD::setMultiplayerStatus(const std::string& text, MultiplayerStatusTone tone) {
+    if (!m_networkStatusLabel || !m_networkPanel) {
+        return;
+    }
+
+    m_networkStatusLabel->setText(text);
+    applyMultiplayerStatusTone(m_networkStatusLabel, tone);
+    m_networkPanel->setVisible(m_visible && !text.empty());
+}
+
+void HUD::clearMultiplayerStatus() {
+    if (m_networkStatusLabel) {
+        m_networkStatusLabel->setText("");
+    }
+    if (m_networkPanel) {
+        m_networkPanel->setVisible(false);
+    }
+}
+
+void HUD::setPauseEnabled(bool enabled) {
+    if (m_pauseButton) {
+        m_pauseButton->setEnabled(enabled);
+    }
 }
 
 void HUD::setOnPause(std::function<void()> callback) { m_onPause = std::move(callback); }

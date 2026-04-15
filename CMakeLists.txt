@@ -8,7 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 list(PREPEND CMAKE_PREFIX_PATH "C:/msys64/ucrt64")
 
 # Find SFML first (needed by TGUI)
-find_package(SFML 2.6 COMPONENTS graphics window system REQUIRED)
+find_package(SFML 2.6 COMPONENTS graphics window system network REQUIRED)
 
 # Build TGUI from source with SFML_GRAPHICS backend
 include(FetchContent)
@@ -37,6 +37,7 @@ target_include_directories(${PROJECT_NAME}Core PUBLIC ${CMAKE_SOURCE_DIR}/src)
 
 target_link_libraries(${PROJECT_NAME}Core PUBLIC
     sfml-graphics
+    sfml-network
     sfml-window
     sfml-system
     TGUI::TGUI
@@ -66,6 +67,7 @@ set(MSYS2_BIN "C:/msys64/ucrt64/bin")
 set(RUNTIME_DLLS
     # SFML core
     "${MSYS2_BIN}/libsfml-graphics-2.dll"
+    "${MSYS2_BIN}/libsfml-network-2.dll"
     "${MSYS2_BIN}/libsfml-system-2.dll"
     "${MSYS2_BIN}/libsfml-window-2.dll"
     # C++ / MinGW runtime

@@ -96,6 +96,7 @@ bool GameEngine::restoreFromSave(const SaveData& data,
 
     m_sessionConfig.saveName = data.gameName;
     m_sessionConfig.kingdoms = data.sessionKingdoms;
+    m_sessionConfig.multiplayer = data.multiplayer;
 
     m_board.init(data.mapRadius);
     if (!data.grid.empty()) {
@@ -148,6 +149,7 @@ SaveData GameEngine::createSaveData() const {
     data.activeKingdom = m_turnSystem.getActiveKingdom();
     data.mapRadius = m_board.getRadius();
     data.sessionKingdoms = m_sessionConfig.kingdoms;
+    data.multiplayer = m_sessionConfig.multiplayer;
 
     const int diameter = m_board.getDiameter();
     data.grid.resize(diameter);

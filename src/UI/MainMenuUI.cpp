@@ -1,17 +1,23 @@
 #include "UI/MainMenuUI.hpp"
 
 #include "Assets/AssetManager.hpp"
+#include "Multiplayer/PasswordUtils.hpp"
 
 #include <cctype>
+#include <limits>
 
 namespace {
 std::string buildSaveLabel(const SaveSummary& save) {
     const auto mode = gameModeFromParticipants(save.kingdoms);
     const auto& white = kingdomParticipantConfig(save.kingdoms, KingdomId::White);
     const auto& black = kingdomParticipantConfig(save.kingdoms, KingdomId::Black);
-    return save.saveName + " - " + gameModeLabel(mode)
+    std::string label = save.saveName + " - " + gameModeLabel(mode)
         + " | White: " + white.participantName
         + " | Black: " + black.participantName;
+    if (save.multiplayer.enabled) {
+        label += " | LAN";
+    }
+    return label;
 }
 }
 
@@ -33,7 +39,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     m_mainBox->add(title);
 
     auto btnLoad = tgui::Button::create("Load Save");
-    btnLoad->setPosition({"(&.width - width) / 2", "42%"});
+    btnLoad->setPosition({"(&.width - width) / 2", "39%"});
     btnLoad->setSize({220, 52});
     btnLoad->onPress([this]() {
         if (m_onLoadSaves) m_onLoadSaves();
@@ -41,8 +47,16 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     });
     m_mainBox->add(btnLoad);
 
+    auto btnJoin = tgui::Button::create("Join Multiplayer");
+    btnJoin->setPosition({"(&.width - width) / 2", "51%"});
+    btnJoin->setSize({220, 52});
+    btnJoin->onPress([this]() {
+        openJoinDialog();
+    });
+    m_mainBox->add(btnJoin);
+
     auto btnExit = tgui::Button::create("Exit Game");
-    btnExit->setPosition({"(&.width - width) / 2", "55%"});
+    btnExit->setPosition({"(&.width - width) / 2", "63%"});
     btnExit->setSize({220, 52});
     btnExit->onPress([this]() {
         if (m_onExitGame) m_onExitGame();
@@ -119,7 +133,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     m_createOverlay->setVisible(false);
     m_panel->add(m_createOverlay);
 
-    auto dialog = tgui::Panel::create({560, 540});
+    auto dialog = tgui::Panel::create({560, 720});
     dialog->setPosition({"(&.parent.width - width) / 2", "(&.parent.height - height) / 2"});
     dialog->getRenderer()->setBackgroundColor(tgui::Color(46, 46, 46, 245));
     dialog->getRenderer()->setBorderColor(tgui::Color(120, 120, 120));
@@ -239,14 +253,56 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     m_blackHintLabel->getRenderer()->setTextColor(tgui::Color(180, 180, 180));
     dialog->add(m_blackHintLabel);
 
+    m_multiplayerCheckBox = tgui::CheckBox::create();
+    m_multiplayerCheckBox->setPosition({36, 500});
+    m_multiplayerCheckBox->setText("Multiplayer");
+    m_multiplayerCheckBox->setTextSize(18);
+    m_multiplayerCheckBox->onChange([this](bool) {
+        updateMultiplayerControlsVisibility();
+        if (m_createErrorLabel) m_createErrorLabel->setText("");
+    });
+    dialog->add(m_multiplayerCheckBox);
+
+    m_multiplayerHintLabel = tgui::Label::create("White hosts the LAN game. Black joins from another machine.");
+    m_multiplayerHintLabel->setPosition({36, 532});
+    m_multiplayerHintLabel->setTextSize(14);
+    m_multiplayerHintLabel->getRenderer()->setTextColor(tgui::Color(180, 180, 180));
+    dialog->add(m_multiplayerHintLabel);
+
+    m_multiplayerPortLabel = tgui::Label::create("Server port");
+    m_multiplayerPortLabel->setPosition({36, 564});
+    m_multiplayerPortLabel->setTextSize(16);
+    m_multiplayerPortLabel->getRenderer()->setTextColor(tgui::Color(220, 220, 220));
+    dialog->add(m_multiplayerPortLabel);
+
+    m_multiplayerPortEdit = tgui::EditBox::create();
+    m_multiplayerPortEdit->setPosition({36, 588});
+    m_multiplayerPortEdit->setSize({180, 32});
+    m_multiplayerPortEdit->setInputValidator(tgui::EditBox::Validator::UInt);
+    dialog->add(m_multiplayerPortEdit);
+
+    m_multiplayerPasswordLabel = tgui::Label::create("Server password");
+    m_multiplayerPasswordLabel->setPosition({236, 564});
+    m_multiplayerPasswordLabel->setTextSize(16);
+    m_multiplayerPasswordLabel->getRenderer()->setTextColor(tgui::Color(220, 220, 220));
+    dialog->add(m_multiplayerPasswordLabel);
+
+    m_multiplayerPasswordEdit = tgui::EditBox::create();
+    m_multiplayerPasswordEdit->setPosition({236, 588});
+    m_multiplayerPasswordEdit->setSize({288, 32});
+    m_multiplayerPasswordEdit->setPasswordCharacter('*');
+    dialog->add(m_multiplayerPasswordEdit);
+
     m_createErrorLabel = tgui::Label::create("");
-    m_createErrorLabel->setPosition({36, 496});
+    m_createErrorLabel->setPosition({36, 656});
+    m_createErrorLabel->setSize({280, 44});
+    m_createErrorLabel->setAutoSize(false);
     m_createErrorLabel->setTextSize(15);
     m_createErrorLabel->getRenderer()->setTextColor(tgui::Color(255, 120, 120));
     dialog->add(m_createErrorLabel);
 
     auto cancelButton = tgui::Button::create("Cancel");
-    cancelButton->setPosition({332, 496});
+    cancelButton->setPosition({332, 656});
     cancelButton->setSize({92, 30});
     cancelButton->onPress([this]() {
         closeCreateDialog();
@@ -254,7 +310,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     dialog->add(cancelButton);
 
     auto createButton = tgui::Button::create("Create");
-    createButton->setPosition({432, 496});
+    createButton->setPosition({432, 656});
     createButton->setSize({92, 30});
     createButton->onPress([this]() {
         GameSessionConfig session;
@@ -287,6 +343,29 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
             return;
         }
 
+        if (m_multiplayerCheckBox && m_multiplayerCheckBox->isChecked()) {
+            int port = 0;
+            if (!tryParsePort(m_multiplayerPortEdit ? m_multiplayerPortEdit->getText().toStdString() : std::string{}, port)
+                || !isValidMultiplayerPort(port)) {
+                m_createErrorLabel->setText("Enter a valid LAN port between 1 and 65535.");
+                return;
+            }
+
+            const std::string password = trimCopy(
+                m_multiplayerPasswordEdit ? m_multiplayerPasswordEdit->getText().toStdString() : std::string{});
+            if (password.empty()) {
+                m_createErrorLabel->setText("A multiplayer password is required.");
+                return;
+            }
+
+            session.multiplayer.enabled = true;
+            session.multiplayer.port = port;
+            session.multiplayer.passwordSalt = MultiplayerPasswordUtils::generateSalt();
+            session.multiplayer.passwordHash = MultiplayerPasswordUtils::computePasswordDigest(
+                password, session.multiplayer.passwordSalt);
+            session.multiplayer.protocolVersion = kCurrentMultiplayerProtocolVersion;
+        }
+
         if (m_onCreateSave) {
             const std::string error = m_onCreateSave(session);
             if (!error.empty()) {
@@ -298,6 +377,109 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
         closeCreateDialog();
     });
     dialog->add(createButton);
+
+    m_joinOverlay = tgui::Panel::create({"100%", "100%"});
+    m_joinOverlay->getRenderer()->setBackgroundColor(tgui::Color(0, 0, 0, 170));
+    m_joinOverlay->setVisible(false);
+    m_panel->add(m_joinOverlay);
+
+    auto joinDialog = tgui::Panel::create({500, 390});
+    joinDialog->setPosition({"(&.parent.width - width) / 2", "(&.parent.height - height) / 2"});
+    joinDialog->getRenderer()->setBackgroundColor(tgui::Color(46, 46, 46, 245));
+    joinDialog->getRenderer()->setBorderColor(tgui::Color(120, 120, 120));
+    joinDialog->getRenderer()->setBorders(2);
+    m_joinOverlay->add(joinDialog);
+
+    auto joinTitle = tgui::Label::create("Join Multiplayer");
+    joinTitle->setPosition({"(&.width - width) / 2", 18});
+    joinTitle->setTextSize(26);
+    joinTitle->getRenderer()->setTextColor(tgui::Color::White);
+    joinDialog->add(joinTitle);
+
+    auto joinHostLabel = tgui::Label::create("Server IP");
+    joinHostLabel->setPosition({36, 86});
+    joinHostLabel->setTextSize(18);
+    joinHostLabel->getRenderer()->setTextColor(tgui::Color::White);
+    joinDialog->add(joinHostLabel);
+
+    m_joinHostEdit = tgui::EditBox::create();
+    m_joinHostEdit->setPosition({36, 114});
+    m_joinHostEdit->setSize({428, 34});
+    joinDialog->add(m_joinHostEdit);
+
+    auto joinPortLabel = tgui::Label::create("Server port");
+    joinPortLabel->setPosition({36, 170});
+    joinPortLabel->setTextSize(18);
+    joinPortLabel->getRenderer()->setTextColor(tgui::Color::White);
+    joinDialog->add(joinPortLabel);
+
+    m_joinPortEdit = tgui::EditBox::create();
+    m_joinPortEdit->setPosition({36, 198});
+    m_joinPortEdit->setSize({180, 34});
+    m_joinPortEdit->setInputValidator(tgui::EditBox::Validator::UInt);
+    joinDialog->add(m_joinPortEdit);
+
+    auto joinPasswordLabel = tgui::Label::create("Password");
+    joinPasswordLabel->setPosition({36, 254});
+    joinPasswordLabel->setTextSize(18);
+    joinPasswordLabel->getRenderer()->setTextColor(tgui::Color::White);
+    joinDialog->add(joinPasswordLabel);
+
+    m_joinPasswordEdit = tgui::EditBox::create();
+    m_joinPasswordEdit->setPosition({36, 282});
+    m_joinPasswordEdit->setSize({428, 34});
+    m_joinPasswordEdit->setPasswordCharacter('*');
+    joinDialog->add(m_joinPasswordEdit);
+
+    m_joinErrorLabel = tgui::Label::create("");
+    m_joinErrorLabel->setPosition({36, 332});
+    m_joinErrorLabel->setSize({240, 40});
+    m_joinErrorLabel->setAutoSize(false);
+    m_joinErrorLabel->setTextSize(15);
+    m_joinErrorLabel->getRenderer()->setTextColor(tgui::Color(255, 120, 120));
+    joinDialog->add(m_joinErrorLabel);
+
+    auto joinCancelButton = tgui::Button::create("Cancel");
+    joinCancelButton->setPosition({292, 336});
+    joinCancelButton->setSize({78, 30});
+    joinCancelButton->onPress([this]() {
+        closeJoinDialog();
+    });
+    joinDialog->add(joinCancelButton);
+
+    auto joinButton = tgui::Button::create("Join Game");
+    joinButton->setPosition({380, 336});
+    joinButton->setSize({84, 30});
+    joinButton->onPress([this]() {
+        JoinMultiplayerRequest request;
+        request.host = trimCopy(m_joinHostEdit ? m_joinHostEdit->getText().toStdString() : std::string{});
+        request.password = trimCopy(m_joinPasswordEdit ? m_joinPasswordEdit->getText().toStdString() : std::string{});
+
+        if (request.host.empty()) {
+            m_joinErrorLabel->setText("Server IP is required.");
+            return;
+        }
+        if (!tryParsePort(m_joinPortEdit ? m_joinPortEdit->getText().toStdString() : std::string{}, request.port)
+            || !isValidMultiplayerPort(request.port)) {
+            m_joinErrorLabel->setText("Enter a valid LAN port.");
+            return;
+        }
+        if (request.password.empty()) {
+            m_joinErrorLabel->setText("Password is required.");
+            return;
+        }
+
+        if (m_onJoinMultiplayer) {
+            const std::string error = m_onJoinMultiplayer(request);
+            if (!error.empty()) {
+                m_joinErrorLabel->setText(error);
+                return;
+            }
+        }
+
+        closeJoinDialog();
+    });
+    joinDialog->add(joinButton);
 
     updateCreateDialogLabels();
     updateSaveButtons();
@@ -314,6 +496,7 @@ void MainMenuUI::show() {
 void MainMenuUI::hide() {
     if (m_panel) {
         closeCreateDialog();
+        closeJoinDialog();
         m_panel->setVisible(false);
     }
 }
@@ -327,6 +510,7 @@ void MainMenuUI::showLoadMenu() {
     if (m_mainBox) m_mainBox->setVisible(false);
     if (m_loadBox) m_loadBox->setVisible(true);
     closeCreateDialog();
+    closeJoinDialog();
     updateSaveButtons();
 }
 
@@ -353,11 +537,13 @@ void MainMenuUI::setOnExitGame(std::function<void()> callback) { m_onExitGame = 
 void MainMenuUI::setOnCreateSave(CreateSaveCallback callback) { m_onCreateSave = std::move(callback); }
 void MainMenuUI::setOnPlaySave(std::function<void(const std::string&)> callback) { m_onPlaySave = std::move(callback); }
 void MainMenuUI::setOnDeleteSave(std::function<void(const std::string&)> callback) { m_onDeleteSave = std::move(callback); }
+void MainMenuUI::setOnJoinMultiplayer(JoinMultiplayerCallback callback) { m_onJoinMultiplayer = std::move(callback); }
 
 void MainMenuUI::showMainScreen() {
     if (m_mainBox) m_mainBox->setVisible(true);
     if (m_loadBox) m_loadBox->setVisible(false);
     closeCreateDialog();
+    closeJoinDialog();
 }
 
 void MainMenuUI::updateSaveButtons() {
@@ -392,6 +578,37 @@ void MainMenuUI::updateCreateDialogLabels() {
         m_blackNameLabel->setText(participantNamePrompt(participants, KingdomId::Black));
     }
     if (m_createErrorLabel) m_createErrorLabel->setText("");
+    updateMultiplayerControlsVisibility();
+}
+
+void MainMenuUI::updateMultiplayerControlsVisibility() {
+    std::array<KingdomParticipantConfig, kNumKingdoms> participants =
+        defaultKingdomParticipants(parseGameModeId(m_modeCombo ? m_modeCombo->getSelectedItemId() : tgui::String{}));
+
+    if (m_whiteControllerCombo) {
+        participants[kingdomIndex(KingdomId::White)].controller =
+            parseControllerId(m_whiteControllerCombo->getSelectedItemId());
+    }
+    if (m_blackControllerCombo) {
+        participants[kingdomIndex(KingdomId::Black)].controller =
+            parseControllerId(m_blackControllerCombo->getSelectedItemId());
+    }
+
+    const bool multiplayerAvailable = supportsMultiplayerParticipants(participants);
+    if (m_multiplayerCheckBox && !multiplayerAvailable) {
+        m_multiplayerCheckBox->setChecked(false);
+    }
+
+    const bool multiplayerEnabled = multiplayerAvailable
+        && m_multiplayerCheckBox
+        && m_multiplayerCheckBox->isChecked();
+
+    if (m_multiplayerCheckBox) m_multiplayerCheckBox->setVisible(multiplayerAvailable);
+    if (m_multiplayerHintLabel) m_multiplayerHintLabel->setVisible(multiplayerAvailable);
+    if (m_multiplayerPortLabel) m_multiplayerPortLabel->setVisible(multiplayerEnabled);
+    if (m_multiplayerPortEdit) m_multiplayerPortEdit->setVisible(multiplayerEnabled);
+    if (m_multiplayerPasswordLabel) m_multiplayerPasswordLabel->setVisible(multiplayerEnabled);
+    if (m_multiplayerPasswordEdit) m_multiplayerPasswordEdit->setVisible(multiplayerEnabled);
 }
 
 void MainMenuUI::applyPresetToCreateDialog(GameMode mode) {
@@ -422,13 +639,35 @@ void MainMenuUI::openCreateDialog() {
 
     if (m_saveNameEdit) m_saveNameEdit->setText("");
     if (m_modeCombo) m_modeCombo->setSelectedItemById("human_ai");
+    if (m_multiplayerCheckBox) m_multiplayerCheckBox->setChecked(false);
+    if (m_multiplayerPortEdit) m_multiplayerPortEdit->setText("45000");
+    if (m_multiplayerPasswordEdit) m_multiplayerPasswordEdit->setText("");
     applyPresetToCreateDialog(GameMode::HumanVsAI);
+    closeJoinDialog();
     m_createOverlay->setVisible(true);
 }
 
 void MainMenuUI::closeCreateDialog() {
     if (m_createOverlay) m_createOverlay->setVisible(false);
     if (m_createErrorLabel) m_createErrorLabel->setText("");
+}
+
+void MainMenuUI::openJoinDialog() {
+    if (!m_joinOverlay) {
+        return;
+    }
+
+    if (m_joinHostEdit) m_joinHostEdit->setText("");
+    if (m_joinPortEdit) m_joinPortEdit->setText("45000");
+    if (m_joinPasswordEdit) m_joinPasswordEdit->setText("");
+    if (m_joinErrorLabel) m_joinErrorLabel->setText("");
+    closeCreateDialog();
+    m_joinOverlay->setVisible(true);
+}
+
+void MainMenuUI::closeJoinDialog() {
+    if (m_joinOverlay) m_joinOverlay->setVisible(false);
+    if (m_joinErrorLabel) m_joinErrorLabel->setText("");
 }
 
 std::string MainMenuUI::selectedSaveName() const {
@@ -466,6 +705,25 @@ bool MainMenuUI::isValidParticipantName(const std::string& value) {
         && value.find('\\') == std::string::npos
         && value.find('\n') == std::string::npos
         && value.find('\r') == std::string::npos;
+}
+
+bool MainMenuUI::tryParsePort(const std::string& value, int& port) {
+    const std::string trimmed = trimCopy(value);
+    if (trimmed.empty()) {
+        return false;
+    }
+
+    try {
+        const long long parsed = std::stoll(trimmed);
+        if (parsed < std::numeric_limits<int>::min() || parsed > std::numeric_limits<int>::max()) {
+            return false;
+        }
+
+        port = static_cast<int>(parsed);
+        return true;
+    } catch (...) {
+        return false;
+    }
 }
 
 GameMode MainMenuUI::parseGameModeId(const tgui::String& id) {

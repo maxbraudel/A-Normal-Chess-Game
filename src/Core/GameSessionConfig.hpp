@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <string>
 
 #include "Kingdom/KingdomId.hpp"
@@ -15,6 +16,22 @@ enum class GameMode {
     HumanVsHuman = 1,
     AIvsAI = 2
 };
+
+inline constexpr int kMinMultiplayerPort = 1;
+inline constexpr int kMaxMultiplayerPort = 65535;
+inline constexpr std::uint32_t kCurrentMultiplayerProtocolVersion = 1;
+
+struct MultiplayerConfig {
+    bool enabled = false;
+    int port = 0;
+    std::string passwordHash;
+    std::string passwordSalt;
+    std::uint32_t protocolVersion = kCurrentMultiplayerProtocolVersion;
+};
+
+inline bool isValidMultiplayerPort(int port) {
+    return port >= kMinMultiplayerPort && port <= kMaxMultiplayerPort;
+}
 
 struct KingdomParticipantConfig {
     KingdomId kingdom = KingdomId::White;
@@ -54,12 +71,14 @@ struct GameSessionConfig {
     std::string saveName;
     std::array<KingdomParticipantConfig, kNumKingdoms> kingdoms =
         defaultKingdomParticipants(GameMode::HumanVsAI);
+    MultiplayerConfig multiplayer{};
 };
 
 struct SaveSummary {
     std::string saveName;
     std::array<KingdomParticipantConfig, kNumKingdoms> kingdoms =
         defaultKingdomParticipants(GameMode::HumanVsAI);
+    MultiplayerConfig multiplayer{};
 };
 
 inline GameSessionConfig makeDefaultGameSessionConfig(GameMode mode,
@@ -109,6 +128,13 @@ inline std::array<ControllerType, kNumKingdoms> controllersFromParticipants(
         kingdomParticipantConfig(participants, KingdomId::White).controller,
         kingdomParticipantConfig(participants, KingdomId::Black).controller
     };
+}
+
+inline bool supportsMultiplayerParticipants(
+    const std::array<KingdomParticipantConfig, kNumKingdoms>& participants) {
+    const auto controllers = controllersFromParticipants(participants);
+    return controllers[0] == ControllerType::Human
+        && controllers[1] == ControllerType::Human;
 }
 
 inline std::array<std::string, kNumKingdoms> participantNamesFromParticipants(

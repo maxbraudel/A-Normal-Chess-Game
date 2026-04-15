@@ -1,8 +1,12 @@
+#include <chrono>
 #include <filesystem>
 #include <iostream>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <vector>
+
+#include <SFML/System/Time.hpp>
 
 #include "Board/Board.hpp"
 #include "Board/CellType.hpp"
@@ -10,8 +14,13 @@
 #include "Buildings/BuildingType.hpp"
 #include "Config/GameConfig.hpp"
 #include "Core/GameEngine.hpp"
+#include "Core/LocalPlayerContext.hpp"
 #include "Core/GameState.hpp"
 #include "Core/GameStateValidator.hpp"
+#include "Multiplayer/MultiplayerClient.hpp"
+#include "Multiplayer/PasswordUtils.hpp"
+#include "Multiplayer/Protocol.hpp"
+#include "Multiplayer/MultiplayerServer.hpp"
 #include "Save/SaveManager.hpp"
 #include "Systems/EconomySystem.hpp"
 #include "Systems/EventLog.hpp"
@@ -27,6 +36,20 @@ void expect(bool condition, const std::string& message) {
     if (!condition) {
         throw std::runtime_error(message);
     }
+}
+
+template <typename Predicate>
+bool waitUntil(Predicate predicate, int timeoutMs = 1000) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+    while (std::chrono::steady_clock::now() < deadline) {
+        if (predicate()) {
+            return true;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    return predicate();
 }
 
 sf::Vector2i findEmptyTraversableCell(const GameEngine& engine) {
@@ -68,6 +91,61 @@ void testSessionValidatorRejectsInvalidOrdering() {
     expect(!error.empty(), "Validator should explain invalid session ordering.");
 }
 
+    void testSessionValidatorRejectsInvalidMultiplayerControllers() {
+        GameSessionConfig invalid = makeDefaultGameSessionConfig(GameMode::HumanVsAI, "invalid_multiplayer_controllers");
+        invalid.multiplayer.enabled = true;
+        invalid.multiplayer.port = 45000;
+        invalid.multiplayer.passwordHash = "hash";
+        invalid.multiplayer.passwordSalt = "salt";
+
+        std::string error;
+        expect(!GameStateValidator::validateSessionConfig(invalid, &error),
+            "Validator should reject multiplayer when both kingdoms are not human-controlled.");
+        expect(!error.empty(), "Validator should explain invalid multiplayer controller setup.");
+    }
+
+    void testSessionValidatorRejectsInvalidMultiplayerPort() {
+        GameSessionConfig invalid = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, "invalid_multiplayer_port");
+        invalid.multiplayer.enabled = true;
+        invalid.multiplayer.port = 70000;
+        invalid.multiplayer.passwordHash = "hash";
+        invalid.multiplayer.passwordSalt = "salt";
+
+        std::string error;
+        expect(!GameStateValidator::validateSessionConfig(invalid, &error),
+            "Validator should reject multiplayer ports outside the valid TCP range.");
+        expect(!error.empty(), "Validator should explain invalid multiplayer port.");
+    }
+
+    void testLocalPlayerContextModes() {
+        GameSessionConfig hotseat = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, "hotseat_session");
+        const LocalPlayerContext hotseatContext = makeLocalPlayerContextForSession(hotseat);
+        expect(hotseatContext.mode == LocalSessionMode::LocalOnly,
+            "Local Human vs Human sessions should stay in local-only mode.");
+        expect(hotseatContext.isLocallyControlled(KingdomId::White)
+         && hotseatContext.isLocallyControlled(KingdomId::Black),
+            "Hotseat sessions should expose both kingdoms as local.");
+
+        GameSessionConfig host = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, "host_session");
+        host.multiplayer.enabled = true;
+        host.multiplayer.port = 42000;
+        host.multiplayer.passwordHash = "hash";
+        host.multiplayer.passwordSalt = "salt";
+        const LocalPlayerContext hostContext = makeLocalPlayerContextForSession(host);
+        expect(hostContext.mode == LocalSessionMode::LanHost,
+            "Multiplayer sessions started from a save should default to host mode.");
+        expect(hostContext.isLocallyControlled(KingdomId::White)
+         && !hostContext.isLocallyControlled(KingdomId::Black),
+            "LAN host sessions should only expose the White kingdom as local.");
+
+        const LocalPlayerContext clientContext = makeLanClientLocalPlayerContext();
+        expect(clientContext.mode == LocalSessionMode::LanClient,
+            "Client helper should configure LAN client mode.");
+        expect(!clientContext.isLocallyControlled(KingdomId::White)
+         && clientContext.isLocallyControlled(KingdomId::Black),
+            "LAN client sessions should only expose the Black kingdom as local.");
+    }
+
 void testGameEngineRestoresFactoryIds() {
     GameConfig config;
     GameEngine engine;
@@ -97,9 +175,13 @@ void testSaveManagerRoundTrip() {
     data.turnNumber = 7;
     data.activeKingdom = KingdomId::Black;
     data.mapRadius = 5;
-    data.sessionKingdoms = defaultKingdomParticipants(GameMode::AIvsAI);
-    data.sessionKingdoms[0].participantName = "AI \"Alpha\"";
-    data.sessionKingdoms[1].participantName = "AI Beta";
+    data.sessionKingdoms = defaultKingdomParticipants(GameMode::HumanVsHuman);
+    data.sessionKingdoms[0].participantName = "Player \"Alpha\"";
+    data.sessionKingdoms[1].participantName = "Player Beta";
+    data.multiplayer.enabled = true;
+    data.multiplayer.port = 42000;
+    data.multiplayer.passwordHash = "argon2id$example_hash";
+    data.multiplayer.passwordSalt = "example_salt";
     data.refreshLegacyMetadataFromSession();
 
     data.grid = {
@@ -135,9 +217,212 @@ void testSaveManagerRoundTrip() {
            "Event messages should preserve escaped characters.");
     expect(loaded.sessionKingdoms[0].participantName == data.sessionKingdoms[0].participantName,
            "Session participant names should round-trip through SaveManager.");
-    expect(loaded.controllers[0] == ControllerType::AI && loaded.controllers[1] == ControllerType::AI,
+        expect(loaded.controllers[0] == ControllerType::Human && loaded.controllers[1] == ControllerType::Human,
            "Legacy controller metadata should stay aligned with session metadata.");
+        expect(loaded.multiplayer.enabled && loaded.multiplayer.port == data.multiplayer.port,
+            "Multiplayer metadata should round-trip through SaveManager.");
+        expect(loaded.multiplayer.passwordHash == data.multiplayer.passwordHash,
+            "Multiplayer password hash should round-trip through SaveManager.");
 }
+
+        void testSaveManagerStringRoundTrip() {
+            SaveData data;
+            data.gameName = "save_string_roundtrip";
+            data.turnNumber = 3;
+            data.activeKingdom = KingdomId::White;
+            data.mapRadius = 4;
+            data.sessionKingdoms = defaultKingdomParticipants(GameMode::HumanVsHuman);
+            data.multiplayer.enabled = true;
+            data.multiplayer.port = 41000;
+            data.multiplayer.passwordSalt = "salt";
+            data.multiplayer.passwordHash = MultiplayerPasswordUtils::computePasswordDigest("secret", data.multiplayer.passwordSalt);
+            data.refreshLegacyMetadataFromSession();
+
+            SaveManager manager;
+            const std::string serialized = manager.serialize(data);
+            expect(!serialized.empty(), "SaveManager should serialize save data to a non-empty string.");
+
+            SaveData loaded;
+            expect(manager.deserialize(serialized, loaded), "SaveManager should deserialize save data from a string snapshot.");
+            expect(loaded.gameName == data.gameName, "Serialized string snapshots should preserve the game name.");
+            expect(loaded.multiplayer.port == data.multiplayer.port, "Serialized string snapshots should preserve multiplayer metadata.");
+        }
+
+        void testMultiplayerPasswordDigest() {
+            const std::string salt = MultiplayerPasswordUtils::generateSalt();
+            expect(!salt.empty(), "Generated multiplayer salts should not be empty.");
+
+            const std::string digestA = MultiplayerPasswordUtils::computePasswordDigest("secret", salt);
+            const std::string digestB = MultiplayerPasswordUtils::computePasswordDigest("secret", salt);
+            const std::string digestC = MultiplayerPasswordUtils::computePasswordDigest("different", salt);
+
+            expect(digestA == digestB, "Password digests should be deterministic for the same password and salt.");
+            expect(digestA != digestC, "Password digests should change when the password changes.");
+        }
+
+        void testMultiplayerTurnSubmissionPacketRoundTrip() {
+            TurnCommand command;
+            command.type = TurnCommand::Build;
+            command.pieceId = 42;
+            command.origin = {1, 2};
+            command.destination = {3, 4};
+            command.buildingType = BuildingType::Barracks;
+            command.buildOrigin = {5, 6};
+            command.barracksId = 7;
+            command.produceType = PieceType::Knight;
+            command.upgradePieceId = 8;
+            command.upgradeTarget = PieceType::Rook;
+            command.formationId = 9;
+
+            sf::Packet packet = createPacket(MultiplayerMessageType::TurnSubmission);
+            expect(writePacket(packet, MultiplayerTurnSubmission{{command}}),
+                "Protocol should serialize turn submission packets.");
+
+            MultiplayerMessageType type = MultiplayerMessageType::ServerInfoRequest;
+            expect(extractMessageType(packet, type), "Protocol should decode packet types.");
+            expect(type == MultiplayerMessageType::TurnSubmission,
+                "Packet type should remain the submitted multiplayer message type.");
+
+            MultiplayerTurnSubmission submission;
+            expect(readPacket(packet, submission), "Protocol should deserialize turn submission packets.");
+            expect(submission.commands.size() == 1, "Turn submission packets should preserve command counts.");
+            expect(submission.commands[0].buildOrigin == command.buildOrigin,
+                "Turn submission packets should preserve command payloads.");
+            expect(submission.commands[0].upgradeTarget == command.upgradeTarget,
+                "Turn submission packets should preserve enum payloads.");
+        }
+
+        void testMultiplayerTurnRejectedPacketRoundTrip() {
+            sf::Packet packet = createPacket(MultiplayerMessageType::TurnRejected);
+            expect(writePacket(packet, MultiplayerTurnRejected{"Rejected test turn."}),
+                "Protocol should serialize turn rejection packets.");
+
+            MultiplayerMessageType type = MultiplayerMessageType::ServerInfoRequest;
+            expect(extractMessageType(packet, type), "Protocol should decode turn rejection packet types.");
+            expect(type == MultiplayerMessageType::TurnRejected,
+                "Turn rejection packets should preserve their multiplayer message type.");
+
+            MultiplayerTurnRejected rejection;
+            expect(readPacket(packet, rejection), "Protocol should deserialize turn rejection packets.");
+            expect(rejection.reason == "Rejected test turn.",
+                "Turn rejection packets should preserve the rejection reason.");
+        }
+
+        void testMultiplayerLoopbackSmoke() {
+            MultiplayerConfig config;
+            config.enabled = true;
+            config.passwordSalt = "loopback_salt";
+            config.passwordHash = MultiplayerPasswordUtils::computePasswordDigest("secret", config.passwordSalt);
+
+            MultiplayerServer server;
+            unsigned short port = 47000;
+            bool started = false;
+            for (; port < 47100; ++port) {
+                std::string startError;
+                if (server.start(port, "loopback_save", config, &startError)) {
+                    started = true;
+                    break;
+                }
+            }
+            expect(started, "Loopback multiplayer test could not find a free local port.");
+
+            MultiplayerClient client;
+            std::string error;
+            expect(client.connect(sf::IpAddress::LocalHost, port, sf::seconds(1.f), &error),
+                   "Loopback multiplayer client should connect to the local server.");
+            expect(client.requestServerInfo(&error),
+                   "Loopback multiplayer client should be able to request server info.");
+
+            MultiplayerServerInfo info;
+            bool receivedInfo = false;
+            expect(waitUntil([&]() {
+                server.update();
+                client.update();
+
+                while (client.hasPendingEvent()) {
+                    const auto event = client.popNextEvent();
+                    if (event.type == MultiplayerClient::Event::Type::ServerInfoReceived) {
+                        info = event.serverInfo;
+                        receivedInfo = true;
+                        return true;
+                    }
+                }
+
+                return false;
+            }), "Loopback multiplayer test should receive server info.");
+            expect(receivedInfo && info.joinable,
+                   "Loopback multiplayer server info should report a joinable session.");
+
+            expect(client.sendJoinRequest(MultiplayerPasswordUtils::computePasswordDigest("secret", info.passwordSalt), &error),
+                   "Loopback multiplayer client should be able to send a join request.");
+
+            bool joinAccepted = false;
+            bool serverConnectedEvent = false;
+            expect(waitUntil([&]() {
+                server.update();
+                client.update();
+
+                while (server.hasPendingEvent()) {
+                    const auto event = server.popNextEvent();
+                    if (event.type == MultiplayerServer::Event::Type::ClientConnected) {
+                        serverConnectedEvent = true;
+                    }
+                }
+
+                while (client.hasPendingEvent()) {
+                    const auto event = client.popNextEvent();
+                    if (event.type == MultiplayerClient::Event::Type::JoinAccepted) {
+                        joinAccepted = true;
+                    }
+                }
+
+                return joinAccepted && serverConnectedEvent;
+            }), "Loopback multiplayer join handshake should complete.");
+
+            expect(server.sendSnapshot("{\"snapshot\":true}", &error),
+                   "Loopback multiplayer server should send snapshots after join.");
+
+            bool receivedSnapshot = false;
+            expect(waitUntil([&]() {
+                client.update();
+                while (client.hasPendingEvent()) {
+                    const auto event = client.popNextEvent();
+                    if (event.type == MultiplayerClient::Event::Type::SnapshotReceived) {
+                        receivedSnapshot = (event.serializedSaveData == "{\"snapshot\":true}");
+                        return receivedSnapshot;
+                    }
+                }
+
+                return false;
+            }), "Loopback multiplayer client should receive state snapshots.");
+
+            TurnCommand command;
+            command.type = TurnCommand::Move;
+            command.pieceId = 17;
+            command.origin = {1, 1};
+            command.destination = {2, 2};
+            expect(client.sendTurnSubmission({command}, &error),
+                   "Loopback multiplayer client should send turn submissions.");
+
+            bool receivedTurn = false;
+            expect(waitUntil([&]() {
+                server.update();
+                while (server.hasPendingEvent()) {
+                    const auto event = server.popNextEvent();
+                    if (event.type == MultiplayerServer::Event::Type::TurnSubmitted) {
+                        receivedTurn = event.commands.size() == 1
+                            && event.commands[0].pieceId == command.pieceId
+                            && event.commands[0].destination == command.destination;
+                        return receivedTurn;
+                    }
+                }
+
+                return false;
+            }), "Loopback multiplayer server should receive remote turn submissions.");
+
+            client.disconnect();
+            server.stop();
+        }
 
 void testTurnSystemSkipsUnaffordableBuild() {
     GameConfig config;
@@ -222,8 +507,16 @@ int main() {
     const std::vector<std::pair<std::string, void(*)()>> tests = {
         {"session defaults", testSessionConfigDefaults},
         {"session validator", testSessionValidatorRejectsInvalidOrdering},
+        {"multiplayer validator controllers", testSessionValidatorRejectsInvalidMultiplayerControllers},
+        {"multiplayer validator port", testSessionValidatorRejectsInvalidMultiplayerPort},
+        {"local player context", testLocalPlayerContextModes},
         {"engine restore factory sync", testGameEngineRestoresFactoryIds},
         {"save manager roundtrip", testSaveManagerRoundTrip},
+        {"save manager string roundtrip", testSaveManagerStringRoundTrip},
+        {"multiplayer password digest", testMultiplayerPasswordDigest},
+        {"multiplayer turn packet roundtrip", testMultiplayerTurnSubmissionPacketRoundTrip},
+        {"multiplayer turn rejection packet roundtrip", testMultiplayerTurnRejectedPacketRoundTrip},
+        {"multiplayer loopback smoke", testMultiplayerLoopbackSmoke},
         {"turn system affordability", testTurnSystemSkipsUnaffordableBuild},
         {"projected income helper", testProjectedIncomeHelper},
         {"in-game view model builder", testInGameViewModelBuilder},

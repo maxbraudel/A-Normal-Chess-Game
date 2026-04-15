@@ -101,6 +101,79 @@ std::string unescapeJsonString(const std::string& value) {
 
 }
 
+void SaveManager::writeJson(std::ostream& output, const SaveData& data) {
+    SaveData normalized = data;
+    normalized.refreshLegacyMetadataFromSession();
+
+    output << "{\n";
+    output << "  \"gameName\": \"" << SaveManager::escapeJsonString(normalized.gameName) << "\",\n";
+    output << "  \"turnNumber\": " << normalized.turnNumber << ",\n";
+    output << "  \"activeKingdom\": " << static_cast<int>(normalized.activeKingdom) << ",\n";
+    output << "  \"mapRadius\": " << normalized.mapRadius << ",\n";
+    output << "  \"gameMode\": " << static_cast<int>(normalized.mode) << ",\n";
+    output << "  \"whiteController\": " << static_cast<int>(normalized.controllers[0]) << ",\n";
+    output << "  \"blackController\": " << static_cast<int>(normalized.controllers[1]) << ",\n";
+    output << "  \"whiteName\": \"" << SaveManager::escapeJsonString(normalized.participantNames[0]) << "\",\n";
+    output << "  \"blackName\": \"" << SaveManager::escapeJsonString(normalized.participantNames[1]) << "\",\n";
+    output << "  \"sessionKingdoms\": [";
+    for (int kingdomSlot = 0; kingdomSlot < kNumKingdoms; ++kingdomSlot) {
+        if (kingdomSlot > 0) output << ", ";
+        output << SaveManager::serializeParticipant(normalized.sessionKingdoms[kingdomSlot]);
+    }
+    output << "],\n";
+    output << "  \"multiplayer\": " << SaveManager::serializeMultiplayerConfig(normalized.multiplayer) << ",\n";
+
+    output << "  \"grid\": [\n";
+    for (std::size_t y = 0; y < normalized.grid.size(); ++y) {
+        output << "    [";
+        for (std::size_t x = 0; x < normalized.grid[y].size(); ++x) {
+            output << "{\"t\":" << static_cast<int>(normalized.grid[y][x].type)
+                   << ",\"c\":" << (normalized.grid[y][x].isInCircle ? 1 : 0) << "}";
+            if (x + 1 < normalized.grid[y].size()) output << ",";
+        }
+        output << "]";
+        if (y + 1 < normalized.grid.size()) output << ",";
+        output << "\n";
+    }
+    output << "  ],\n";
+
+    static const char* kingdomKeys[] = {"whiteKingdom", "blackKingdom"};
+    for (int k = 0; k < kNumKingdoms; ++k) {
+        const auto& kd = normalized.kingdoms[k];
+        output << "  \"" << kingdomKeys[k] << "\": {\n";
+        output << "    \"gold\": " << kd.gold << ",\n";
+        output << "    \"pieces\": [";
+        for (std::size_t i = 0; i < kd.pieces.size(); ++i) {
+            if (i > 0) output << ", ";
+            output << SaveManager::serializePiece(kd.pieces[i]);
+        }
+        output << "],\n";
+        output << "    \"buildings\": [";
+        for (std::size_t i = 0; i < kd.buildings.size(); ++i) {
+            if (i > 0) output << ", ";
+            output << SaveManager::serializeBuilding(kd.buildings[i]);
+        }
+        output << "]\n  }";
+        output << ",\n";
+    }
+
+    output << "  \"publicBuildings\": [";
+    for (std::size_t i = 0; i < normalized.publicBuildings.size(); ++i) {
+        if (i > 0) output << ", ";
+        output << SaveManager::serializeBuilding(normalized.publicBuildings[i]);
+    }
+    output << "],\n";
+
+    output << "  \"events\": [";
+    for (std::size_t i = 0; i < normalized.events.size(); ++i) {
+        if (i > 0) output << ", ";
+        output << SaveManager::serializeEvent(normalized.events[i]);
+    }
+    output << "]\n";
+
+    output << "}\n";
+}
+
 std::string SaveManager::escapeJsonString(const std::string& value) {
     std::string escaped;
     escaped.reserve(value.size());
@@ -251,6 +324,17 @@ std::string SaveManager::serializeParticipant(const KingdomParticipantConfig& pa
     return ss.str();
 }
 
+std::string SaveManager::serializeMultiplayerConfig(const MultiplayerConfig& multiplayer) {
+    std::ostringstream ss;
+    ss << "{ \"enabled\": " << (multiplayer.enabled ? "true" : "false")
+       << ", \"port\": " << multiplayer.port
+       << ", \"passwordHash\": \"" << escapeJsonString(multiplayer.passwordHash) << "\""
+       << ", \"passwordSalt\": \"" << escapeJsonString(multiplayer.passwordSalt) << "\""
+       << ", \"protocolVersion\": " << multiplayer.protocolVersion
+       << " }";
+    return ss.str();
+}
+
 std::string SaveManager::serializePiece(const Piece& p) {
     std::ostringstream ss;
     ss << "{ \"id\": " << p.id
@@ -310,6 +394,23 @@ KingdomParticipantConfig SaveManager::parseParticipant(const std::string& json) 
     return participant;
 }
 
+MultiplayerConfig SaveManager::parseMultiplayerConfig(const std::string& json) {
+    MultiplayerConfig multiplayer;
+    multiplayer.enabled = extractBool(json, "enabled", false);
+    multiplayer.port = extractInt(json, "port", 0);
+    multiplayer.passwordHash = extractString(json, "passwordHash");
+    multiplayer.passwordSalt = extractString(json, "passwordSalt");
+
+    const int protocolVersion = extractInt(
+        json,
+        "protocolVersion",
+        static_cast<int>(kCurrentMultiplayerProtocolVersion));
+    multiplayer.protocolVersion = (protocolVersion > 0)
+        ? static_cast<std::uint32_t>(protocolVersion)
+        : 0u;
+    return multiplayer;
+}
+
 Piece SaveManager::parsePiece(const std::string& json) {
     Piece p;
     p.id = extractInt(json, "id", 0);
@@ -365,79 +466,7 @@ bool SaveManager::save(const std::string& filepath, const SaveData& data) {
     std::ofstream file(filepath);
     if (!file.is_open()) return false;
 
-    SaveData normalized = data;
-    normalized.refreshLegacyMetadataFromSession();
-
-    file << "{\n";
-    file << "  \"gameName\": \"" << escapeJsonString(normalized.gameName) << "\",\n";
-    file << "  \"turnNumber\": " << normalized.turnNumber << ",\n";
-    file << "  \"activeKingdom\": " << static_cast<int>(normalized.activeKingdom) << ",\n";
-    file << "  \"mapRadius\": " << normalized.mapRadius << ",\n";
-    file << "  \"gameMode\": " << static_cast<int>(normalized.mode) << ",\n";
-    file << "  \"whiteController\": " << static_cast<int>(normalized.controllers[0]) << ",\n";
-    file << "  \"blackController\": " << static_cast<int>(normalized.controllers[1]) << ",\n";
-    file << "  \"whiteName\": \"" << escapeJsonString(normalized.participantNames[0]) << "\",\n";
-    file << "  \"blackName\": \"" << escapeJsonString(normalized.participantNames[1]) << "\",\n";
-    file << "  \"sessionKingdoms\": [";
-    for (int kingdomSlot = 0; kingdomSlot < kNumKingdoms; ++kingdomSlot) {
-        if (kingdomSlot > 0) file << ", ";
-        file << serializeParticipant(normalized.sessionKingdoms[kingdomSlot]);
-    }
-    file << "],\n";
-
-    // Grid
-    file << "  \"grid\": [\n";
-    for (std::size_t y = 0; y < normalized.grid.size(); ++y) {
-        file << "    [";
-        for (std::size_t x = 0; x < normalized.grid[y].size(); ++x) {
-            file << "{\"t\":" << static_cast<int>(normalized.grid[y][x].type)
-                 << ",\"c\":" << (normalized.grid[y][x].isInCircle ? 1 : 0) << "}";
-            if (x + 1 < normalized.grid[y].size()) file << ",";
-        }
-        file << "]";
-        if (y + 1 < normalized.grid.size()) file << ",";
-        file << "\n";
-    }
-    file << "  ],\n";
-
-    // Kingdoms (JSON keys "whiteKingdom"/"blackKingdom" kept for backward compatibility)
-    static const char* kingdomKeys[] = {"whiteKingdom", "blackKingdom"};
-    for (int k = 0; k < kNumKingdoms; ++k) {
-        const auto& kd = normalized.kingdoms[k];
-        file << "  \"" << kingdomKeys[k] << "\": {\n";
-        file << "    \"gold\": " << kd.gold << ",\n";
-        file << "    \"pieces\": [";
-        for (std::size_t i = 0; i < kd.pieces.size(); ++i) {
-            if (i > 0) file << ", ";
-            file << serializePiece(kd.pieces[i]);
-        }
-        file << "],\n";
-        file << "    \"buildings\": [";
-        for (std::size_t i = 0; i < kd.buildings.size(); ++i) {
-            if (i > 0) file << ", ";
-            file << serializeBuilding(kd.buildings[i]);
-        }
-        file << "]\n  }";
-        file << ",\n";
-    }
-
-    // Public buildings
-    file << "  \"publicBuildings\": [";
-    for (std::size_t i = 0; i < normalized.publicBuildings.size(); ++i) {
-        if (i > 0) file << ", ";
-        file << serializeBuilding(normalized.publicBuildings[i]);
-    }
-    file << "],\n";
-
-    // Events
-    file << "  \"events\": [";
-    for (std::size_t i = 0; i < normalized.events.size(); ++i) {
-        if (i > 0) file << ", ";
-        file << serializeEvent(normalized.events[i]);
-    }
-    file << "]\n";
-
-    file << "}\n";
+    writeJson(file, data);
     file.close();
     return true;
 }
@@ -448,8 +477,21 @@ bool SaveManager::load(const std::string& filepath, SaveData& outData) {
 
     std::stringstream ss;
     ss << file.rdbuf();
-    std::string json = ss.str();
     file.close();
+
+    return deserialize(ss.str(), outData);
+}
+
+std::string SaveManager::serialize(const SaveData& data) {
+    std::ostringstream output;
+    writeJson(output, data);
+    return output.str();
+}
+
+bool SaveManager::deserialize(const std::string& json, SaveData& outData) {
+    if (json.empty()) {
+        return false;
+    }
 
     outData.gameName = extractString(json, "gameName");
     outData.turnNumber = extractInt(json, "turnNumber", 1);
@@ -477,6 +519,7 @@ bool SaveManager::load(const std::string& filepath, SaveData& outData) {
             outData.sessionKingdoms[kingdomSlot] = parseParticipant(participantElements[kingdomSlot]);
         }
     }
+    outData.multiplayer = parseMultiplayerConfig(extractSection(json, "multiplayer"));
     outData.refreshLegacyMetadataFromSession();
 
     // Parse kingdoms
@@ -553,6 +596,7 @@ std::vector<SaveSummary> SaveManager::listSaveSummaries(const std::string& saves
         SaveData data;
         if (load(entry.path().string(), data)) {
             summary.kingdoms = data.sessionKingdoms;
+            summary.multiplayer = data.multiplayer;
         }
 
         std::error_code timeError;

@@ -50,13 +50,53 @@ bool GameStateValidator::validateKingdomParticipants(
     return true;
 }
 
+bool GameStateValidator::validateMultiplayerConfig(
+    const std::array<KingdomParticipantConfig, kNumKingdoms>& participants,
+    const MultiplayerConfig& multiplayer,
+    std::string* errorMessage) {
+    if (!multiplayer.enabled) {
+        return true;
+    }
+
+    if (!supportsMultiplayerParticipants(participants)) {
+        writeError(errorMessage, "Multiplayer sessions require two human-controlled kingdoms.");
+        return false;
+    }
+
+    if (!isValidMultiplayerPort(multiplayer.port)) {
+        writeError(errorMessage, "Multiplayer sessions require a valid LAN port between 1 and 65535.");
+        return false;
+    }
+
+    if (multiplayer.passwordHash.empty()) {
+        writeError(errorMessage, "Multiplayer sessions require a password hash.");
+        return false;
+    }
+
+    if (multiplayer.passwordSalt.empty()) {
+        writeError(errorMessage, "Multiplayer sessions require a password salt.");
+        return false;
+    }
+
+    if (multiplayer.protocolVersion == 0) {
+        writeError(errorMessage, "Multiplayer sessions require a valid protocol version.");
+        return false;
+    }
+
+    return true;
+}
+
 bool GameStateValidator::validateSessionConfig(const GameSessionConfig& session, std::string* errorMessage) {
     if (session.saveName.empty()) {
         writeError(errorMessage, "Save name is required.");
         return false;
     }
 
-    return validateKingdomParticipants(session.kingdoms, errorMessage);
+    if (!validateKingdomParticipants(session.kingdoms, errorMessage)) {
+        return false;
+    }
+
+    return validateMultiplayerConfig(session.kingdoms, session.multiplayer, errorMessage);
 }
 
 bool GameStateValidator::validateSaveData(const SaveData& data, std::string* errorMessage) {
@@ -77,6 +117,9 @@ bool GameStateValidator::validateSaveData(const SaveData& data, std::string* err
         return false;
     }
     if (!validateKingdomParticipants(data.sessionKingdoms, errorMessage)) {
+        return false;
+    }
+    if (!validateMultiplayerConfig(data.sessionKingdoms, data.multiplayer, errorMessage)) {
         return false;
     }
 

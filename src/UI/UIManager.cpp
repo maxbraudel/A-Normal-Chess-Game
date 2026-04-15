@@ -59,8 +59,88 @@ void UIManager::init(tgui::Gui& gui, const AssetManager& assets) {
     m_kingdomBalancePanel.init(m_rightBalanceSection);
     m_toolBar.init(gui);
 
+    m_multiplayerWaitingOverlay = tgui::Panel::create({"100%", "100%"});
+    m_multiplayerWaitingOverlay->getRenderer()->setBackgroundColor(tgui::Color(0, 0, 0, 140));
+    gui.add(m_multiplayerWaitingOverlay, "MultiplayerWaitingOverlay");
+
+    auto waitingDialog = tgui::Panel::create({540, 230});
+    waitingDialog->setPosition({"(&.parent.width - width) / 2", "(&.parent.height - height) / 2"});
+    waitingDialog->getRenderer()->setBackgroundColor(tgui::Color(32, 32, 32, 240));
+    waitingDialog->getRenderer()->setBorders(2);
+    waitingDialog->getRenderer()->setBorderColor(tgui::Color(196, 160, 76));
+    m_multiplayerWaitingOverlay->add(waitingDialog);
+
+    m_multiplayerWaitingTitle = tgui::Label::create("Waiting for Player");
+    m_multiplayerWaitingTitle->setPosition({24, 22});
+    m_multiplayerWaitingTitle->setSize({492, 30});
+    m_multiplayerWaitingTitle->setAutoSize(false);
+    m_multiplayerWaitingTitle->setTextSize(26);
+    m_multiplayerWaitingTitle->getRenderer()->setTextColor(tgui::Color::White);
+    waitingDialog->add(m_multiplayerWaitingTitle);
+
+    m_multiplayerWaitingMessage = tgui::Label::create("");
+    m_multiplayerWaitingMessage->setPosition({24, 72});
+    m_multiplayerWaitingMessage->setSize({492, 120});
+    m_multiplayerWaitingMessage->setAutoSize(false);
+    m_multiplayerWaitingMessage->setTextSize(17);
+    m_multiplayerWaitingMessage->getRenderer()->setTextColor(tgui::Color(230, 230, 230));
+    waitingDialog->add(m_multiplayerWaitingMessage);
+
+    m_multiplayerWaitingButton = tgui::Button::create("Return to Menu");
+    m_multiplayerWaitingButton->setPosition({372, 186});
+    m_multiplayerWaitingButton->setSize({144, 30});
+    m_multiplayerWaitingButton->onPress([this]() {
+        const auto onClose = m_onMultiplayerWaitingClose;
+        hideMultiplayerWaitingOverlay();
+        if (onClose) {
+            onClose();
+        }
+    });
+    waitingDialog->add(m_multiplayerWaitingButton);
+
+    m_multiplayerAlertOverlay = tgui::Panel::create({"100%", "100%"});
+    m_multiplayerAlertOverlay->getRenderer()->setBackgroundColor(tgui::Color(0, 0, 0, 175));
+    gui.add(m_multiplayerAlertOverlay, "MultiplayerAlertOverlay");
+
+    auto alertDialog = tgui::Panel::create({520, 260});
+    alertDialog->setPosition({"(&.parent.width - width) / 2", "(&.parent.height - height) / 2"});
+    alertDialog->getRenderer()->setBackgroundColor(tgui::Color(40, 40, 40, 245));
+    alertDialog->getRenderer()->setBorders(2);
+    alertDialog->getRenderer()->setBorderColor(tgui::Color(140, 140, 140));
+    m_multiplayerAlertOverlay->add(alertDialog);
+
+    m_multiplayerAlertTitle = tgui::Label::create("Network Alert");
+    m_multiplayerAlertTitle->setPosition({24, 20});
+    m_multiplayerAlertTitle->setSize({472, 30});
+    m_multiplayerAlertTitle->setAutoSize(false);
+    m_multiplayerAlertTitle->setTextSize(24);
+    m_multiplayerAlertTitle->getRenderer()->setTextColor(tgui::Color::White);
+    alertDialog->add(m_multiplayerAlertTitle);
+
+    m_multiplayerAlertMessage = tgui::Label::create("");
+    m_multiplayerAlertMessage->setPosition({24, 66});
+    m_multiplayerAlertMessage->setSize({472, 126});
+    m_multiplayerAlertMessage->setAutoSize(false);
+    m_multiplayerAlertMessage->setTextSize(17);
+    m_multiplayerAlertMessage->getRenderer()->setTextColor(tgui::Color(230, 230, 230));
+    alertDialog->add(m_multiplayerAlertMessage);
+
+    m_multiplayerAlertButton = tgui::Button::create("OK");
+    m_multiplayerAlertButton->setPosition({372, 208});
+    m_multiplayerAlertButton->setSize({124, 34});
+    m_multiplayerAlertButton->onPress([this]() {
+        const auto onClose = m_onMultiplayerAlertClose;
+        hideMultiplayerAlert();
+        if (onClose) {
+            onClose();
+        }
+    });
+    alertDialog->add(m_multiplayerAlertButton);
+
     m_leftSidebar->setVisible(false);
     m_rightSidebar->setVisible(false);
+    m_multiplayerWaitingOverlay->setVisible(false);
+    m_multiplayerAlertOverlay->setVisible(false);
 }
 
 void UIManager::showMainMenu() {
@@ -138,6 +218,9 @@ void UIManager::hideAllPanels() {
     m_mainMenu.hide();
     m_hud.hide();
     m_pauseMenu.hide();
+    hideMultiplayerWaitingOverlay();
+    hideMultiplayerAlert();
+    clearMultiplayerStatus();
     hideLeftContextPanels();
     if (m_leftEmptyState) m_leftEmptyState->setVisible(false);
     m_eventLogPanel.hide();
@@ -149,6 +232,75 @@ void UIManager::hideAllPanels() {
 
 void UIManager::update() {
     // Placeholder for animation updates
+}
+
+void UIManager::setMultiplayerStatus(const std::string& text, MultiplayerStatusTone tone) {
+    m_hud.setMultiplayerStatus(text, tone);
+}
+
+void UIManager::clearMultiplayerStatus() {
+    m_hud.clearMultiplayerStatus();
+}
+
+void UIManager::showMultiplayerWaitingOverlay(const std::string& title,
+                                              const std::string& message,
+                                              const std::string& buttonLabel,
+                                              std::function<void()> onClose) {
+    m_onMultiplayerWaitingClose = std::move(onClose);
+    if (m_multiplayerWaitingTitle) {
+        m_multiplayerWaitingTitle->setText(title);
+    }
+    if (m_multiplayerWaitingMessage) {
+        m_multiplayerWaitingMessage->setText(message);
+    }
+    if (m_multiplayerWaitingButton) {
+        m_multiplayerWaitingButton->setText(buttonLabel.empty() ? "Return to Menu" : buttonLabel);
+        m_multiplayerWaitingButton->setVisible(!buttonLabel.empty() || static_cast<bool>(m_onMultiplayerWaitingClose));
+    }
+    if (m_multiplayerWaitingOverlay) {
+        m_multiplayerWaitingOverlay->setVisible(true);
+    }
+}
+
+void UIManager::hideMultiplayerWaitingOverlay() {
+    if (m_multiplayerWaitingOverlay) {
+        m_multiplayerWaitingOverlay->setVisible(false);
+    }
+    m_onMultiplayerWaitingClose = {};
+}
+
+bool UIManager::isMultiplayerWaitingOverlayVisible() const {
+    return m_multiplayerWaitingOverlay && m_multiplayerWaitingOverlay->isVisible();
+}
+
+void UIManager::showMultiplayerAlert(const std::string& title,
+                                     const std::string& message,
+                                     const std::string& buttonLabel,
+                                     std::function<void()> onClose) {
+    m_onMultiplayerAlertClose = std::move(onClose);
+    if (m_multiplayerAlertTitle) {
+        m_multiplayerAlertTitle->setText(title);
+    }
+    if (m_multiplayerAlertMessage) {
+        m_multiplayerAlertMessage->setText(message);
+    }
+    if (m_multiplayerAlertButton) {
+        m_multiplayerAlertButton->setText(buttonLabel);
+    }
+    if (m_multiplayerAlertOverlay) {
+        m_multiplayerAlertOverlay->setVisible(true);
+    }
+}
+
+void UIManager::hideMultiplayerAlert() {
+    if (m_multiplayerAlertOverlay) {
+        m_multiplayerAlertOverlay->setVisible(false);
+    }
+    m_onMultiplayerAlertClose = {};
+}
+
+bool UIManager::isMultiplayerAlertVisible() const {
+    return m_multiplayerAlertOverlay && m_multiplayerAlertOverlay->isVisible();
 }
 
 void UIManager::hideLeftContextPanels() {
