@@ -238,6 +238,7 @@ Game::Game()
 void Game::cacheReconnectRequest(const JoinMultiplayerRequest& request) {
     m_clientReconnectState.available = true;
     m_clientReconnectState.awaitingReconnect = false;
+    m_clientReconnectState.reconnectAttemptInProgress = false;
     m_clientReconnectState.lastErrorMessage.clear();
     m_clientReconnectState.request = request;
 }
@@ -256,6 +257,7 @@ bool Game::isLocalPlayerTurn() const {
 
 bool Game::canLocalPlayerIssueCommands() const {
     return (m_state == GameState::Playing)
+    && !m_uiManager.isMultiplayerAlertVisible()
         && !m_waitingForRemoteTurnResult
         && isMultiplayerSessionReady()
         && isLocalPlayerTurn();
@@ -330,6 +332,12 @@ void Game::updateMultiplayerPresentation() {
 
     if (isLanHost()) {
         if (!m_multiplayerServer.hasAuthenticatedClient()) {
+            if (m_uiManager.isMultiplayerAlertVisible()) {
+                m_uiManager.hideMultiplayerWaitingOverlay();
+                m_uiManager.setMultiplayerStatus("LAN Host | Waiting for Black", MultiplayerStatusTone::Waiting);
+                return;
+            }
+
             std::string waitingMessage = "Share this endpoint with Black:\n";
             if (!m_multiplayerHostJoinHint.empty()) {
                 waitingMessage += m_multiplayerHostJoinHint;
@@ -814,7 +822,7 @@ void Game::commitPlayerTurn() {
         std::string error;
         if (!submitClientTurn(&error)) {
             std::cerr << "Failed to submit multiplayer turn: " << error << std::endl;
-            if (!error.empty()) {
+            if (!error.empty() && m_multiplayerClient.isConnected()) {
                 m_uiManager.showMultiplayerAlert("Turn Not Sent", error);
             }
         }
@@ -878,6 +886,7 @@ void Game::stopMultiplayer() {
 
     m_multiplayerServer.stop();
     m_multiplayerClient.disconnect();
+    m_lanHostRemoteSessionEstablished = false;
     m_waitingForRemoteTurnResult = false;
     m_multiplayerHostJoinHint.clear();
     m_localPlayerContext = LocalPlayerContext{};
@@ -894,6 +903,7 @@ void Game::prepareForClientConnectionAttempt(bool preserveLanClientContext) {
 
     m_multiplayerServer.stop();
     m_multiplayerClient.disconnect();
+    m_lanHostRemoteSessionEstablished = false;
     m_waitingForRemoteTurnResult = false;
     m_multiplayerHostJoinHint.clear();
     if (!preserveLanClientContext) {
@@ -905,11 +915,14 @@ void Game::prepareForClientConnectionAttempt(bool preserveLanClientContext) {
     m_input.setTool(ToolState::Select);
     m_engine.resetPendingTurn();
     m_uiManager.hideGameMenu();
+    m_uiManager.hideMultiplayerAlert();
     m_uiManager.hideMultiplayerWaitingOverlay();
     m_uiManager.clearMultiplayerStatus();
 }
 
 bool Game::startMultiplayerHostIfNeeded(const GameSessionConfig& session, std::string* errorMessage) {
+    m_lanHostRemoteSessionEstablished = false;
+
     if (!session.multiplayer.enabled) {
         return true;
     }
@@ -1075,6 +1088,7 @@ bool Game::joinMultiplayerInternal(const JoinMultiplayerRequest& request,
     cacheReconnectRequest(request);
     m_localPlayerContext = makeLanClientLocalPlayerContext();
     m_waitingForRemoteTurnResult = false;
+    m_clientReconnectState.reconnectAttemptInProgress = false;
     m_state = GameState::Playing;
     m_input.clearMovePreview();
     m_input.clearSelection();
@@ -1104,18 +1118,39 @@ void Game::updateMultiplayer() {
 
 void Game::processMultiplayerServerEvent(const MultiplayerServer::Event& event) {
     switch (event.type) {
-        case MultiplayerServer::Event::Type::ClientConnected:
+        case MultiplayerServer::Event::Type::ClientConnected: {
             m_uiManager.hideMultiplayerAlert();
             eventLog().log(turnSystem().getTurnNumber(), KingdomId::Black, event.message);
-            pushSnapshotToRemote(nullptr);
+            m_lanHostRemoteSessionEstablished = false;
+            std::string snapshotError;
+            if (!pushSnapshotToRemote(&snapshotError)) {
+                if (!snapshotError.empty()) {
+                    eventLog().log(turnSystem().getTurnNumber(), KingdomId::Black, snapshotError);
+                }
+            } else {
+                m_lanHostRemoteSessionEstablished = true;
+            }
             break;
+        }
 
-        case MultiplayerServer::Event::Type::ClientDisconnected:
+        case MultiplayerServer::Event::Type::ClientDisconnected: {
+            const bool wasEstablished = m_lanHostRemoteSessionEstablished;
+            m_lanHostRemoteSessionEstablished = false;
             eventLog().log(turnSystem().getTurnNumber(), KingdomId::Black, event.message);
-            m_uiManager.showMultiplayerAlert(
-                "Player Disconnected",
-                event.message + "\n\nWhite is locked until Black reconnects.",
-                "Continue");
+            if (wasEstablished) {
+                m_uiManager.showMultiplayerAlert(
+                    "Black Disconnected",
+                    event.message + "\n\nWhite cannot continue until Black reconnects.",
+                    "Continue");
+            }
+            break;
+        }
+
+        case MultiplayerServer::Event::Type::ClientConnectionInterrupted:
+            m_lanHostRemoteSessionEstablished = false;
+            if (!event.message.empty()) {
+                eventLog().log(turnSystem().getTurnNumber(), KingdomId::Black, event.message);
+            }
             break;
 
         case MultiplayerServer::Event::Type::TurnSubmitted: {
@@ -1159,9 +1194,11 @@ void Game::processMultiplayerClientEvent(const MultiplayerClient::Event& event) 
             m_localPlayerContext = makeLanClientLocalPlayerContext();
             m_waitingForRemoteTurnResult = false;
             m_clientReconnectState.awaitingReconnect = false;
+            m_clientReconnectState.reconnectAttemptInProgress = false;
             m_clientReconnectState.lastErrorMessage.clear();
             m_input.clearMovePreview();
             m_input.clearSelection();
+            m_uiManager.hideMultiplayerAlert();
             refreshTurnPhase();
             updateUIState();
             break;
@@ -1186,6 +1223,7 @@ void Game::processMultiplayerClientEvent(const MultiplayerClient::Event& event) 
             m_multiplayerClient.disconnect();
             m_localPlayerContext = makeLanClientLocalPlayerContext();
             m_waitingForRemoteTurnResult = false;
+            m_clientReconnectState.reconnectAttemptInProgress = false;
             m_input.clearMovePreview();
             m_input.clearSelection();
             m_input.setTool(ToolState::Select);
@@ -1203,6 +1241,7 @@ void Game::processMultiplayerClientEvent(const MultiplayerClient::Event& event) 
 
 void Game::showLanClientDisconnectAlert(const std::string& title, const std::string& message) {
     m_clientReconnectState.awaitingReconnect = true;
+    m_clientReconnectState.reconnectAttemptInProgress = false;
     m_clientReconnectState.lastErrorMessage = message;
     m_uiManager.hideGameMenu();
 
@@ -1223,8 +1262,14 @@ void Game::showLanClientDisconnectAlert(const std::string& title, const std::str
         MultiplayerDialogAction{
             "Reconnect",
             [this]() {
+                if (m_clientReconnectState.reconnectAttemptInProgress) {
+                    return;
+                }
+
+                m_clientReconnectState.reconnectAttemptInProgress = true;
                 std::string error;
                 if (!reconnectToMultiplayerHost(&error)) {
+                    m_clientReconnectState.reconnectAttemptInProgress = false;
                     const std::string reconnectMessage = error.empty()
                         ? "Unable to reconnect to the previous multiplayer host."
                         : "Unable to reconnect to the previous multiplayer host.\n\n" + error;

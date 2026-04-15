@@ -16,25 +16,40 @@ bool MultiplayerClient::connect(const sf::IpAddress& address,
                                 std::string* errorMessage) {
     disconnect();
 
-    const sf::Socket::Status status = m_socket.connect(address, port, timeout);
+    m_socket = std::make_unique<sf::TcpSocket>();
+
+    const sf::Socket::Status status = m_socket->connect(address, port, timeout);
     if (status != sf::Socket::Done) {
         writeError(errorMessage, "Unable to connect to the multiplayer host.");
+        m_socket.reset();
         return false;
     }
 
-    m_socket.setBlocking(false);
+    m_socket->setBlocking(false);
     m_connected = true;
     return true;
 }
 
 void MultiplayerClient::disconnect() {
-    if (m_connected) {
-        m_socket.disconnect();
+    if (m_socket) {
+        m_socket->disconnect();
+        m_socket.reset();
     }
 
     m_connected = false;
     m_authenticated = false;
     m_events.clear();
+}
+
+void MultiplayerClient::handleTransportDisconnect(const std::string& message) {
+    if (m_socket) {
+        m_socket->disconnect();
+        m_socket.reset();
+    }
+
+    m_connected = false;
+    m_authenticated = false;
+    pushEvent(Event{Event::Type::Disconnected, {}, message, {}});
 }
 
 MultiplayerClient::Event MultiplayerClient::popNextEvent() {
@@ -52,14 +67,17 @@ void MultiplayerClient::pushEvent(const Event& event) {
 }
 
 bool MultiplayerClient::sendPacket(sf::Packet& packet, std::string* errorMessage) {
-    if (!m_connected) {
+    if (!m_connected || !m_socket) {
         writeError(errorMessage, "No multiplayer host connection is active.");
         return false;
     }
 
-    const sf::Socket::Status status = m_socket.send(packet);
+    m_socket->setBlocking(true);
+    const sf::Socket::Status status = m_socket->send(packet);
+    m_socket->setBlocking(false);
     if (status != sf::Socket::Done) {
         writeError(errorMessage, "Failed to send multiplayer data to the host.");
+        handleTransportDisconnect("Lost connection to the multiplayer host while sending data.");
         return false;
     }
 
@@ -141,10 +159,7 @@ void MultiplayerClient::handlePacket(sf::Packet& packet) {
             if (!readPacket(packet, notice)) {
                 notice.reason = "Disconnected from the multiplayer host.";
             }
-            m_connected = false;
-            m_authenticated = false;
-            m_socket.disconnect();
-            pushEvent(Event{Event::Type::Disconnected, {}, notice.reason, {}});
+            handleTransportDisconnect(notice.reason);
             break;
         }
 
@@ -155,23 +170,23 @@ void MultiplayerClient::handlePacket(sf::Packet& packet) {
 }
 
 void MultiplayerClient::update() {
-    if (!m_connected) {
+    if (!m_connected || !m_socket) {
         return;
     }
 
     while (true) {
         sf::Packet packet;
-        const sf::Socket::Status status = m_socket.receive(packet);
+        const sf::Socket::Status status = m_socket->receive(packet);
         if (status == sf::Socket::Done) {
             handlePacket(packet);
+            if (!m_connected || !m_socket) {
+                break;
+            }
             continue;
         }
 
         if (status == sf::Socket::Disconnected) {
-            m_connected = false;
-            m_authenticated = false;
-            m_socket.disconnect();
-            pushEvent(Event{Event::Type::Disconnected, {}, "Disconnected from the multiplayer host.", {}});
+            handleTransportDisconnect("Disconnected from the multiplayer host.");
         }
 
         break;

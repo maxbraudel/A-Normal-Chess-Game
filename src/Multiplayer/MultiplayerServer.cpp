@@ -31,13 +31,13 @@ bool MultiplayerServer::start(unsigned short port,
 }
 
 void MultiplayerServer::stop() {
-    if (m_hasClientSocket) {
-        m_clientSocket.disconnect();
+    if (m_clientSocket) {
+        m_clientSocket->disconnect();
+        m_clientSocket.reset();
     }
 
     m_listener.close();
     m_running = false;
-    m_hasClientSocket = false;
     m_clientAuthenticated = false;
     m_events.clear();
 }
@@ -53,12 +53,21 @@ MultiplayerServer::Event MultiplayerServer::popNextEvent() {
 }
 
 void MultiplayerServer::resetClientState() {
-    if (m_hasClientSocket) {
-        m_clientSocket.disconnect();
+    if (m_clientSocket) {
+        m_clientSocket->disconnect();
+        m_clientSocket.reset();
     }
 
-    m_hasClientSocket = false;
     m_clientAuthenticated = false;
+}
+
+void MultiplayerServer::handleClientTransportLoss(const std::string& authenticatedMessage,
+                                                 const std::string& interruptedMessage) {
+    const bool hadAuthenticatedClient = m_clientAuthenticated;
+    resetClientState();
+    pushEvent(hadAuthenticatedClient ? Event::Type::ClientDisconnected
+                                     : Event::Type::ClientConnectionInterrupted,
+              hadAuthenticatedClient ? authenticatedMessage : interruptedMessage);
 }
 
 void MultiplayerServer::pushEvent(Event::Type type,
@@ -68,14 +77,18 @@ void MultiplayerServer::pushEvent(Event::Type type,
 }
 
 bool MultiplayerServer::sendPacket(sf::Packet& packet, std::string* errorMessage) {
-    if (!m_hasClientSocket) {
+    if (!m_clientSocket) {
         writeError(errorMessage, "No multiplayer client is currently connected.");
         return false;
     }
 
-    const sf::Socket::Status status = m_clientSocket.send(packet);
+    m_clientSocket->setBlocking(true);
+    const sf::Socket::Status status = m_clientSocket->send(packet);
+    m_clientSocket->setBlocking(false);
     if (status != sf::Socket::Done) {
         writeError(errorMessage, "Failed to send multiplayer packet to the client.");
+        handleClientTransportLoss("Multiplayer client disconnected.",
+                                  "A multiplayer connection attempt was interrupted.");
         return false;
     }
 
@@ -123,7 +136,7 @@ bool MultiplayerServer::sendTurnRejected(const std::string& reason, std::string*
 }
 
 bool MultiplayerServer::sendDisconnectNotice(const std::string& reason, std::string* errorMessage) {
-    if (!m_hasClientSocket) {
+    if (!m_clientSocket) {
         return true;
     }
 
@@ -162,7 +175,9 @@ void MultiplayerServer::handlePacket(sf::Packet& packet) {
             }
 
             m_clientAuthenticated = true;
-            sendJoinResponse(true, "");
+            if (!sendJoinResponse(true, "")) {
+                return;
+            }
             pushEvent(Event::Type::ClientConnected, "Multiplayer client connected.");
             break;
         }
@@ -184,8 +199,8 @@ void MultiplayerServer::handlePacket(sf::Packet& packet) {
         }
 
         case MultiplayerMessageType::DisconnectNotice:
-            resetClientState();
-            pushEvent(Event::Type::ClientDisconnected, "Remote player disconnected.");
+            handleClientTransportLoss("Remote player disconnected.",
+                                      "A multiplayer connection attempt was interrupted.");
             break;
 
         default:
@@ -199,29 +214,33 @@ void MultiplayerServer::update() {
         return;
     }
 
-    if (!m_hasClientSocket) {
-        const sf::Socket::Status acceptStatus = m_listener.accept(m_clientSocket);
+    if (!m_clientSocket) {
+        auto nextSocket = std::make_unique<sf::TcpSocket>();
+        const sf::Socket::Status acceptStatus = m_listener.accept(*nextSocket);
         if (acceptStatus == sf::Socket::Done) {
-            m_clientSocket.setBlocking(false);
-            m_hasClientSocket = true;
+            nextSocket->setBlocking(false);
+            m_clientSocket = std::move(nextSocket);
         }
     }
 
-    if (!m_hasClientSocket) {
+    if (!m_clientSocket) {
         return;
     }
 
     while (true) {
         sf::Packet packet;
-        const sf::Socket::Status status = m_clientSocket.receive(packet);
+        const sf::Socket::Status status = m_clientSocket->receive(packet);
         if (status == sf::Socket::Done) {
             handlePacket(packet);
+            if (!m_clientSocket) {
+                break;
+            }
             continue;
         }
 
         if (status == sf::Socket::Disconnected) {
-            resetClientState();
-            pushEvent(Event::Type::ClientDisconnected, "Multiplayer client disconnected.");
+            handleClientTransportLoss("Multiplayer client disconnected.",
+                                      "A multiplayer connection attempt was interrupted before joining.");
         }
 
         break;

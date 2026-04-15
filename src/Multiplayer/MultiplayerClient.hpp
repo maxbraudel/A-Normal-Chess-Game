@@ -3,6 +3,7 @@
 #include <SFML/Network.hpp>
 
 #include <deque>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -44,11 +45,12 @@ public:
     Event popNextEvent();
 
 private:
+    void handleTransportDisconnect(const std::string& message);
     void pushEvent(const Event& event);
     bool sendPacket(sf::Packet& packet, std::string* errorMessage = nullptr);
     void handlePacket(sf::Packet& packet);
 
-    sf::TcpSocket m_socket;
+    std::unique_ptr<sf::TcpSocket> m_socket;
     bool m_connected = false;
     bool m_authenticated = false;
     std::deque<Event> m_events;

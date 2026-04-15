@@ -3,6 +3,7 @@
 #include <SFML/Network.hpp>
 
 #include <deque>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -15,6 +16,7 @@ public:
         enum class Type {
             ClientConnected,
             ClientDisconnected,
+            ClientConnectionInterrupted,
             TurnSubmitted,
             Error
         };
@@ -42,6 +44,8 @@ public:
 
 private:
     void resetClientState();
+    void handleClientTransportLoss(const std::string& authenticatedMessage,
+                                   const std::string& interruptedMessage);
     void pushEvent(Event::Type type, const std::string& message, const std::vector<TurnCommand>& commands = {});
     bool sendPacket(sf::Packet& packet, std::string* errorMessage = nullptr);
     void handlePacket(sf::Packet& packet);
@@ -49,9 +53,8 @@ private:
     bool sendJoinResponse(bool accepted, const std::string& reason);
 
     sf::TcpListener m_listener;
-    sf::TcpSocket m_clientSocket;
+    std::unique_ptr<sf::TcpSocket> m_clientSocket;
     bool m_running = false;
-    bool m_hasClientSocket = false;
     bool m_clientAuthenticated = false;
     unsigned short m_port = 0;
     std::string m_saveName;

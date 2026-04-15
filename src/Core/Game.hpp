@@ -187,6 +187,7 @@ private:
     struct ClientReconnectState {
         bool available = false;
         bool awaitingReconnect = false;
+        bool reconnectAttemptInProgress = false;
         JoinMultiplayerRequest request;
         std::string lastErrorMessage;
     };
@@ -195,6 +196,7 @@ private:
     LocalPlayerContext m_localPlayerContext;
     MultiplayerServer m_multiplayerServer;
     MultiplayerClient m_multiplayerClient;
+    bool m_lanHostRemoteSessionEstablished = false;
     bool m_waitingForRemoteTurnResult = false;
     std::string m_multiplayerHostJoinHint;
 
