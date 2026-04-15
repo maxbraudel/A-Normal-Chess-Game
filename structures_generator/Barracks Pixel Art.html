@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Barracks Structure Generator</title>
+<link rel="stylesheet" href="./structure-generator.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="./structure-generator-core.js"></script>
+</head>
+<body>
+<div class="structure-app">
+  <aside class="control-rail">
+    <section class="brand-block">
+      <p class="eyebrow">Chunked Pixel Structure Generator</p>
+      <h1 id="buildingTitle"></h1>
+      <p class="subtitle" id="buildingSubtitle"></p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Generator Config</h2>
+          <p>This barracks page only defines the footprint, export naming and the draw rules for the compound.</p>
+        </div>
+      </div>
+      <div class="meta-grid">
+        <div class="meta-card"><span>Chunk Grid</span><strong id="chunkDimensions"></strong></div>
+        <div class="meta-card"><span>Pixel Size</span><strong id="pixelDimensions"></strong></div>
+        <div class="meta-card"><span>Chunk Size</span><strong id="chunkSize"></strong></div>
+        <div class="meta-card"><span>Export ZIP</span><strong id="exportName"></strong></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Workflow Notes</h2>
+          <p>The shared engine still handles previews, chunk naming, guides and ZIP export.</p>
+        </div>
+      </div>
+      <ul class="notes-list" id="notesList"></ul>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Export</h2>
+          <p>One click packages the full 4x3 barracks compound into chunk-ready textures.</p>
+        </div>
+      </div>
+      <div class="button-row">
+        <button class="primary-button" id="downloadButton" type="button">Download ZIP Chunks</button>
+        <div class="status-pill" id="downloadStatus"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Chunk Names</h2>
+          <p id="chunkCount"></p>
+        </div>
+      </div>
+      <div class="chunk-name-list" id="chunkNameList"></div>
+    </section>
+  </aside>
+
+  <main class="workspace">
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Master Layout</h2>
+          <p>A detailed top-down military barracks compound with dormitory wings, a command hall, fortified walls, a parade yard and training equipment.</p>
+        </div>
+        <label class="toggle"><input id="chunkGuideToggle" type="checkbox" checked> Show chunk guides</label>
+      </div>
+      <div class="canvas-frame">
+        <canvas id="masterCanvas"></canvas>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Chunk Preview</h2>
+          <p>Exact export order with local previews for every barracks chunk.</p>
+        </div>
+      </div>
+      <div class="chunk-preview-grid" id="chunkPreviewGrid"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+const barracksConfig = {
+  title: "Barracks Structure Generator",
+  subtitle: "A highly detailed 4x3 chunk top-down barracks with a fortified wall, command house, dormitory and armory wings, parade yard and training props.",
+  buildingName: "barracks",
+  widthChunks: 4,
+  heightChunks: 3,
+  previewScale: 10,
+  chunkPreviewScale: 6,
+  defaultTile: "grass",
+  chunkFileName: ({ buildingName, chunkX, chunkY }) => `${buildingName}_${chunkX + 1}_${chunkY + 1}.png`,
+  zipFileName: ({ buildingName }) => `${buildingName}_chunks.zip`,
+  notes: [
+    "This layout is 4 chunks wide by 3 chunks high, producing a 64x48 master texture.",
+    "The composition uses a fortified perimeter with three major roofs around a central parade yard.",
+    "Training props, banners and supply stacks are kept in helper functions so the scene stays readable and easy to remix.",
+    "Chunk naming remains configurable through chunkFileName if you want another export convention."
+  ],
+  palette: {
+    grass: "#647f45",
+    grassAlt: "#76935a",
+    grassDark: "#4e6537",
+    dirt: "#7f5d3a",
+    dirtAlt: "#956b43",
+    dirtDark: "#5e4329",
+    cobble: "#918471",
+    cobbleAlt: "#a29482",
+    cobbleDark: "#6f6351",
+    wallStone: "#b1a38b",
+    wallStoneLight: "#c7baa4",
+    wallStoneDark: "#81745f",
+    towerStone: "#96886f",
+    wood: "#7a5330",
+    woodDark: "#55381f",
+    woodLight: "#9c6d41",
+    roofSlate: "#5c6679",
+    roofSlateDark: "#454d5c",
+    roofSlateLight: "#78839a",
+    roofRed: "#8d3f3a",
+    roofRedDark: "#6d302c",
+    roofRedLight: "#a7544c",
+    plaster: "#d9d2c4",
+    brass: "#c79e4a",
+    bannerBlue: "#32577b",
+    bannerRed: "#8e2e32",
+    bannerGold: "#d8bb63",
+    shadow: "#3f342a",
+    fireCore: "#f6d57c",
+    fireGlow: "#d8882f",
+    steel: "#a8afb5",
+    cloth: "#6c3d2f",
+    target: "#c3b084"
+  },
+  draw(structure) {
+    const width = structure.widthPixels;
+    const height = structure.heightPixels;
+
+    function scatterGroundNoise() {
+      for (let y = 1; y < height - 1; y += 3) {
+        for (let x = 1 + ((y / 3) % 2); x < width - 1; x += 4) {
+          structure.set(x, y, "grassAlt");
+          if (x + 1 < width - 1) {
+            structure.set(x + 1, y + 1 < height ? y + 1 : y, "grassDark");
+          }
+        }
+      }
+    }
+
+    function drawCornerTower(x, y) {
+      structure.fillRect(x, y, 8, 8, "towerStone");
+      structure.fillRect(x + 1, y + 1, 6, 6, "wallStone");
+      structure.strokeRect(x, y, 8, 8, "wallStoneDark");
+      structure.lineH(y + 3, x + 1, x + 6, "wallStoneDark");
+      structure.lineV(x + 3, y + 1, y + 6, "wallStoneDark");
+      structure.points([[x + 2, y + 2], [x + 5, y + 2], [x + 2, y + 5], [x + 5, y + 5]], "wallStoneLight");
+    }
+
+    function drawBrazier(cx, cy) {
+      structure.fillEllipse(cx, cy, 2, 2, "fireGlow");
+      structure.fillRect(cx - 1, cy, 3, 2, "woodDark");
+      structure.set(cx, cy - 1, "fireCore");
+      structure.points([[cx - 1, cy], [cx + 1, cy], [cx, cy + 1]], "fireGlow");
+    }
+
+    function drawBanner(x, y, colorTile) {
+      structure.fillRect(x, y, 2, 6, "bannerGold");
+      structure.fillRect(x + 2, y + 1, 4, 4, colorTile);
+      structure.fillRect(x + 3, y + 5, 2, 2, colorTile);
+      structure.points([[x + 3, y + 2], [x + 4, y + 3]], "bannerGold");
+    }
+
+    function drawCrate(x, y) {
+      structure.stamp(x, y, [
+        "LLLL",
+        "LWWL",
+        "LWWL",
+        "LLLL"
+      ], {
+        L: "woodLight",
+        W: "wood"
+      });
+    }
+
+    function drawBarrel(x, y) {
+      structure.stamp(x, y, [
+        ".LL.",
+        "LWWL",
+        "LWWL",
+        ".LL."
+      ], {
+        L: "woodLight",
+        W: "woodDark"
+      });
+    }
+
+    function drawWeaponRack(x, y, vertical) {
+      if (vertical) {
+        structure.fillRect(x + 1, y, 2, 7, "wood");
+        structure.fillRect(x, y + 1, 4, 1, "woodDark");
+        structure.fillRect(x, y + 5, 4, 1, "woodDark");
+        structure.lineV(x + 2, y + 1, y + 6, "steel");
+        structure.points([[x + 1, y + 2], [x + 3, y + 4]], "steel");
+      } else {
+        structure.fillRect(x, y + 1, 7, 2, "wood");
+        structure.fillRect(x + 1, y, 1, 4, "woodDark");
+        structure.fillRect(x + 5, y, 1, 4, "woodDark");
+        structure.points([[x + 2, y], [x + 3, y + 1], [x + 4, y]], "steel");
+        structure.lineV(x + 3, y + 1, y + 4, "steel");
+      }
+    }
+
+    function drawTrainingDummy(x, y) {
+      structure.fillRect(x + 1, y, 2, 2, "cloth");
+      structure.fillRect(x + 1, y + 2, 2, 2, "woodLight");
+      structure.fillRect(x, y + 1, 4, 1, "woodLight");
+      structure.fillRect(x + 1, y + 4, 1, 3, "woodDark");
+      structure.fillRect(x + 2, y + 4, 1, 3, "woodDark");
+      structure.fillRect(x, y + 7, 4, 1, "wood");
+    }
+
+    function drawArcheryTarget(x, y) {
+      structure.fillRect(x + 1, y, 4, 1, "woodDark");
+      structure.fillRect(x + 2, y + 1, 2, 1, "steel");
+      structure.fillRect(x, y + 2, 6, 5, "target");
+      structure.fillRect(x + 1, y + 3, 4, 3, "bannerRed");
+      structure.fillRect(x + 2, y + 4, 2, 1, "bannerGold");
+      structure.fillRect(x + 2, y + 7, 1, 2, "woodDark");
+      structure.fillRect(x + 3, y + 7, 1, 2, "woodDark");
+    }
+
+    function drawRoofBlock(x, y, w, h, roofMain, roofDark, roofLight, wallTile) {
+      structure.fillRect(x, y, w, h, roofDark);
+      structure.fillRect(x + 1, y + 1, w - 2, h - 2, roofMain);
+      for (let ridge = x + 2; ridge < x + w - 2; ridge += 3) {
+        structure.lineV(ridge, y + 2, y + h - 3, roofDark);
+      }
+      structure.lineH(y + 2, x + 1, x + w - 2, roofLight);
+      structure.fillRect(x + 2, y + h - 3, w - 4, 2, wallTile);
+      structure.strokeRect(x, y, w, h, roofDark);
+    }
+
+    function drawCommandHall() {
+      drawRoofBlock(21, 6, 22, 10, "roofSlate", "roofSlateDark", "roofSlateLight", "plaster");
+      structure.fillRect(30, 4, 4, 3, "wallStoneDark");
+      structure.fillRect(31, 3, 2, 2, "wallStone");
+      structure.fillRect(24, 13, 4, 2, "plaster");
+      structure.fillRect(36, 13, 4, 2, "plaster");
+      structure.fillRect(30, 13, 4, 3, "woodDark");
+      structure.fillRect(31, 13, 2, 2, "wood");
+      structure.points([[26, 8], [37, 8]], "bannerGold");
+    }
+
+    function drawDormitoryWing() {
+      drawRoofBlock(8, 14, 12, 15, "roofRed", "roofRedDark", "roofRedLight", "plaster");
+      structure.fillRect(10, 26, 8, 2, "plaster");
+      structure.points([[11, 17], [16, 17], [11, 21], [16, 21]], "bannerBlue");
+      structure.fillRect(12, 24, 4, 3, "woodDark");
+      structure.fillRect(13, 24, 2, 2, "wood");
+    }
+
+    function drawArmoryWing() {
+      drawRoofBlock(44, 14, 12, 15, "roofRed", "roofRedDark", "roofRedLight", "plaster");
+      structure.fillRect(46, 26, 8, 2, "plaster");
+      structure.points([[47, 17], [52, 17], [47, 21], [52, 21]], "bannerRed");
+      structure.fillRect(48, 24, 4, 3, "woodDark");
+      structure.fillRect(49, 24, 2, 2, "wood");
+      drawWeaponRack(46, 8, false);
+      drawWeaponRack(51, 8, false);
+    }
+
+    function drawGatehouse() {
+      structure.fillRect(24, 35, 16, 7, "wallStoneDark");
+      structure.fillRect(25, 35, 14, 5, "wallStone");
+      structure.fillRect(28, 36, 8, 6, "woodDark");
+      structure.fillRect(29, 36, 6, 5, "wood");
+      structure.lineV(31, 36, 40, "woodDark");
+      structure.lineV(33, 36, 40, "woodDark");
+      structure.points([[27, 36], [36, 36]], "bannerGold");
+      drawBanner(22, 34, "bannerBlue");
+      drawBanner(36, 34, "bannerRed");
+    }
+
+    function drawParadeYard() {
+      structure.fillRect(21, 18, 22, 16, "cobble");
+      structure.checkerRect(22, 19, 20, 14, "cobble", "cobbleAlt", 3);
+      structure.strokeRect(21, 18, 22, 16, "cobbleDark");
+      structure.lineH(25, 24, 39, "cobbleDark");
+      structure.lineH(29, 24, 39, "cobbleDark");
+      structure.lineV(31, 20, 31, "brass");
+      structure.lineH(26, 28, 34, "brass");
+      structure.points([[31, 23], [31, 29], [28, 26], [34, 26]], "bannerGold");
+    }
+
+    structure.fillRect(0, 0, width, height, "grass");
+    structure.checkerRect(0, 0, width, height, "grass", "grassAlt", 4);
+    scatterGroundNoise();
+
+    structure.fillRect(3, 5, 58, 38, "dirt");
+    structure.checkerRect(4, 6, 56, 36, "dirt", "dirtAlt", 4);
+    structure.strokeRect(3, 5, 58, 38, "wallStoneDark");
+
+    drawCornerTower(3, 5);
+    drawCornerTower(53, 5);
+    drawCornerTower(3, 35);
+    drawCornerTower(53, 35);
+
+    structure.fillRect(11, 5, 42, 5, "wallStoneDark");
+    structure.fillRect(11, 6, 42, 3, "wallStone");
+    structure.fillRect(3, 13, 5, 22, "wallStoneDark");
+    structure.fillRect(4, 13, 3, 22, "wallStone");
+    structure.fillRect(56, 13, 5, 22, "wallStoneDark");
+    structure.fillRect(57, 13, 3, 22, "wallStone");
+    structure.fillRect(11, 38, 13, 5, "wallStoneDark");
+    structure.fillRect(40, 38, 13, 5, "wallStoneDark");
+    structure.fillRect(11, 39, 13, 3, "wallStone");
+    structure.fillRect(40, 39, 13, 3, "wallStone");
+
+    drawCommandHall();
+    drawDormitoryWing();
+    drawArmoryWing();
+    drawParadeYard();
+    drawGatehouse();
+
+    drawBrazier(14, 12);
+    drawBrazier(50, 12);
+    drawBrazier(15, 32);
+    drawBrazier(49, 32);
+
+    drawTrainingDummy(23, 31);
+    drawTrainingDummy(38, 31);
+    drawArcheryTarget(15, 29);
+    drawArcheryTarget(43, 29);
+    drawWeaponRack(23, 19, true);
+    drawWeaponRack(37, 19, true);
+
+    drawCrate(9, 31);
+    drawCrate(14, 31);
+    drawCrate(46, 31);
+    drawCrate(51, 31);
+    drawBarrel(12, 36);
+    drawBarrel(48, 36);
+
+    structure.fillRect(18, 11, 5, 2, "cloth");
+    structure.fillRect(41, 11, 5, 2, "cloth");
+    structure.fillRect(28, 43, 8, 2, "dirtDark");
+    structure.fillRect(30, 45, 4, 3, "dirtDark");
+
+    structure.points([
+      [6, 18], [6, 24], [57, 18], [57, 24],
+      [11, 41], [18, 41], [45, 41], [52, 41],
+      [25, 8], [39, 8], [31, 17], [31, 34]
+    ], "bannerGold");
+  }
+};
+
+createStructureGenerator(barracksConfig);
+</script>
+</body>
+</html>
