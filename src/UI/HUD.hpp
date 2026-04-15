@@ -24,9 +24,8 @@ public:
     void update(const InGameViewModel& model);
     void setMultiplayerStatus(const std::string& text, MultiplayerStatusTone tone);
     void clearMultiplayerStatus();
-    void setPauseEnabled(bool enabled);
 
-    void setOnPause(std::function<void()> callback);
+    void setOnMenu(std::function<void()> callback);
     void setOnResetTurn(std::function<void()> callback);
     void setOnEndTurn(std::function<void()> callback);
 
@@ -39,10 +38,10 @@ private:
     std::array<tgui::Label::Ptr, 4> m_metricLabels{};
     tgui::Label::Ptr m_statusLabel;
     tgui::Label::Ptr m_networkStatusLabel;
-    tgui::Button::Ptr m_pauseButton;
+    tgui::Button::Ptr m_menuButton;
     tgui::Button::Ptr m_endTurnButton;
     tgui::Button::Ptr m_resetTurnButton;
-    std::function<void()> m_onPause;
+    std::function<void()> m_onMenu;
     std::function<void()> m_onResetTurn;
     std::function<void()> m_onEndTurn;
 };

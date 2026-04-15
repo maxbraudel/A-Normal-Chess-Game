@@ -1,7 +1,7 @@
 #pragma once
 #include "UI/MainMenuUI.hpp"
 #include "UI/HUD.hpp"
-#include "UI/PauseMenuUI.hpp"
+#include "UI/GameMenuUI.hpp"
 #include "UI/PiecePanel.hpp"
 #include "UI/BuildingPanel.hpp"
 #include "UI/BarracksPanel.hpp"
@@ -27,8 +27,9 @@ public:
     void init(tgui::Gui& gui, const AssetManager& assets);
     void showMainMenu();
     void showHUD();
-    void showPauseMenu();
-    void hidePauseMenu();
+    void showGameMenu(const GameMenuPresentation& presentation);
+    void hideGameMenu();
+    bool isGameMenuVisible() const;
     void updateDashboard(const InGameViewModel& model);
     void showPiecePanel(const Piece& piece, const GameConfig& config, bool allowUpgrade);
     void showBuildingPanel(const Building& building);
@@ -56,7 +57,7 @@ public:
 
     MainMenuUI&     mainMenu()        { return m_mainMenu; }
     HUD&            hud()             { return m_hud; }
-    PauseMenuUI&    pauseMenu()       { return m_pauseMenu; }
+    GameMenuUI&     gameMenu()        { return m_gameMenu; }
     PiecePanel&     piecePanel()      { return m_piecePanel; }
     BuildingPanel&  buildingPanel()   { return m_buildingPanel; }
     BarracksPanel&  barracksPanel()   { return m_barracksPanel; }
@@ -71,7 +72,7 @@ private:
 
     MainMenuUI      m_mainMenu;
     HUD             m_hud;
-    PauseMenuUI     m_pauseMenu;
+    GameMenuUI      m_gameMenu;
     PiecePanel      m_piecePanel;
     BuildingPanel   m_buildingPanel;
     BarracksPanel   m_barracksPanel;

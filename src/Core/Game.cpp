@@ -152,9 +152,47 @@ bool Game::isMultiplayerSessionReady() const {
     return true;
 }
 
-void Game::updateMultiplayerPresentation() {
-    m_uiManager.hud().setPauseEnabled(!m_localPlayerContext.isNetworked());
+GameMenuPresentation Game::buildGameMenuPresentation() const {
+    GameMenuPresentation presentation;
+    presentation.pauseState = m_localPlayerContext.isNetworked()
+        ? GameMenuPauseState::NotPaused
+        : GameMenuPauseState::Paused;
+    presentation.showSave = !isLanClient();
+    return presentation;
+}
 
+bool Game::isInGameMenuOpen() const {
+    return m_uiManager.isGameMenuVisible();
+}
+
+void Game::openInGameMenu() {
+    if (m_state != GameState::Playing && m_state != GameState::Paused) {
+        return;
+    }
+
+    if (!m_localPlayerContext.isNetworked()) {
+        m_state = GameState::Paused;
+    }
+
+    m_uiManager.showGameMenu(buildGameMenuPresentation());
+}
+
+void Game::closeInGameMenu() {
+    m_uiManager.hideGameMenu();
+    if (!m_localPlayerContext.isNetworked() && m_state == GameState::Paused) {
+        m_state = GameState::Playing;
+    }
+}
+
+void Game::toggleInGameMenu() {
+    if (isInGameMenuOpen()) {
+        closeInGameMenu();
+    } else {
+        openInGameMenu();
+    }
+}
+
+void Game::updateMultiplayerPresentation() {
     if (!m_localPlayerContext.isNetworked()) {
         m_uiManager.hideMultiplayerWaitingOverlay();
         m_uiManager.clearMultiplayerStatus();
@@ -173,7 +211,7 @@ void Game::updateMultiplayerPresentation() {
             m_uiManager.showMultiplayerWaitingOverlay(
                 "Waiting for Black Player",
                 waitingMessage,
-                "Return to Menu",
+                "Return to Main Menu",
                 [this]() {
                     returnToMainMenu();
                 });
@@ -212,7 +250,7 @@ void Game::returnToMainMenu() {
     m_input.setTool(ToolState::Select);
     turnSystem().resetPendingCommands();
     m_state = GameState::MainMenu;
-    m_uiManager.hidePauseMenu();
+    m_uiManager.hideGameMenu();
     m_uiManager.showMainMenu();
 }
 
@@ -342,17 +380,12 @@ void Game::handleInput() {
         }
 
         if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Escape) {
-            if (m_localPlayerContext.isNetworked()) {
+            if (m_state != GameState::Playing && m_state != GameState::Paused) {
                 continue;
             }
 
-            if (m_state == GameState::Playing) {
-                m_state = GameState::Paused;
-                m_uiManager.showPauseMenu();
-            } else if (m_state == GameState::Paused) {
-                m_state = GameState::Playing;
-                m_uiManager.hidePauseMenu();
-            }
+            toggleInGameMenu();
+            continue;
         }
 
         if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::P) {
@@ -361,6 +394,10 @@ void Game::handleInput() {
                                              turnSystem().getTurnNumber(),
                                              turnSystem().getActiveKingdom());
             }
+        }
+
+        if (isInGameMenuOpen()) {
+            continue;
         }
 
         // Spacebar acts as the Play button (commit turn)
@@ -1015,7 +1052,7 @@ void Game::processMultiplayerClientEvent(const MultiplayerClient::Event& event) 
             m_uiManager.showMultiplayerAlert(
                 event.type == MultiplayerClient::Event::Type::Disconnected ? "Host Disconnected" : "Network Error",
                 message,
-                "Return to Menu",
+                "Return to Main Menu",
                 [this]() {
                     returnToMainMenu();
                 });
@@ -1028,16 +1065,14 @@ void Game::processMultiplayerClientEvent(const MultiplayerClient::Event& event) 
 }
 
 void Game::setupUICallbacks() {
-    // Pause menu
-    m_uiManager.pauseMenu().setOnResume([this]() {
-        if (m_localPlayerContext.isNetworked()) return;
-        m_state = GameState::Playing;
-        m_uiManager.hidePauseMenu();
+    // Game menu
+    m_uiManager.gameMenu().setOnResume([this]() {
+        closeInGameMenu();
     });
-    m_uiManager.pauseMenu().setOnSave([this]() {
+    m_uiManager.gameMenu().setOnSave([this]() {
         saveGame();
     });
-    m_uiManager.pauseMenu().setOnQuitToMenu([this]() {
+    m_uiManager.gameMenu().setOnQuitToMainMenu([this]() {
         returnToMainMenu();
     });
 
@@ -1076,18 +1111,12 @@ void Game::setupUICallbacks() {
     });
 
     // HUD
-    m_uiManager.hud().setOnPause([this]() {
-        if (m_localPlayerContext.isNetworked()) {
+    m_uiManager.hud().setOnMenu([this]() {
+        if (m_state != GameState::Playing && m_state != GameState::Paused) {
             return;
         }
 
-        if (m_state == GameState::Playing) {
-            m_state = GameState::Paused;
-            m_uiManager.showPauseMenu();
-        } else if (m_state == GameState::Paused) {
-            m_state = GameState::Playing;
-            m_uiManager.hidePauseMenu();
-        }
+        toggleInGameMenu();
     });
     m_uiManager.hud().setOnResetTurn([this]() {
         if (!canLocalPlayerIssueCommands()) return;

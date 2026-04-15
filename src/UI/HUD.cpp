@@ -98,15 +98,15 @@ void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
     applyMultiplayerStatusTone(m_networkStatusLabel, MultiplayerStatusTone::Neutral);
     m_networkPanel->add(m_networkStatusLabel);
 
-    m_pauseButton = tgui::Button::create("Pause");
-    HUDLayout::styleHudButton(m_pauseButton);
-    HUDLayout::placeStackChild(m_pauseButton, 0, HUDLayout::kActionWidth);
-    m_pauseButton->onPress([this]() {
-        if (m_onPause) {
-            m_onPause();
+    m_menuButton = tgui::Button::create("Menu");
+    HUDLayout::styleHudButton(m_menuButton);
+    HUDLayout::placeStackChild(m_menuButton, 0, HUDLayout::kActionWidth);
+    m_menuButton->onPress([this]() {
+        if (m_onMenu) {
+            m_onMenu();
         }
     });
-    m_actionPanel->add(m_pauseButton);
+    m_actionPanel->add(m_menuButton);
 
     m_endTurnButton = tgui::Button::create("End Turn");
     HUDLayout::styleHudButton(m_endTurnButton);
@@ -185,12 +185,6 @@ void HUD::clearMultiplayerStatus() {
     }
 }
 
-void HUD::setPauseEnabled(bool enabled) {
-    if (m_pauseButton) {
-        m_pauseButton->setEnabled(enabled);
-    }
-}
-
-void HUD::setOnPause(std::function<void()> callback) { m_onPause = std::move(callback); }
+void HUD::setOnMenu(std::function<void()> callback) { m_onMenu = std::move(callback); }
 void HUD::setOnResetTurn(std::function<void()> callback) { m_onResetTurn = std::move(callback); }
 void HUD::setOnEndTurn(std::function<void()> callback) { m_onEndTurn = std::move(callback); }

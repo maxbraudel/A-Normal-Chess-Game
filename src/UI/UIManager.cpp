@@ -10,7 +10,6 @@
 void UIManager::init(tgui::Gui& gui, const AssetManager& assets) {
     m_mainMenu.init(gui, assets);
     m_hud.init(gui, assets);
-    m_pauseMenu.init(gui);
 
     m_leftSidebar = tgui::Panel::create(HUDLayout::sidebarSize(HUDAnchor::MiddleLeft));
     m_leftSidebar->setPosition(HUDLayout::sidebarPosition(HUDAnchor::MiddleLeft));
@@ -58,6 +57,7 @@ void UIManager::init(tgui::Gui& gui, const AssetManager& assets) {
     m_eventLogPanel.init(m_rightHistorySection);
     m_kingdomBalancePanel.init(m_rightBalanceSection);
     m_toolBar.init(gui);
+    m_gameMenu.init(gui);
 
     m_multiplayerWaitingOverlay = tgui::Panel::create({"100%", "100%"});
     m_multiplayerWaitingOverlay->getRenderer()->setBackgroundColor(tgui::Color(0, 0, 0, 140));
@@ -86,7 +86,7 @@ void UIManager::init(tgui::Gui& gui, const AssetManager& assets) {
     m_multiplayerWaitingMessage->getRenderer()->setTextColor(tgui::Color(230, 230, 230));
     waitingDialog->add(m_multiplayerWaitingMessage);
 
-    m_multiplayerWaitingButton = tgui::Button::create("Return to Menu");
+    m_multiplayerWaitingButton = tgui::Button::create("Return to Main Menu");
     m_multiplayerWaitingButton->setPosition({372, 186});
     m_multiplayerWaitingButton->setSize({144, 30});
     m_multiplayerWaitingButton->onPress([this]() {
@@ -158,12 +158,16 @@ void UIManager::showHUD() {
     m_kingdomBalancePanel.show();
 }
 
-void UIManager::showPauseMenu() {
-    m_pauseMenu.show();
+void UIManager::showGameMenu(const GameMenuPresentation& presentation) {
+    m_gameMenu.show(presentation);
 }
 
-void UIManager::hidePauseMenu() {
-    m_pauseMenu.hide();
+void UIManager::hideGameMenu() {
+    m_gameMenu.hide();
+}
+
+bool UIManager::isGameMenuVisible() const {
+    return m_gameMenu.isVisible();
 }
 
 void UIManager::updateDashboard(const InGameViewModel& model) {
@@ -217,7 +221,7 @@ void UIManager::showSelectionEmptyState() {
 void UIManager::hideAllPanels() {
     m_mainMenu.hide();
     m_hud.hide();
-    m_pauseMenu.hide();
+    m_gameMenu.hide();
     hideMultiplayerWaitingOverlay();
     hideMultiplayerAlert();
     clearMultiplayerStatus();
@@ -254,7 +258,7 @@ void UIManager::showMultiplayerWaitingOverlay(const std::string& title,
         m_multiplayerWaitingMessage->setText(message);
     }
     if (m_multiplayerWaitingButton) {
-        m_multiplayerWaitingButton->setText(buttonLabel.empty() ? "Return to Menu" : buttonLabel);
+        m_multiplayerWaitingButton->setText(buttonLabel.empty() ? "Return to Main Menu" : buttonLabel);
         m_multiplayerWaitingButton->setVisible(!buttonLabel.empty() || static_cast<bool>(m_onMultiplayerWaitingClose));
     }
     if (m_multiplayerWaitingOverlay) {

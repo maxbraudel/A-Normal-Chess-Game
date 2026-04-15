@@ -82,6 +82,11 @@ private:
     bool isMultiplayerSessionReady() const;
     void updateMultiplayerPresentation();
     void returnToMainMenu();
+    void openInGameMenu();
+    void closeInGameMenu();
+    void toggleInGameMenu();
+    bool isInGameMenuOpen() const;
+    GameMenuPresentation buildGameMenuPresentation() const;
     bool isLanHost() const { return m_localPlayerContext.mode == LocalSessionMode::LanHost; }
     bool isLanClient() const { return m_localPlayerContext.mode == LocalSessionMode::LanClient; }
     std::string participantName(KingdomId id) const;
