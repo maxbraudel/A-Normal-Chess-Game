@@ -1,6 +1,7 @@
 #pragma once
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <vector>
 #include <SFML/System/Vector2.hpp>
 #include "Buildings/Building.hpp"
@@ -83,8 +84,23 @@ struct SnapBuilding {
 struct SnapKingdom {
     KingdomId id = KingdomId::White;
     int gold = 0;
+    bool hasSpawnedBishop = false;
+    int lastBishopSpawnParity = 0;
     std::vector<SnapPiece> pieces;
     std::vector<SnapBuilding> buildings;
+
+    std::optional<int> preferredNextBishopSpawnParity() const {
+        if (!hasSpawnedBishop) {
+            return std::nullopt;
+        }
+
+        return 1 - lastBishopSpawnParity;
+    }
+
+    void recordSuccessfulBishopSpawnParity(int parity) {
+        hasSpawnedBishop = true;
+        lastBishopSpawnParity = parity & 1;
+    }
 
     SnapPiece* getKing() {
         for (auto& p : pieces) if (p.type == PieceType::King) return &p;

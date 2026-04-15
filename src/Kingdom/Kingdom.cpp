@@ -64,6 +64,19 @@ Building* Kingdom::getBuildingAt(sf::Vector2i pos) {
     return nullptr;
 }
 
+std::optional<int> Kingdom::preferredNextBishopSpawnParity() const {
+    if (!hasSpawnedBishop) {
+        return std::nullopt;
+    }
+
+    return 1 - lastBishopSpawnParity;
+}
+
+void Kingdom::recordSuccessfulBishopSpawnParity(int parity) {
+    hasSpawnedBishop = true;
+    lastBishopSpawnParity = parity & 1;
+}
+
 void Kingdom::addPiece(const Piece& piece) {
     pieces.push_back(piece);
 }

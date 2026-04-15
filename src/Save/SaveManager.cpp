@@ -144,6 +144,8 @@ void SaveManager::writeJson(std::ostream& output, const SaveData& data) {
         const auto& kd = normalized.kingdoms[k];
         output << "  \"" << kingdomKeys[k] << "\": {\n";
         output << "    \"gold\": " << kd.gold << ",\n";
+        output << "    \"hasSpawnedBishop\": " << (kd.hasSpawnedBishop ? 1 : 0) << ",\n";
+        output << "    \"lastBishopSpawnParity\": " << kd.lastBishopSpawnParity << ",\n";
         output << "    \"pieces\": [";
         for (std::size_t i = 0; i < kd.pieces.size(); ++i) {
             if (i > 0) output << ", ";
@@ -537,6 +539,8 @@ bool SaveManager::deserialize(const std::string& json, SaveData& outData) {
         std::string section = extractSection(json, kingdomKeys[k]);
         outData.kingdoms[k].id = id;
         outData.kingdoms[k].gold = extractInt(section, "gold", 0);
+        outData.kingdoms[k].hasSpawnedBishop = extractInt(section, "hasSpawnedBishop", 0) != 0;
+        outData.kingdoms[k].lastBishopSpawnParity = extractInt(section, "lastBishopSpawnParity", 0) & 1;
 
         std::string piecesArr = extractArray(section, "pieces");
         auto pieceElems = splitArrayElements(piecesArr);

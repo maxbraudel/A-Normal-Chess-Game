@@ -14,5 +14,8 @@ public:
     static void startProduction(Building& barracks, PieceType type, const GameConfig& config);
     static void advanceProduction(Building& barracks);
     static bool isProductionComplete(const Building& barracks);
-    static sf::Vector2i findSpawnCell(const Building& barracks, const Board& board);
+    static sf::Vector2i findSpawnCell(const Building& barracks,
+                                      const Board& board,
+                                      PieceType type,
+                                      const Kingdom& kingdom);
 };

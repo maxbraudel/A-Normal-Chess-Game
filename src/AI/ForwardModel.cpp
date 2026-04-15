@@ -6,6 +6,7 @@
 #include "Units/Piece.hpp"
 #include "Config/GameConfig.hpp"
 #include "Systems/EconomySystem.hpp"
+#include "Systems/ProductionSpawnRules.hpp"
 #include <cmath>
 #include <algorithm>
 
@@ -64,6 +65,8 @@ GameSnapshot ForwardModel::createSnapshot(const Board& board,
     auto assignKingdom = [&](const Kingdom& kingdom) {
         SnapKingdom& target = (kingdom.id == KingdomId::White) ? s.white : s.black;
         target.gold = kingdom.gold;
+        target.hasSpawnedBishop = kingdom.hasSpawnedBishop;
+        target.lastBishopSpawnParity = kingdom.lastBishopSpawnParity;
         target.pieces.clear();
         target.buildings.clear();
         for (const auto& p : kingdom.pieces) target.pieces.push_back(toSnap(p));
@@ -380,28 +383,25 @@ bool ForwardModel::applyMarriage(GameSnapshot& s, KingdomId k) {
 // Turn advancement
 // ========================================================================
 
-sf::Vector2i ForwardModel::findSpawnCell(const GameSnapshot& s, const SnapBuilding& barracks) {
-    // Search adjacent cells in expanding radius
-    for (int r = 1; r <= 2; ++r) {
-        for (int dy = -r; dy <= barracks.getFootprintHeight() - 1 + r; ++dy) {
-            for (int dx = -r; dx <= barracks.getFootprintWidth() - 1 + r; ++dx) {
-                // Only the border ring for this radius
-                bool isBorder = (dx == -r || dx == barracks.getFootprintWidth() - 1 + r ||
-                                 dy == -r || dy == barracks.getFootprintHeight() - 1 + r);
-                if (!isBorder && r > 1) continue;
+sf::Vector2i ForwardModel::findSpawnCell(const GameSnapshot& s,
+                                         const SnapBuilding& barracks,
+                                         const SnapKingdom& kingdom,
+                                         PieceType type) {
+    const std::optional<int> preferredParity = (type == PieceType::Bishop)
+        ? kingdom.preferredNextBishopSpawnParity()
+        : std::nullopt;
 
-                int cx = barracks.origin.x + dx;
-                int cy = barracks.origin.y + dy;
-                if (!s.isTraversable(cx, cy)) continue;
-                if (s.pieceAt({cx, cy})) continue;
-                // Don't spawn inside other buildings
-                auto* bld = s.buildingAt({cx, cy});
-                if (bld && bld->id != barracks.id) continue;
-                return {cx, cy};
-            }
-        }
-    }
-    return {-1, -1}; // no space
+    return ProductionSpawnRules::findSpawnCell(
+        barracks.origin,
+        barracks.getFootprintWidth(),
+        barracks.getFootprintHeight(),
+        s.getDiameter(),
+        [&s](const sf::Vector2i& pos) {
+            if (!s.isTraversable(pos.x, pos.y)) return false;
+            if (s.pieceAt(pos)) return false;
+            return s.buildingAt(pos) == nullptr;
+        },
+        preferredParity);
 }
 
 void ForwardModel::advanceTurn(GameSnapshot& s, KingdomId k,
@@ -414,16 +414,21 @@ void ForwardModel::advanceTurn(GameSnapshot& s, KingdomId k,
         if (!b.isProducing) continue;
         b.turnsRemaining--;
         if (b.turnsRemaining <= 0) {
-            sf::Vector2i spawnPos = findSpawnCell(s, b);
+            const PieceType producedType = b.producingType;
+            sf::Vector2i spawnPos = findSpawnCell(s, b, myK, producedType);
             if (spawnPos.x >= 0) {
                 static int nextSnapPieceId = 80000;
                 SnapPiece np;
                 np.id = nextSnapPieceId++;
-                np.type = b.producingType;
+                np.type = producedType;
                 np.kingdom = k;
                 np.position = spawnPos;
                 np.xp = 0;
                 myK.pieces.push_back(np);
+                if (producedType == PieceType::Bishop) {
+                    myK.recordSuccessfulBishopSpawnParity(
+                        ProductionSpawnRules::squareColorParity(spawnPos));
+                }
                 b.isProducing = false;
             }
             // If no space, stays at turnsRemaining=0 and retries next turn

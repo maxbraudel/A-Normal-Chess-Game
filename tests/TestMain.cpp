@@ -12,6 +12,7 @@
 #include <SFML/System/Time.hpp>
 
 #include "AI/AIBrain.hpp"
+#include "AI/ForwardModel.hpp"
 #include "AI/AIStrategySpecial.hpp"
 #include "Board/Board.hpp"
 #include "Board/BoardGenerator.hpp"
@@ -35,6 +36,8 @@
 #include "Systems/CheckResponseRules.hpp"
 #include "Systems/EconomySystem.hpp"
 #include "Systems/EventLog.hpp"
+#include "Systems/ProductionSpawnRules.hpp"
+#include "Systems/ProductionSystem.hpp"
 #include "Systems/TurnCommand.hpp"
 #include "Systems/TurnSystem.hpp"
 #include "UI/InGameViewModelBuilder.hpp"
@@ -83,6 +86,27 @@ Piece& addPieceToBoard(Kingdom& kingdom,
     Piece& piece = kingdom.pieces.back();
     board.getCell(position.x, position.y).piece = &piece;
     return piece;
+}
+
+void linkBuildingOnBoard(Building& building, Board& board) {
+    for (const sf::Vector2i& pos : building.getOccupiedCells()) {
+        board.getCell(pos.x, pos.y).building = &building;
+    }
+}
+
+int ringDistanceFromBuilding(const Building& building, const sf::Vector2i& position) {
+    const int left = building.origin.x;
+    const int top = building.origin.y;
+    const int right = building.origin.x + building.getFootprintWidth() - 1;
+    const int bottom = building.origin.y + building.getFootprintHeight() - 1;
+
+    const int dx = (position.x < left)
+        ? (left - position.x)
+        : (position.x > right ? position.x - right : 0);
+    const int dy = (position.y < top)
+        ? (top - position.y)
+        : (position.y > bottom ? position.y - bottom : 0);
+    return std::max(dx, dy);
 }
 
 template <typename Predicate>
@@ -727,6 +751,26 @@ void testGameEngineRestoresFactoryIds() {
     expect(nextPiece.id == 43, "Piece factory should continue after the highest restored piece ID.");
 }
 
+void testGameEngineRestoresBishopSpawnMemory() {
+    GameConfig config;
+    GameEngine engine;
+    GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, "engine_bishop_memory_restore_test");
+
+    std::string error;
+    expect(engine.startNewSession(session, config, &error), error);
+    engine.kingdom(KingdomId::White).hasSpawnedBishop = true;
+    engine.kingdom(KingdomId::White).lastBishopSpawnParity = 1;
+
+    const SaveData save = engine.createSaveData();
+
+    GameEngine restored;
+    expect(restored.restoreFromSave(save, config, &error), error);
+    expect(restored.kingdom(KingdomId::White).hasSpawnedBishop,
+           "Restoring save data should preserve bishop spawn history per kingdom.");
+    expect(restored.kingdom(KingdomId::White).lastBishopSpawnParity == 1,
+           "Restoring save data should preserve the last bishop spawn parity.");
+}
+
     void testGameEngineAssignsWorldSeed() {
         GameConfig config;
         GameEngine engine;
@@ -842,6 +886,8 @@ void testSaveManagerRoundTrip() {
 
     data.kingdoms[0].id = KingdomId::White;
     data.kingdoms[0].gold = 120;
+    data.kingdoms[0].hasSpawnedBishop = true;
+    data.kingdoms[0].lastBishopSpawnParity = 1;
     data.kingdoms[0].pieces.push_back(Piece(0, PieceType::King, KingdomId::White, {0, 0}));
     Building ownedBarracks = makeTestBarracks(10, KingdomId::White, {1, 1}, GameConfig{});
     ownedBarracks.rotationQuarterTurns = 1;
@@ -892,6 +938,9 @@ void testSaveManagerRoundTrip() {
         expect(loaded.kingdoms[0].buildings.size() == 1
             && loaded.kingdoms[0].buildings[0].rotationQuarterTurns == ownedBarracks.rotationQuarterTurns,
             "Owned building rotations should round-trip through SaveManager.");
+        expect(loaded.kingdoms[0].hasSpawnedBishop
+            && loaded.kingdoms[0].lastBishopSpawnParity == data.kingdoms[0].lastBishopSpawnParity,
+            "Kingdom bishop spawn memory should round-trip through SaveManager.");
         expect(loaded.publicBuildings.size() == 1
             && loaded.publicBuildings[0].flipMask == publicMine.flipMask
             && loaded.publicBuildings[0].rotationQuarterTurns == publicMine.rotationQuarterTurns,
@@ -1313,6 +1362,213 @@ void testTurnSystemSkipsUnaffordableProduction() {
     expect(!white.buildings.front().isProducing, "Unaffordable production must not start barracks production.");
 }
 
+void testFirstBishopSpawnUsesDefaultNearestRule() {
+    GameConfig config;
+    Board board;
+    board.init(10);
+
+    Kingdom white(KingdomId::White);
+    Building barracks = makeTestBarracks(70, KingdomId::White, {7, 8}, config);
+
+    const sf::Vector2i bishopSpawn = ProductionSystem::findSpawnCell(barracks, board, PieceType::Bishop, white);
+    const sf::Vector2i pawnSpawn = ProductionSystem::findSpawnCell(barracks, board, PieceType::Pawn, white);
+    expect(bishopSpawn == pawnSpawn,
+           "The first bishop spawn for a kingdom should use the default nearest-cell spawn rule.");
+}
+
+void testBishopSpawnAlternatesAcrossKingdomBarracks() {
+    GameConfig config;
+    Board board;
+    board.init(10);
+
+    Kingdom white(KingdomId::White);
+    Building firstBarracks = makeTestBarracks(71, KingdomId::White, {7, 8}, config);
+    Building secondBarracks = makeTestBarracks(72, KingdomId::White, {11, 8}, config);
+
+    const sf::Vector2i firstSpawn = ProductionSystem::findSpawnCell(firstBarracks, board, PieceType::Bishop, white);
+    white.recordSuccessfulBishopSpawnParity(ProductionSpawnRules::squareColorParity(firstSpawn));
+
+    const sf::Vector2i secondSpawn = ProductionSystem::findSpawnCell(secondBarracks, board, PieceType::Bishop, white);
+    expect(ProductionSpawnRules::squareColorParity(secondSpawn)
+            != ProductionSpawnRules::squareColorParity(firstSpawn),
+           "Bishop spawn parity should alternate across all barracks of a kingdom.");
+}
+
+void testBishopSpawnFallsBackWhenPreferredParityUnavailable() {
+    GameConfig config;
+    Board board;
+    board.init(10);
+
+    Kingdom white(KingdomId::White);
+    white.recordSuccessfulBishopSpawnParity(0);
+
+    Building barracks = makeTestBarracks(73, KingdomId::White, {7, 8}, config);
+    linkBuildingOnBoard(barracks, board);
+
+    for (const sf::Vector2i& cellPos : board.getAllValidCells()) {
+        if (barracks.containsCell(cellPos.x, cellPos.y)) {
+            continue;
+        }
+
+        if (ProductionSpawnRules::squareColorParity(cellPos) == 1) {
+            board.getCell(cellPos.x, cellPos.y).type = CellType::Water;
+        }
+    }
+
+    const sf::Vector2i bishopSpawn = ProductionSystem::findSpawnCell(barracks, board, PieceType::Bishop, white);
+    const sf::Vector2i pawnSpawn = ProductionSystem::findSpawnCell(barracks, board, PieceType::Pawn, white);
+    expect(bishopSpawn == pawnSpawn,
+           "Bishop spawns should fall back to the nearest valid opposite-parity square when the preferred parity is impossible.");
+    expect(ProductionSpawnRules::squareColorParity(bishopSpawn) == 0,
+           "Fallback bishop spawns should use the available opposite parity when the preferred parity is blocked everywhere.");
+}
+
+void testSpawnSearchExpandsBeyondInitialRadius() {
+    GameConfig config;
+    Board board;
+    board.init(10);
+
+    Kingdom white(KingdomId::White);
+    Building barracks = makeTestBarracks(74, KingdomId::White, {7, 8}, config);
+    linkBuildingOnBoard(barracks, board);
+
+    const std::vector<sf::Vector2i> candidates = ProductionSpawnRules::buildSpawnCandidateOrder(
+        barracks.origin,
+        barracks.getFootprintWidth(),
+        barracks.getFootprintHeight(),
+        board.getDiameter());
+
+    for (const sf::Vector2i& candidate : candidates) {
+        if (!board.getCell(candidate.x, candidate.y).isInCircle || barracks.containsCell(candidate.x, candidate.y)) {
+            continue;
+        }
+
+        if (ringDistanceFromBuilding(barracks, candidate) <= 2) {
+            board.getCell(candidate.x, candidate.y).type = CellType::Water;
+        }
+    }
+
+    sf::Vector2i expected{-1, -1};
+    for (const sf::Vector2i& candidate : candidates) {
+        const Cell& cell = board.getCell(candidate.x, candidate.y);
+        if (!cell.isInCircle || cell.type == CellType::Water || cell.building || barracks.containsCell(candidate.x, candidate.y)) {
+            continue;
+        }
+
+        expected = candidate;
+        break;
+    }
+
+    expect(expected.x >= 0,
+           "The spawn expansion test should leave at least one valid candidate beyond the initial radius.");
+
+    const sf::Vector2i spawn = ProductionSystem::findSpawnCell(barracks, board, PieceType::Pawn, white);
+    expect(spawn == expected,
+           "Barracks spawn search should expand beyond the previous radius-2 limit when closer rings are blocked.");
+}
+
+void testBlockedBishopSpawnKeepsKingdomMemoryUnchanged() {
+    GameConfig config;
+    Board board;
+    board.init(10);
+
+    Kingdom white(KingdomId::White);
+    Kingdom black(KingdomId::Black);
+    white.recordSuccessfulBishopSpawnParity(1);
+    white.addBuilding(makeTestBarracks(75, KingdomId::White, {7, 8}, config));
+    Building& barracks = white.buildings.back();
+    barracks.isProducing = true;
+    barracks.producingType = static_cast<int>(PieceType::Bishop);
+    barracks.turnsRemaining = 1;
+    linkBuildingOnBoard(barracks, board);
+
+    for (const sf::Vector2i& cellPos : board.getAllValidCells()) {
+        if (!barracks.containsCell(cellPos.x, cellPos.y)) {
+            board.getCell(cellPos.x, cellPos.y).type = CellType::Water;
+        }
+    }
+
+    std::vector<Building> publicBuildings;
+    TurnSystem turnSystem;
+    turnSystem.setActiveKingdom(KingdomId::White);
+    EventLog eventLog;
+    PieceFactory pieceFactory;
+    BuildingFactory buildingFactory;
+    turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+
+    expect(white.pieces.empty(), "Blocked bishop production should not spawn a piece.");
+    expect(white.hasSpawnedBishop && white.lastBishopSpawnParity == 1,
+           "A failed bishop spawn must not overwrite the kingdom's remembered bishop parity.");
+    expect(white.buildings.front().isProducing,
+           "Blocked bishop production should stay active so the barracks can retry later.");
+}
+
+void testSimultaneousBishopSpawnsAlternateWithinSameTurn() {
+    GameConfig config;
+    Board board;
+    board.init(10);
+
+    Kingdom white(KingdomId::White);
+    Kingdom black(KingdomId::Black);
+    white.addBuilding(makeTestBarracks(76, KingdomId::White, {7, 8}, config));
+    white.addBuilding(makeTestBarracks(77, KingdomId::White, {11, 8}, config));
+    for (Building& barracks : white.buildings) {
+        barracks.isProducing = true;
+        barracks.producingType = static_cast<int>(PieceType::Bishop);
+        barracks.turnsRemaining = 1;
+    }
+    for (Building& barracks : white.buildings) {
+        linkBuildingOnBoard(barracks, board);
+    }
+
+    std::vector<Building> publicBuildings;
+    TurnSystem turnSystem;
+    turnSystem.setActiveKingdom(KingdomId::White);
+    EventLog eventLog;
+    PieceFactory pieceFactory;
+    BuildingFactory buildingFactory;
+    turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+
+    expect(white.pieces.size() == 2, "Two completed bishop productions should spawn two bishops when space exists.");
+    const int firstParity = ProductionSpawnRules::squareColorParity(white.pieces[0].position);
+    const int secondParity = ProductionSpawnRules::squareColorParity(white.pieces[1].position);
+    expect(firstParity != secondParity,
+           "Multiple bishop spawns in the same turn should alternate using the existing barracks iteration order.");
+    expect(white.lastBishopSpawnParity == secondParity,
+           "The kingdom should remember the parity of the last bishop that actually spawned this turn.");
+}
+
+void testForwardModelMatchesRuntimeBishopSpawnRule() {
+    GameConfig config;
+    Board board;
+    board.init(10);
+
+    Kingdom white(KingdomId::White);
+    Kingdom black(KingdomId::Black);
+    white.recordSuccessfulBishopSpawnParity(0);
+    white.addBuilding(makeTestBarracks(78, KingdomId::White, {7, 8}, config));
+    Building& barracks = white.buildings.back();
+    barracks.isProducing = true;
+    barracks.producingType = static_cast<int>(PieceType::Bishop);
+    barracks.turnsRemaining = 1;
+    linkBuildingOnBoard(barracks, board);
+
+    const sf::Vector2i runtimeSpawn = ProductionSystem::findSpawnCell(barracks, board, PieceType::Bishop, white);
+    GameSnapshot snapshot = ForwardModel::createSnapshot(board, white, black, {}, 1);
+    ForwardModel::advanceTurn(snapshot,
+                              KingdomId::White,
+                              config.getMineIncomePerCellPerTurn(),
+                              config.getFarmIncomePerCellPerTurn(),
+                              config.getArenaXPPerTurn());
+
+    expect(snapshot.white.pieces.size() == 1,
+           "ForwardModel should spawn a produced bishop when runtime conditions allow it.");
+    expect(snapshot.white.pieces.front().position == runtimeSpawn,
+           "ForwardModel bishop spawns should match the authoritative runtime spawn selection.");
+    expect(snapshot.white.lastBishopSpawnParity == ProductionSpawnRules::squareColorParity(runtimeSpawn),
+           "ForwardModel should update kingdom bishop parity memory from the square actually used.");
+}
+
 void testTurnSystemSkipsUnaffordableUpgrade() {
     GameConfig config;
     Board board;
@@ -1596,6 +1852,7 @@ int main() {
         {"multiplayer validator port", testSessionValidatorRejectsInvalidMultiplayerPort},
         {"local player context", testLocalPlayerContextModes},
         {"engine restore factory sync", testGameEngineRestoresFactoryIds},
+        {"engine restore bishop parity", testGameEngineRestoresBishopSpawnMemory},
         {"engine world seed", testGameEngineAssignsWorldSeed},
         {"board generator deterministic seed", testBoardGeneratorUsesDeterministicSeed},
         {"board generator terrain balance", testBoardGeneratorProducesGrassDominantTerrain},
@@ -1624,6 +1881,13 @@ int main() {
         {"multiplayer reconnect same client", testMultiplayerReconnectReusesSameClientInstance},
         {"turn system affordability", testTurnSystemSkipsUnaffordableBuild},
         {"turn system unaffordable production", testTurnSystemSkipsUnaffordableProduction},
+        {"first bishop spawn uses default rule", testFirstBishopSpawnUsesDefaultNearestRule},
+        {"bishop spawn alternates across barracks", testBishopSpawnAlternatesAcrossKingdomBarracks},
+        {"bishop spawn fallback parity", testBishopSpawnFallsBackWhenPreferredParityUnavailable},
+        {"spawn search expands beyond radius two", testSpawnSearchExpandsBeyondInitialRadius},
+        {"blocked bishop spawn keeps memory", testBlockedBishopSpawnKeepsKingdomMemoryUnchanged},
+        {"simultaneous bishop spawns alternate", testSimultaneousBishopSpawnsAlternateWithinSameTurn},
+        {"forward model bishop spawn consistency", testForwardModelMatchesRuntimeBishopSpawnRule},
         {"turn system unaffordable upgrade", testTurnSystemSkipsUnaffordableUpgrade},
         {"ai special planning preserves gold", testAIStrategySpecialDoesNotMutateRuntimeGold},
         {"save validator negative gold", testGameStateValidatorRejectsNegativeSaveGold},

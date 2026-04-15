@@ -10,6 +10,7 @@
 #include "Systems/XPSystem.hpp"
 #include "Systems/BuildSystem.hpp"
 #include "Systems/ProductionSystem.hpp"
+#include "Systems/ProductionSpawnRules.hpp"
 #include "Systems/MarriageSystem.hpp"
 #include "Units/PieceFactory.hpp"
 #include "Buildings/BuildingFactory.hpp"
@@ -206,12 +207,16 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
         if (b.type == BuildingType::Barracks && b.isProducing) {
             ProductionSystem::advanceProduction(b);
             if (ProductionSystem::isProductionComplete(b)) {
-                sf::Vector2i spawnPos = ProductionSystem::findSpawnCell(b, board);
+                const PieceType pt = static_cast<PieceType>(b.producingType);
+                sf::Vector2i spawnPos = ProductionSystem::findSpawnCell(b, board, pt, activeKingdom);
                 if (spawnPos.x >= 0) {
-                    PieceType pt = static_cast<PieceType>(b.producingType);
                     Piece newPiece = pieceFactory.createPiece(pt, m_activeKingdom, spawnPos);
                     activeKingdom.addPiece(newPiece);
                     board.getCell(spawnPos.x, spawnPos.y).piece = &activeKingdom.pieces.back();
+                    if (pt == PieceType::Bishop) {
+                        activeKingdom.recordSuccessfulBishopSpawnParity(
+                            ProductionSpawnRules::squareColorParity(spawnPos));
+                    }
 
                     log.log(m_turnNumber, m_activeKingdom, "Unit produced!");
                     b.isProducing = false;

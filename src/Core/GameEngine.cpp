@@ -210,6 +210,8 @@ bool GameEngine::restoreFromSave(const SaveData& data,
         const auto kingdomId = static_cast<KingdomId>(kingdomSlot);
         m_kingdoms[kingdomSlot] = Kingdom(kingdomId);
         m_kingdoms[kingdomSlot].gold = data.kingdoms[kingdomSlot].gold;
+        m_kingdoms[kingdomSlot].hasSpawnedBishop = data.kingdoms[kingdomSlot].hasSpawnedBishop;
+        m_kingdoms[kingdomSlot].lastBishopSpawnParity = data.kingdoms[kingdomSlot].lastBishopSpawnParity & 1;
         for (const auto& piece : data.kingdoms[kingdomSlot].pieces) {
             m_kingdoms[kingdomSlot].addPiece(piece);
         }
@@ -262,6 +264,8 @@ SaveData GameEngine::createSaveData() const {
     for (int kingdomSlot = 0; kingdomSlot < kNumKingdoms; ++kingdomSlot) {
         data.kingdoms[kingdomSlot].id = static_cast<KingdomId>(kingdomSlot);
         data.kingdoms[kingdomSlot].gold = m_kingdoms[kingdomSlot].gold;
+        data.kingdoms[kingdomSlot].hasSpawnedBishop = m_kingdoms[kingdomSlot].hasSpawnedBishop;
+        data.kingdoms[kingdomSlot].lastBishopSpawnParity = m_kingdoms[kingdomSlot].lastBishopSpawnParity;
         data.kingdoms[kingdomSlot].pieces.assign(m_kingdoms[kingdomSlot].pieces.begin(), m_kingdoms[kingdomSlot].pieces.end());
         data.kingdoms[kingdomSlot].buildings = m_kingdoms[kingdomSlot].buildings;
     }

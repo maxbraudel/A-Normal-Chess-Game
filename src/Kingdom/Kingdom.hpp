@@ -1,4 +1,5 @@
 #pragma once
+#include <optional>
 #include <vector>
 #include <deque>
 #include <SFML/System/Vector2.hpp>
@@ -10,6 +11,8 @@ class Kingdom {
 public:
     KingdomId id;
     int gold;
+    bool hasSpawnedBishop = false;
+    int lastBishopSpawnParity = 0;
     std::deque<Piece> pieces;
     std::vector<Building> buildings;
 
@@ -26,6 +29,8 @@ public:
     Piece* getPieceById(int pieceId);
     const Piece* getPieceById(int pieceId) const;
     Building* getBuildingAt(sf::Vector2i pos);
+    std::optional<int> preferredNextBishopSpawnParity() const;
+    void recordSuccessfulBishopSpawnParity(int parity);
 
     void addPiece(const Piece& piece);
     void removePiece(int pieceId);

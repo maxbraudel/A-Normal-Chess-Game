@@ -38,6 +38,8 @@ struct SaveData {
     struct KingdomData {
         KingdomId id = KingdomId::White;
         int gold = 0;
+        bool hasSpawnedBishop = false;
+        int lastBishopSpawnParity = 0;
         std::vector<Piece> pieces;
         std::vector<Building> buildings;
     };

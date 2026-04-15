@@ -62,5 +62,8 @@ private:
                                                    const GameSnapshot& s);
 
     static bool canLandOn(const GameSnapshot& s, sf::Vector2i pos, KingdomId mover);
-    static sf::Vector2i findSpawnCell(const GameSnapshot& s, const SnapBuilding& barracks);
+    static sf::Vector2i findSpawnCell(const GameSnapshot& s,
+                                      const SnapBuilding& barracks,
+                                      const SnapKingdom& kingdom,
+                                      PieceType type);
 };
