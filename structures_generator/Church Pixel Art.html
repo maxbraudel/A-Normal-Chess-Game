@@ -2,190 +2,193 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Pixel Church 64x48 (Perfect 4x3 Chunks)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Church Structure Generator</title>
+<link rel="stylesheet" href="./structure-generator.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<style>
-  body {
-    background: #111;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-    margin: 0;
-    gap: 20px;
-  }
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(64, 10px);
-    grid-template-rows: repeat(48, 10px);
-  }
-  .cell { width: 10px; height: 10px; }
-  button { padding: 10px 20px; cursor: pointer; }
-</style>
+<script src="./structure-generator-core.js"></script>
 </head>
 <body>
-<button onclick="downloadChunks()">Download Chunks</button>
-<div class="grid" id="grid"></div>
+<div class="structure-app">
+  <aside class="control-rail">
+    <section class="brand-block">
+      <p class="eyebrow">Chunked Pixel Structure Generator</p>
+      <h1 id="buildingTitle"></h1>
+      <p class="subtitle" id="buildingSubtitle"></p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Generator Config</h2>
+          <p>Width, height and chunk naming are all defined in this page-level config object.</p>
+        </div>
+      </div>
+      <div class="meta-grid">
+        <div class="meta-card"><span>Chunk Grid</span><strong id="chunkDimensions"></strong></div>
+        <div class="meta-card"><span>Pixel Size</span><strong id="pixelDimensions"></strong></div>
+        <div class="meta-card"><span>Chunk Size</span><strong id="chunkSize"></strong></div>
+        <div class="meta-card"><span>Export ZIP</span><strong id="exportName"></strong></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Workflow Notes</h2>
+          <p>This page is now only config plus drawing rules; rendering and export live in the shared core.</p>
+        </div>
+      </div>
+      <ul class="notes-list" id="notesList"></ul>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Export</h2>
+          <p>Preview the naming system first, then package everything into a ZIP with one click.</p>
+        </div>
+      </div>
+      <div class="button-row">
+        <button class="primary-button" id="downloadButton" type="button">Download ZIP Chunks</button>
+        <div class="status-pill" id="downloadStatus"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Chunk Names</h2>
+          <p id="chunkCount"></p>
+        </div>
+      </div>
+      <div class="chunk-name-list" id="chunkNameList"></div>
+    </section>
+  </aside>
+
+  <main class="workspace">
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Master Layout</h2>
+          <p>Same church footprint as before, now described with helpers instead of one-off raw loops.</p>
+        </div>
+        <label class="toggle"><input id="chunkGuideToggle" type="checkbox" checked> Show chunk guides</label>
+      </div>
+      <div class="canvas-frame">
+        <canvas id="masterCanvas"></canvas>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Chunk Preview</h2>
+          <p>Exact export order with per-chunk thumbnails.</p>
+        </div>
+      </div>
+      <div class="chunk-preview-grid" id="chunkPreviewGrid"></div>
+    </section>
+  </main>
+</div>
 
 <script>
-const grid = document.getElementById('grid');
+const churchConfig = {
+  title: "Church Structure Generator",
+  subtitle: "The original 4x3 chunk church rebuilt on a reusable structure engine so new buildings only need config and drawing rules.",
+  buildingName: "church",
+  widthChunks: 4,
+  heightChunks: 3,
+  previewScale: 9,
+  chunkPreviewScale: 5,
+  defaultTile: "floor",
+  chunkFileName: ({ buildingName, chunkX, chunkY }) => `${buildingName}_${chunkX + 1}_${chunkY + 1}.png`,
+  zipFileName: ({ buildingName }) => `${buildingName}_chunks.zip`,
+  notes: [
+    "Set widthChunks and heightChunks at the top of the config when starting another building.",
+    "Replace chunkFileName with any naming callback you need for another export convention.",
+    "Keep scene composition inside draw(structure) with small local helpers so the HTML stays readable.",
+    "The shared core now handles the main preview, chunk thumbnails, file naming preview and ZIP export."
+  ],
+  palette: {
+    floor: "#6f6f6f",
+    floorAlt: "#7a7a7a",
+    wall: "#c8c8c8",
+    wallDark: "#8f8f8f",
+    aisle: "#8b5a2b",
+    aisleEdge: "#6e4522",
+    carpetRed: "#7a1f1f",
+    carpetGold: "#c9b037",
+    altar: "#ece3b8",
+    altarEdge: "#cfc48f",
+    step: "#b5ab7a",
+    pew: "#5a3b1a",
+    pewTop: "#7a5226",
+    column: "#dddddd",
+    door: "#3b2a1a",
+    glassR: "#9c2f2f",
+    glassB: "#3a5f8a",
+    candle: "#f5d97a",
+    shadow: "#4a4a4a"
+  },
+  draw(structure) {
+    const width = structure.widthPixels;
+    const height = structure.heightPixels;
 
-const colors = {
-  floor: '#6f6f6f',
-  floorAlt: '#7a7a7a',
-  wall: '#c8c8c8',
-  wallDark: '#8f8f8f',
-  aisle: '#8b5a2b',
-  aisleEdge: '#6e4522',
-  carpetRed: '#7a1f1f',
-  carpetGold: '#c9b037',
-  altar: '#ece3b8',
-  altarEdge: '#cfc48f',
-  step: '#b5ab7a',
-  pew: '#5a3b1a',
-  pewTop: '#7a5226',
-  column: '#dddddd',
-  door: '#3b2a1a',
-  glassR: '#9c2f2f',
-  glassB: '#3a5f8a',
-  candle: '#f5d97a',
-  shadow: '#4a4a4a'
+    function placePewBank(startX, endX) {
+      for (let y = 4; y < 44; y += 4) {
+        structure.fillRect(startX, y, endX - startX, 1, "pew");
+        structure.fillRect(startX, y + 1, endX - startX, 1, "pewTop");
+      }
+    }
+
+    function placeStainedGlass() {
+      for (let y = 6; y < 44; y += 6) {
+        structure.points([[1, y], [62, y]], "glassR");
+        structure.points([[2, y], [61, y]], "glassB");
+      }
+    }
+
+    function placeColumns() {
+      for (let y = 6; y < 44; y += 6) {
+        structure.points([[26, y], [37, y]], "column");
+      }
+    }
+
+    structure.fillRect(0, 0, width, height, "floor");
+    structure.checkerRect(2, 2, width - 4, height - 4, "floor", "floorAlt", 4);
+    structure.strokeRect(0, 0, width, height, "wall");
+    structure.lineH(1, 1, 62, "wallDark");
+
+    for (let y = 2; y < 46; y += 1) {
+      structure.fillRect(30, y, 4, 1, "aisle");
+      structure.points([[29, y], [34, y]], "aisleEdge");
+    }
+
+    for (let y = 4; y < 44; y += 2) {
+      structure.points([[31, y]], "carpetRed");
+      structure.points([[32, y]], "carpetGold");
+    }
+
+    placePewBank(4, 28);
+    placePewBank(36, 60);
+    placeColumns();
+    placeStainedGlass();
+
+    structure.fillRect(24, 2, 16, 8, "altar");
+    structure.fillRect(26, 10, 12, 2, "step");
+    structure.fillRect(29, 4, 6, 4, "altarEdge");
+
+    for (let y = 3; y <= 8; y += 1) {
+      structure.set(31, y, "carpetGold");
+    }
+    structure.fillRect(29, 5, 5, 1, "carpetGold");
+    structure.points([[28, 6], [35, 6]], "candle");
+    structure.fillRect(30, 47, 4, 1, "door");
+  }
 };
 
-// FULL 64x48 CHURCH (NO OFFSET)
-let map = Array.from({ length: 48 }, () => Array(64).fill('floor'));
-
-// Walls
-for (let x = 0; x < 64; x++) {
-  map[0][x] = 'wall';
-  map[47][x] = 'wall';
-}
-for (let y = 0; y < 48; y++) {
-  map[y][0] = 'wall';
-  map[y][63] = 'wall';
-}
-
-// Wall shading
-for (let x = 1; x < 63; x++) map[1][x] = 'wallDark';
-
-// Central aisle
-for (let y = 2; y < 46; y++) {
-  for (let x = 30; x <= 33; x++) map[y][x] = 'aisle';
-  map[y][29] = 'aisleEdge';
-  map[y][34] = 'aisleEdge';
-}
-
-// Carpet
-for (let y = 4; y < 44; y++) {
-  if (y % 2 === 0) {
-    map[y][31] = 'carpetRed';
-    map[y][32] = 'carpetGold';
-  }
-}
-
-// Pews
-for (let y = 4; y < 44; y += 4) {
-  for (let x = 4; x < 28; x++) {
-    map[y][x] = 'pew';
-    map[y+1][x] = 'pewTop';
-  }
-  for (let x = 36; x < 60; x++) {
-    map[y][x] = 'pew';
-    map[y+1][x] = 'pewTop';
-  }
-}
-
-// Columns
-for (let y = 6; y < 44; y += 6) {
-  map[y][26] = 'column';
-  map[y][37] = 'column';
-}
-
-// Stained glass
-for (let y = 6; y < 44; y += 6) {
-  map[y][1] = 'glassR';
-  map[y][2] = 'glassB';
-  map[y][62] = 'glassR';
-  map[y][61] = 'glassB';
-}
-
-// Altar area (top full width center)
-for (let y = 2; y < 10; y++) {
-  for (let x = 24; x < 40; x++) map[y][x] = 'altar';
-}
-
-// Steps
-for (let x = 26; x <= 37; x++) {
-  map[10][x] = 'step';
-  map[11][x] = 'step';
-}
-
-// Pedestal
-for (let y = 4; y <= 7; y++) {
-  for (let x = 29; x <= 34; x++) map[y][x] = 'altarEdge';
-}
-
-// Proper cross
-for (let y = 3; y <= 8; y++) map[y][31] = 'carpetGold';
-map[5][29] = 'carpetGold';
-map[5][30] = 'carpetGold';
-map[5][31] = 'carpetGold';
-map[5][32] = 'carpetGold';
-map[5][33] = 'carpetGold';
-
-// Candles
-map[6][28] = 'candle';
-map[6][35] = 'candle';
-
-// Entrance
-for (let x = 30; x <= 33; x++) map[47][x] = 'door';
-
-// Render
-for (let y = 0; y < 48; y++) {
-  for (let x = 0; x < 64; x++) {
-    const div = document.createElement('div');
-    div.classList.add('cell');
-    div.style.background = colors[map[y][x]];
-    grid.appendChild(div);
-  }
-}
-
-// PERFECT CHUNK EXPORT (no offset needed anymore)
-function downloadChunks() {
-  const zip = new JSZip();
-
-  for (let cy = 0; cy < 3; cy++) {
-    for (let cx = 0; cx < 4; cx++) {
-      const canvas = document.createElement('canvas');
-      canvas.width = 16;
-      canvas.height = 16;
-      const ctx = canvas.getContext('2d');
-
-      for (let y = 0; y < 16; y++) {
-        for (let x = 0; x < 16; x++) {
-          const mapX = cx * 16 + x;
-          const mapY = cy * 16 + y;
-
-          ctx.fillStyle = colors[map[mapY][mapX]];
-          ctx.fillRect(x, y, 1, 1);
-        }
-      }
-
-      const dataURL = canvas.toDataURL("image/png");
-      const base64 = dataURL.split(',')[1];
-
-      zip.file(`church_${cx+1}_${cy+1}.png`, base64, { base64: true });
-    }
-  }
-
-  zip.generateAsync({ type: "blob" }).then(content => {
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(content);
-    a.download = "church_chunks.zip";
-    a.click();
-  });
-}
+createStructureGenerator(churchConfig);
 </script>
 </body>
 </html>

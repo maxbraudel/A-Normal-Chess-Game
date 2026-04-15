@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mine Structure Generator</title>
+<link rel="stylesheet" href="./structure-generator.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="./structure-generator-core.js"></script>
+</head>
+<body>
+<div class="structure-app">
+  <aside class="control-rail">
+    <section class="brand-block">
+      <p class="eyebrow">Chunked Pixel Structure Generator</p>
+      <h1 id="buildingTitle"></h1>
+      <p class="subtitle" id="buildingSubtitle"></p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Generator Config</h2>
+          <p>Primary knobs stay explicit so each building page remains easy to clone.</p>
+        </div>
+      </div>
+      <div class="meta-grid">
+        <div class="meta-card"><span>Chunk Grid</span><strong id="chunkDimensions"></strong></div>
+        <div class="meta-card"><span>Pixel Size</span><strong id="pixelDimensions"></strong></div>
+        <div class="meta-card"><span>Chunk Size</span><strong id="chunkSize"></strong></div>
+        <div class="meta-card"><span>Export ZIP</span><strong id="exportName"></strong></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Workflow Notes</h2>
+          <p>Only the config object and the rule-based draw function need to change for a new structure.</p>
+        </div>
+      </div>
+      <ul class="notes-list" id="notesList"></ul>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Export</h2>
+          <p>Chunk names are generated from the callback defined in this file.</p>
+        </div>
+      </div>
+      <div class="button-row">
+        <button class="primary-button" id="downloadButton" type="button">Download ZIP Chunks</button>
+        <div class="status-pill" id="downloadStatus"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Chunk Names</h2>
+          <p id="chunkCount"></p>
+        </div>
+      </div>
+      <div class="chunk-name-list" id="chunkNameList"></div>
+    </section>
+  </aside>
+
+  <main class="workspace">
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Master Layout</h2>
+          <p>Top-down mine composition laid out directly in code with reusable helper rules.</p>
+        </div>
+        <label class="toggle"><input id="chunkGuideToggle" type="checkbox" checked> Show chunk guides</label>
+      </div>
+      <div class="canvas-frame">
+        <canvas id="masterCanvas"></canvas>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Chunk Preview</h2>
+          <p>Exact export order with naming and local previews.</p>
+        </div>
+      </div>
+      <div class="chunk-preview-grid" id="chunkPreviewGrid"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+const mineConfig = {
+  title: "Mine Structure Generator",
+  subtitle: "A reusable 6x6 chunk template with a detailed top-down mine scene: central shaft, rails, supports, ore veins, carts, water, lanterns and storage pockets.",
+  buildingName: "mine",
+  widthChunks: 6,
+  heightChunks: 6,
+  previewScale: 7,
+  chunkPreviewScale: 5,
+  defaultTile: "rockFloor",
+  chunkFileName: ({ buildingName, chunkX, chunkY }) => `${buildingName}_${chunkX + 1}_${chunkY + 1}.png`,
+  zipFileName: ({ buildingName }) => `${buildingName}_chunks.zip`,
+  notes: [
+    "Change widthChunks and heightChunks first when starting a new building silhouette.",
+    "Swap chunkFileName if you need another export naming convention.",
+    "Keep the scene itself inside draw(structure) and local helper functions so the page stays readable.",
+    "The shared engine handles rendering, chunk previews, guide overlays and ZIP export for every structure page."
+  ],
+  palette: {
+    rockFloor: "#4a4035",
+    rockFloorAlt: "#564b40",
+    dust: "#66594d",
+    bedrock: "#2f2924",
+    bedrockShadow: "#211d19",
+    shaftRim: "#7f6444",
+    shaftRimDark: "#5d472f",
+    pit: "#090909",
+    pitDeep: "#131313",
+    timber: "#7f5833",
+    timberLight: "#a67646",
+    timberDark: "#5d3f24",
+    rail: "#8f9095",
+    railShadow: "#5f6064",
+    sleeper: "#4e321b",
+    sleeperLight: "#6e4a2a",
+    lantern: "#f7d27d",
+    lanternGlow: "#b97d29",
+    oreBlue: "#5b89ab",
+    oreCopper: "#c47b45",
+    oreGold: "#d8b84f",
+    crate: "#7b522d",
+    crateEdge: "#a77444",
+    metal: "#a8a9ad",
+    cloth: "#6f2e2c",
+    water: "#2a4a61",
+    waterFoam: "#4f7898",
+    moss: "#46603a"
+  },
+  draw(structure) {
+    const width = structure.widthPixels;
+    const height = structure.heightPixels;
+
+    function scatterDust(x, y, w, h, spacing) {
+      for (let py = y; py < y + h; py += spacing) {
+        for (let px = x + ((py / spacing) % 2); px < x + w; px += spacing) {
+          structure.set(px, py, "dust");
+        }
+      }
+    }
+
+    function placeLantern(x, y) {
+      structure.fillEllipse(x, y, 3, 3, "lanternGlow");
+      structure.set(x, y, "lantern");
+      structure.points([[x, y - 1], [x - 1, y], [x + 1, y], [x, y + 1]], "lanternGlow");
+    }
+
+    function placeCrate(x, y) {
+      structure.stamp(x, y, [
+        "EEEE",
+        "ECCE",
+        "ECCE",
+        "EEEE"
+      ], {
+        E: "crateEdge",
+        C: "crate"
+      });
+    }
+
+    function placeBarrel(x, y) {
+      structure.stamp(x, y, [
+        ".TT.",
+        "TMMT",
+        "TMMT",
+        ".TT."
+      ], {
+        T: "timberLight",
+        M: "timberDark"
+      });
+    }
+
+    function placeMineCart(x, y) {
+      structure.stamp(x, y, [
+        ".MMMM.",
+        "MCCCCM",
+        "MMMMMM",
+        ".R..R."
+      ], {
+        M: "metal",
+        C: "crate",
+        R: "railShadow"
+      });
+    }
+
+    function placeOreVein(x, y, tile) {
+      structure.stamp(x, y, [
+        ".XX.",
+        "XXXX",
+        ".XX.",
+        "X..X"
+      ], {
+        X: tile
+      });
+    }
+
+    function drawVerticalRails(leftRailX, topY, bottomY) {
+      const rightRailX = leftRailX + 3;
+      structure.lineV(leftRailX, topY, bottomY, "rail");
+      structure.lineV(rightRailX, topY, bottomY, "rail");
+      structure.lineV(leftRailX + 1, topY, bottomY, "railShadow");
+      structure.lineV(rightRailX - 1, topY, bottomY, "railShadow");
+      for (let y = topY; y <= bottomY; y += 3) {
+        structure.fillRect(leftRailX - 1, y, 6, 1, "sleeper");
+        structure.fillRect(leftRailX, y, 4, 1, "sleeperLight");
+      }
+    }
+
+    function drawHorizontalRails(topRailY, leftX, rightX) {
+      const bottomRailY = topRailY + 3;
+      structure.lineH(topRailY, leftX, rightX, "rail");
+      structure.lineH(bottomRailY, leftX, rightX, "rail");
+      structure.lineH(topRailY + 1, leftX, rightX, "railShadow");
+      structure.lineH(bottomRailY - 1, leftX, rightX, "railShadow");
+      for (let x = leftX; x <= rightX; x += 3) {
+        structure.fillRect(x, topRailY - 1, 1, 6, "sleeper");
+        structure.fillRect(x, topRailY, 1, 4, "sleeperLight");
+      }
+    }
+
+    function drawSupport(x, y, widthSupport, heightSupport) {
+      structure.fillRect(x, y, widthSupport, 2, "timberLight");
+      structure.fillRect(x, y + heightSupport - 2, widthSupport, 2, "timberDark");
+      structure.fillRect(x, y, 2, heightSupport, "timber");
+      structure.fillRect(x + widthSupport - 2, y, 2, heightSupport, "timber");
+      structure.points([
+        [x + 1, y + 1],
+        [x + widthSupport - 2, y + 1],
+        [x + 1, y + heightSupport - 2],
+        [x + widthSupport - 2, y + heightSupport - 2]
+      ], "metal");
+    }
+
+    structure.fillRect(0, 0, width, height, "bedrock");
+    structure.fillRect(5, 5, width - 10, height - 10, "rockFloor");
+    structure.checkerRect(5, 5, width - 10, height - 10, "rockFloor", "rockFloorAlt", 3);
+    structure.strokeRect(5, 5, width - 10, height - 10, "bedrockShadow");
+
+    structure.fillRect(10, 10, 18, 16, "bedrock");
+    structure.fillRect(68, 9, 18, 16, "bedrock");
+    structure.fillRect(10, 36, 10, 24, "bedrock");
+    structure.fillRect(76, 38, 10, 22, "bedrock");
+    structure.fillRect(12, 70, 16, 12, "bedrock");
+    structure.fillRect(68, 71, 16, 11, "bedrock");
+
+    structure.fillRect(14, 14, 10, 8, "water");
+    structure.fillEllipse(19, 18, 5, 3, "waterFoam");
+    structure.points([[17, 18], [21, 18], [19, 16], [19, 20]], "water");
+
+    scatterDust(7, 7, width - 14, height - 14, 4);
+
+    structure.fillRect(28, 23, 40, 46, "timberDark");
+    structure.fillRect(31, 26, 34, 40, "shaftRim");
+    structure.fillRect(34, 29, 28, 34, "pit");
+    structure.fillRect(38, 33, 20, 26, "pitDeep");
+    structure.strokeRect(31, 26, 34, 40, "shaftRimDark");
+
+    for (let x = 31; x <= 62; x += 4) {
+      structure.fillRect(x, 26, 2, 40, "timber");
+    }
+    for (let y = 26; y <= 64; y += 4) {
+      structure.fillRect(31, y, 34, 2, "timberLight");
+    }
+
+    structure.fillRect(42, 67, 12, 12, "timberDark");
+    structure.fillRect(44, 69, 8, 10, "shaftRim");
+    structure.fillRect(45, 71, 6, 7, "rockFloorAlt");
+
+    drawVerticalRails(45, 66, 90);
+    drawHorizontalRails(73, 19, 42);
+    drawHorizontalRails(73, 53, 76);
+    drawHorizontalRails(18, 24, 72);
+
+    placeMineCart(20, 71);
+    placeMineCart(69, 71);
+    placeMineCart(57, 16);
+
+    drawSupport(18, 67, 10, 14);
+    drawSupport(68, 67, 10, 14);
+    drawSupport(22, 13, 10, 12);
+    drawSupport(64, 13, 10, 12);
+
+    placeLantern(32, 24);
+    placeLantern(64, 24);
+    placeLantern(32, 66);
+    placeLantern(64, 66);
+    placeLantern(47, 83);
+    placeLantern(24, 73);
+    placeLantern(71, 73);
+
+    placeOreVein(14, 33, "oreCopper");
+    placeOreVein(79, 34, "oreBlue");
+    placeOreVein(18, 72, "oreGold");
+    placeOreVein(72, 72, "oreCopper");
+    placeOreVein(73, 14, "oreGold");
+
+    placeCrate(24, 75);
+    placeCrate(29, 75);
+    placeCrate(63, 75);
+    placeCrate(68, 75);
+    placeCrate(18, 58);
+    placeCrate(74, 58);
+    placeBarrel(25, 80);
+    placeBarrel(66, 80);
+
+    structure.stamp(42, 14, [
+      "..T..",
+      ".TTT.",
+      "TGTGT",
+      ".TTT.",
+      "..T.."
+    ], {
+      T: "timberLight",
+      G: "metal"
+    });
+
+    structure.stamp(11, 44, [
+      "MMMMMMMM",
+      "MCCCCCCM",
+      "MMMMMMMM"
+    ], {
+      M: "timberDark",
+      C: "cloth"
+    });
+
+    structure.stamp(77, 45, [
+      "MMMMMMMM",
+      "MCCCCCCM",
+      "MMMMMMMM"
+    ], {
+      M: "timberDark",
+      C: "cloth"
+    });
+
+    structure.fillRect(40, 88, 16, 3, "timberLight");
+    structure.fillRect(42, 91, 12, 2, "timberDark");
+    structure.points([[44, 89], [51, 89], [47, 92]], "metal");
+    structure.lineH(90, 46, 49, "rail");
+  }
+};
+
+createStructureGenerator(mineConfig);
+</script>
+</body>
+</html>
