@@ -72,7 +72,7 @@ void UIManager::showHUD() {
     m_mainMenu.hide();
     m_hud.show();
     m_toolBar.show();
-    if (m_leftSidebar) m_leftSidebar->setVisible(true);
+    if (m_leftSidebar) m_leftSidebar->setVisible(false);
     if (m_rightSidebar) m_rightSidebar->setVisible(true);
     m_eventLogPanel.show();
     m_kingdomBalancePanel.show();
@@ -94,12 +94,14 @@ void UIManager::updateDashboard(const InGameViewModel& model) {
 
 void UIManager::showPiecePanel(const Piece& piece, const GameConfig& config, bool allowUpgrade) {
     hideLeftContextPanels();
+    if (m_leftSidebar) m_leftSidebar->setVisible(true);
     if (m_leftEmptyState) m_leftEmptyState->setVisible(false);
     m_piecePanel.show(piece, config, allowUpgrade);
 }
 
 void UIManager::showBuildingPanel(const Building& building) {
     hideLeftContextPanels();
+    if (m_leftSidebar) m_leftSidebar->setVisible(true);
     if (m_leftEmptyState) m_leftEmptyState->setVisible(false);
     m_buildingPanel.show(building);
 }
@@ -107,25 +109,29 @@ void UIManager::showBuildingPanel(const Building& building) {
 void UIManager::showBarracksPanel(const Building& barracks, const Kingdom& kingdom, const GameConfig& config,
                                   bool allowProduce) {
     hideLeftContextPanels();
+    if (m_leftSidebar) m_leftSidebar->setVisible(true);
     if (m_leftEmptyState) m_leftEmptyState->setVisible(false);
     m_barracksPanel.show(barracks, kingdom, config, allowProduce);
 }
 
 void UIManager::showBuildToolPanel(const Kingdom& kingdom, const GameConfig& config, bool allowBuild) {
     hideLeftContextPanels();
+    if (m_leftSidebar) m_leftSidebar->setVisible(true);
     if (m_leftEmptyState) m_leftEmptyState->setVisible(false);
     m_buildToolPanel.show(kingdom, config, allowBuild);
 }
 
 void UIManager::showCellPanel(const Cell& cell) {
     hideLeftContextPanels();
+    if (m_leftSidebar) m_leftSidebar->setVisible(true);
     if (m_leftEmptyState) m_leftEmptyState->setVisible(false);
     m_cellPanel.show(cell);
 }
 
 void UIManager::showSelectionEmptyState() {
     hideLeftContextPanels();
-    setLeftContextMessage("Selection", "Select a piece or building.");
+    if (m_leftEmptyState) m_leftEmptyState->setVisible(false);
+    if (m_leftSidebar) m_leftSidebar->setVisible(false);
 }
 
 void UIManager::hideAllPanels() {

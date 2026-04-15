@@ -14,29 +14,35 @@ void KingdomBalancePanel::init(const tgui::Panel::Ptr& parent) {
     HUDLayout::styleSidebarTitle(titleLabel);
     m_panel->add(titleLabel);
 
-    const int metricBaseY = 42;
-    const int metricGap = 54;
-
     for (std::size_t index = 0; index < m_metricWidgets.size(); ++index) {
         MetricWidgets widgets;
-        const int y = metricBaseY + static_cast<int>(index) * metricGap;
+        const std::string rowHeight = "(&.height - 64) / 4";
+        const std::string rowY = "40 + ((&.height - 64) / 4) * " + std::to_string(index);
+
+        widgets.rowPanel = tgui::Panel::create(
+            tgui::Layout2d{tgui::Layout{"&.width - 16"}, tgui::Layout{rowHeight}});
+        widgets.rowPanel->setPosition(tgui::Layout{"8"}, tgui::Layout{rowY});
+        HUDLayout::styleEmbeddedPanel(widgets.rowPanel);
+        m_panel->add(widgets.rowPanel);
 
         widgets.nameLabel = tgui::Label::create("Metric");
-        widgets.nameLabel->setPosition({10, y});
-        widgets.nameLabel->setSize({"&.width - 20", 18});
+        widgets.nameLabel->setPosition({0, 0});
+        widgets.nameLabel->setSize({"&.width", 22});
         HUDLayout::styleSidebarBody(widgets.nameLabel, 14);
+        widgets.nameLabel->getScrollbar()->setPolicy(tgui::Scrollbar::Policy::Never);
         widgets.nameLabel->getRenderer()->setTextColor(HUDLayout::metricColors()[index]);
-        m_panel->add(widgets.nameLabel);
+        widgets.rowPanel->add(widgets.nameLabel);
 
         widgets.whiteValueLabel = tgui::Label::create("White 0");
-        widgets.whiteValueLabel->setPosition({10, y + 20});
-        widgets.whiteValueLabel->setSize({100, 20});
+        widgets.whiteValueLabel->setPosition({0, 22});
+        widgets.whiteValueLabel->setSize({100, 22});
         HUDLayout::styleSidebarBody(widgets.whiteValueLabel, 13);
-        m_panel->add(widgets.whiteValueLabel);
+        widgets.whiteValueLabel->getScrollbar()->setPolicy(tgui::Scrollbar::Policy::Never);
+        widgets.rowPanel->add(widgets.whiteValueLabel);
 
         widgets.balanceBar = tgui::ProgressBar::create();
-        widgets.balanceBar->setPosition({116, y + 22});
-        widgets.balanceBar->setSize({"&.width - 232", 16});
+        widgets.balanceBar->setPosition({110, 25});
+        widgets.balanceBar->setSize({"&.width - 232", 14});
         widgets.balanceBar->setMinimum(0);
         widgets.balanceBar->setMaximum(100);
         widgets.balanceBar->setValue(50);
@@ -46,14 +52,15 @@ void KingdomBalancePanel::init(const tgui::Panel::Ptr& parent) {
         widgets.balanceBar->getRenderer()->setTextColor(tgui::Color::Black);
         widgets.balanceBar->getRenderer()->setBorders(1);
         widgets.balanceBar->getRenderer()->setBorderColor(tgui::Color(140, 140, 140));
-        m_panel->add(widgets.balanceBar);
+        widgets.rowPanel->add(widgets.balanceBar);
 
         widgets.blackValueLabel = tgui::Label::create("Black 0");
-    widgets.blackValueLabel->setPosition({"&.width - 110", y + 20});
-    widgets.blackValueLabel->setSize({100, 20});
+        widgets.blackValueLabel->setPosition({"&.width - 100", 22});
+        widgets.blackValueLabel->setSize({100, 22});
         widgets.blackValueLabel->setHorizontalAlignment(tgui::HorizontalAlignment::Right);
         HUDLayout::styleSidebarBody(widgets.blackValueLabel, 13);
-        m_panel->add(widgets.blackValueLabel);
+        widgets.blackValueLabel->getScrollbar()->setPolicy(tgui::Scrollbar::Policy::Never);
+        widgets.rowPanel->add(widgets.blackValueLabel);
 
         m_metricWidgets[index] = widgets;
     }

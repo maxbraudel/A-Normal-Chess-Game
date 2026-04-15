@@ -15,6 +15,7 @@ public:
 
 private:
     struct MetricWidgets {
+        tgui::Panel::Ptr rowPanel;
         tgui::Label::Ptr nameLabel;
         tgui::Label::Ptr whiteValueLabel;
         tgui::Label::Ptr blackValueLabel;

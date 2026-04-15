@@ -13,8 +13,10 @@ std::string metricText(std::size_t index, int value) {
 void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
     (void) assets;
 
-    m_metricsPanel = tgui::Panel::create(HUDLayout::stackSize(4, HUDLayout::kMetricWidth));
-    m_metricsPanel->setPosition(HUDLayout::anchorPosition(HUDAnchor::TopLeft, 4, HUDLayout::kMetricWidth));
+    m_metricsPanel = tgui::Panel::create(HUDLayout::metricsPanelSize());
+    m_metricsPanel->setPosition(HUDLayout::anchorPositionForSize(HUDAnchor::TopLeft,
+                                                                 HUDLayout::metricsPanelSize().x,
+                                                                 HUDLayout::metricsPanelSize().y));
     HUDLayout::makeTransparentPanel(m_metricsPanel);
     gui.add(m_metricsPanel, "HUDMetricsPanel");
 
@@ -31,8 +33,8 @@ void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
     for (std::size_t index = 0; index < m_metricLabels.size(); ++index) {
         m_metricLabels[index] = tgui::Label::create(metricText(index, 0));
         HUDLayout::styleHudIndicator(m_metricLabels[index], HUDLayout::metricColors()[index],
-                                     HUDLayout::kMetricWidth, HUDLayout::kTopComponentHeight, 13);
-        HUDLayout::placeStackChild(m_metricLabels[index], static_cast<int>(index), HUDLayout::kMetricWidth);
+                                     HUDLayout::metricWidths()[index], HUDLayout::kTopComponentHeight, 13);
+        HUDLayout::placeMetricChild(m_metricLabels[index], index);
         m_metricsPanel->add(m_metricLabels[index]);
     }
 

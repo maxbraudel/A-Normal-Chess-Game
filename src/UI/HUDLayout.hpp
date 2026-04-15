@@ -21,6 +21,7 @@ namespace HUDLayout {
 
 inline constexpr float kEdgeMargin = 12.f;
 inline constexpr float kMetricWidth = 108.f;
+inline constexpr float kWideMetricWidth = 156.f;
 inline constexpr float kActionWidth = 118.f;
 inline constexpr float kStatusWidth = 360.f;
 inline constexpr float kTopComponentHeight = 40.f;
@@ -55,6 +56,44 @@ inline const std::array<tgui::Color, 4>& metricColors() {
     };
 
     return colors;
+}
+
+inline const std::array<float, 4>& metricWidths() {
+    static const std::array<float, 4> widths = {
+        kMetricWidth,
+        kWideMetricWidth,
+        kMetricWidth,
+        kMetricWidth
+    };
+
+    return widths;
+}
+
+inline float totalMetricWidth() {
+    float width = 0.f;
+    const auto& widths = metricWidths();
+    for (std::size_t index = 0; index < widths.size(); ++index) {
+        width += widths[index];
+        if (index + 1 < widths.size()) {
+            width += kComponentGap;
+        }
+    }
+
+    return width;
+}
+
+inline tgui::Vector2f metricsPanelSize() {
+    return {totalMetricWidth(), kTopComponentHeight};
+}
+
+inline float metricOffsetX(std::size_t index) {
+    float x = 0.f;
+    const auto& widths = metricWidths();
+    for (std::size_t current = 0; current < index && current < widths.size(); ++current) {
+        x += widths[current] + kComponentGap;
+    }
+
+    return x;
 }
 
 inline tgui::Vector2f stackSize(int count,
@@ -108,6 +147,41 @@ inline tgui::Layout2d anchorPosition(HUDAnchor anchor,
     return layout("0", "0");
 }
 
+inline tgui::Layout2d anchorPositionForSize(HUDAnchor anchor,
+                                            float width,
+                                            float height,
+                                            float marginX = kEdgeMargin,
+                                            float marginY = kEdgeMargin) {
+    const std::string layoutWidth = asLayoutValue(width);
+    const std::string layoutHeight = asLayoutValue(height);
+    const std::string xMargin = asLayoutValue(marginX);
+    const std::string yMargin = asLayoutValue(marginY);
+    const auto layout = [](const std::string& x, const std::string& y) {
+        return tgui::Layout2d{tgui::Layout{x}, tgui::Layout{y}};
+    };
+
+    switch (anchor) {
+        case HUDAnchor::TopLeft:
+            return layout(xMargin, yMargin);
+        case HUDAnchor::TopCenter:
+            return layout("(&.width - " + layoutWidth + ") / 2", yMargin);
+        case HUDAnchor::TopRight:
+            return layout("&.width - " + layoutWidth + " - " + xMargin, yMargin);
+        case HUDAnchor::MiddleLeft:
+            return layout(xMargin, "(&.height - " + layoutHeight + ") / 2");
+        case HUDAnchor::MiddleRight:
+            return layout("&.width - " + layoutWidth + " - " + xMargin, "(&.height - " + layoutHeight + ") / 2");
+        case HUDAnchor::BottomLeft:
+            return layout(xMargin, "&.height - " + layoutHeight + " - " + yMargin);
+        case HUDAnchor::BottomCenter:
+            return layout("(&.width - " + layoutWidth + ") / 2", "&.height - " + layoutHeight + " - " + yMargin);
+        case HUDAnchor::BottomRight:
+            return layout("&.width - " + layoutWidth + " - " + xMargin, "&.height - " + layoutHeight + " - " + yMargin);
+    }
+
+    return layout("0", "0");
+}
+
 inline tgui::Layout sidebarHeight() {
     return tgui::Layout{"(&.height * 7) / 10"};
 }
@@ -141,6 +215,11 @@ inline void placeStackChild(const tgui::Widget::Ptr& widget,
                             float componentHeight = kTopComponentHeight) {
     widget->setPosition({index * (componentWidth + componentGap), 0});
     widget->setSize({componentWidth, componentHeight});
+}
+
+inline void placeMetricChild(const tgui::Widget::Ptr& widget, std::size_t index) {
+    widget->setPosition({metricOffsetX(index), 0});
+    widget->setSize({metricWidths()[index], kTopComponentHeight});
 }
 
 inline void styleHudButton(const tgui::Button::Ptr& button,

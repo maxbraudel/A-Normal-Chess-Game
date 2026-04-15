@@ -336,7 +336,7 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
             return;
         }
 
-        clearSelection();
+        selectCell(cellPos);
     }
 }
 
