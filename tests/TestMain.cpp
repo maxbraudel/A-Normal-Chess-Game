@@ -624,6 +624,119 @@ void testSaveManagerRoundTrip() {
             server.stop();
         }
 
+        void testMultiplayerServerAllowsReconnectAfterDisconnect() {
+            MultiplayerConfig config;
+            config.enabled = true;
+            config.passwordSalt = "reconnect_salt";
+            config.passwordHash = MultiplayerPasswordUtils::computePasswordDigest("secret", config.passwordSalt);
+
+            MultiplayerServer server;
+            unsigned short port = 47100;
+            bool started = false;
+            for (; port < 47200; ++port) {
+                std::string startError;
+                if (server.start(port, "reconnect_save", config, &startError)) {
+                    started = true;
+                    break;
+                }
+            }
+            expect(started, "Reconnect smoke test could not find a free local port.");
+
+            auto connectAndJoin = [&](MultiplayerClient& client, std::string* errorMessage) {
+                expect(client.connect(sf::IpAddress::LocalHost, port, sf::seconds(1.f), errorMessage),
+                       "Reconnect smoke test client should connect to the local server.");
+                expect(client.requestServerInfo(errorMessage),
+                       "Reconnect smoke test client should request server info.");
+
+                MultiplayerServerInfo info;
+                expect(waitUntil([&]() {
+                    server.update();
+                    client.update();
+
+                    while (client.hasPendingEvent()) {
+                        const auto event = client.popNextEvent();
+                        if (event.type == MultiplayerClient::Event::Type::ServerInfoReceived) {
+                            info = event.serverInfo;
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }), "Reconnect smoke test should receive server info.");
+
+                expect(info.joinable, "Reconnect smoke test server should be joinable before each join.");
+                expect(client.sendJoinRequest(
+                           MultiplayerPasswordUtils::computePasswordDigest("secret", info.passwordSalt),
+                           errorMessage),
+                       "Reconnect smoke test client should send a join request.");
+
+                bool joinAccepted = false;
+                bool serverConnectedEvent = false;
+                expect(waitUntil([&]() {
+                    server.update();
+                    client.update();
+
+                    while (server.hasPendingEvent()) {
+                        const auto event = server.popNextEvent();
+                        if (event.type == MultiplayerServer::Event::Type::ClientConnected) {
+                            serverConnectedEvent = true;
+                        }
+                    }
+
+                    while (client.hasPendingEvent()) {
+                        const auto event = client.popNextEvent();
+                        if (event.type == MultiplayerClient::Event::Type::JoinAccepted) {
+                            joinAccepted = true;
+                        }
+                    }
+
+                    return joinAccepted && serverConnectedEvent;
+                }), "Reconnect smoke test join handshake should complete.");
+            };
+
+            MultiplayerClient firstClient;
+            std::string error;
+            connectAndJoin(firstClient, &error);
+
+            firstClient.disconnect();
+            bool serverSawDisconnect = false;
+            expect(waitUntil([&]() {
+                server.update();
+                while (server.hasPendingEvent()) {
+                    const auto event = server.popNextEvent();
+                    if (event.type == MultiplayerServer::Event::Type::ClientDisconnected) {
+                        serverSawDisconnect = true;
+                        return true;
+                    }
+                }
+
+                return false;
+            }), "Reconnect smoke test server should detect client disconnects.");
+            expect(serverSawDisconnect, "Reconnect smoke test should observe a disconnect event before rejoining.");
+
+            MultiplayerClient secondClient;
+            connectAndJoin(secondClient, &error);
+            expect(server.sendSnapshot("{\"reconnected\":true}", &error),
+                   "Reconnect smoke test server should send snapshots to the reconnected client.");
+
+            bool receivedSnapshot = false;
+            expect(waitUntil([&]() {
+                secondClient.update();
+                while (secondClient.hasPendingEvent()) {
+                    const auto event = secondClient.popNextEvent();
+                    if (event.type == MultiplayerClient::Event::Type::SnapshotReceived) {
+                        receivedSnapshot = (event.serializedSaveData == "{\"reconnected\":true}");
+                        return receivedSnapshot;
+                    }
+                }
+
+                return false;
+            }), "Reconnect smoke test client should receive a snapshot after reconnecting.");
+
+            secondClient.disconnect();
+            server.stop();
+        }
+
 void testTurnSystemSkipsUnaffordableBuild() {
     GameConfig config;
     Board board;
@@ -761,6 +874,7 @@ int main() {
         {"multiplayer turn packet roundtrip", testMultiplayerTurnSubmissionPacketRoundTrip},
         {"multiplayer turn rejection packet roundtrip", testMultiplayerTurnRejectedPacketRoundTrip},
         {"multiplayer loopback smoke", testMultiplayerLoopbackSmoke},
+        {"multiplayer reconnect smoke", testMultiplayerServerAllowsReconnectAfterDisconnect},
         {"turn system affordability", testTurnSystemSkipsUnaffordableBuild},
         {"projected income helper", testProjectedIncomeHelper},
         {"structure chunk registry", testStructureChunkRegistry},

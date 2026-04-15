@@ -14,6 +14,7 @@
 
 #include <SFML/System/Vector2.hpp>
 #include <functional>
+#include <optional>
 #include <string>
 
 class AssetManager;
@@ -22,6 +23,11 @@ class Building;
 class Kingdom;
 class GameConfig;
 struct Cell;
+
+struct MultiplayerDialogAction {
+    std::string label;
+    std::function<void()> callback;
+};
 
 class UIManager {
 public:
@@ -53,6 +59,10 @@ public:
                               const std::string& message,
                               const std::string& buttonLabel = "OK",
                               std::function<void()> onClose = {});
+    void showMultiplayerAlert(const std::string& title,
+                              const std::string& message,
+                              const MultiplayerDialogAction& primaryAction,
+                              std::optional<MultiplayerDialogAction> secondaryAction = std::nullopt);
     void hideMultiplayerAlert();
     bool isMultiplayerAlertVisible() const;
     bool blocksWorldMouseInput(const sf::Vector2i& screenPos, const sf::Vector2u& windowSize) const;
@@ -107,8 +117,10 @@ private:
     tgui::Panel::Ptr m_multiplayerAlertOverlay;
     tgui::Label::Ptr m_multiplayerAlertTitle;
     tgui::Label::Ptr m_multiplayerAlertMessage;
-    tgui::Button::Ptr m_multiplayerAlertButton;
+    tgui::Button::Ptr m_multiplayerAlertPrimaryButton;
+    tgui::Button::Ptr m_multiplayerAlertSecondaryButton;
     std::function<void()> m_onMultiplayerWaitingClose;
-    std::function<void()> m_onMultiplayerAlertClose;
+    std::function<void()> m_onMultiplayerAlertPrimaryAction;
+    std::function<void()> m_onMultiplayerAlertSecondaryAction;
     LeftContextView m_currentLeftContext = LeftContextView::None;
 };

@@ -67,6 +67,10 @@ private:
     void stopMultiplayer();
     bool startMultiplayerHostIfNeeded(const GameSessionConfig& session, std::string* errorMessage = nullptr);
     bool joinMultiplayer(const JoinMultiplayerRequest& request, std::string* errorMessage = nullptr);
+    bool joinMultiplayerInternal(const JoinMultiplayerRequest& request,
+                                 bool preserveLanClientContext,
+                                 std::string* errorMessage = nullptr);
+    bool reconnectToMultiplayerHost(std::string* errorMessage = nullptr);
     void updateMultiplayer();
     void processMultiplayerServerEvent(const MultiplayerServer::Event& event);
     void processMultiplayerClientEvent(const MultiplayerClient::Event& event);
@@ -74,6 +78,11 @@ private:
     bool applyRemoteTurnSubmission(const std::vector<TurnCommand>& commands, std::string* errorMessage = nullptr);
     void commitAuthoritativeTurn();
     bool pushSnapshotToRemote(std::string* errorMessage = nullptr);
+    void prepareForClientConnectionAttempt(bool preserveLanClientContext);
+    void cacheReconnectRequest(const JoinMultiplayerRequest& request);
+    void clearReconnectState();
+    void showLanClientDisconnectAlert(const std::string& title,
+                                      const std::string& message);
     void centerCameraOnKingdom(KingdomId kingdom);
     void configureLocalPlayerContext(const GameSessionConfig& session);
     bool isLocalPlayerTurn() const;
@@ -175,6 +184,14 @@ private:
     AssetManager m_assets;
     UIManager m_uiManager;
     SaveManager m_saveManager;
+    struct ClientReconnectState {
+        bool available = false;
+        bool awaitingReconnect = false;
+        JoinMultiplayerRequest request;
+        std::string lastErrorMessage;
+    };
+
+    ClientReconnectState m_clientReconnectState;
     LocalPlayerContext m_localPlayerContext;
     MultiplayerServer m_multiplayerServer;
     MultiplayerClient m_multiplayerClient;

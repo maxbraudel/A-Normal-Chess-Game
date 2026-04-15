@@ -139,17 +139,30 @@ void UIManager::init(tgui::Gui& gui, const AssetManager& assets) {
     m_multiplayerAlertMessage->getRenderer()->setTextColor(tgui::Color(230, 230, 230));
     alertDialog->add(m_multiplayerAlertMessage);
 
-    m_multiplayerAlertButton = tgui::Button::create("OK");
-    m_multiplayerAlertButton->setPosition({372, 208});
-    m_multiplayerAlertButton->setSize({124, 34});
-    m_multiplayerAlertButton->onPress([this]() {
-        const auto onClose = m_onMultiplayerAlertClose;
+    m_multiplayerAlertSecondaryButton = tgui::Button::create("Cancel");
+    m_multiplayerAlertSecondaryButton->setPosition({236, 208});
+    m_multiplayerAlertSecondaryButton->setSize({124, 34});
+    m_multiplayerAlertSecondaryButton->setVisible(false);
+    m_multiplayerAlertSecondaryButton->onPress([this]() {
+        const auto onAction = m_onMultiplayerAlertSecondaryAction;
         hideMultiplayerAlert();
-        if (onClose) {
-            onClose();
+        if (onAction) {
+            onAction();
         }
     });
-    alertDialog->add(m_multiplayerAlertButton);
+    alertDialog->add(m_multiplayerAlertSecondaryButton);
+
+    m_multiplayerAlertPrimaryButton = tgui::Button::create("OK");
+    m_multiplayerAlertPrimaryButton->setPosition({372, 208});
+    m_multiplayerAlertPrimaryButton->setSize({124, 34});
+    m_multiplayerAlertPrimaryButton->onPress([this]() {
+        const auto onAction = m_onMultiplayerAlertPrimaryAction;
+        hideMultiplayerAlert();
+        if (onAction) {
+            onAction();
+        }
+    });
+    alertDialog->add(m_multiplayerAlertPrimaryButton);
 
     m_leftSidebar->setVisible(false);
     m_rightSidebar->setVisible(false);
@@ -289,15 +302,35 @@ void UIManager::showMultiplayerAlert(const std::string& title,
                                      const std::string& message,
                                      const std::string& buttonLabel,
                                      std::function<void()> onClose) {
-    m_onMultiplayerAlertClose = std::move(onClose);
+    showMultiplayerAlert(
+        title,
+        message,
+        MultiplayerDialogAction{buttonLabel.empty() ? "OK" : buttonLabel, std::move(onClose)});
+}
+
+void UIManager::showMultiplayerAlert(const std::string& title,
+                                     const std::string& message,
+                                     const MultiplayerDialogAction& primaryAction,
+                                     std::optional<MultiplayerDialogAction> secondaryAction) {
+    hideMultiplayerWaitingOverlay();
+    m_onMultiplayerAlertPrimaryAction = primaryAction.callback;
+    m_onMultiplayerAlertSecondaryAction = secondaryAction ? secondaryAction->callback : std::function<void()>{};
     if (m_multiplayerAlertTitle) {
         m_multiplayerAlertTitle->setText(title);
     }
     if (m_multiplayerAlertMessage) {
         m_multiplayerAlertMessage->setText(message);
     }
-    if (m_multiplayerAlertButton) {
-        m_multiplayerAlertButton->setText(buttonLabel);
+    if (m_multiplayerAlertPrimaryButton) {
+        m_multiplayerAlertPrimaryButton->setText(primaryAction.label.empty() ? "OK" : primaryAction.label);
+    }
+    if (m_multiplayerAlertSecondaryButton) {
+        const bool hasSecondaryAction = secondaryAction.has_value();
+        m_multiplayerAlertSecondaryButton->setVisible(hasSecondaryAction);
+        if (hasSecondaryAction) {
+            m_multiplayerAlertSecondaryButton->setText(
+                secondaryAction->label.empty() ? "Cancel" : secondaryAction->label);
+        }
     }
     if (m_multiplayerAlertOverlay) {
         m_multiplayerAlertOverlay->setVisible(true);
@@ -308,7 +341,8 @@ void UIManager::hideMultiplayerAlert() {
     if (m_multiplayerAlertOverlay) {
         m_multiplayerAlertOverlay->setVisible(false);
     }
-    m_onMultiplayerAlertClose = {};
+    m_onMultiplayerAlertPrimaryAction = {};
+    m_onMultiplayerAlertSecondaryAction = {};
 }
 
 bool UIManager::isMultiplayerAlertVisible() const {

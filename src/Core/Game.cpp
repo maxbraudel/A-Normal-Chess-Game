@@ -35,6 +35,98 @@ std::optional<sf::Vector2i> mouseScreenPositionFromEvent(const sf::Event& event)
     }
 }
 
+void writeMultiplayerError(std::string* errorMessage, const std::string& message) {
+    if (errorMessage) {
+        *errorMessage = message;
+    }
+}
+
+bool waitForServerInfo(MultiplayerClient& client,
+                       MultiplayerServerInfo& serverInfo,
+                       sf::Time timeout,
+                       std::string* errorMessage) {
+    sf::Clock clock;
+    while (clock.getElapsedTime() < timeout) {
+        client.update();
+        while (client.hasPendingEvent()) {
+            const auto event = client.popNextEvent();
+            if (event.type == MultiplayerClient::Event::Type::ServerInfoReceived) {
+                serverInfo = event.serverInfo;
+                return true;
+            }
+
+            if (event.type == MultiplayerClient::Event::Type::Disconnected
+                || event.type == MultiplayerClient::Event::Type::Error) {
+                writeMultiplayerError(
+                    errorMessage,
+                    event.message.empty() ? "The multiplayer host did not respond." : event.message);
+                client.disconnect();
+                return false;
+            }
+        }
+    }
+
+    writeMultiplayerError(errorMessage, "The multiplayer host did not answer the ping request.");
+    client.disconnect();
+    return false;
+}
+
+bool waitForJoinSnapshot(MultiplayerClient& client,
+                         SaveManager& saveManager,
+                         SaveData& snapshotData,
+                         sf::Time timeout,
+                         std::string* errorMessage) {
+    bool accepted = false;
+    bool receivedSnapshot = false;
+    sf::Clock clock;
+    while (clock.getElapsedTime() < timeout && !receivedSnapshot) {
+        client.update();
+        while (client.hasPendingEvent()) {
+            const auto event = client.popNextEvent();
+            if (event.type == MultiplayerClient::Event::Type::JoinRejected) {
+                writeMultiplayerError(
+                    errorMessage,
+                    event.message.empty() ? "The multiplayer host rejected the join request." : event.message);
+                client.disconnect();
+                return false;
+            }
+
+            if (event.type == MultiplayerClient::Event::Type::JoinAccepted) {
+                accepted = true;
+                continue;
+            }
+
+            if (event.type == MultiplayerClient::Event::Type::SnapshotReceived) {
+                if (!saveManager.deserialize(event.serializedSaveData, snapshotData)) {
+                    writeMultiplayerError(errorMessage, "The multiplayer host sent an invalid game snapshot.");
+                    client.disconnect();
+                    return false;
+                }
+
+                receivedSnapshot = true;
+                break;
+            }
+
+            if (event.type == MultiplayerClient::Event::Type::Disconnected
+                || event.type == MultiplayerClient::Event::Type::Error) {
+                writeMultiplayerError(
+                    errorMessage,
+                    event.message.empty() ? "Lost connection to the multiplayer host." : event.message);
+                client.disconnect();
+                return false;
+            }
+        }
+    }
+
+    if (!accepted || !receivedSnapshot) {
+        writeMultiplayerError(errorMessage, "The multiplayer host did not complete the join handshake in time.");
+        client.disconnect();
+        return false;
+    }
+
+    return true;
+}
+
 }
 
 #ifdef _WIN32
@@ -142,6 +234,17 @@ LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 
 Game::Game()
     : m_state(GameState::MainMenu) {}
+
+void Game::cacheReconnectRequest(const JoinMultiplayerRequest& request) {
+    m_clientReconnectState.available = true;
+    m_clientReconnectState.awaitingReconnect = false;
+    m_clientReconnectState.lastErrorMessage.clear();
+    m_clientReconnectState.request = request;
+}
+
+void Game::clearReconnectState() {
+    m_clientReconnectState = {};
+}
 
 void Game::configureLocalPlayerContext(const GameSessionConfig& session) {
     m_localPlayerContext = makeLocalPlayerContextForSession(session);
@@ -256,6 +359,15 @@ void Game::updateMultiplayerPresentation() {
 
     m_uiManager.hideMultiplayerWaitingOverlay();
     if (!m_multiplayerClient.isAuthenticated()) {
+        if (m_clientReconnectState.awaitingReconnect) {
+            m_uiManager.setMultiplayerStatus(
+                m_clientReconnectState.available
+                    ? "LAN Client | Disconnected - reconnect available"
+                    : "LAN Client | Connection lost",
+                MultiplayerStatusTone::Waiting);
+            return;
+        }
+
         m_uiManager.setMultiplayerStatus("LAN Client | Finalizing connection", MultiplayerStatusTone::Waiting);
         return;
     }
@@ -769,8 +881,31 @@ void Game::stopMultiplayer() {
     m_waitingForRemoteTurnResult = false;
     m_multiplayerHostJoinHint.clear();
     m_localPlayerContext = LocalPlayerContext{};
+    clearReconnectState();
     m_uiManager.hideMultiplayerWaitingOverlay();
     m_uiManager.hideMultiplayerAlert();
+    m_uiManager.clearMultiplayerStatus();
+}
+
+void Game::prepareForClientConnectionAttempt(bool preserveLanClientContext) {
+    if (m_multiplayerServer.isRunning()) {
+        m_multiplayerServer.sendDisconnectNotice("Host closed the multiplayer session.", nullptr);
+    }
+
+    m_multiplayerServer.stop();
+    m_multiplayerClient.disconnect();
+    m_waitingForRemoteTurnResult = false;
+    m_multiplayerHostJoinHint.clear();
+    if (!preserveLanClientContext) {
+        m_localPlayerContext = LocalPlayerContext{};
+    }
+
+    m_input.clearMovePreview();
+    m_input.clearSelection();
+    m_input.setTool(ToolState::Select);
+    m_engine.resetPendingTurn();
+    m_uiManager.hideGameMenu();
+    m_uiManager.hideMultiplayerWaitingOverlay();
     m_uiManager.clearMultiplayerStatus();
 }
 
@@ -860,17 +995,28 @@ bool Game::applyRemoteTurnSubmission(const std::vector<TurnCommand>& commands, s
 }
 
 bool Game::joinMultiplayer(const JoinMultiplayerRequest& request, std::string* errorMessage) {
-    stopMultiplayer();
+    clearReconnectState();
+    return joinMultiplayerInternal(request, false, errorMessage);
+}
+
+bool Game::reconnectToMultiplayerHost(std::string* errorMessage) {
+    if (!m_clientReconnectState.available) {
+        writeMultiplayerError(errorMessage, "No previous multiplayer host is available for reconnect.");
+        return false;
+    }
+
+    return joinMultiplayerInternal(m_clientReconnectState.request, true, errorMessage);
+}
+
+bool Game::joinMultiplayerInternal(const JoinMultiplayerRequest& request,
+                                  bool preserveLanClientContext,
+                                  std::string* errorMessage) {
     discardPendingAITurn();
-    m_input.clearMovePreview();
-    m_input.setTool(ToolState::Select);
-    m_engine.resetPendingTurn();
+    prepareForClientConnectionAttempt(preserveLanClientContext);
 
     const sf::IpAddress address(request.host);
     if (address == sf::IpAddress::None) {
-        if (errorMessage) {
-            *errorMessage = "Invalid server IP address.";
-        }
+        writeMultiplayerError(errorMessage, "Invalid server IP address.");
         return false;
     }
 
@@ -886,53 +1032,21 @@ bool Game::joinMultiplayer(const JoinMultiplayerRequest& request, std::string* e
     }
 
     MultiplayerServerInfo serverInfo;
-    bool hasServerInfo = false;
-    sf::Clock clock;
-    while (clock.getElapsedTime() < sf::seconds(3.f) && !hasServerInfo) {
-        m_multiplayerClient.update();
-        while (m_multiplayerClient.hasPendingEvent()) {
-            const auto event = m_multiplayerClient.popNextEvent();
-            if (event.type == MultiplayerClient::Event::Type::ServerInfoReceived) {
-                serverInfo = event.serverInfo;
-                hasServerInfo = true;
-                break;
-            }
-            if (event.type == MultiplayerClient::Event::Type::Disconnected
-                || event.type == MultiplayerClient::Event::Type::Error) {
-                if (errorMessage) {
-                    *errorMessage = event.message.empty() ? "The multiplayer host did not respond." : event.message;
-                }
-                m_multiplayerClient.disconnect();
-                return false;
-            }
-        }
-    }
-
-    if (!hasServerInfo) {
-        if (errorMessage) {
-            *errorMessage = "The multiplayer host did not answer the ping request.";
-        }
-        m_multiplayerClient.disconnect();
+    if (!waitForServerInfo(m_multiplayerClient, serverInfo, sf::seconds(3.f), errorMessage)) {
         return false;
     }
     if (!serverInfo.multiplayerEnabled) {
-        if (errorMessage) {
-            *errorMessage = "This server is not hosting a multiplayer save.";
-        }
+        writeMultiplayerError(errorMessage, "This server is not hosting a multiplayer save.");
         m_multiplayerClient.disconnect();
         return false;
     }
     if (serverInfo.protocolVersion != kCurrentMultiplayerProtocolVersion) {
-        if (errorMessage) {
-            *errorMessage = "The multiplayer host uses an incompatible protocol version.";
-        }
+        writeMultiplayerError(errorMessage, "The multiplayer host uses an incompatible protocol version.");
         m_multiplayerClient.disconnect();
         return false;
     }
     if (!serverInfo.joinable) {
-        if (errorMessage) {
-            *errorMessage = "The multiplayer server is already occupied.";
-        }
+        writeMultiplayerError(errorMessage, "The multiplayer server is already occupied.");
         m_multiplayerClient.disconnect();
         return false;
     }
@@ -944,69 +1058,29 @@ bool Game::joinMultiplayer(const JoinMultiplayerRequest& request, std::string* e
         return false;
     }
 
-    bool accepted = false;
-    bool receivedSnapshot = false;
     SaveData snapshotData;
-    clock.restart();
-    while (clock.getElapsedTime() < sf::seconds(5.f) && !receivedSnapshot) {
-        m_multiplayerClient.update();
-        while (m_multiplayerClient.hasPendingEvent()) {
-            const auto event = m_multiplayerClient.popNextEvent();
-            if (event.type == MultiplayerClient::Event::Type::JoinRejected) {
-                if (errorMessage) {
-                    *errorMessage = event.message.empty() ? "The multiplayer host rejected the join request." : event.message;
-                }
-                m_multiplayerClient.disconnect();
-                return false;
-            }
-            if (event.type == MultiplayerClient::Event::Type::JoinAccepted) {
-                accepted = true;
-                continue;
-            }
-            if (event.type == MultiplayerClient::Event::Type::SnapshotReceived) {
-                if (!m_saveManager.deserialize(event.serializedSaveData, snapshotData)) {
-                    if (errorMessage) {
-                        *errorMessage = "The multiplayer host sent an invalid game snapshot.";
-                    }
-                    m_multiplayerClient.disconnect();
-                    return false;
-                }
-                receivedSnapshot = true;
-                break;
-            }
-            if (event.type == MultiplayerClient::Event::Type::Disconnected
-                || event.type == MultiplayerClient::Event::Type::Error) {
-                if (errorMessage) {
-                    *errorMessage = event.message.empty() ? "Lost connection to the multiplayer host." : event.message;
-                }
-                m_multiplayerClient.disconnect();
-                return false;
-            }
-        }
-    }
-
-    if (!accepted || !receivedSnapshot) {
-        if (errorMessage) {
-            *errorMessage = "The multiplayer host did not complete the join handshake in time.";
-        }
-        m_multiplayerClient.disconnect();
+    if (!waitForJoinSnapshot(m_multiplayerClient, m_saveManager, snapshotData, sf::seconds(5.f), errorMessage)) {
         return false;
     }
 
     std::string restoreError;
     if (!m_engine.restoreFromSave(snapshotData, m_config, &restoreError)) {
-        if (errorMessage) {
-            *errorMessage = restoreError.empty() ? "Unable to restore the multiplayer snapshot." : restoreError;
-        }
+        writeMultiplayerError(
+            errorMessage,
+            restoreError.empty() ? "Unable to restore the multiplayer snapshot." : restoreError);
         m_multiplayerClient.disconnect();
         return false;
     }
 
+    cacheReconnectRequest(request);
     m_localPlayerContext = makeLanClientLocalPlayerContext();
     m_waitingForRemoteTurnResult = false;
     m_state = GameState::Playing;
+    m_input.clearMovePreview();
+    m_input.clearSelection();
     refreshTurnPhase();
     centerCameraOnKingdom(KingdomId::Black);
+    m_uiManager.hideMultiplayerAlert();
     m_uiManager.showHUD();
     updateUIState();
     return true;
@@ -1084,6 +1158,8 @@ void Game::processMultiplayerClientEvent(const MultiplayerClient::Event& event) 
 
             m_localPlayerContext = makeLanClientLocalPlayerContext();
             m_waitingForRemoteTurnResult = false;
+            m_clientReconnectState.awaitingReconnect = false;
+            m_clientReconnectState.lastErrorMessage.clear();
             m_input.clearMovePreview();
             m_input.clearSelection();
             refreshTurnPhase();
@@ -1107,19 +1183,59 @@ void Game::processMultiplayerClientEvent(const MultiplayerClient::Event& event) 
                     : "The multiplayer client encountered a network error.")
                 : event.message;
             std::cerr << message << std::endl;
-            m_uiManager.showMultiplayerAlert(
+            m_multiplayerClient.disconnect();
+            m_localPlayerContext = makeLanClientLocalPlayerContext();
+            m_waitingForRemoteTurnResult = false;
+            m_input.clearMovePreview();
+            m_input.clearSelection();
+            m_input.setTool(ToolState::Select);
+            m_engine.resetPendingTurn();
+            showLanClientDisconnectAlert(
                 event.type == MultiplayerClient::Event::Type::Disconnected ? "Host Disconnected" : "Network Error",
-                message,
-                "Return to Main Menu",
-                [this]() {
-                    returnToMainMenu();
-                });
+                message);
             break;
         }
 
         default:
             break;
     }
+}
+
+void Game::showLanClientDisconnectAlert(const std::string& title, const std::string& message) {
+    m_clientReconnectState.awaitingReconnect = true;
+    m_clientReconnectState.lastErrorMessage = message;
+    m_uiManager.hideGameMenu();
+
+    if (!m_clientReconnectState.available) {
+        m_uiManager.showMultiplayerAlert(
+            title,
+            message,
+            "Return to Main Menu",
+            [this]() {
+                returnToMainMenu();
+            });
+        return;
+    }
+
+    m_uiManager.showMultiplayerAlert(
+        title,
+        message,
+        MultiplayerDialogAction{
+            "Reconnect",
+            [this]() {
+                std::string error;
+                if (!reconnectToMultiplayerHost(&error)) {
+                    const std::string reconnectMessage = error.empty()
+                        ? "Unable to reconnect to the previous multiplayer host."
+                        : "Unable to reconnect to the previous multiplayer host.\n\n" + error;
+                    showLanClientDisconnectAlert("Reconnect Failed", reconnectMessage);
+                }
+            }},
+        MultiplayerDialogAction{
+            "Return to Main Menu",
+            [this]() {
+                returnToMainMenu();
+            }});
 }
 
 void Game::setupUICallbacks() {
