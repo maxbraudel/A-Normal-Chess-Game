@@ -1,4 +1,5 @@
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -25,6 +26,7 @@
 #include "Core/GameState.hpp"
 #include "Core/GameStateValidator.hpp"
 #include "Input/LayeredSelection.hpp"
+#include "Render/StructureOverlay.hpp"
 #include "Multiplayer/MultiplayerClient.hpp"
 #include "Multiplayer/PasswordUtils.hpp"
 #include "Multiplayer/Protocol.hpp"
@@ -57,6 +59,17 @@ Building makeTestBarracks(int id, KingdomId owner, const sf::Vector2i& origin, c
     barracks.height = config.getBuildingHeight(BuildingType::Barracks);
     barracks.cellHP.assign(barracks.width * barracks.height, config.getBarracksCellHP());
     return barracks;
+}
+
+Building makeTestPublicBuilding(BuildingType type, const sf::Vector2i& origin, int width, int height) {
+    Building building;
+    building.type = type;
+    building.isNeutral = true;
+    building.origin = origin;
+    building.width = width;
+    building.height = height;
+    building.cellHP.assign(width * height, 1);
+    return building;
 }
 
 template <typename Predicate>
@@ -348,6 +361,115 @@ void testLayeredSelectionStackSupportsPreviewPieceOverride() {
     expect(stack.top() == SelectionLayer::Piece && stack.count == 3,
         "Preview overrides should still preserve the standard piece > building > terrain stack.");
 }
+
+    void testPublicBuildingOccupationStateResolvesAllOutcomes() {
+        Board board;
+        board.init(5);
+
+        Building mine = makeTestPublicBuilding(BuildingType::Mine, {1, 1}, 2, 1);
+        Kingdom white(KingdomId::White);
+        white.addPiece(Piece(31, PieceType::Pawn, KingdomId::White, {1, 1}));
+        Kingdom black(KingdomId::Black);
+        black.addPiece(Piece(32, PieceType::Pawn, KingdomId::Black, {2, 1}));
+
+        expect(resolvePublicBuildingOccupationState(mine, board) == PublicBuildingOccupationState::Unoccupied,
+            "Unoccupied public buildings should resolve to the empty occupation state.");
+
+        board.getCell(1, 1).piece = &white.pieces.back();
+        expect(resolvePublicBuildingOccupationState(mine, board) == PublicBuildingOccupationState::WhiteOccupied,
+            "White-only presence should resolve to the white occupation state.");
+
+        board.getCell(1, 1).piece = nullptr;
+        board.getCell(2, 1).piece = &black.pieces.back();
+        expect(resolvePublicBuildingOccupationState(mine, board) == PublicBuildingOccupationState::BlackOccupied,
+            "Black-only presence should resolve to the black occupation state.");
+
+        board.getCell(1, 1).piece = &white.pieces.back();
+        expect(resolvePublicBuildingOccupationState(mine, board) == PublicBuildingOccupationState::Contested,
+            "Mixed kingdom presence should resolve to the contested occupation state.");
+    }
+
+    void testSelectedStructureOverlayPrivateBuildingsUseOwnerShield() {
+        GameConfig config;
+        Board board;
+        board.init(5);
+
+        const Building barracks = makeTestBarracks(7, KingdomId::Black, {1, 1}, config);
+        const StructureOverlayStack overlay = buildSelectedStructureOverlay(barracks, board, config);
+
+        expect(overlay.rows.size() == 1,
+            "Idle private buildings should expose a single status row.");
+        expect(overlay.rows[0].placement == StructureOverlayRowPlacement::Above,
+            "The private building status row should be the primary row above the structure.");
+        expect(overlay.rows[0].items.size() == 1,
+            "The private building status row should currently contain a single owner icon.");
+        expect(overlay.rows[0].items[0].type == StructureOverlayItemType::Icon,
+            "The private building status row should contain an icon item.");
+        expect(overlay.rows[0].items[0].icon.source == StructureOverlayIconSource::UITexture,
+            "The private building owner indicator should use a UI texture icon.");
+        expect(overlay.rows[0].items[0].icon.textureName == "shield_black",
+            "A black-owned private building should display the black shield icon.");
+    }
+
+    void testSelectedStructureOverlayPublicBuildingsUseOccupationIndicator() {
+        GameConfig config;
+        Board board;
+        board.init(5);
+
+        Building church = makeTestPublicBuilding(BuildingType::Church, {1, 1}, 2, 1);
+        Kingdom white(KingdomId::White);
+        white.addPiece(Piece(41, PieceType::Pawn, KingdomId::White, {1, 1}));
+        Kingdom black(KingdomId::Black);
+        black.addPiece(Piece(42, PieceType::Pawn, KingdomId::Black, {2, 1}));
+        board.getCell(1, 1).piece = &white.pieces.back();
+        board.getCell(2, 1).piece = &black.pieces.back();
+
+        const StructureOverlayStack overlay = buildSelectedStructureOverlay(church, board, config);
+
+        expect(overlay.rows.size() == 1,
+            "Selected public buildings with occupation should expose a single occupation row.");
+        expect(overlay.rows[0].items.size() == 1,
+            "The public occupation row should currently contain one occupation icon.");
+        expect(overlay.rows[0].items[0].icon.textureName == "crossed_swords",
+            "Contested public buildings should display the crossed swords occupation icon.");
+    }
+
+    void testSelectedStructureOverlayProducingBarracksAddsProgressRow() {
+        GameConfig config;
+        Board board;
+        board.init(5);
+
+        Building barracks = makeTestBarracks(8, KingdomId::White, {1, 1}, config);
+        barracks.isProducing = true;
+        barracks.producingType = static_cast<int>(PieceType::Knight);
+        const int totalTurns = config.getProductionTurns(PieceType::Knight);
+        barracks.turnsRemaining = totalTurns > 1 ? totalTurns - 1 : 0;
+
+        const StructureOverlayStack overlay = buildSelectedStructureOverlay(barracks, board, config);
+
+        expect(overlay.rows.size() == 2,
+            "Producing barracks should expose both the owner row and the production row.");
+        expect(overlay.rows[1].placement == StructureOverlayRowPlacement::Below,
+            "The production row should be stacked below the primary status row.");
+        expect(overlay.rows[1].items.size() == 2,
+            "The production row should contain a piece icon plus a progress bar.");
+        expect(overlay.rows[1].items[0].type == StructureOverlayItemType::Icon,
+            "The first production-row item should be the produced piece icon.");
+        expect(overlay.rows[1].items[0].icon.source == StructureOverlayIconSource::PieceTexture,
+            "Produced pieces should use piece textures in the overlay row.");
+        expect(overlay.rows[1].items[0].icon.pieceType == PieceType::Knight,
+            "The produced piece icon should match the barracks production type.");
+        expect(overlay.rows[1].items[1].type == StructureOverlayItemType::ProgressBar,
+            "The second production-row item should be the progress bar.");
+
+        const float expectedProgress = totalTurns > 0
+         ? static_cast<float>(totalTurns - barracks.turnsRemaining) / static_cast<float>(totalTurns)
+         : 1.f;
+        expect(std::abs(overlay.rows[1].items[1].progress - expectedProgress) < 0.0001f,
+            "The production progress bar should expose completed progress derived from total turns and turns remaining.");
+        expect(overlay.rows[1].items[1].text == formatTurnsRemainingLabel(barracks.turnsRemaining),
+            "The production progress bar should carry the remaining-turns label.");
+    }
 
 void testSessionConfigDefaults() {
     GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsAI, "session_test");
@@ -1290,6 +1412,10 @@ int main() {
         {"layered selection priority", testLayeredSelectionStackResolvesPriority},
         {"layered selection building cycle", testLayeredSelectionStackSupportsBuildingTerrainCycle},
         {"layered selection preview override", testLayeredSelectionStackSupportsPreviewPieceOverride},
+        {"public building occupation state", testPublicBuildingOccupationStateResolvesAllOutcomes},
+        {"private building overlay owner shield", testSelectedStructureOverlayPrivateBuildingsUseOwnerShield},
+        {"public building overlay occupation", testSelectedStructureOverlayPublicBuildingsUseOccupationIndicator},
+        {"barracks overlay production row", testSelectedStructureOverlayProducingBarracksAddsProgressRow},
         {"save manager roundtrip", testSaveManagerRoundTrip},
         {"save manager string roundtrip", testSaveManagerStringRoundTrip},
         {"multiplayer password digest", testMultiplayerPasswordDigest},

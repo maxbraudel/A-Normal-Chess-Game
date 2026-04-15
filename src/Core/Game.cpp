@@ -1,5 +1,6 @@
 #include "Core/Game.hpp"
 #include "Render/OverlayRenderer.hpp"
+#include "Render/StructureOverlay.hpp"
 #include "Save/SaveData.hpp"
 #include "Buildings/BuildingType.hpp"
 #include "Systems/BuildSystem.hpp"
@@ -704,9 +705,15 @@ void Game::render() {
                 m_config.getCellSizePx(), true, m_assets);
             }
         }
-        m_renderer.getOverlay().drawZoneIndicators(m_window, m_camera, m_hudView,
-            m_windowSize, board(),
-            publicBuildings(), kingdoms(), m_config.getCellSizePx(), m_assets);
+        if (m_input.getCurrentTool() == ToolState::Select) {
+            if (const Building* selectedBuilding = m_input.getSelectedBuilding()) {
+                const StructureOverlayStack overlay = buildSelectedStructureOverlay(
+                    *selectedBuilding, board(), m_config);
+                m_renderer.getOverlay().drawStructureOverlay(
+                    m_window, m_camera, m_hudView, m_windowSize,
+                    *selectedBuilding, overlay, m_config.getCellSizePx(), m_assets);
+            }
+        }
     }
 
     m_window.setView(m_hudView);

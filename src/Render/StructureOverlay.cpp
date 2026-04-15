@@ -1,0 +1,152 @@
+#include "Render/StructureOverlay.hpp"
+
+#include <algorithm>
+
+#include "Board/Board.hpp"
+#include "Board/Cell.hpp"
+#include "Buildings/Building.hpp"
+#include "Buildings/BuildingType.hpp"
+#include "Config/GameConfig.hpp"
+#include "Units/Piece.hpp"
+
+namespace {
+
+StructureOverlayIcon makeUITextureIcon(const std::string& textureName) {
+    StructureOverlayIcon icon;
+    icon.source = StructureOverlayIconSource::UITexture;
+    icon.textureName = textureName;
+    return icon;
+}
+
+StructureOverlayIcon makePieceIcon(PieceType type, KingdomId kingdom) {
+    StructureOverlayIcon icon;
+    icon.source = StructureOverlayIconSource::PieceTexture;
+    icon.pieceType = type;
+    icon.kingdom = kingdom;
+    return icon;
+}
+
+StructureOverlayItem makeIconItem(const StructureOverlayIcon& icon) {
+    StructureOverlayItem item;
+    item.type = StructureOverlayItemType::Icon;
+    item.icon = icon;
+    return item;
+}
+
+StructureOverlayItem makeProgressBarItem(float progress, const std::string& label) {
+    StructureOverlayItem item;
+    item.type = StructureOverlayItemType::ProgressBar;
+    item.progress = progress;
+    item.text = label;
+    return item;
+}
+
+StructureOverlayIcon makeOwnerShieldIcon(KingdomId owner) {
+    return makeUITextureIcon(owner == KingdomId::White ? "shield_white" : "shield_black");
+}
+
+} // namespace
+
+bool StructureOverlayStack::isEmpty() const {
+    return rows.empty();
+}
+
+PublicBuildingOccupationState resolvePublicBuildingOccupationState(const Building& building,
+                                                                   const Board& board) {
+    bool whitePresent = false;
+    bool blackPresent = false;
+
+    for (const sf::Vector2i& pos : building.getOccupiedCells()) {
+        if (!board.isInBounds(pos.x, pos.y)) {
+            continue;
+        }
+
+        const Cell& cell = board.getCell(pos.x, pos.y);
+        if (!cell.piece) {
+            continue;
+        }
+
+        if (cell.piece->kingdom == KingdomId::White) {
+            whitePresent = true;
+        } else {
+            blackPresent = true;
+        }
+
+        if (whitePresent && blackPresent) {
+            return PublicBuildingOccupationState::Contested;
+        }
+    }
+
+    if (whitePresent) {
+        return PublicBuildingOccupationState::WhiteOccupied;
+    }
+    if (blackPresent) {
+        return PublicBuildingOccupationState::BlackOccupied;
+    }
+
+    return PublicBuildingOccupationState::Unoccupied;
+}
+
+float computeBarracksProductionProgress(const Building& barracks, const GameConfig& config) {
+    if (barracks.type != BuildingType::Barracks || !barracks.isProducing) {
+        return 0.f;
+    }
+
+    const PieceType pieceType = static_cast<PieceType>(barracks.producingType);
+    const int totalTurns = std::max(0, config.getProductionTurns(pieceType));
+    if (totalTurns <= 0) {
+        return 1.f;
+    }
+
+    const int remainingTurns = std::max(0, barracks.turnsRemaining);
+    const int completedTurns = std::clamp(totalTurns - remainingTurns, 0, totalTurns);
+    return static_cast<float>(completedTurns) / static_cast<float>(totalTurns);
+}
+
+std::string formatTurnsRemainingLabel(int turnsRemaining) {
+    const int clampedTurns = std::max(0, turnsRemaining);
+    return std::to_string(clampedTurns) + (clampedTurns == 1 ? " turn" : " turns");
+}
+
+StructureOverlayStack buildSelectedStructureOverlay(const Building& building,
+                                                    const Board& board,
+                                                    const GameConfig& config) {
+    StructureOverlayStack stack;
+
+    StructureOverlayRow statusRow;
+    statusRow.placement = StructureOverlayRowPlacement::Above;
+    if (building.isPublic()) {
+        switch (resolvePublicBuildingOccupationState(building, board)) {
+            case PublicBuildingOccupationState::WhiteOccupied:
+                statusRow.items.push_back(makeIconItem(makeUITextureIcon("shield_white")));
+                break;
+            case PublicBuildingOccupationState::BlackOccupied:
+                statusRow.items.push_back(makeIconItem(makeUITextureIcon("shield_black")));
+                break;
+            case PublicBuildingOccupationState::Contested:
+                statusRow.items.push_back(makeIconItem(makeUITextureIcon("crossed_swords")));
+                break;
+            case PublicBuildingOccupationState::Unoccupied:
+                break;
+        }
+    } else {
+        statusRow.items.push_back(makeIconItem(makeOwnerShieldIcon(building.owner)));
+    }
+
+    if (!statusRow.items.empty()) {
+        stack.rows.push_back(std::move(statusRow));
+    }
+
+    if (building.type == BuildingType::Barracks && building.isProducing) {
+        StructureOverlayRow productionRow;
+        productionRow.placement = StructureOverlayRowPlacement::Below;
+        productionRow.items.push_back(makeIconItem(
+            makePieceIcon(static_cast<PieceType>(building.producingType), building.owner)));
+        productionRow.items.push_back(makeProgressBarItem(
+            computeBarracksProductionProgress(building, config),
+            formatTurnsRemainingLabel(building.turnsRemaining)));
+        stack.rows.push_back(std::move(productionRow));
+    }
+
+    return stack;
+}

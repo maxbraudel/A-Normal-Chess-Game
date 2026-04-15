@@ -1,19 +1,25 @@
 #include "Render/OverlayRenderer.hpp"
 #include "Render/Camera.hpp"
-#include "Board/Board.hpp"
-#include "Board/Cell.hpp"
-#include "Kingdom/Kingdom.hpp"
-#include "Kingdom/KingdomId.hpp"
 #include "Buildings/Building.hpp"
-#include "Buildings/BuildingType.hpp"
 #include "Assets/AssetManager.hpp"
 #include <algorithm>
 
 namespace {
 
 const sf::Color kSelectionBlue(80, 160, 255, 240);
+const sf::Color kOverlayBackground(24, 24, 28, 220);
+const sf::Color kOverlayOutline(235, 235, 235, 210);
+const sf::Color kOverlayFill(80, 160, 255, 220);
+const sf::Color kOverlayText(248, 248, 248, 240);
 constexpr int kFlipHorizontalMask = 1;
 constexpr int kFlipVerticalMask = 2;
+constexpr float kOverlayIconSize = 28.f;
+constexpr float kOverlayProgressWidth = 96.f;
+constexpr float kOverlayProgressHeight = 18.f;
+constexpr float kOverlayItemGap = 6.f;
+constexpr float kOverlayRowGap = 4.f;
+constexpr float kOverlayMarginAboveBuilding = 8.f;
+constexpr unsigned int kOverlayTextSize = 13;
 
 void drawDot(sf::RenderWindow& window, float x, float y, float diameter) {
     sf::RectangleShape dot({diameter, diameter});
@@ -93,6 +99,191 @@ void configureSpriteForCell(sf::Sprite& sprite, int cellSize,
     }
     normalizedRotation %= 4;
     sprite.setRotation(static_cast<float>(normalizedRotation) * 90.f);
+}
+
+const sf::Texture& getOverlayTexture(const StructureOverlayIcon& icon,
+                                     const AssetManager& assets) {
+    if (icon.source == StructureOverlayIconSource::PieceTexture) {
+        return assets.getPieceTexture(icon.pieceType, icon.kingdom);
+    }
+
+    return assets.getUITexture(icon.textureName);
+}
+
+float measureTextWidth(const std::string& text, const AssetManager& assets) {
+    if (text.empty()) {
+        return 0.f;
+    }
+
+    if (!assets.hasFont()) {
+        return static_cast<float>(text.size()) * static_cast<float>(kOverlayTextSize) * 0.6f;
+    }
+
+    sf::Text drawable;
+    drawable.setFont(assets.getFont());
+    drawable.setCharacterSize(kOverlayTextSize);
+    drawable.setString(text);
+    const sf::FloatRect bounds = drawable.getLocalBounds();
+    return bounds.width;
+}
+
+float measureTextHeight(const std::string& text, const AssetManager& assets) {
+    if (text.empty()) {
+        return 0.f;
+    }
+
+    if (!assets.hasFont()) {
+        return static_cast<float>(kOverlayTextSize);
+    }
+
+    sf::Text drawable;
+    drawable.setFont(assets.getFont());
+    drawable.setCharacterSize(kOverlayTextSize);
+    drawable.setString(text);
+    const sf::FloatRect bounds = drawable.getLocalBounds();
+    return bounds.height;
+}
+
+float measureOverlayItemWidth(const StructureOverlayItem& item,
+                              const AssetManager& assets) {
+    switch (item.type) {
+        case StructureOverlayItemType::Icon:
+            return kOverlayIconSize;
+        case StructureOverlayItemType::Text:
+            return measureTextWidth(item.text, assets);
+        case StructureOverlayItemType::ProgressBar:
+            return kOverlayProgressWidth;
+    }
+
+    return 0.f;
+}
+
+float measureOverlayItemHeight(const StructureOverlayItem& item,
+                               const AssetManager& assets) {
+    switch (item.type) {
+        case StructureOverlayItemType::Icon:
+            return kOverlayIconSize;
+        case StructureOverlayItemType::Text:
+            return measureTextHeight(item.text, assets);
+        case StructureOverlayItemType::ProgressBar:
+            return kOverlayProgressHeight;
+    }
+
+    return 0.f;
+}
+
+float measureOverlayRowWidth(const StructureOverlayRow& row,
+                             const AssetManager& assets) {
+    float totalWidth = 0.f;
+    for (std::size_t index = 0; index < row.items.size(); ++index) {
+        totalWidth += measureOverlayItemWidth(row.items[index], assets);
+        if (index + 1 < row.items.size()) {
+            totalWidth += kOverlayItemGap;
+        }
+    }
+
+    return totalWidth;
+}
+
+float measureOverlayRowHeight(const StructureOverlayRow& row,
+                              const AssetManager& assets) {
+    float rowHeight = 0.f;
+    for (const StructureOverlayItem& item : row.items) {
+        rowHeight = std::max(rowHeight, measureOverlayItemHeight(item, assets));
+    }
+
+    return rowHeight;
+}
+
+float measureOverlayGroupHeight(const std::vector<const StructureOverlayRow*>& rows,
+                                const AssetManager& assets) {
+    float totalHeight = 0.f;
+    for (std::size_t index = 0; index < rows.size(); ++index) {
+        totalHeight += measureOverlayRowHeight(*rows[index], assets);
+        if (index + 1 < rows.size()) {
+            totalHeight += kOverlayRowGap;
+        }
+    }
+
+    return totalHeight;
+}
+
+void drawCenteredText(sf::RenderWindow& window, const AssetManager& assets,
+                      const std::string& text, const sf::FloatRect& bounds,
+                      const sf::Color& color) {
+    if (text.empty() || !assets.hasFont()) {
+        return;
+    }
+
+    sf::Text drawable;
+    drawable.setFont(assets.getFont());
+    drawable.setCharacterSize(kOverlayTextSize);
+    drawable.setFillColor(color);
+    drawable.setString(text);
+
+    const sf::FloatRect textBounds = drawable.getLocalBounds();
+    drawable.setPosition(
+        bounds.left + (bounds.width - textBounds.width) * 0.5f - textBounds.left,
+        bounds.top + (bounds.height - textBounds.height) * 0.5f - textBounds.top);
+    window.draw(drawable);
+}
+
+void drawOverlayRow(sf::RenderWindow& window, const StructureOverlayRow& row,
+                    float rowTop, float centerX,
+                    const AssetManager& assets) {
+    const float rowWidth = measureOverlayRowWidth(row, assets);
+    const float rowHeight = measureOverlayRowHeight(row, assets);
+    float itemLeft = centerX - rowWidth * 0.5f;
+
+    for (std::size_t index = 0; index < row.items.size(); ++index) {
+        const StructureOverlayItem& item = row.items[index];
+        const float itemWidth = measureOverlayItemWidth(item, assets);
+        const float itemHeight = measureOverlayItemHeight(item, assets);
+        const float itemTop = rowTop + (rowHeight - itemHeight) * 0.5f;
+
+        switch (item.type) {
+            case StructureOverlayItemType::Icon: {
+                sf::Sprite sprite(getOverlayTexture(item.icon, assets));
+                const sf::Texture* texture = sprite.getTexture();
+                if (texture && texture->getSize().x > 0 && texture->getSize().y > 0) {
+                    sprite.setScale(itemWidth / static_cast<float>(texture->getSize().x),
+                                    itemHeight / static_cast<float>(texture->getSize().y));
+                }
+                sprite.setPosition(itemLeft, itemTop);
+                window.draw(sprite);
+                break;
+            }
+            case StructureOverlayItemType::Text:
+                drawCenteredText(window, assets, item.text,
+                                 {itemLeft, rowTop, itemWidth, rowHeight}, kOverlayText);
+                break;
+            case StructureOverlayItemType::ProgressBar: {
+                sf::RectangleShape background({itemWidth, itemHeight});
+                background.setFillColor(kOverlayBackground);
+                background.setOutlineThickness(1.f);
+                background.setOutlineColor(kOverlayOutline);
+                background.setPosition(itemLeft, itemTop);
+                window.draw(background);
+
+                const float clampedProgress = std::clamp(item.progress, 0.f, 1.f);
+                if (clampedProgress > 0.f) {
+                    sf::RectangleShape fill({itemWidth * clampedProgress, itemHeight});
+                    fill.setFillColor(kOverlayFill);
+                    fill.setPosition(itemLeft, itemTop);
+                    window.draw(fill);
+                }
+
+                drawCenteredText(window, assets, item.text,
+                                 {itemLeft, itemTop, itemWidth, itemHeight}, kOverlayText);
+                break;
+            }
+        }
+
+        itemLeft += itemWidth;
+        if (index + 1 < row.items.size()) {
+            itemLeft += kOverlayItemGap;
+        }
+    }
 }
 
 } // namespace
@@ -203,65 +394,77 @@ void OverlayRenderer::drawBuildPreview(sf::RenderWindow& window, const Camera& c
     }
 }
 
-void OverlayRenderer::drawZoneIndicators(sf::RenderWindow& window, const Camera& camera,
-                                           const sf::View& hudView, sf::Vector2u windowSize,
-                                           const Board& board, const std::vector<Building>& publicBuildings,
-                                           const std::array<Kingdom, kNumKingdoms>& kingdoms,
-                                           int cellSize, const AssetManager& assets) {
-    // Fixed icon size in screen pixels — independent of camera zoom
-    static constexpr float ICON_SIZE = 28.f;
-
-    // Save current (camera) view, we'll need to restore it after drawing in screen space
-    sf::View cameraView = window.getView();
-
-    for (const auto& building : publicBuildings) {
-        if (building.type != BuildingType::Mine &&
-            building.type != BuildingType::Farm &&
-            building.type != BuildingType::Church) continue;
-
-        // Track which kingdoms have a piece on this building
-        bool present[kNumKingdoms] = {};
-
-        for (const auto& pos : building.getOccupiedCells()) {
-            const Cell& cell = board.getCell(pos.x, pos.y);
-            if (cell.piece) {
-                present[kingdomIndex(cell.piece->kingdom)] = true;
-            }
-        }
-
-        bool whitePresent = present[kingdomIndex(KingdomId::White)];
-        bool blackPresent = present[kingdomIndex(KingdomId::Black)];
-        if (!whitePresent && !blackPresent) continue;
-
-        // World-space anchor: horizontally centered above the building, one cell above top edge
-        float worldX = static_cast<float>(building.origin.x * cellSize + building.getFootprintWidth() * cellSize / 2);
-        float worldY = static_cast<float>(building.origin.y * cellSize - cellSize / 2);
-
-        // Convert that world point to screen pixels (respects camera pan + zoom)
-        sf::Vector2f screenPos = camera.worldToScreen({worldX, worldY}, windowSize);
-
-        // Pick texture
-        const sf::Texture* tex = nullptr;
-        if (whitePresent && blackPresent)
-            tex = &assets.getUITexture("crossed_swords");
-        else if (whitePresent)
-            tex = &assets.getUITexture("shield_white");
-        else
-            tex = &assets.getUITexture("shield_black");
-
-        // Build a fixed-size sprite in screen space
-        sf::Sprite spr(*tex);
-        sf::Vector2u tsz = tex->getSize();
-        if (tsz.x > 0 && tsz.y > 0) {
-            spr.setScale(ICON_SIZE / static_cast<float>(tsz.x),
-                         ICON_SIZE / static_cast<float>(tsz.y));
-        }
-        // Center the icon on the anchor point
-        spr.setPosition(screenPos.x - ICON_SIZE * 0.5f, screenPos.y - ICON_SIZE * 0.5f);
-
-        // Draw in screen space (default view = no zoom scaling)
-        window.setView(hudView);
-        window.draw(spr);
-        window.setView(cameraView);  // Restore camera view immediately after
+void OverlayRenderer::drawStructureOverlay(sf::RenderWindow& window, const Camera& camera,
+                                             const sf::View& hudView, sf::Vector2u windowSize,
+                                             const Building& building,
+                                             const StructureOverlayStack& overlay,
+                                             int cellSize, const AssetManager& assets) {
+    if (overlay.isEmpty()) {
+        return;
     }
+
+    const sf::Vector2f worldTopLeft(
+        static_cast<float>(building.origin.x * cellSize),
+        static_cast<float>(building.origin.y * cellSize));
+    const sf::Vector2f worldBottomRight(
+        static_cast<float>((building.origin.x + building.getFootprintWidth()) * cellSize),
+        static_cast<float>((building.origin.y + building.getFootprintHeight()) * cellSize));
+
+    const sf::Vector2f screenTopLeft = camera.worldToScreen(worldTopLeft, windowSize);
+    const sf::Vector2f screenBottomRight = camera.worldToScreen(worldBottomRight, windowSize);
+    const float leftEdge = std::min(screenTopLeft.x, screenBottomRight.x);
+    const float topEdge = std::min(screenTopLeft.y, screenBottomRight.y);
+    const float rightEdge = std::max(screenTopLeft.x, screenBottomRight.x);
+    const float centerX = (leftEdge + rightEdge) * 0.5f;
+
+    std::vector<const StructureOverlayRow*> aboveRows;
+    std::vector<const StructureOverlayRow*> belowRows;
+    for (const StructureOverlayRow& row : overlay.rows) {
+        if (row.items.empty()) {
+            continue;
+        }
+
+        if (row.placement == StructureOverlayRowPlacement::Above) {
+            aboveRows.push_back(&row);
+        } else {
+            belowRows.push_back(&row);
+        }
+    }
+
+    if (aboveRows.empty() && belowRows.empty()) {
+        return;
+    }
+
+    const float groupGap = (!aboveRows.empty() && !belowRows.empty()) ? kOverlayRowGap : 0.f;
+    const float totalHeight = measureOverlayGroupHeight(aboveRows, assets)
+        + groupGap
+        + measureOverlayGroupHeight(belowRows, assets);
+    float rowTop = topEdge - kOverlayMarginAboveBuilding - totalHeight;
+
+    const sf::View savedView = window.getView();
+    window.setView(hudView);
+
+    for (std::size_t index = 0; index < aboveRows.size(); ++index) {
+        const float rowHeight = measureOverlayRowHeight(*aboveRows[index], assets);
+        drawOverlayRow(window, *aboveRows[index], rowTop, centerX, assets);
+        rowTop += rowHeight;
+        if (index + 1 < aboveRows.size()) {
+            rowTop += kOverlayRowGap;
+        }
+    }
+
+    if (!aboveRows.empty() && !belowRows.empty()) {
+        rowTop += kOverlayRowGap;
+    }
+
+    for (std::size_t index = 0; index < belowRows.size(); ++index) {
+        const float rowHeight = measureOverlayRowHeight(*belowRows[index], assets);
+        drawOverlayRow(window, *belowRows[index], rowTop, centerX, assets);
+        rowTop += rowHeight;
+        if (index + 1 < belowRows.size()) {
+            rowTop += kOverlayRowGap;
+        }
+    }
+
+    window.setView(savedView);
 }

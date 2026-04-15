@@ -1,16 +1,12 @@
 #pragma once
 #include <SFML/Graphics.hpp>
-#include <array>
 #include <vector>
 #include "Buildings/BuildingType.hpp"
-#include "Kingdom/KingdomId.hpp"
+#include "Render/StructureOverlay.hpp"
 
 class AssetManager;
 class Camera;
-class Board;
-class Kingdom;
 class Building;
-class TurnSystem;
 
 class OverlayRenderer {
 public:
@@ -29,9 +25,8 @@ public:
                            int rotationQuarterTurns, int flipMask,
                            int cellSize, bool valid,
                            const AssetManager& assets);
-    void drawZoneIndicators(sf::RenderWindow& window, const Camera& camera,
-                             const sf::View& hudView, sf::Vector2u windowSize,
-                             const Board& board, const std::vector<Building>& publicBuildings,
-                             const std::array<Kingdom, kNumKingdoms>& kingdoms,
-                             int cellSize, const AssetManager& assets);
+    void drawStructureOverlay(sf::RenderWindow& window, const Camera& camera,
+                               const sf::View& hudView, sf::Vector2u windowSize,
+                               const Building& building, const StructureOverlayStack& overlay,
+                               int cellSize, const AssetManager& assets);
 };
