@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Farm Structure Generator</title>
+<link rel="stylesheet" href="./structure-generator.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="./structure-generator-core.js"></script>
+</head>
+<body>
+<div class="structure-app">
+  <aside class="control-rail">
+    <section class="brand-block">
+      <p class="eyebrow">Chunked Pixel Structure Generator</p>
+      <h1 id="buildingTitle"></h1>
+      <p class="subtitle" id="buildingSubtitle"></p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Generator Config</h2>
+          <p>This farm page only declares the chunk layout, export naming and draw rules.</p>
+        </div>
+      </div>
+      <div class="meta-grid">
+        <div class="meta-card"><span>Chunk Grid</span><strong id="chunkDimensions"></strong></div>
+        <div class="meta-card"><span>Pixel Size</span><strong id="pixelDimensions"></strong></div>
+        <div class="meta-card"><span>Chunk Size</span><strong id="chunkSize"></strong></div>
+        <div class="meta-card"><span>Export ZIP</span><strong id="exportName"></strong></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Workflow Notes</h2>
+          <p>The shared engine still handles previews, chunk naming and ZIP export.</p>
+        </div>
+      </div>
+      <ul class="notes-list" id="notesList"></ul>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Export</h2>
+          <p>One click packages the full 6x4 farm into chunk-ready textures.</p>
+        </div>
+      </div>
+      <div class="button-row">
+        <button class="primary-button" id="downloadButton" type="button">Download ZIP Chunks</button>
+        <div class="status-pill" id="downloadStatus"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Chunk Names</h2>
+          <p id="chunkCount"></p>
+        </div>
+      </div>
+      <div class="chunk-name-list" id="chunkNameList"></div>
+    </section>
+  </aside>
+
+  <main class="workspace">
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Master Layout</h2>
+          <p>A detailed top-down farmstead with barn, farmhouse, silo, fields, fenced livestock pen and a busy central yard.</p>
+        </div>
+        <label class="toggle"><input id="chunkGuideToggle" type="checkbox" checked> Show chunk guides</label>
+      </div>
+      <div class="canvas-frame">
+        <canvas id="masterCanvas"></canvas>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Chunk Preview</h2>
+          <p>Exact export order with local previews for every farm chunk.</p>
+        </div>
+      </div>
+      <div class="chunk-preview-grid" id="chunkPreviewGrid"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+const farmConfig = {
+  title: "Farm Structure Generator",
+  subtitle: "A highly detailed 6x4 chunk top-down farmstead with roofed buildings, crop beds, livestock fencing, orchard accents and a textured working yard.",
+  buildingName: "farm",
+  widthChunks: 6,
+  heightChunks: 4,
+  previewScale: 8,
+  chunkPreviewScale: 5,
+  defaultTile: "grass",
+  chunkFileName: ({ buildingName, chunkX, chunkY }) => `${buildingName}_${chunkX + 1}_${chunkY + 1}.png`,
+  zipFileName: ({ buildingName }) => `${buildingName}_chunks.zip`,
+  notes: [
+    "Chunk naming stays configurable through chunkFileName in this page config.",
+    "The footprint is 6 chunks wide by 4 chunks high, giving a 96x64 pixel master texture.",
+    "This composition mixes architecture and cultivated land so the farm reads as a complete production site from top-down.",
+    "To make another rural variant, keep the layout helpers and only swap palette plus scene composition."
+  ],
+  palette: {
+    grass: "#678a45",
+    grassAlt: "#759852",
+    grassShadow: "#4f6d35",
+    path: "#9b7b58",
+    pathAlt: "#b08b63",
+    dirt: "#7a5a38",
+    dirtDark: "#5c4329",
+    fence: "#8b6339",
+    fenceDark: "#654726",
+    soil: "#6a492d",
+    soilDark: "#523722",
+    wheat: "#d0b14c",
+    wheatDark: "#b08f33",
+    cropLeaf: "#4f8f3e",
+    cropLeafDark: "#3a6d2d",
+    cropFlower: "#c94e52",
+    barnRoof: "#b13a34",
+    barnRoofDark: "#8b2c27",
+    barnTrim: "#e7d9c6",
+    barnWall: "#c98553",
+    houseRoof: "#6c7f9e",
+    houseRoofDark: "#53647d",
+    plaster: "#d8cfbf",
+    timber: "#8c6038",
+    timberDark: "#664728",
+    silo: "#bfc7cc",
+    siloShadow: "#929aa0",
+    metal: "#9aa4aa",
+    water: "#4c7ba1",
+    waterLight: "#76a0c0",
+    hay: "#d8ba5a",
+    hayDark: "#b29038",
+    treeLeaf: "#507a34",
+    treeLeafDark: "#395724",
+    trunk: "#6a4324",
+    stone: "#9a9a94",
+    stoneDark: "#77766f",
+    door: "#5f3f24",
+    animalWhite: "#ece6d8",
+    animalBrown: "#875634",
+    animalDark: "#35261a",
+    cloth: "#b84d36",
+    shadow: "#42352a"
+  },
+  draw(structure) {
+    const width = structure.widthPixels;
+    const height = structure.heightPixels;
+
+    function sprinkleGrass() {
+      for (let y = 1; y < height - 1; y += 3) {
+        for (let x = 1 + ((y / 3) % 2); x < width - 1; x += 4) {
+          structure.set(x, y, "grassAlt");
+          if (x + 1 < width) {
+            structure.set(x + 1, y, "grassShadow");
+          }
+        }
+      }
+    }
+
+    function placeTree(cx, cy, radiusX, radiusY) {
+      structure.fillEllipse(cx, cy, radiusX, radiusY, "treeLeaf");
+      structure.fillEllipse(cx + 1, cy + 1, radiusX - 1, radiusY - 1, "treeLeafDark");
+      structure.fillRect(cx - 1, cy, 2, 4, "trunk");
+    }
+
+    function drawFenceRect(x, y, w, h) {
+      structure.strokeRect(x, y, w, h, "fence");
+      for (let px = x; px < x + w; px += 3) {
+        structure.set(px, y, "fenceDark");
+        structure.set(px, y + h - 1, "fenceDark");
+      }
+      for (let py = y; py < y + h; py += 3) {
+        structure.set(x, py, "fenceDark");
+        structure.set(x + w - 1, py, "fenceDark");
+      }
+    }
+
+    function placeHayBale(x, y) {
+      structure.fillRect(x, y, 4, 3, "hayDark");
+      structure.fillRect(x, y, 4, 2, "hay");
+      structure.lineV(x + 1, y, y + 2, "barnTrim");
+      structure.lineV(x + 2, y, y + 2, "barnTrim");
+    }
+
+    function placeCrate(x, y) {
+      structure.stamp(x, y, [
+        "EEEE",
+        "ECCE",
+        "ECCE",
+        "EEEE"
+      ], {
+        E: "timber",
+        C: "timberDark"
+      });
+    }
+
+    function placeBarrel(x, y) {
+      structure.stamp(x, y, [
+        ".TT.",
+        "TMMT",
+        "TMMT",
+        ".TT."
+      ], {
+        T: "timber",
+        M: "timberDark"
+      });
+    }
+
+    function placeAnimal(x, y, flip) {
+      const pattern = flip ? [
+        ".WW.",
+        "WBBW",
+        ".DDW"
+      ] : [
+        ".WW.",
+        "WBBW",
+        "WDD."
+      ];
+
+      structure.stamp(x, y, pattern, {
+        W: "animalWhite",
+        B: "animalBrown",
+        D: "animalDark"
+      });
+    }
+
+    function drawField(x, y, w, h, cropTile, accentTile, spacingX, spacingY) {
+      structure.fillRect(x, y, w, h, "soil");
+      for (let py = y + 1; py < y + h - 1; py += spacingY) {
+        structure.lineH(py, x + 1, x + w - 2, "soilDark");
+        for (let px = x + 2 + ((py / spacingY) % 2); px < x + w - 2; px += spacingX) {
+          structure.set(px, py, cropTile);
+          if (accentTile) {
+            structure.set(px + 1, py, accentTile);
+          }
+        }
+      }
+      structure.strokeRect(x, y, w, h, "fenceDark");
+    }
+
+    function drawBarn(x, y) {
+      structure.fillRect(x, y, 30, 18, "barnRoofDark");
+      structure.fillRect(x + 2, y + 2, 26, 14, "barnRoof");
+      structure.lineH(y + 6, x + 2, x + 27, "barnRoofDark");
+      structure.lineH(y + 11, x + 2, x + 27, "barnRoofDark");
+      structure.fillRect(x + 14, y + 2, 2, 14, "barnTrim");
+      structure.fillRect(x + 9, y + 5, 4, 4, "barnWall");
+      structure.fillRect(x + 17, y + 5, 4, 4, "barnWall");
+      structure.fillRect(x + 11, y + 13, 8, 4, "barnWall");
+      structure.fillRect(x + 12, y + 13, 6, 4, "barnTrim");
+      structure.fillRect(x + 13, y + 13, 4, 4, "shadow");
+      structure.points([[x + 5, y + 4], [x + 24, y + 4]], "barnTrim");
+      structure.points([[x + 7, y + 14], [x + 22, y + 14]], "barnTrim");
+    }
+
+    function drawHouse(x, y) {
+      structure.fillRect(x, y, 20, 15, "houseRoofDark");
+      structure.fillRect(x + 2, y + 2, 16, 11, "houseRoof");
+      structure.fillRect(x + 7, y, 6, 4, "stoneDark");
+      structure.fillRect(x + 3, y + 11, 14, 3, "plaster");
+      structure.fillRect(x + 5, y + 13, 10, 3, "timber");
+      structure.fillRect(x + 8, y + 12, 4, 4, "door");
+      structure.fillRect(x + 4, y + 5, 3, 3, "plaster");
+      structure.fillRect(x + 13, y + 5, 3, 3, "plaster");
+      structure.lineH(y + 8, x + 2, x + 17, "houseRoofDark");
+      structure.points([[x + 5, y + 6], [x + 14, y + 6]], "waterLight");
+    }
+
+    function drawSilo(x, y) {
+      structure.fillEllipse(x + 6, y + 8, 7, 9, "siloShadow");
+      structure.fillEllipse(x + 6, y + 7, 6, 8, "silo");
+      structure.fillRect(x + 3, y + 1, 6, 3, "metal");
+      structure.fillRect(x + 5, y, 2, 2, "metal");
+      structure.lineV(x + 6, y + 3, y + 14, "metal");
+      structure.points([[x + 4, y + 5], [x + 8, y + 5], [x + 4, y + 10], [x + 8, y + 10]], "metal");
+    }
+
+    function drawWaterTrough(x, y) {
+      structure.fillRect(x, y, 8, 4, "stoneDark");
+      structure.fillRect(x + 1, y + 1, 6, 2, "water");
+      structure.fillRect(x + 2, y + 1, 4, 1, "waterLight");
+    }
+
+    function drawPathNetwork() {
+      structure.fillRect(0, 25, width, 10, "path");
+      structure.fillRect(38, 0, 10, height, "path");
+      structure.checkerRect(2, 27, width - 4, 6, "path", "pathAlt", 3);
+      structure.checkerRect(40, 2, 6, height - 4, "path", "pathAlt", 3);
+      structure.fillRect(28, 17, 30, 20, "dirt");
+      structure.checkerRect(30, 19, 26, 16, "dirt", "pathAlt", 4);
+    }
+
+    structure.fillRect(0, 0, width, height, "grass");
+    structure.checkerRect(0, 0, width, height, "grass", "grassAlt", 4);
+    sprinkleGrass();
+
+    drawPathNetwork();
+
+    drawBarn(48, 5);
+    drawHouse(12, 6);
+    drawSilo(79, 5);
+
+    drawField(4, 38, 28, 20, "cropLeaf", "cropFlower", 4, 3);
+    drawField(62, 40, 28, 18, "wheat", "wheatDark", 4, 3);
+
+    drawFenceRect(58, 22, 28, 16);
+    drawWaterTrough(69, 28);
+    placeAnimal(62, 25, false);
+    placeAnimal(76, 31, true);
+    placeAnimal(69, 24, true);
+
+    drawFenceRect(6, 21, 18, 10);
+    placeTree(10, 24, 3, 3);
+    placeTree(17, 27, 3, 3);
+    structure.fillRect(11, 26, 2, 3, "trunk");
+
+    placeHayBale(49, 39);
+    placeHayBale(54, 39);
+    placeHayBale(51, 43);
+    placeCrate(33, 28);
+    placeCrate(27, 31);
+    placeBarrel(44, 28);
+    placeBarrel(47, 31);
+
+    structure.fillRect(23, 17, 10, 5, "cloth");
+    structure.fillRect(24, 18, 8, 3, "barnTrim");
+    structure.fillRect(25, 19, 6, 2, "cloth");
+
+    structure.fillRect(16, 21, 1, 8, "fenceDark");
+    structure.fillRect(17, 22, 1, 6, "cloth");
+
+    structure.points([
+      [25, 11], [29, 11], [58, 23], [83, 23], [43, 24], [43, 38],
+      [50, 29], [38, 29], [37, 33], [46, 33], [71, 41], [75, 45], [80, 50]
+    ], "shadow");
+
+    structure.fillRect(34, 45, 8, 6, "stone");
+    structure.fillRect(36, 47, 4, 2, "waterLight");
+    structure.points([[35, 46], [40, 46], [35, 50], [40, 50]], "stoneDark");
+
+    structure.lineH(57, 6, 29, "fence");
+    structure.lineH(57, 65, 89, "fence");
+    for (let x = 6; x < 30; x += 3) {
+      structure.set(x, 57, "fenceDark");
+    }
+    for (let x = 65; x < 90; x += 3) {
+      structure.set(x, 57, "fenceDark");
+    }
+  }
+};
+
+createStructureGenerator(farmConfig);
+</script>
+</body>
+</html>
