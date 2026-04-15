@@ -84,6 +84,7 @@ void BarracksPanel::init(const tgui::Panel::Ptr& parent) {
 void BarracksPanel::show(const Building& barracks, const Kingdom& kingdom, const GameConfig& config,
                          bool allowProduce) {
     if (!m_panel) return;
+    m_panel->moveToFront();
     m_currentBarracksId = barracks.id;
 
     int totalHP = 0;

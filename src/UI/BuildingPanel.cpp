@@ -63,6 +63,7 @@ void BuildingPanel::init(const tgui::Panel::Ptr& parent) {
 
 void BuildingPanel::show(const Building& building) {
     if (!m_panel) return;
+    m_panel->moveToFront();
     m_typeLabel->setText("Type: " + buildingTypeName(building.type));
     m_ownerLabel->setText("Owner: " + (building.isNeutral ? std::string("Neutral") : kingdomLabel(building.owner)));
     m_cellsLabel->setText("Occupied Cells: " + std::to_string(building.width * building.height));

@@ -61,6 +61,8 @@ void CellPanel::show(const Cell& cell) {
         return;
     }
 
+    m_panel->moveToFront();
+
     std::string status = "Empty";
     if (cell.piece) {
         status = "Occupied by piece";

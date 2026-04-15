@@ -99,10 +99,11 @@ void Renderer::drawBuildings(sf::RenderWindow& window, const Camera& camera,
 
 void Renderer::drawSingleBuilding(sf::RenderWindow& window, const Building& building) {
     sf::Sprite sprite;
-    sprite.setTexture(m_assets->getBuildingTexture(building.type));
 
     for (int dy = 0; dy < building.height; ++dy) {
         for (int dx = 0; dx < building.width; ++dx) {
+            sprite.setTexture(m_assets->getBuildingTexture(building.type, dx, dy));
+
             int x = building.origin.x + dx;
             int y = building.origin.y + dy;
 

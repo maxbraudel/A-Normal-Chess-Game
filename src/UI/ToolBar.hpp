@@ -8,6 +8,7 @@ public:
     void init(tgui::Gui& gui);
     void show();
     void hide();
+    bool isVisible() const;
 
     void setOnSelect(std::function<void()> callback);
     void setOnBuild(std::function<void()> callback);

@@ -8,8 +8,34 @@
 #include "Multiplayer/PasswordUtils.hpp"
 #include <algorithm>
 #include <iostream>
+#include <optional>
 #include <thread>
 #include <ctime>
+
+namespace {
+
+bool isBlockedGameplayShortcutKey(sf::Keyboard::Key key) {
+    return key == sf::Keyboard::Escape
+        || key == sf::Keyboard::P
+        || key == sf::Keyboard::K
+        || key == sf::Keyboard::Space;
+}
+
+std::optional<sf::Vector2i> mouseScreenPositionFromEvent(const sf::Event& event) {
+    switch (event.type) {
+        case sf::Event::MouseMoved:
+            return sf::Vector2i(event.mouseMove.x, event.mouseMove.y);
+        case sf::Event::MouseButtonPressed:
+        case sf::Event::MouseButtonReleased:
+            return sf::Vector2i(event.mouseButton.x, event.mouseButton.y);
+        case sf::Event::MouseWheelScrolled:
+            return sf::Vector2i(event.mouseWheelScroll.x, event.mouseWheelScroll.y);
+        default:
+            return std::nullopt;
+    }
+}
+
+}
 
 #ifdef _WIN32
 namespace {
@@ -362,8 +388,6 @@ void Game::handleNativeResize(sf::Vector2u newSize) {
 void Game::handleInput() {
     sf::Event event;
     while (m_window.pollEvent(event)) {
-        m_gui.handleEvent(event);
-
         if (event.type == sf::Event::Closed) {
             m_window.close();
             return;
@@ -375,36 +399,63 @@ void Game::handleInput() {
             continue;
         }
 
-        if (m_uiManager.isMultiplayerAlertVisible() || m_uiManager.isMultiplayerWaitingOverlayVisible()) {
-            continue;
-        }
+        const bool inInteractiveGameState = (m_state == GameState::Playing
+                                          || m_state == GameState::Paused
+                                          || m_state == GameState::GameOver);
+        const bool overlaysVisible = m_uiManager.isMultiplayerAlertVisible()
+                                  || m_uiManager.isMultiplayerWaitingOverlayVisible();
 
-        if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Escape) {
-            if (m_state != GameState::Playing && m_state != GameState::Paused) {
+        if (inInteractiveGameState && !overlaysVisible
+            && event.type == sf::Event::KeyPressed
+            && isBlockedGameplayShortcutKey(event.key.code)) {
+            if (event.key.code == sf::Keyboard::Escape) {
+                toggleInGameMenu();
                 continue;
             }
 
-            toggleInGameMenu();
-            continue;
-        }
-
-        if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::P) {
-            if (m_state == GameState::Playing || m_state == GameState::Paused || m_state == GameState::GameOver) {
+            if (event.key.code == sf::Keyboard::P) {
                 m_debugRecorder.exportHistory(gameName(),
                                              turnSystem().getTurnNumber(),
                                              turnSystem().getActiveKingdom());
+                continue;
+            }
+
+            if (isInGameMenuOpen()) {
+                continue;
+            }
+
+            if (event.key.code == sf::Keyboard::Space) {
+                if (canLocalPlayerIssueCommands()) {
+                    commitPlayerTurn();
+                }
+                continue;
+            }
+
+            if (event.key.code == sf::Keyboard::K) {
+                centerCameraOnKingdom(localPerspectiveKingdom());
+                continue;
+            }
+        }
+
+        const bool handledByGui = m_gui.handleEvent(event);
+
+        if (overlaysVisible) {
+            continue;
+        }
+
+        if (handledByGui) {
+            continue;
+        }
+
+        if (inInteractiveGameState) {
+            const auto mouseScreenPos = mouseScreenPositionFromEvent(event);
+            if (mouseScreenPos && m_uiManager.blocksWorldMouseInput(*mouseScreenPos, m_windowSize)) {
+                continue;
             }
         }
 
         if (isInGameMenuOpen()) {
             continue;
-        }
-
-        // Spacebar acts as the Play button (commit turn)
-        if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Space) {
-            if (canLocalPlayerIssueCommands()) {
-                commitPlayerTurn();
-            }
         }
 
         if (m_state == GameState::Playing) {
@@ -1142,13 +1193,16 @@ void Game::setupUICallbacks() {
     m_uiManager.toolBar().setOnBuild([this]() {
         if (!canLocalPlayerIssueCommands()) return;
         m_input.setTool(ToolState::Build);
+        m_uiManager.buildToolPanel().setSelectedBuildType(m_input.getBuildPreviewType());
         m_uiManager.showBuildToolPanel(activeKingdom(), m_config, true);
     });
 
     // Build tool panel
     m_uiManager.buildToolPanel().setOnSelectBuildType([this](int type) {
         if (!canLocalPlayerIssueCommands()) return;
-        m_input.setBuildType(static_cast<BuildingType>(type));
+        const BuildingType buildingType = static_cast<BuildingType>(type);
+        m_input.setBuildType(buildingType);
+        m_uiManager.buildToolPanel().setSelectedBuildType(buildingType);
     });
 
     // Piece panel upgrade

@@ -7,6 +7,20 @@
 #include "Config/GameConfig.hpp"
 #include "UI/HUDLayout.hpp"
 
+namespace {
+
+bool containsScreenPoint(const sf::FloatRect& rect, const sf::Vector2i& point) {
+    return rect.contains(static_cast<float>(point.x), static_cast<float>(point.y));
+}
+
+sf::FloatRect widgetScreenRect(const tgui::Widget::Ptr& widget) {
+    const tgui::Vector2f position = widget->getAbsolutePosition();
+    const tgui::Vector2f size = widget->getSize();
+    return sf::FloatRect(position.x, position.y, size.x, size.y);
+}
+
+}
+
 void UIManager::init(tgui::Gui& gui, const AssetManager& assets) {
     m_mainMenu.init(gui, assets);
     m_hud.init(gui, assets);
@@ -177,43 +191,36 @@ void UIManager::updateDashboard(const InGameViewModel& model) {
 }
 
 void UIManager::showPiecePanel(const Piece& piece, const GameConfig& config, bool allowUpgrade) {
-    hideLeftContextPanels();
-    if (m_leftSidebar) m_leftSidebar->setVisible(true);
-    if (m_leftEmptyState) m_leftEmptyState->setVisible(false);
+    activateLeftContext(LeftContextView::Piece);
     m_piecePanel.show(piece, config, allowUpgrade);
 }
 
 void UIManager::showBuildingPanel(const Building& building) {
-    hideLeftContextPanels();
-    if (m_leftSidebar) m_leftSidebar->setVisible(true);
-    if (m_leftEmptyState) m_leftEmptyState->setVisible(false);
+    activateLeftContext(LeftContextView::Building);
     m_buildingPanel.show(building);
 }
 
 void UIManager::showBarracksPanel(const Building& barracks, const Kingdom& kingdom, const GameConfig& config,
                                   bool allowProduce) {
-    hideLeftContextPanels();
-    if (m_leftSidebar) m_leftSidebar->setVisible(true);
-    if (m_leftEmptyState) m_leftEmptyState->setVisible(false);
+    activateLeftContext(LeftContextView::Barracks);
     m_barracksPanel.show(barracks, kingdom, config, allowProduce);
 }
 
 void UIManager::showBuildToolPanel(const Kingdom& kingdom, const GameConfig& config, bool allowBuild) {
-    hideLeftContextPanels();
-    if (m_leftSidebar) m_leftSidebar->setVisible(true);
-    if (m_leftEmptyState) m_leftEmptyState->setVisible(false);
+    activateLeftContext(LeftContextView::BuildTool);
     m_buildToolPanel.show(kingdom, config, allowBuild);
 }
 
 void UIManager::showCellPanel(const Cell& cell) {
-    hideLeftContextPanels();
-    if (m_leftSidebar) m_leftSidebar->setVisible(true);
-    if (m_leftEmptyState) m_leftEmptyState->setVisible(false);
+    activateLeftContext(LeftContextView::Cell);
     m_cellPanel.show(cell);
 }
 
 void UIManager::showSelectionEmptyState() {
-    hideLeftContextPanels();
+    if (m_currentLeftContext != LeftContextView::None) {
+        hideLeftContextPanels();
+        m_currentLeftContext = LeftContextView::None;
+    }
     if (m_leftEmptyState) m_leftEmptyState->setVisible(false);
     if (m_leftSidebar) m_leftSidebar->setVisible(false);
 }
@@ -232,6 +239,7 @@ void UIManager::hideAllPanels() {
     m_toolBar.hide();
     if (m_leftSidebar) m_leftSidebar->setVisible(false);
     if (m_rightSidebar) m_rightSidebar->setVisible(false);
+    m_currentLeftContext = LeftContextView::None;
 }
 
 void UIManager::update() {
@@ -307,6 +315,92 @@ bool UIManager::isMultiplayerAlertVisible() const {
     return m_multiplayerAlertOverlay && m_multiplayerAlertOverlay->isVisible();
 }
 
+bool UIManager::blocksWorldMouseInput(const sf::Vector2i& screenPos, const sf::Vector2u& windowSize) const {
+    const float width = static_cast<float>(windowSize.x);
+    const float height = static_cast<float>(windowSize.y);
+
+    if (m_leftSidebar && m_leftSidebar->isVisible()) {
+        const sf::FloatRect rect = widgetScreenRect(m_leftSidebar);
+        if (containsScreenPoint(rect, screenPos)) {
+            return true;
+        }
+    }
+
+    if (m_rightSidebar && m_rightSidebar->isVisible()) {
+        const sf::FloatRect rect = widgetScreenRect(m_rightSidebar);
+        if (containsScreenPoint(rect, screenPos)) {
+            return true;
+        }
+    }
+
+    if (m_hud.isVisible()) {
+        const sf::FloatRect metricsRect(HUDLayout::kEdgeMargin,
+                                        HUDLayout::kEdgeMargin,
+                                        HUDLayout::totalMetricWidth(),
+                                        HUDLayout::kTopComponentHeight);
+        if (containsScreenPoint(metricsRect, screenPos)) {
+            return true;
+        }
+
+        const sf::FloatRect statusRect((width - HUDLayout::kStatusWidth) * 0.5f,
+                                       HUDLayout::kEdgeMargin,
+                                       HUDLayout::kStatusWidth,
+                                       HUDLayout::kTopComponentHeight);
+        if (containsScreenPoint(statusRect, screenPos)) {
+            return true;
+        }
+
+        const float actionWidth = HUDLayout::stackSize(3, HUDLayout::kActionWidth).x;
+        const sf::FloatRect actionRect(width - actionWidth - HUDLayout::kEdgeMargin,
+                                       HUDLayout::kEdgeMargin,
+                                       actionWidth,
+                                       HUDLayout::kTopComponentHeight);
+        if (containsScreenPoint(actionRect, screenPos)) {
+            return true;
+        }
+
+        const sf::FloatRect networkRect((width - HUDLayout::kNetworkStatusWidth) * 0.5f,
+                                        HUDLayout::kEdgeMargin + HUDLayout::kTopComponentHeight + HUDLayout::kComponentGap,
+                                        HUDLayout::kNetworkStatusWidth,
+                                        HUDLayout::kNetworkStatusHeight);
+        if (containsScreenPoint(networkRect, screenPos)) {
+            return true;
+        }
+    }
+
+    if (m_toolBar.isVisible()) {
+        const float toolbarWidth = HUDLayout::stackSize(2,
+                                                        HUDLayout::kToolbarButtonWidth,
+                                                        HUDLayout::kComponentGap,
+                                                        HUDLayout::kToolbarHeight).x;
+        const sf::FloatRect toolbarRect(HUDLayout::kEdgeMargin,
+                                        height - HUDLayout::kToolbarHeight - HUDLayout::kEdgeMargin,
+                                        toolbarWidth,
+                                        HUDLayout::kToolbarHeight);
+        if (containsScreenPoint(toolbarRect, screenPos)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+void UIManager::activateLeftContext(LeftContextView view) {
+    if (m_currentLeftContext != view) {
+        hideLeftContextPanels();
+        m_currentLeftContext = view;
+    }
+
+    if (m_leftSidebar) {
+        m_leftSidebar->setVisible(true);
+        m_leftSidebar->moveToFront();
+    }
+
+    if (m_leftEmptyState) {
+        m_leftEmptyState->setVisible(false);
+    }
+}
+
 void UIManager::hideLeftContextPanels() {
     m_piecePanel.hide();
     m_buildingPanel.hide();
@@ -320,6 +414,13 @@ void UIManager::setLeftContextMessage(const std::string& title, const std::strin
         return;
     }
 
+    hideLeftContextPanels();
+    m_currentLeftContext = LeftContextView::None;
+    if (m_leftSidebar) {
+        m_leftSidebar->setVisible(true);
+        m_leftSidebar->moveToFront();
+    }
+    m_leftEmptyState->moveToFront();
     m_leftEmptyState->setVisible(true);
     if (m_leftContextTitle) {
         m_leftContextTitle->setText(title);

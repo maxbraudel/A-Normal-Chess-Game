@@ -25,6 +25,16 @@ int buildingCost(BuildingType type, const GameConfig& config) {
     }
 }
 
+void applyButtonBaseStyle(const tgui::Button::Ptr& button,
+                          const tgui::Color& backgroundColor,
+                          const tgui::Color& textColor) {
+    auto renderer = button->getRenderer();
+    renderer->setBackgroundColor(backgroundColor);
+    renderer->setTextColor(textColor);
+    renderer->setBackgroundColorHover(backgroundColor);
+    renderer->setTextColorHover(textColor);
+}
+
 } // namespace
 
 void BuildToolPanel::init(const tgui::Panel::Ptr& parent) {
@@ -60,6 +70,7 @@ void BuildToolPanel::init(const tgui::Panel::Ptr& parent) {
         btn->setTextSize(15);
         const int typeInt = static_cast<int>(type);
         btn->onPress([this, typeInt]() {
+            setSelectedBuildType(static_cast<BuildingType>(typeInt));
             if (m_onSelectBuildType) m_onSelectBuildType(typeInt);
         });
         m_panel->add(btn);
@@ -75,16 +86,40 @@ void BuildToolPanel::show(const Kingdom& kingdom, const GameConfig& config, bool
         return;
     }
 
+    m_panel->moveToFront();
+
     for (auto& option : m_options) {
         const int cost = buildingCost(option.type, config);
-        option.button->setText(std::string(buildingTypeName(option.type)) + " - " + std::to_string(cost) + "g");
-        option.button->setEnabled(allowBuild && kingdom.gold >= cost);
+        std::string label = std::string(buildingTypeName(option.type)) + " - " + std::to_string(cost) + "g";
+        if (kingdom.gold < cost) {
+            label += " (need gold)";
+        }
+        if (option.type == m_selectedType) {
+            label = "> " + label;
+        }
+
+        option.button->setText(label);
+        option.button->setEnabled(allowBuild);
+
+        if (option.type == m_selectedType) {
+            applyButtonBaseStyle(option.button,
+                                 tgui::Color(124, 96, 28),
+                                 tgui::Color::White);
+        } else {
+            applyButtonBaseStyle(option.button,
+                                 tgui::Color(255, 255, 255),
+                                 tgui::Color::Black);
+        }
     }
 
     m_panel->setVisible(true);
 }
 
 void BuildToolPanel::hide() { if (m_panel) m_panel->setVisible(false); }
+
+void BuildToolPanel::setSelectedBuildType(BuildingType type) {
+    m_selectedType = type;
+}
 
 void BuildToolPanel::setOnSelectBuildType(std::function<void(int)> callback) {
     m_onSelectBuildType = std::move(callback);

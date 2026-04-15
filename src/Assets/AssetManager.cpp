@@ -1,4 +1,7 @@
 #include "Assets/AssetManager.hpp"
+
+#include "Buildings/StructureChunkRegistry.hpp"
+
 #include <iostream>
 
 AssetManager::AssetManager() : m_hasFont(false) {
@@ -22,6 +25,17 @@ void AssetManager::loadAll(const std::string& assetsDir) {
     loadTexture("cell_grass", assetsDir + "/textures/cells/grass.png");
     loadTexture("cell_dirt", assetsDir + "/textures/cells/dirt.png");
     loadTexture("cell_water", assetsDir + "/textures/cells/water.png");
+
+    for (const auto& definition : StructureChunkRegistry::all()) {
+        for (int localY = 0; localY < definition.height; ++localY) {
+            for (int localX = 0; localX < definition.width; ++localX) {
+                loadTexture(
+                    StructureChunkRegistry::makeChunkTextureKey(definition.type, localX, localY),
+                    assetsDir + StructureChunkRegistry::makeChunkTextureRelativePath(definition.type, localX, localY)
+                );
+            }
+        }
+    }
 
     // Building textures
     loadTexture("building_church", assetsDir + "/textures/cells/church.png");
@@ -100,6 +114,10 @@ std::string AssetManager::buildingKey(BuildingType type) const {
     return "";
 }
 
+std::string AssetManager::buildingChunkKey(BuildingType type, int localX, int localY) const {
+    return StructureChunkRegistry::makeChunkTextureKey(type, localX, localY);
+}
+
 const sf::Texture& AssetManager::getCellTexture(CellType type) const {
     auto key = cellKey(type);
     auto it = m_textures.find(key);
@@ -112,6 +130,18 @@ const sf::Texture& AssetManager::getBuildingTexture(BuildingType type) const {
     auto it = m_textures.find(key);
     if (it != m_textures.end()) return it->second;
     return m_fallback;
+}
+
+const sf::Texture& AssetManager::getBuildingTexture(BuildingType type, int localX, int localY) const {
+    const std::string key = buildingChunkKey(type, localX, localY);
+    if (!key.empty()) {
+        auto it = m_textures.find(key);
+        if (it != m_textures.end()) {
+            return it->second;
+        }
+    }
+
+    return getBuildingTexture(type);
 }
 
 const sf::Texture& AssetManager::getPieceTexture(PieceType type, KingdomId kingdom) const {

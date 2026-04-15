@@ -34,5 +34,9 @@ void ToolBar::init(tgui::Gui& gui) {
 void ToolBar::show() { if (m_panel) m_panel->setVisible(true); }
 void ToolBar::hide() { if (m_panel) m_panel->setVisible(false); }
 
+bool ToolBar::isVisible() const {
+    return m_panel && m_panel->isVisible();
+}
+
 void ToolBar::setOnSelect(std::function<void()> callback) { m_onSelect = std::move(callback); }
 void ToolBar::setOnBuild(std::function<void()> callback) { m_onBuild = std::move(callback); }

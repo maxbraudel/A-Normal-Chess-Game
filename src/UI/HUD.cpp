@@ -152,6 +152,10 @@ void HUD::hide() {
     if (m_networkPanel) m_networkPanel->setVisible(false);
 }
 
+bool HUD::isVisible() const {
+    return m_visible;
+}
+
 void HUD::update(const InGameViewModel& model) {
     if (m_metricLabels[0]) m_metricLabels[0]->setText(metricText(0, model.activeGold));
     if (m_metricLabels[1]) m_metricLabels[1]->setText(metricText(1, model.activeOccupiedCells));

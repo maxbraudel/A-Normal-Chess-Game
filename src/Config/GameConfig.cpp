@@ -1,6 +1,29 @@
 #include "Config/GameConfig.hpp"
+
+#include "Buildings/StructureChunkRegistry.hpp"
+
 #include <iostream>
 #include <algorithm>
+
+namespace {
+
+void alignChunkedStructureDimensions(const char* label, BuildingType type, int& width, int& height) {
+    const int expectedWidth = StructureChunkRegistry::getChunkWidth(type, width);
+    const int expectedHeight = StructureChunkRegistry::getChunkHeight(type, height);
+    if (width == expectedWidth && height == expectedHeight) {
+        return;
+    }
+
+    std::cerr << "GameConfig: Overriding " << label << " size from "
+              << width << "x" << height << " to "
+              << expectedWidth << "x" << expectedHeight
+              << " to match structure chunk textures.\n";
+
+    width = expectedWidth;
+    height = expectedHeight;
+}
+
+}
 
 GameConfig::GameConfig() { setDefaults(); }
 
@@ -57,8 +80,12 @@ void GameConfig::setDefaults() {
     m_barracksWidth = 4; m_barracksHeight = 2;
     m_churchWidth = 4; m_churchHeight = 3;
     m_mineWidth = 6; m_mineHeight = 6;
-    m_farmWidth = 4; m_farmHeight = 3;
+    m_farmWidth = 6; m_farmHeight = 4;
     m_arenaWidth = 3; m_arenaHeight = 3;
+
+    alignChunkedStructureDimensions("church", BuildingType::Church, m_churchWidth, m_churchHeight);
+    alignChunkedStructureDimensions("mine", BuildingType::Mine, m_mineWidth, m_mineHeight);
+    alignChunkedStructureDimensions("farm", BuildingType::Farm, m_farmWidth, m_farmHeight);
 }
 
 std::string GameConfig::readFile(const std::string& path) {
@@ -188,6 +215,10 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
         m_arenaWidth = extractInt(buildSec, "arena_width", m_arenaWidth);
         m_arenaHeight = extractInt(buildSec, "arena_height", m_arenaHeight);
     }
+
+    alignChunkedStructureDimensions("church", BuildingType::Church, m_churchWidth, m_churchHeight);
+    alignChunkedStructureDimensions("mine", BuildingType::Mine, m_mineWidth, m_mineHeight);
+    alignChunkedStructureDimensions("farm", BuildingType::Farm, m_farmWidth, m_farmHeight);
 
     return true;
 }

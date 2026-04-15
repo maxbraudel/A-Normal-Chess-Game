@@ -21,6 +21,7 @@ public:
     void init(tgui::Gui& gui, const AssetManager& assets);
     void show();
     void hide();
+    bool isVisible() const;
     void update(const InGameViewModel& model);
     void setMultiplayerStatus(const std::string& text, MultiplayerStatusTone tone);
     void clearMultiplayerStatus();

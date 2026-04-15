@@ -15,4 +15,5 @@ public:
 private:
     tgui::Panel::Ptr m_panel;
     tgui::ListView::Ptr m_listView;
+    std::vector<InGameEventRow> m_renderedRows;
 };

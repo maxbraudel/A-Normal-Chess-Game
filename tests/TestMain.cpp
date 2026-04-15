@@ -1,5 +1,6 @@
 #include <chrono>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <stdexcept>
 #include <string>
@@ -11,6 +12,7 @@
 #include "Board/Board.hpp"
 #include "Board/CellType.hpp"
 #include "Buildings/BuildingFactory.hpp"
+#include "Buildings/StructureChunkRegistry.hpp"
 #include "Buildings/BuildingType.hpp"
 #include "Config/GameConfig.hpp"
 #include "Core/GameEngine.hpp"
@@ -481,6 +483,47 @@ void testProjectedIncomeHelper() {
            "Contested public resource cells should not produce projected income.");
 }
 
+    void testStructureChunkRegistry() {
+        const StructureChunkDefinition* church = StructureChunkRegistry::find(BuildingType::Church);
+        expect(church != nullptr, "Church should have a chunked structure definition.");
+        expect(church->width == 4 && church->height == 3,
+            "Church chunk definition should expose the expected 4x3 footprint.");
+        expect(StructureChunkRegistry::makeChunkTextureRelativePath(BuildingType::Farm, 5, 3)
+             == "/textures/cells/structures/farm/farm_6_4.png",
+            "Farm chunk path generation should match the runtime asset layout.");
+        expect(StructureChunkRegistry::makeChunkTextureKey(BuildingType::Mine, 5, 5)
+             == "building_chunk_mine_6_6",
+            "Mine chunk keys should be generated from local coordinates.");
+        expect(!StructureChunkRegistry::hasChunkedTextures(BuildingType::Barracks),
+            "Non-structure buildings should keep the legacy single-texture path.");
+    }
+
+    void testGameConfigAlignsChunkedStructureDimensions() {
+        const std::filesystem::path tempPath = std::filesystem::temp_directory_path() / "anormalchess_structure_size_test.json";
+        {
+         std::ofstream out(tempPath);
+         out << "{\n"
+             << "  \"buildings\": {\n"
+             << "    \"church_width\": 4,\n"
+             << "    \"church_height\": 3,\n"
+             << "    \"mine_width\": 6,\n"
+             << "    \"mine_height\": 6,\n"
+             << "    \"farm_width\": 4,\n"
+             << "    \"farm_height\": 3\n"
+             << "  }\n"
+             << "}\n";
+        }
+
+        GameConfig config;
+        expect(config.loadFromFile(tempPath.string()), "GameConfig should load a partial JSON override file.");
+        std::filesystem::remove(tempPath);
+
+        expect(config.getBuildingWidth(BuildingType::Farm) == 6,
+            "Chunked farm definitions should force the runtime footprint width to 6.");
+        expect(config.getBuildingHeight(BuildingType::Farm) == 4,
+            "Chunked farm definitions should force the runtime footprint height to 4.");
+    }
+
 void testInGameViewModelBuilder() {
     GameConfig config;
     GameEngine engine;
@@ -519,6 +562,8 @@ int main() {
         {"multiplayer loopback smoke", testMultiplayerLoopbackSmoke},
         {"turn system affordability", testTurnSystemSkipsUnaffordableBuild},
         {"projected income helper", testProjectedIncomeHelper},
+        {"structure chunk registry", testStructureChunkRegistry},
+        {"chunked structure dimensions", testGameConfigAlignsChunkedStructureDimensions},
         {"in-game view model builder", testInGameViewModelBuilder},
     };
 

@@ -15,6 +15,7 @@ public:
 
     const sf::Texture& getCellTexture(CellType type) const;
     const sf::Texture& getBuildingTexture(BuildingType type) const;
+    const sf::Texture& getBuildingTexture(BuildingType type, int localX, int localY) const;
     const sf::Texture& getPieceTexture(PieceType type, KingdomId kingdom) const;
     const sf::Texture& getUITexture(const std::string& name) const;
     const sf::Font& getFont() const;
@@ -30,4 +31,5 @@ private:
     std::string pieceKey(PieceType type, KingdomId kingdom) const;
     std::string cellKey(CellType type) const;
     std::string buildingKey(BuildingType type) const;
+    std::string buildingChunkKey(BuildingType type, int localX, int localY) const;
 };

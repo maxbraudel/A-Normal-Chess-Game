@@ -84,6 +84,7 @@ void PiecePanel::init(const tgui::Panel::Ptr& parent) {
 
 void PiecePanel::show(const Piece& piece, const GameConfig& config, bool allowUpgrade) {
     if (!m_panel) return;
+    m_panel->moveToFront();
     m_currentPieceId = piece.id;
     m_ownerLabel->setText("Owner: " + kingdomLabel(piece.kingdom));
     m_positionLabel->setText("Cell: " + std::to_string(piece.position.x) + ", "

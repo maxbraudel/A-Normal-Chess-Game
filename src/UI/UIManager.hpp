@@ -12,6 +12,7 @@
 #include "UI/InGameViewModel.hpp"
 #include "UI/ToolBar.hpp"
 
+#include <SFML/System/Vector2.hpp>
 #include <functional>
 #include <string>
 
@@ -54,6 +55,7 @@ public:
                               std::function<void()> onClose = {});
     void hideMultiplayerAlert();
     bool isMultiplayerAlertVisible() const;
+    bool blocksWorldMouseInput(const sf::Vector2i& screenPos, const sf::Vector2u& windowSize) const;
 
     MainMenuUI&     mainMenu()        { return m_mainMenu; }
     HUD&            hud()             { return m_hud; }
@@ -67,6 +69,16 @@ public:
     ToolBar&        toolBar()         { return m_toolBar; }
 
 private:
+    enum class LeftContextView {
+        None,
+        Piece,
+        Building,
+        Barracks,
+        BuildTool,
+        Cell
+    };
+
+    void activateLeftContext(LeftContextView view);
     void hideLeftContextPanels();
     void setLeftContextMessage(const std::string& title, const std::string& message);
 
@@ -98,4 +110,5 @@ private:
     tgui::Button::Ptr m_multiplayerAlertButton;
     std::function<void()> m_onMultiplayerWaitingClose;
     std::function<void()> m_onMultiplayerAlertClose;
+    LeftContextView m_currentLeftContext = LeftContextView::None;
 };

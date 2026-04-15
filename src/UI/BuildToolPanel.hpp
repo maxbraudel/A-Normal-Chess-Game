@@ -14,6 +14,7 @@ public:
     void init(const tgui::Panel::Ptr& parent);
     void show(const Kingdom& kingdom, const GameConfig& config, bool allowBuild);
     void hide();
+    void setSelectedBuildType(BuildingType type);
 
     void setOnSelectBuildType(std::function<void(int buildingType)> callback);
 
@@ -25,5 +26,6 @@ private:
 
     tgui::Panel::Ptr m_panel;
     std::vector<BuildOptionWidgets> m_options;
+    BuildingType m_selectedType = BuildingType::Barracks;
     std::function<void(int)> m_onSelectBuildType;
 };

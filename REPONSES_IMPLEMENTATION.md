@@ -52,11 +52,11 @@
 > Pas de pattern imposé. Cependant, il est souligné que le game engine doit être **très bien développé**, avec un système **itératif**, notamment pour la génération de bâtiments publics, avec des règles de génération bien définies. La philosophie est que le jeu soit codé de manière **neutre** : deux royaumes avec exactement les mêmes pouvoirs et fonctionnalités, l'un contrôlé par le joueur, l'autre par l'IA.
 
 **1.6 — Comment est structuré le projet ?**
-> Les textures sont dans le dossier `src/textures/`. La structure existante est :
+> Au runtime, les textures utilisées par le jeu sont chargées depuis le dossier `assets/textures/`. La structure active est :
 > ```
-> src/
+> assets/
 >   textures/
->     cell/           → textures de blocs/cellules (16×16 pixels chacune)
+>     cells/          → textures de blocs/cellules (16×16 pixels chacune)
 >       barrak.png
 >       bridge.png
 >       church.png
@@ -67,15 +67,18 @@
 >       wall_stone.png
 >       wall_wood.png
 >       water.png
->     chesspieces/     → sprites des pièces d'échecs
->       black/         → pièces du royaume noir
+>     pieces/         → sprites des pièces d'échecs
+>       black/        → pièces du royaume noir
 >         bishop.png, king.png, knight.png, pawn.png, queen.png, rook.png
->       white/         → pièces du royaume blanc
+>       white/        → pièces du royaume blanc
 >         bishop.png, king.png, knight.png, pawn.png, queen.png, rook.png
->     crossed_swords.png  → icône d'épées croisées (zone disputée)
->     shield_black.png   → icône bouclier noir (zone occupée par les noirs)
->     shield_white.png   → icône bouclier blanc (zone occupée par les blancs)
+>     ui/             → icônes UI
+>       crossed_swords.png
+>       shield_black.png
+>       shield_white.png
 > ```
+>
+> Le dossier `src/textures/` existe encore mais il n'est pas chargé par le runtime actuel. Il sert aujourd'hui de reliquat historique et de zone de travail/source art pour certaines textures générées. Le code exécutable charge `assets/`, pas `src/`.
 
 **1.7 — Le jeu doit-il supporter le multijoueur à terme ou est-ce uniquement joueur solo vs IA ?**
 > Pour l'instant, c'est uniquement **joueur solo vs IA**. Le joueur contrôle le **royaume blanc**, l'IA contrôle le **royaume noir**.
@@ -173,7 +176,7 @@
 > Les cellules (cases de la grille) utilisent des textures de **16×16 pixels**. La carte est une grille contenant des cellules, et chaque cellule peut contenir un bloc de bâtiment ou un bloc de terrain. L'utilisateur peut zoomer et dézoomer sur cette grille avec la caméra.
 
 **3.6 — Quelles textures de terrain sont nécessaires ?**
-> Les textures de terrain sont fournies dans `src/textures/cell/` :
+> Les textures de terrain utilisées au runtime sont fournies dans `assets/textures/cells/` :
 > - `grass.png` — herbe
 > - `dirt.png` — terre (décoratif)
 > - `water.png` — eau
@@ -184,13 +187,17 @@
 > **Non, pas pour l'instant.** Pas de transition visuelle entre les types de terrain.
 
 **3.8 — Les pièces d'échecs ont-elles un sprite unique par type ou des variantes visuelles ?**
-> **Sprite unique par type**, pas de variante visuelle. Les sprites sont fournis dans `src/textures/chesspieces/` avec un dossier `black/` et un dossier `white/`, chacun contenant : `bishop.png`, `king.png`, `knight.png`, `pawn.png`, `queen.png`, `rook.png`.
+> **Sprite unique par type**, pas de variante visuelle. Les sprites utilisés au runtime sont fournis dans `assets/textures/pieces/` avec un dossier `black/` et un dossier `white/`, chacun contenant : `bishop.png`, `king.png`, `knight.png`, `pawn.png`, `queen.png`, `rook.png`.
 
 **3.9 — Faut-il des animations pour les pièces ?**
 > **Non, aucune animation** n'est nécessaire pour les pièces.
 
 **3.10 — Comment les bâtiments sont-ils représentés visuellement quand ils occupent plusieurs cases ?**
-> Chaque case du bâtiment utilise **la même texture** (une seule texture 16×16 par type de bâtiment). C'est pourquoi dans le dossier `src/textures/cell/`, il y a **une texture 16×16 par bâtiment** :
+> Historiquement, chaque case du bâtiment utilisait **la même texture** 16×16 par type, chargée depuis `assets/textures/cells/`.
+>
+> Ce n'est plus totalement vrai aujourd'hui pour les bâtiments publics chunkés : l'église, la mine et la ferme peuvent désormais charger une texture différente par case locale via `assets/textures/cells/structures/{building}/`.
+>
+> Les bâtiments non chunkés continuent à utiliser une texture unique par type dans `assets/textures/cells/` :
 > - `barrak.png` — caserne
 > - `church.png` — église
 > - `farm.png` — champ
@@ -209,7 +216,7 @@
 ### Différenciation des royaumes
 
 **3.13 — Comment sont différenciées visuellement les pièces des deux royaumes ?**
-> Par les couleurs classiques : un **royaume blanc** et un **royaume noir**. Les textures correspondantes sont dans `src/textures/chesspieces/white/` et `src/textures/chesspieces/black/`.
+> Par les couleurs classiques : un **royaume blanc** et un **royaume noir**. Les textures correspondantes sont dans `assets/textures/pieces/white/` et `assets/textures/pieces/black/`.
 
 **3.14 — Les bâtiments privés portent-ils les couleurs du royaume qui les a construits ?**
 > Pas de réponse explicite. Les textures de bâtiments fournies (`barrak.png`, `wall_stone.png`, `wall_wood.png`) sont uniques (pas de variante blanc/noir).
