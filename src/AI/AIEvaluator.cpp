@@ -12,6 +12,7 @@
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingType.hpp"
 #include "Config/GameConfig.hpp"
+#include "Systems/EconomySystem.hpp"
 #include <cmath>
 #include <algorithm>
 
@@ -111,11 +112,17 @@ static int countIncomePerTurn(const GameSnapshot& s, KingdomId k,
         if (b.isDestroyed()) return;
         if (b.type != BuildingType::Mine && b.type != BuildingType::Farm) return;
         int incPerCell = (b.type == BuildingType::Mine) ? mineIncome : farmIncome;
+        int myOccupiedCells = 0;
+        int enemyOccupiedCells = 0;
         for (auto& cell : b.getOccupiedCells()) {
-            bool myPiece    = kd.getPieceAt(cell)    != nullptr;
-            bool enemyPiece = enemy.getPieceAt(cell)  != nullptr;
-            if (myPiece && !enemyPiece) income += incPerCell;
+            if (kd.getPieceAt(cell)) ++myOccupiedCells;
+            if (enemy.getPieceAt(cell)) ++enemyOccupiedCells;
         }
+
+        const ResourceIncomeBreakdown breakdown = (k == KingdomId::White)
+            ? EconomySystem::calculateResourceIncomeFromOccupation(myOccupiedCells, enemyOccupiedCells, incPerCell)
+            : EconomySystem::calculateResourceIncomeFromOccupation(enemyOccupiedCells, myOccupiedCells, incPerCell);
+        income += breakdown.incomeFor(k);
     };
 
     for (auto& b : kd.buildings)      checkBuilding(b);

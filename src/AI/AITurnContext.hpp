@@ -22,6 +22,9 @@ struct AITurnContext {
     // Cached resource cell positions (mines/farms not occupied by self)
     std::vector<sf::Vector2i> freeResourceCells;
 
+    int mineIncomePerCell = 0;
+    int farmIncomePerCell = 0;
+
     // Build the context — called once per AI turn
     void build(const Board& board, const Kingdom& self, const Kingdom& enemy,
                const GameConfig& config);

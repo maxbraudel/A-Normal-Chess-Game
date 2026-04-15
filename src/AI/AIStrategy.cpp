@@ -5,6 +5,7 @@
 #include "AI/AIEvaluator.hpp"
 #include "Config/AIConfig.hpp"
 #include "Kingdom/KingdomId.hpp"
+#include "Systems/EconomySystem.hpp"
 #include <algorithm>
 #include <cmath>
 #include <random>
@@ -165,10 +166,17 @@ float AIStrategy::scoreEconomyExpand(const AITurnContext& ctx, const GameSnapsho
     auto countIncome = [&](const SnapBuilding& b) {
         if (b.isDestroyed()) return;
         if (b.type != BuildingType::Mine && b.type != BuildingType::Farm) return;
-        int incPerCell = (b.type == BuildingType::Mine) ? 10 : 5;
-        for (auto& cell : b.getOccupiedCells())
-            if (s.kingdom(k).getPieceAt(cell) && !s.enemyKingdom(k).getPieceAt(cell))
-                income += incPerCell;
+        const int incPerCell = (b.type == BuildingType::Mine) ? ctx.mineIncomePerCell : ctx.farmIncomePerCell;
+        int myOccupiedCells = 0;
+        int enemyOccupiedCells = 0;
+        for (auto& cell : b.getOccupiedCells()) {
+            if (s.kingdom(k).getPieceAt(cell)) ++myOccupiedCells;
+            if (s.enemyKingdom(k).getPieceAt(cell)) ++enemyOccupiedCells;
+        }
+        const ResourceIncomeBreakdown breakdown = (k == KingdomId::White)
+            ? EconomySystem::calculateResourceIncomeFromOccupation(myOccupiedCells, enemyOccupiedCells, incPerCell)
+            : EconomySystem::calculateResourceIncomeFromOccupation(enemyOccupiedCells, myOccupiedCells, incPerCell);
+        income += breakdown.incomeFor(k);
     };
     for (auto& b : s.kingdom(k).buildings)       countIncome(b);
     for (auto& b : s.enemyKingdom(k).buildings)   countIncome(b);

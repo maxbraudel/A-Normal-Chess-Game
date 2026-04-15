@@ -1464,32 +1464,65 @@ void testGameConfigClampsNegativeEconomyValues() {
 void testProjectedIncomeHelper() {
     GameConfig config;
     Board board;
-    board.init(3);
+    board.init(4);
 
     Kingdom white(KingdomId::White);
-    white.addPiece(Piece(0, PieceType::Pawn, KingdomId::White, {1, 1}));
+    Kingdom black(KingdomId::Black);
 
-    Building mine;
-    mine.type = BuildingType::Mine;
-    mine.isNeutral = true;
-    mine.origin = {1, 1};
-    mine.width = 1;
-    mine.height = 1;
-    mine.cellHP = {1};
+    Building mine = makeTestPublicBuilding(BuildingType::Mine, {1, 1}, 2, 2);
 
     std::vector<Building> publicBuildings = {mine};
-    board.getCell(1, 1).piece = &white.pieces.back();
+    addPieceToBoard(white, board, 0, PieceType::Pawn, KingdomId::White, {1, 1});
+    addPieceToBoard(white, board, 1, PieceType::Pawn, KingdomId::White, {2, 1});
+    addPieceToBoard(white, board, 2, PieceType::Pawn, KingdomId::White, {1, 2});
+    addPieceToBoard(black, board, 3, PieceType::Pawn, KingdomId::Black, {2, 2});
+
+    const ResourceIncomeBreakdown dominantIncome = EconomySystem::calculateResourceIncomeBreakdown(
+     publicBuildings.front(), board, config);
+    expect(dominantIncome.whiteOccupiedCells == 3 && dominantIncome.blackOccupiedCells == 1,
+        "Resource breakdown should count occupied cells for both kingdoms on a public resource building.");
+    expect(dominantIncome.whiteIncome == 2 * config.getMineIncomePerCellPerTurn(),
+        "The leading kingdom should earn income from its net occupation advantage only.");
+    expect(dominantIncome.blackIncome == 0,
+        "The trailing kingdom should be clamped to zero income on a contested public resource building.");
 
     const int projectedIncome = EconomySystem::calculateProjectedIncome(white, board, publicBuildings, config);
-    expect(projectedIncome == config.getMineIncomePerCellPerTurn(),
-           "Projected income should match occupied public resource cells.");
+    expect(projectedIncome == 2 * config.getMineIncomePerCellPerTurn(),
+        "Projected income should follow the public resource net occupation rule.");
 
-    Kingdom black(KingdomId::Black);
-    black.addPiece(Piece(1, PieceType::Pawn, KingdomId::Black, {1, 1}));
-    board.getCell(1, 1).piece = &black.pieces.back();
-    const int contestedIncome = EconomySystem::calculateProjectedIncome(white, board, publicBuildings, config);
-    expect(contestedIncome == 0,
-           "Contested public resource cells should not produce projected income.");
+    const int trailingIncome = EconomySystem::calculateProjectedIncome(black, board, publicBuildings, config);
+    expect(trailingIncome == 0,
+        "Projected income should clamp to zero for the trailing kingdom on a contested public resource building.");
+
+    for (const sf::Vector2i& pos : publicBuildings.front().getOccupiedCells()) {
+     board.getCell(pos.x, pos.y).piece = nullptr;
+    }
+    white.pieces.clear();
+    black.pieces.clear();
+
+    addPieceToBoard(white, board, 4, PieceType::Pawn, KingdomId::White, {1, 1});
+    addPieceToBoard(white, board, 5, PieceType::Pawn, KingdomId::White, {2, 1});
+    addPieceToBoard(black, board, 6, PieceType::Pawn, KingdomId::Black, {1, 2});
+    addPieceToBoard(black, board, 7, PieceType::Pawn, KingdomId::Black, {2, 2});
+
+    const ResourceIncomeBreakdown equalIncome = EconomySystem::calculateResourceIncomeBreakdown(
+     publicBuildings.front(), board, config);
+    expect(equalIncome.whiteIncome == 0 && equalIncome.blackIncome == 0,
+        "Equal occupation on a public resource building should yield zero income for both kingdoms.");
+}
+
+void testResourceIncomeHelperSupportsBothResourceTypes() {
+    GameConfig config;
+
+    const ResourceIncomeBreakdown farmIncome = EconomySystem::calculateResourceIncomeFromOccupation(
+     4, 1, config.getFarmIncomePerCellPerTurn());
+    const ResourceIncomeBreakdown mineIncome = EconomySystem::calculateResourceIncomeFromOccupation(
+     2, 0, config.getMineIncomePerCellPerTurn());
+
+    expect(farmIncome.whiteIncome == 3 * config.getFarmIncomePerCellPerTurn(),
+        "Farm income helper should preserve the configured farm per-cell rate.");
+    expect(mineIncome.whiteIncome == 2 * config.getMineIncomePerCellPerTurn(),
+        "Mine income helper should preserve the configured mine per-cell rate.");
 }
 
     void testStructureChunkRegistry() {
@@ -1597,6 +1630,7 @@ int main() {
         {"runtime validator negative gold", testGameStateValidatorRejectsNegativeRuntimeGold},
         {"game config clamps negative economy", testGameConfigClampsNegativeEconomyValues},
         {"projected income helper", testProjectedIncomeHelper},
+        {"resource income helper resource types", testResourceIncomeHelperSupportsBothResourceTypes},
         {"structure chunk registry", testStructureChunkRegistry},
         {"chunked structure dimensions", testGameConfigAlignsChunkedStructureDimensions},
         {"in-game view model builder", testInGameViewModelBuilder},

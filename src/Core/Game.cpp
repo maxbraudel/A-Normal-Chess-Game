@@ -1527,7 +1527,11 @@ void Game::updateUIState() {
                     const bool allowProduce = allowNonMoveActions && (building->owner == viewedKingdomId);
                     m_uiManager.showBarracksPanel(*building, kingdom(building->owner), m_config, allowProduce);
                 } else {
-                    m_uiManager.showBuildingPanel(*building);
+                    std::optional<ResourceIncomeBreakdown> resourceIncome;
+                    if (building->type == BuildingType::Mine || building->type == BuildingType::Farm) {
+                        resourceIncome = EconomySystem::calculateResourceIncomeBreakdown(*building, board(), m_config);
+                    }
+                    m_uiManager.showBuildingPanel(*building, resourceIncome);
                 }
             } else if (m_input.hasSelectedCell()) {
                 const sf::Vector2i cellPos = m_input.getSelectedCell();

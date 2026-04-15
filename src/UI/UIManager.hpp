@@ -39,7 +39,8 @@ public:
     bool isGameMenuVisible() const;
     void updateDashboard(const InGameViewModel& model);
     void showPiecePanel(const Piece& piece, const GameConfig& config, bool allowUpgrade);
-    void showBuildingPanel(const Building& building);
+    void showBuildingPanel(const Building& building,
+                           const std::optional<ResourceIncomeBreakdown>& resourceIncome = std::nullopt);
     void showBarracksPanel(const Building& barracks, const Kingdom& kingdom, const GameConfig& config,
                            bool allowProduce);
     void showBuildToolPanel(const Kingdom& kingdom, const GameConfig& config, bool allowBuild);

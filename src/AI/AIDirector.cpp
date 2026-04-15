@@ -3,6 +3,7 @@
 #include "Kingdom/Kingdom.hpp"
 #include "Buildings/Building.hpp"
 #include "Config/GameConfig.hpp"
+#include "Systems/EconomySystem.hpp"
 #include <algorithm>
 #include <array>
 #include <iostream>
@@ -38,8 +39,16 @@ static int estimateIncome(const GameSnapshot& s, KingdomId k,
         if (b.isDestroyed()) return;
         if (b.type != BuildingType::Mine && b.type != BuildingType::Farm) return;
         int ipCell = (b.type == BuildingType::Mine) ? mineIncome : farmIncome;
-        for (auto& cell : b.getOccupiedCells())
-            if (kd.getPieceAt(cell) && !enemy.getPieceAt(cell)) income += ipCell;
+        int myOccupiedCells = 0;
+        int enemyOccupiedCells = 0;
+        for (auto& cell : b.getOccupiedCells()) {
+            if (kd.getPieceAt(cell)) ++myOccupiedCells;
+            if (enemy.getPieceAt(cell)) ++enemyOccupiedCells;
+        }
+        const ResourceIncomeBreakdown breakdown = (k == KingdomId::White)
+            ? EconomySystem::calculateResourceIncomeFromOccupation(myOccupiedCells, enemyOccupiedCells, ipCell)
+            : EconomySystem::calculateResourceIncomeFromOccupation(enemyOccupiedCells, myOccupiedCells, ipCell);
+        income += breakdown.incomeFor(k);
     };
     for (auto& b : kd.buildings)      check(b);
     for (auto& b : enemy.buildings)   check(b);

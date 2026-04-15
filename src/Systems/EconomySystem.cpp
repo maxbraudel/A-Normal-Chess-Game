@@ -7,46 +7,76 @@
 #include "Config/GameConfig.hpp"
 #include "Systems/EventLog.hpp"
 
+#include <algorithm>
+
+namespace {
+
+int incomePerCellForResource(BuildingType type, const GameConfig& config) {
+    switch (type) {
+        case BuildingType::Mine:
+            return config.getMineIncomePerCellPerTurn();
+        case BuildingType::Farm:
+            return config.getFarmIncomePerCellPerTurn();
+        default:
+            return 0;
+    }
+}
+
+} // namespace
+
+ResourceIncomeBreakdown EconomySystem::calculateResourceIncomeFromOccupation(int whiteOccupiedCells,
+                                                                             int blackOccupiedCells,
+                                                                             int incomePerCell) {
+    ResourceIncomeBreakdown breakdown;
+    breakdown.isResourceBuilding = true;
+    breakdown.incomePerCell = incomePerCell;
+    breakdown.whiteOccupiedCells = std::max(0, whiteOccupiedCells);
+    breakdown.blackOccupiedCells = std::max(0, blackOccupiedCells);
+    breakdown.whiteIncome = std::max(breakdown.whiteOccupiedCells - breakdown.blackOccupiedCells, 0) * incomePerCell;
+    breakdown.blackIncome = std::max(breakdown.blackOccupiedCells - breakdown.whiteOccupiedCells, 0) * incomePerCell;
+    return breakdown;
+}
+
+ResourceIncomeBreakdown EconomySystem::calculateResourceIncomeBreakdown(const Building& building,
+                                                                        const Board& board,
+                                                                        const GameConfig& config) {
+    if (building.type != BuildingType::Mine && building.type != BuildingType::Farm) {
+        return {};
+    }
+
+    int whiteOccupiedCells = 0;
+    int blackOccupiedCells = 0;
+    for (const sf::Vector2i& pos : building.getOccupiedCells()) {
+        const Cell& cell = board.getCell(pos.x, pos.y);
+        if (!cell.piece) {
+            continue;
+        }
+
+        if (cell.piece->kingdom == KingdomId::White) {
+            ++whiteOccupiedCells;
+        } else {
+            ++blackOccupiedCells;
+        }
+    }
+
+    return calculateResourceIncomeFromOccupation(
+        whiteOccupiedCells,
+        blackOccupiedCells,
+        incomePerCellForResource(building.type, config));
+}
+
 int EconomySystem::calculateProjectedIncome(const Kingdom& kingdom, const Board& board,
                                             const std::vector<Building>& publicBuildings,
                                             const GameConfig& config) {
     int totalIncome = 0;
 
     for (const auto& building : publicBuildings) {
-        if (building.type != BuildingType::Mine && building.type != BuildingType::Farm) {
+        const ResourceIncomeBreakdown breakdown = calculateResourceIncomeBreakdown(building, board, config);
+        if (!breakdown.isResourceBuilding) {
             continue;
         }
 
-        const int incomePerCell = (building.type == BuildingType::Mine)
-            ? config.getMineIncomePerCellPerTurn()
-            : config.getFarmIncomePerCellPerTurn();
-
-        bool friendlyPresent = false;
-        bool enemyPresent = false;
-        int friendlyCells = 0;
-
-        for (const auto& pos : building.getOccupiedCells()) {
-            const Cell& cell = board.getCell(pos.x, pos.y);
-            if (!cell.piece) {
-                continue;
-            }
-
-            if (cell.piece->kingdom == kingdom.id) {
-                friendlyPresent = true;
-                ++friendlyCells;
-            } else {
-                enemyPresent = true;
-            }
-        }
-
-        if (friendlyPresent && enemyPresent) {
-            continue;
-        }
-        if (!friendlyPresent) {
-            continue;
-        }
-
-        totalIncome += friendlyCells * incomePerCell;
+        totalIncome += breakdown.incomeFor(kingdom.id);
     }
 
     return totalIncome;

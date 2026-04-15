@@ -17,6 +17,8 @@ void AITurnContext::build(const Board& board, const Kingdom& self, const Kingdom
     selfMoves.clear();
     enemyMoves.clear();
     freeResourceCells.clear();
+    mineIncomePerCell = config.getMineIncomePerCellPerTurn();
+    farmIncomePerCell = config.getFarmIncomePerCellPerTurn();
 
     // 1. Compute move lists and threat maps for our pieces
     const Piece* enemyKing = enemy.getKing();

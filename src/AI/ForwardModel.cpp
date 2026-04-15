@@ -5,6 +5,7 @@
 #include "Buildings/Building.hpp"
 #include "Units/Piece.hpp"
 #include "Config/GameConfig.hpp"
+#include "Systems/EconomySystem.hpp"
 #include <cmath>
 #include <algorithm>
 
@@ -429,27 +430,24 @@ void ForwardModel::advanceTurn(GameSnapshot& s, KingdomId k,
         }
     }
 
-    // 2. Collect income — only from exclusively occupied resource cells
+    // 2. Collect income from net occupation advantage on public resources.
     SnapKingdom& enemyK = s.enemyKingdom(k);
     for (auto& b : s.publicBuildings) {
         if (b.type != BuildingType::Mine && b.type != BuildingType::Farm) continue;
         auto cells = b.getOccupiedCells();
 
-        bool myPresence = false, enemyPresence = false;
+        int myOccupiedCells = 0;
+        int enemyOccupiedCells = 0;
         for (auto& c : cells) {
-            if (myK.getPieceAt(c)) myPresence = true;
-            if (enemyK.getPieceAt(c)) enemyPresence = true;
-            if (myPresence && enemyPresence) break;
+            if (myK.getPieceAt(c)) ++myOccupiedCells;
+            if (enemyK.getPieceAt(c)) ++enemyOccupiedCells;
         }
 
-        if (myPresence && !enemyPresence) {
-            // Count MY occupied cells
-            for (auto& c : cells) {
-                if (myK.getPieceAt(c)) {
-                    myK.gold += (b.type == BuildingType::Mine) ? mineIncomePerCell : farmIncomePerCell;
-                }
-            }
-        }
+        const int incomePerCell = (b.type == BuildingType::Mine) ? mineIncomePerCell : farmIncomePerCell;
+        const ResourceIncomeBreakdown breakdown = (k == KingdomId::White)
+            ? EconomySystem::calculateResourceIncomeFromOccupation(myOccupiedCells, enemyOccupiedCells, incomePerCell)
+            : EconomySystem::calculateResourceIncomeFromOccupation(enemyOccupiedCells, myOccupiedCells, incomePerCell);
+        myK.gold += breakdown.incomeFor(k);
     }
 
     // 3. Arena XP

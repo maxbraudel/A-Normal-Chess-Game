@@ -4,6 +4,14 @@
 #include "Buildings/BuildingType.hpp"
 #include "UI/HUDLayout.hpp"
 
+namespace {
+
+std::string formatIncomeLabel(const std::string& prefix, int income) {
+    return prefix + ": +" + std::to_string(income) + " gold/turn";
+}
+
+} // namespace
+
 static std::string buildingTypeName(BuildingType type) {
     switch (type) {
         case BuildingType::Church:    return "Church";
@@ -58,10 +66,31 @@ void BuildingPanel::init(const tgui::Panel::Ptr& parent) {
     HUDLayout::styleSidebarBody(m_statusLabel);
     m_panel->add(m_statusLabel);
 
+    m_resourceSectionLabel = tgui::Label::create("Resource Income");
+    m_resourceSectionLabel->setPosition({10, 212});
+    HUDLayout::styleSidebarTitle(m_resourceSectionLabel);
+    m_panel->add(m_resourceSectionLabel);
+
+    m_whiteIncomeLabel = tgui::Label::create("White: +0 gold/turn");
+    m_whiteIncomeLabel->setPosition({10, 244});
+    m_whiteIncomeLabel->setSize({316, 22});
+    HUDLayout::styleSidebarBody(m_whiteIncomeLabel);
+    m_panel->add(m_whiteIncomeLabel);
+
+    m_blackIncomeLabel = tgui::Label::create("Black: +0 gold/turn");
+    m_blackIncomeLabel->setPosition({10, 274});
+    m_blackIncomeLabel->setSize({316, 22});
+    HUDLayout::styleSidebarBody(m_blackIncomeLabel);
+    m_panel->add(m_blackIncomeLabel);
+
+    m_resourceSectionLabel->setVisible(false);
+    m_whiteIncomeLabel->setVisible(false);
+    m_blackIncomeLabel->setVisible(false);
+
     m_panel->setVisible(false);
 }
 
-void BuildingPanel::show(const Building& building) {
+void BuildingPanel::show(const Building& building, const std::optional<ResourceIncomeBreakdown>& resourceIncome) {
     if (!m_panel) return;
     m_panel->moveToFront();
     m_typeLabel->setText("Type: " + buildingTypeName(building.type));
@@ -78,6 +107,16 @@ void BuildingPanel::show(const Building& building) {
     m_hpLabel->setText("HP: " + std::to_string(totalHP) + "/" + std::to_string(maxHP));
     m_statusLabel->setText(building.isDestroyed() ? "Status: Destroyed" :
                            building.isNeutral ? "Status: Neutral" : "Status: Active");
+
+    const bool showResourceIncome = resourceIncome.has_value() && resourceIncome->isResourceBuilding;
+    m_resourceSectionLabel->setVisible(showResourceIncome);
+    m_whiteIncomeLabel->setVisible(showResourceIncome);
+    m_blackIncomeLabel->setVisible(showResourceIncome);
+    if (showResourceIncome) {
+        m_whiteIncomeLabel->setText(formatIncomeLabel("White", resourceIncome->whiteIncome));
+        m_blackIncomeLabel->setText(formatIncomeLabel("Black", resourceIncome->blackIncome));
+    }
+
     m_panel->setVisible(true);
 }
 

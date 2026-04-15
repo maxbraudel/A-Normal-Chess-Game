@@ -208,9 +208,10 @@ void UIManager::showPiecePanel(const Piece& piece, const GameConfig& config, boo
     m_piecePanel.show(piece, config, allowUpgrade);
 }
 
-void UIManager::showBuildingPanel(const Building& building) {
+void UIManager::showBuildingPanel(const Building& building,
+                                  const std::optional<ResourceIncomeBreakdown>& resourceIncome) {
     activateLeftContext(LeftContextView::Building);
-    m_buildingPanel.show(building);
+    m_buildingPanel.show(building, resourceIncome);
 }
 
 void UIManager::showBarracksPanel(const Building& barracks, const Kingdom& kingdom, const GameConfig& config,
