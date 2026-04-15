@@ -14,6 +14,8 @@
 #include "Systems/ProductionSpawnRules.hpp"
 #include "Systems/StructureIntegrityRules.hpp"
 #include "Systems/MarriageSystem.hpp"
+#include "Systems/PendingTurnProjection.hpp"
+#include "Systems/TurnPointRules.hpp"
 #include "Units/PieceFactory.hpp"
 #include "Buildings/BuildingFactory.hpp"
 
@@ -158,82 +160,202 @@ void removeDestroyedStructures(Kingdom& kingdom) {
 
 TurnSystem::TurnSystem()
     : m_activeKingdom(KingdomId::White), m_turnNumber(1),
-      m_hasMoved(false), m_hasBuilt(false), m_hasProduced(false), m_hasMarried(false) {}
+      m_movementPointsMax(0), m_movementPointsRemaining(0),
+      m_buildPointsMax(0), m_buildPointsRemaining(0),
+      m_hasProduced(false), m_hasMarried(false) {}
 
 void TurnSystem::setActiveKingdom(KingdomId id) { m_activeKingdom = id; }
 void TurnSystem::setTurnNumber(int turnNumber) { m_turnNumber = std::max(1, turnNumber); }
 KingdomId TurnSystem::getActiveKingdom() const { return m_activeKingdom; }
 int TurnSystem::getTurnNumber() const { return m_turnNumber; }
 
-bool TurnSystem::queueCommand(const TurnCommand& cmd) {
-    switch (cmd.type) {
-        case TurnCommand::Move:
-            if (m_hasMoved) return false;
-            m_hasMoved = true;
-            break;
-        case TurnCommand::Build:
-            if (m_hasBuilt) return false;
-            m_hasBuilt = true;
-            break;
-        case TurnCommand::Produce:
-            // Allow 1 production per barracks (instead of 1 global)
-            if (cmd.barracksId >= 0 && m_producedBarracks.count(cmd.barracksId))
-                return false; // this barracks already has a production queued
-            if (cmd.barracksId >= 0)
-                m_producedBarracks.insert(cmd.barracksId);
+void TurnSystem::syncPointBudget(const GameConfig& config) {
+    const TurnPointBudget budget = TurnPointRules::makeBudget(config);
+    m_movementPointsMax = budget.movementPointsMax;
+    m_buildPointsMax = budget.buildPointsMax;
+
+    if (m_pendingCommands.empty()) {
+        m_movementPointsRemaining = budget.movementPointsRemaining;
+        m_buildPointsRemaining = budget.buildPointsRemaining;
+        m_pieceMoveCounts.clear();
+    } else {
+        m_movementPointsRemaining = std::min(m_movementPointsRemaining, budget.movementPointsMax);
+        m_buildPointsRemaining = std::min(m_buildPointsRemaining, budget.buildPointsMax);
+    }
+}
+
+void TurnSystem::rebuildQueuedSpecialState() {
+    m_hasProduced = false;
+    m_producedBarracks.clear();
+    m_hasMarried = false;
+
+    for (const TurnCommand& command : m_pendingCommands) {
+        if (command.type == TurnCommand::Produce) {
             m_hasProduced = true;
-            break;
-        case TurnCommand::Marry:
-            if (m_hasMarried) return false;
+            if (command.barracksId >= 0) {
+                m_producedBarracks.insert(command.barracksId);
+            }
+        } else if (command.type == TurnCommand::Marry) {
             m_hasMarried = true;
+        }
+    }
+}
+
+void TurnSystem::refreshProjectedBudgetState(const Board& board,
+                                             const Kingdom& activeKingdom,
+                                             const Kingdom& enemyKingdom,
+                                             const std::vector<Building>& publicBuildings,
+                                             const GameConfig& config) {
+    syncPointBudget(config);
+    if (m_pendingCommands.empty()) {
+        return;
+    }
+
+    const PendingTurnProjectionResult projection = PendingTurnProjection::project(
+        board, activeKingdom, enemyKingdom, publicBuildings, m_turnNumber,
+        m_pendingCommands, config);
+    if (!projection.valid) {
+        return;
+    }
+
+    const SnapTurnBudget& budget = projection.snapshot.turnBudget(activeKingdom.id);
+    m_movementPointsRemaining = budget.movementPointsRemaining;
+    m_buildPointsRemaining = budget.buildPointsRemaining;
+    m_pieceMoveCounts = budget.pieceMoveCounts;
+}
+
+bool TurnSystem::queueCommand(const TurnCommand& cmd,
+                              const Board& board,
+                              const Kingdom& activeKingdom,
+                              const Kingdom& enemyKingdom,
+                              const std::vector<Building>& publicBuildings,
+                              const GameConfig& config) {
+    syncPointBudget(config);
+
+    switch (cmd.type) {
+        case TurnCommand::Produce:
+            if (cmd.barracksId >= 0 && m_producedBarracks.count(cmd.barracksId)) {
+                return false;
+            }
             break;
+
+        case TurnCommand::Marry:
+            if (m_hasMarried) {
+                return false;
+            }
+            break;
+
         default:
             break;
     }
+
+    std::string errorMessage;
+    if (!PendingTurnProjection::canAppendCommand(
+            board, activeKingdom, enemyKingdom, publicBuildings,
+            m_turnNumber, m_pendingCommands, cmd, config, &errorMessage)) {
+        return false;
+    }
+
     m_pendingCommands.push_back(cmd);
+    rebuildQueuedSpecialState();
+    refreshProjectedBudgetState(board, activeKingdom, enemyKingdom, publicBuildings, config);
     return true;
 }
 
 void TurnSystem::resetPendingCommands() {
     m_pendingCommands.clear();
-    m_hasMoved = false;
-    m_hasBuilt = false;
-    m_hasProduced = false;
-    m_producedBarracks.clear();
-    m_hasMarried = false;
+    m_pieceMoveCounts.clear();
+    m_movementPointsRemaining = m_movementPointsMax;
+    m_buildPointsRemaining = m_buildPointsMax;
+    rebuildQueuedSpecialState();
 }
 
-void TurnSystem::cancelMoveCommand() {
+bool TurnSystem::cancelMoveCommand(int pieceId,
+                                   const Board& board,
+                                   const Kingdom& activeKingdom,
+                                   const Kingdom& enemyKingdom,
+                                   const std::vector<Building>& publicBuildings,
+                                   const GameConfig& config) {
+    const auto originalSize = m_pendingCommands.size();
     auto it = std::remove_if(m_pendingCommands.begin(), m_pendingCommands.end(),
-        [](const TurnCommand& c) { return c.type == TurnCommand::Move; });
+        [pieceId](const TurnCommand& c) {
+            return c.type == TurnCommand::Move && c.pieceId == pieceId;
+        });
     m_pendingCommands.erase(it, m_pendingCommands.end());
-    m_hasMoved = false;
+    if (m_pendingCommands.size() == originalSize) {
+        return false;
+    }
+
+    rebuildQueuedSpecialState();
+    refreshProjectedBudgetState(board, activeKingdom, enemyKingdom, publicBuildings, config);
+    return true;
 }
 
-void TurnSystem::cancelBuildCommand() {
+bool TurnSystem::cancelBuildCommand(BuildingType type,
+                                    sf::Vector2i origin,
+                                    int rotationQuarterTurns,
+                                    const Board& board,
+                                    const Kingdom& activeKingdom,
+                                    const Kingdom& enemyKingdom,
+                                    const std::vector<Building>& publicBuildings,
+                                    const GameConfig& config) {
+    const auto originalSize = m_pendingCommands.size();
     auto it = std::remove_if(m_pendingCommands.begin(), m_pendingCommands.end(),
-        [](const TurnCommand& c) { return c.type == TurnCommand::Build; });
+        [type, origin, rotationQuarterTurns](const TurnCommand& c) {
+            return c.type == TurnCommand::Build
+                && c.buildingType == type
+                && c.buildOrigin == origin
+                && c.buildRotationQuarterTurns == rotationQuarterTurns;
+        });
     m_pendingCommands.erase(it, m_pendingCommands.end());
-    m_hasBuilt = false;
+    if (m_pendingCommands.size() == originalSize) {
+        return false;
+    }
+
+    rebuildQueuedSpecialState();
+    refreshProjectedBudgetState(board, activeKingdom, enemyKingdom, publicBuildings, config);
+    return true;
 }
 
 const std::vector<TurnCommand>& TurnSystem::getPendingCommands() const {
     return m_pendingCommands;
 }
 
-const TurnCommand* TurnSystem::getPendingBuildCommand() const {
+const TurnCommand* TurnSystem::getPendingMoveCommand(int pieceId) const {
     for (const auto& cmd : m_pendingCommands) {
-        if (cmd.type == TurnCommand::Build) {
+        if (cmd.type == TurnCommand::Move && cmd.pieceId == pieceId) {
             return &cmd;
         }
     }
     return nullptr;
 }
 
-bool TurnSystem::hasPendingMove() const { return m_hasMoved; }
-bool TurnSystem::hasPendingBuild() const { return m_hasBuilt; }
+bool TurnSystem::hasPendingMove() const {
+    return std::any_of(m_pendingCommands.begin(), m_pendingCommands.end(),
+        [](const TurnCommand& command) { return command.type == TurnCommand::Move; });
+}
+bool TurnSystem::hasPendingBuild() const {
+    return std::any_of(m_pendingCommands.begin(), m_pendingCommands.end(),
+        [](const TurnCommand& command) { return command.type == TurnCommand::Build; });
+}
 bool TurnSystem::hasPendingProduce() const { return m_hasProduced; }
 bool TurnSystem::hasPendingMarriage() const { return m_hasMarried; }
+bool TurnSystem::hasPendingMoveForPiece(int pieceId) const {
+    return getPendingMoveCommand(pieceId) != nullptr;
+}
+
+int TurnSystem::getMovementPointsMax() const { return m_movementPointsMax; }
+int TurnSystem::getMovementPointsRemaining() const { return m_movementPointsRemaining; }
+int TurnSystem::getBuildPointsMax() const { return m_buildPointsMax; }
+int TurnSystem::getBuildPointsRemaining() const { return m_buildPointsRemaining; }
+int TurnSystem::getDerivedActionPointsMax() const { return m_movementPointsMax + m_buildPointsMax; }
+int TurnSystem::getDerivedActionPointsRemaining() const {
+    return m_movementPointsRemaining + m_buildPointsRemaining;
+}
+int TurnSystem::getMoveCountForPiece(int pieceId) const {
+    const auto it = m_pieceMoveCounts.find(pieceId);
+    return (it == m_pieceMoveCounts.end()) ? 0 : it->second;
+}
 
 void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemyKingdom,
                              std::vector<Building>& publicBuildings,
@@ -256,7 +378,9 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                 // Clear the origin cell (use cmd.origin, not piece->position, because
                 // the piece may have been pre-applied live by InputHandler already)
                 Cell& oldCell = board.getCell(cmd.origin.x, cmd.origin.y);
-                oldCell.piece = nullptr;
+                if (oldCell.piece == piece) {
+                    oldCell.piece = nullptr;
+                }
 
                 // Combat resolution
                 CombatSystem::resolve(*piece, board, cmd.destination,
@@ -384,11 +508,10 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
     XPSystem::grantArenaXP(activeKingdom, board, activeKingdom.buildings, config);
 
     m_pendingCommands.clear();
-    m_hasMoved = false;
-    m_hasBuilt = false;
-    m_hasProduced = false;
-    m_producedBarracks.clear();
-    m_hasMarried = false;
+    m_pieceMoveCounts.clear();
+    m_movementPointsRemaining = m_movementPointsMax;
+    m_buildPointsRemaining = m_buildPointsMax;
+    rebuildQueuedSpecialState();
 }
 
 void TurnSystem::advanceTurn() {

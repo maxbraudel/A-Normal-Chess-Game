@@ -9,10 +9,20 @@
 #include "Systems/EconomySystem.hpp"
 #include "Systems/ProductionSpawnRules.hpp"
 #include "Systems/StructureIntegrityRules.hpp"
+#include "Systems/TurnPointRules.hpp"
 #include <cmath>
 #include <algorithm>
 
 namespace {
+
+SnapTurnBudget toSnapTurnBudget(const TurnPointBudget& budget) {
+    SnapTurnBudget snapBudget;
+    snapBudget.movementPointsMax = budget.movementPointsMax;
+    snapBudget.movementPointsRemaining = budget.movementPointsRemaining;
+    snapBudget.buildPointsMax = budget.buildPointsMax;
+    snapBudget.buildPointsRemaining = budget.buildPointsRemaining;
+    return snapBudget;
+}
 
 bool isBlockingWallCell(const SnapBuilding* building, sf::Vector2i pos) {
     if (!building) {
@@ -342,10 +352,21 @@ std::vector<sf::Vector2i> ForwardModel::getLegalMoves(const GameSnapshot& s,
 // ========================================================================
 
 bool ForwardModel::applyMove(GameSnapshot& s, int pieceId, sf::Vector2i dest,
-                              KingdomId mover) {
+                             KingdomId mover, const GameConfig& config) {
     SnapKingdom& myK = s.kingdom(mover);
     SnapPiece* piece = myK.getPieceById(pieceId);
     if (!piece) return false;
+
+    SnapTurnBudget& budget = s.turnBudget(mover);
+    if (budget.movementPointsMax <= 0 && budget.buildPointsMax <= 0
+        && budget.pieceMoveCounts.empty()) {
+        budget = toSnapTurnBudget(TurnPointRules::makeBudget(config));
+    }
+    const int moveAllowance = TurnPointRules::moveAllowance(piece->type, config);
+    if (budget.moveCountForPiece(pieceId) >= moveAllowance) return false;
+
+    const int moveCost = TurnPointRules::movementCost(piece->type, config);
+    if (budget.movementPointsRemaining < moveCost) return false;
 
     // Capture enemy piece at destination
     SnapKingdom& enemyK = s.enemyKingdom(mover);
@@ -358,18 +379,33 @@ bool ForwardModel::applyMove(GameSnapshot& s, int pieceId, sf::Vector2i dest,
     }
 
     piece->position = dest;
+    budget.movementPointsRemaining -= moveCost;
+    budget.setMoveCountForPiece(pieceId, budget.moveCountForPiece(pieceId) + 1);
     return true;
 }
 
 bool ForwardModel::applyBuild(GameSnapshot& s, KingdomId k, BuildingType type,
-                               sf::Vector2i pos, int width, int height,
-                               int cost, int cellHPValue) {
+                              sf::Vector2i pos, int sourceWidth, int sourceHeight,
+                              int rotationQuarterTurns, int cost, int cellHPValue,
+                              const GameConfig& config) {
     SnapKingdom& myK = s.kingdom(k);
+    SnapTurnBudget& budget = s.turnBudget(k);
+    if (budget.movementPointsMax <= 0 && budget.buildPointsMax <= 0
+        && budget.pieceMoveCounts.empty()) {
+        budget = toSnapTurnBudget(TurnPointRules::makeBudget(config));
+    }
+    const int buildPointCost = TurnPointRules::buildCost(type, config);
+    if (budget.buildPointsRemaining < buildPointCost) return false;
     if (myK.gold < cost) return false;
 
+    const int footprintWidth = Building::getFootprintWidthFor(
+        sourceWidth, sourceHeight, rotationQuarterTurns);
+    const int footprintHeight = Building::getFootprintHeightFor(
+        sourceWidth, sourceHeight, rotationQuarterTurns);
+
     // Validate space
-    for (int dy = 0; dy < height; ++dy) {
-        for (int dx = 0; dx < width; ++dx) {
+    for (int dy = 0; dy < footprintHeight; ++dy) {
+        for (int dx = 0; dx < footprintWidth; ++dx) {
             int cx = pos.x + dx, cy = pos.y + dy;
             if (!s.isTraversable(cx, cy)) return false;
             if (s.pieceAt({cx, cy})) return false;
@@ -377,12 +413,13 @@ bool ForwardModel::applyBuild(GameSnapshot& s, KingdomId k, BuildingType type,
         }
     }
 
-    if (!footprintHasAdjacentBuilder(pos, width, height,
+    if (!footprintHasAdjacentBuilder(pos, footprintWidth, footprintHeight,
                                      collectBuilderPositions(myK.pieces))) {
         return false;
     }
 
     myK.gold -= cost;
+    budget.buildPointsRemaining -= buildPointCost;
 
     SnapBuilding bld;
     static int nextSnapBuildId = 90000;
@@ -391,10 +428,12 @@ bool ForwardModel::applyBuild(GameSnapshot& s, KingdomId k, BuildingType type,
     bld.owner = k;
     bld.isNeutral = false;
     bld.origin = pos;
-    bld.width = width;
-    bld.height = height;
-    bld.cellHP.assign(width * height, cellHPValue);
-    bld.cellBreachState.assign(width * height, 0);
+    bld.width = sourceWidth;
+    bld.height = sourceHeight;
+    bld.rotationQuarterTurns = rotationQuarterTurns;
+    bld.flipMask = 0;
+    bld.cellHP.assign(sourceWidth * sourceHeight, cellHPValue);
+    bld.cellBreachState.assign(sourceWidth * sourceHeight, 0);
     myK.buildings.push_back(bld);
     return true;
 }
@@ -557,6 +596,8 @@ void ForwardModel::advanceTurn(GameSnapshot& s, KingdomId k,
             }
         }
     }
+
+    s.turnBudget(opponent(k)) = toSnapTurnBudget(TurnPointRules::makeBudget(config));
 
 }
 

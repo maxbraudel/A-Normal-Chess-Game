@@ -171,7 +171,7 @@ void Renderer::drawSingleBuilding(sf::RenderWindow& window, const Building& buil
     }
 }
 
-void Renderer::setSkipPieceId(int id) { m_skipPieceId = id; }
+void Renderer::setSkipPieceIds(const std::set<int>& ids) { m_skipPieceIds = ids; }
 
 void Renderer::drawPieces(sf::RenderWindow& window, const Camera& camera,
                             const std::array<Kingdom, kNumKingdoms>& kingdoms) {
@@ -179,7 +179,7 @@ void Renderer::drawPieces(sf::RenderWindow& window, const Camera& camera,
 
     for (const auto& k : kingdoms) {
         for (const auto& piece : k.pieces) {
-            if (piece.id == m_skipPieceId) continue;
+            if (m_skipPieceIds.count(piece.id) != 0) continue;
             sf::Sprite sprite;
             sprite.setTexture(m_assets->getPieceTexture(piece.type, piece.kingdom));
             sprite.setPosition(static_cast<float>(piece.position.x * m_cellSize),

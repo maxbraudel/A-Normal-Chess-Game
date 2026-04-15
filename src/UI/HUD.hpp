@@ -33,10 +33,12 @@ public:
 private:
     bool m_visible = false;
     tgui::Panel::Ptr m_metricsPanel;
+    tgui::Panel::Ptr m_pointPanel;
     tgui::Panel::Ptr m_statusPanel;
     tgui::Panel::Ptr m_actionPanel;
     tgui::Panel::Ptr m_networkPanel;
     std::array<tgui::Label::Ptr, 4> m_metricLabels{};
+    std::array<tgui::Label::Ptr, 3> m_pointLabels{};
     tgui::Label::Ptr m_statusLabel;
     tgui::Label::Ptr m_networkStatusLabel;
     tgui::Button::Ptr m_menuButton;

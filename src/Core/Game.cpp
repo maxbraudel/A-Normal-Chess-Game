@@ -4,6 +4,7 @@
 #include "Save/SaveData.hpp"
 #include "Buildings/BuildingType.hpp"
 #include "Systems/BuildSystem.hpp"
+#include "Systems/PendingTurnProjection.hpp"
 #include "Input/InputContext.hpp"
 #include "UI/InGameViewModelBuilder.hpp"
 #include "Multiplayer/PasswordUtils.hpp"
@@ -293,12 +294,14 @@ bool Game::canLocalPlayerIssueCommands() const {
 
 CheckTurnValidation Game::validateActivePendingTurn() {
     return CheckResponseRules::validatePendingTurn(
-        activeKingdom(), board(), turnSystem().getPendingCommands(), m_config);
+        activeKingdom(), enemyKingdom(), board(), publicBuildings(),
+        turnSystem().getTurnNumber(), turnSystem().getPendingCommands(), m_config);
 }
 
 bool Game::isActiveKingInCheckForRules() {
     return CheckResponseRules::isActiveKingInCheck(
-        activeKingdom(), board(), turnSystem().getPendingCommands(), m_config);
+        activeKingdom(), enemyKingdom(), board(), publicBuildings(),
+        turnSystem().getTurnNumber(), turnSystem().getPendingCommands(), m_config);
 }
 
 bool Game::canQueueNonMoveActions() {
@@ -679,7 +682,7 @@ void Game::render() {
 
     if (m_state == GameState::Playing || m_state == GameState::Paused || m_state == GameState::GameOver) {
         m_camera.applyTo(m_window);
-        m_renderer.setSkipPieceId(m_input.getCapturePreviewPieceId());
+        m_renderer.setSkipPieceIds(m_input.getCapturePreviewPieceIds());
         m_renderer.drawWorldBase(m_window, m_camera, board(), kingdoms(),
             publicBuildings());
 
@@ -695,8 +698,9 @@ void Game::render() {
         }
 
         if (canShowSelectedPieceActions && m_input.getCurrentTool() == ToolState::Select) {
-            sf::Vector2i highlightedOrigin = m_input.hasMovePreview()
-                ? m_input.getMoveFrom()
+            const TurnCommand* pendingMove = turnSystem().getPendingMoveCommand(selectedPiece->id);
+            const sf::Vector2i highlightedOrigin = pendingMove
+                ? pendingMove->origin
                 : selectedPiece->position;
             m_renderer.getOverlay().drawOriginCell(m_window, m_camera,
                 highlightedOrigin, m_config.getCellSizePx());
@@ -734,22 +738,31 @@ void Game::render() {
             const int previewRotationQuarterTurns = m_input.getBuildPreviewRotationQuarterTurns();
             const int bw = m_config.getBuildingWidth(bt);
             const int bh = m_config.getBuildingHeight(bt);
-            Kingdom& builder = activeKingdom();
-            bool valid = BuildSystem::canBuild(bt, m_input.getBuildPreviewOrigin(),
-                                               board(), builder, m_config,
-                                               previewRotationQuarterTurns);
+            TurnCommand previewBuild;
+            previewBuild.type = TurnCommand::Build;
+            previewBuild.buildingType = bt;
+            previewBuild.buildOrigin = m_input.getBuildPreviewOrigin();
+            previewBuild.buildRotationQuarterTurns = previewRotationQuarterTurns;
+            const bool valid = PendingTurnProjection::canAppendCommand(
+                board(), activeKingdom(), enemyKingdom(), publicBuildings(),
+                turnSystem().getTurnNumber(), turnSystem().getPendingCommands(),
+                previewBuild, m_config);
             m_renderer.getOverlay().drawBuildPreview(m_window, m_camera,
                 m_input.getBuildPreviewOrigin(), bt, bw, bh, previewRotationQuarterTurns,
                 0, m_config.getCellSizePx(), valid, m_assets);
         }
         if (showActionOverlays) {
-            if (const TurnCommand* pendingBuild = turnSystem().getPendingBuildCommand()) {
-            const int bw = m_config.getBuildingWidth(pendingBuild->buildingType);
-            const int bh = m_config.getBuildingHeight(pendingBuild->buildingType);
-            m_renderer.getOverlay().drawBuildPreview(m_window, m_camera,
-                pendingBuild->buildOrigin, pendingBuild->buildingType, bw, bh,
-                pendingBuild->buildRotationQuarterTurns, 0,
-                m_config.getCellSizePx(), true, m_assets);
+            for (const TurnCommand& pendingCommand : turnSystem().getPendingCommands()) {
+                if (pendingCommand.type != TurnCommand::Build) {
+                    continue;
+                }
+
+                const int bw = m_config.getBuildingWidth(pendingCommand.buildingType);
+                const int bh = m_config.getBuildingHeight(pendingCommand.buildingType);
+                m_renderer.getOverlay().drawBuildPreview(m_window, m_camera,
+                    pendingCommand.buildOrigin, pendingCommand.buildingType, bw, bh,
+                    pendingCommand.buildRotationQuarterTurns, 0,
+                    m_config.getCellSizePx(), true, m_assets);
             }
         }
         const StructureOverlayPolicy overlayPolicy = makeWorldStructureOverlayPolicy();
@@ -950,7 +963,7 @@ void Game::commitAuthoritativeTurn() {
 }
 
 void Game::resetPlayerTurn() {
-    m_input.cancelLiveMove();  // restore piece position if a live move is pending
+    m_input.cancelLiveMove(activeKingdom(), turnSystem());  // restore piece positions for queued move previews
     turnSystem().resetPendingCommands();
     m_input.clearSelection();
 }
@@ -1078,7 +1091,12 @@ bool Game::applyRemoteTurnSubmission(const std::vector<TurnCommand>& commands, s
 
     turnSystem().resetPendingCommands();
     for (const auto& command : commands) {
-        if (!turnSystem().queueCommand(command)) {
+        if (!turnSystem().queueCommand(command,
+                                       board(),
+                                       activeKingdom(),
+                                       enemyKingdom(),
+                                       publicBuildings(),
+                                       m_config)) {
             turnSystem().resetPendingCommands();
             if (errorMessage) {
                 *errorMessage = "The remote player submitted an invalid or conflicting turn command.";
@@ -1475,7 +1493,12 @@ void Game::setupUICallbacks() {
         if (!piece->canUpgradeTo(cmd.upgradeTarget, m_config)) {
             return;
         }
-        turnSystem().queueCommand(cmd);
+        turnSystem().queueCommand(cmd,
+                                  board(),
+                                  activeKingdom(),
+                                  enemyKingdom(),
+                                  publicBuildings(),
+                                  m_config);
     });
 
     // Barracks panel produce
@@ -1485,11 +1508,17 @@ void Game::setupUICallbacks() {
         cmd.type = TurnCommand::Produce;
         cmd.barracksId = barracksId;
         cmd.produceType = static_cast<PieceType>(pieceType);
-        turnSystem().queueCommand(cmd);
+        turnSystem().queueCommand(cmd,
+                                  board(),
+                                  activeKingdom(),
+                                  enemyKingdom(),
+                                  publicBuildings(),
+                                  m_config);
     });
 }
 
 void Game::updateUIState() {
+    turnSystem().syncPointBudget(m_config);
     const bool allowCommands = canLocalPlayerIssueCommands();
     const CheckTurnValidation validation = validateActivePendingTurn();
     InGameViewModel viewModel = buildInGameViewModel(m_engine, m_config, m_state, allowCommands);
@@ -1663,7 +1692,12 @@ void Game::pollAITurn() {
             if (restrictToResponseMove && cmd.type != TurnCommand::Move) {
                 continue;
             }
-            turnSystem().queueCommand(cmd);
+            turnSystem().queueCommand(cmd,
+                                      board(),
+                                      activeKingdom(),
+                                      enemyKingdom(),
+                                      publicBuildings(),
+                                      m_config);
         }
     } else {
         m_ai.applyTurnPlanMetadata(plan);
@@ -1690,7 +1724,12 @@ void Game::pollAITurn() {
             if (restrictToResponseMove && cmd.type != TurnCommand::Move) {
                 continue;
             }
-            turnSystem().queueCommand(cmd);
+            turnSystem().queueCommand(cmd,
+                                      board(),
+                                      activeKingdom(),
+                                      enemyKingdom(),
+                                      publicBuildings(),
+                                      m_config);
         }
     }
     eventLog().log(task->turnNumber, task->activeKingdom, "AI completed turn planning.");
@@ -1710,7 +1749,12 @@ void Game::pollAITurn() {
             fallbackMove.pieceId = piece.id;
             fallbackMove.origin = piece.position;
             fallbackMove.destination = legalMoves.front();
-            turnSystem().queueCommand(fallbackMove);
+            turnSystem().queueCommand(fallbackMove,
+                                      board(),
+                                      activeKingdom(),
+                                      enemyKingdom(),
+                                      publicBuildings(),
+                                      m_config);
             break;
         }
     }

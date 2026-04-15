@@ -1,6 +1,7 @@
 #pragma once
 #include <SFML/Graphics.hpp>
 #include <array>
+#include <set>
 #include <vector>
 #include "Render/OverlayRenderer.hpp"
 #include "Kingdom/KingdomId.hpp"
@@ -28,7 +29,7 @@ public:
                          const std::array<Kingdom, kNumKingdoms>& kingdoms);
 
     OverlayRenderer& getOverlay();
-    void setSkipPieceId(int id); // hide a piece from rendering (used for capture preview)
+    void setSkipPieceIds(const std::set<int>& ids); // hide pieces from rendering (used for capture preview)
 
 private:
     void drawBoard(sf::RenderWindow& window, const Camera& camera, const Board& board);
@@ -41,6 +42,6 @@ private:
 
     const AssetManager* m_assets;
     int m_cellSize;
-    int m_skipPieceId = -1;
+    std::set<int> m_skipPieceIds;
     OverlayRenderer m_overlay;
 };

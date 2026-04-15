@@ -1,5 +1,7 @@
 #pragma once
 #include <chrono>
+#include <map>
+#include <set>
 #include <SFML/System/Vector2.hpp>
 #include <SFML/Window/Event.hpp>
 #include <vector>
@@ -33,11 +35,9 @@ public:
     sf::Vector2i getSelectedCell() const;
     const std::vector<sf::Vector2i>& getValidMoves() const;
     const std::vector<sf::Vector2i>& getDangerMoves() const; // king squares under enemy threat
-    int getCapturePreviewPieceId() const; // id of enemy piece visually hidden during move preview (-1 if none)
+    const std::set<int>& getCapturePreviewPieceIds() const; // enemy pieces visually hidden during queued capture previews
     bool hasMovePreview() const;
-    sf::Vector2i getMoveFrom() const;
-    sf::Vector2i getMoveTo() const;
-    void cancelLiveMove();   // restores piece position and clears preview state
+    void cancelLiveMove(Kingdom& controlledKingdom, const TurnSystem& turnSystem);   // restores queued preview positions and clears preview state
     void clearMovePreview(); // clears preview state without restoring (use after commit)
 
     // Build mode
@@ -57,12 +57,8 @@ private:
     sf::Vector2i m_selectedCell;
     std::vector<sf::Vector2i> m_validMoves;
     std::vector<sf::Vector2i> m_dangerMoves; // king moves onto threatened squares (shown red, blocked)
-    int m_capturePreviewPieceId = -1; // enemy piece hidden during move preview
-
-    bool m_hasMovePreview;
-    sf::Vector2i m_moveFrom;
-    sf::Vector2i m_moveTo;
-    Piece* m_movedPiece = nullptr;
+    std::set<int> m_capturePreviewPieceIds;
+    std::map<int, sf::Vector2i> m_movePreviewOrigins;
 
     bool m_hasBuildPreview;
     BuildingType m_buildPreviewType;
@@ -83,12 +79,12 @@ private:
     void handleSelectTool(const sf::Event& event, const InputContext& context);
     void handleBuildTool(const sf::Event& event, const InputContext& context);
     void handleCameraInput(const sf::Event& event, sf::RenderWindow& window, Camera& camera);
-    // Recompute m_validMoves / m_dangerMoves for piece given current preview board state
-    void refreshPieceMoves(Piece* piece, Board& board, const Kingdom& enemyKingdom, const GameConfig& config);
+    // Recompute move targets for piece given the projected queued turn state.
+    void refreshPieceMoves(Piece* piece, const InputContext& context);
+    void syncQueuedMovePreviewState(const InputContext& context);
     void selectCell(sf::Vector2i cellPos);
     void activatePieceSelection(Piece* piece, sf::Vector2i cellPos,
-                                const Board& board, const Kingdom& enemyKingdom,
-                                const GameConfig& config, bool allowCommands);
+                                const InputContext& context, bool allowCommands);
     void activateBuildingSelection(Building* building, sf::Vector2i cellPos);
     void activateTerrainSelection(sf::Vector2i cellPos);
     void setActiveSelectionMetadata(SelectionLayer layer, sf::Vector2i cellPos);

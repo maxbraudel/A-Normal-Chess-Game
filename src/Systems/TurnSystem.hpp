@@ -1,4 +1,5 @@
 #pragma once
+#include <map>
 #include <vector>
 #include <set>
 #include "Systems/TurnCommand.hpp"
@@ -28,17 +29,44 @@ public:
     KingdomId getActiveKingdom() const;
     int getTurnNumber() const;
 
-    bool queueCommand(const TurnCommand& cmd);
+    void syncPointBudget(const GameConfig& config);
+    bool queueCommand(const TurnCommand& cmd,
+                      const Board& board,
+                      const Kingdom& activeKingdom,
+                      const Kingdom& enemyKingdom,
+                      const std::vector<Building>& publicBuildings,
+                      const GameConfig& config);
     void resetPendingCommands();
-    void cancelMoveCommand();   // undo a live-applied move: removes the Move command only
-    void cancelBuildCommand();  // removes the queued Build command only
+    bool cancelMoveCommand(int pieceId,
+                           const Board& board,
+                           const Kingdom& activeKingdom,
+                           const Kingdom& enemyKingdom,
+                           const std::vector<Building>& publicBuildings,
+                           const GameConfig& config);
+    bool cancelBuildCommand(BuildingType type,
+                            sf::Vector2i origin,
+                            int rotationQuarterTurns,
+                            const Board& board,
+                            const Kingdom& activeKingdom,
+                            const Kingdom& enemyKingdom,
+                            const std::vector<Building>& publicBuildings,
+                            const GameConfig& config);
     const std::vector<TurnCommand>& getPendingCommands() const;
-    const TurnCommand* getPendingBuildCommand() const;
+    const TurnCommand* getPendingMoveCommand(int pieceId) const;
 
     bool hasPendingMove() const;
     bool hasPendingBuild() const;
     bool hasPendingProduce() const;
     bool hasPendingMarriage() const;
+    bool hasPendingMoveForPiece(int pieceId) const;
+
+    int getMovementPointsMax() const;
+    int getMovementPointsRemaining() const;
+    int getBuildPointsMax() const;
+    int getBuildPointsRemaining() const;
+    int getDerivedActionPointsMax() const;
+    int getDerivedActionPointsRemaining() const;
+    int getMoveCountForPiece(int pieceId) const;
 
     void commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemyKingdom,
                     std::vector<Building>& publicBuildings,
@@ -52,9 +80,19 @@ private:
     int m_turnNumber;
     std::vector<TurnCommand> m_pendingCommands;
 
-    bool m_hasMoved;
-    bool m_hasBuilt;
-    bool m_hasProduced;           // true if at least 1 production queued (legacy compat)
+    int m_movementPointsMax;
+    int m_movementPointsRemaining;
+    int m_buildPointsMax;
+    int m_buildPointsRemaining;
+    std::map<int, int> m_pieceMoveCounts;
+    bool m_hasProduced;           // true if at least 1 production queued
     std::set<int> m_producedBarracks;  // barracks IDs that have a produce queued
     bool m_hasMarried;
+
+    void rebuildQueuedSpecialState();
+    void refreshProjectedBudgetState(const Board& board,
+                                     const Kingdom& activeKingdom,
+                                     const Kingdom& enemyKingdom,
+                                     const std::vector<Building>& publicBuildings,
+                                     const GameConfig& config);
 };

@@ -3,29 +3,20 @@
 #include <algorithm>
 
 #include "Board/Board.hpp"
-#include "Board/Cell.hpp"
+#include "Buildings/Building.hpp"
+#include "AI/ForwardModel.hpp"
 #include "Config/GameConfig.hpp"
 #include "Kingdom/Kingdom.hpp"
+#include "Systems/PendingTurnProjection.hpp"
 #include "Systems/CheckSystem.hpp"
 #include "Units/MovementRules.hpp"
 #include "Units/Piece.hpp"
 
 namespace {
 
-const TurnCommand* findPendingMoveCommand(const std::vector<TurnCommand>& pendingCommands) {
-    for (const TurnCommand& command : pendingCommands) {
-        if (command.type == TurnCommand::Move) {
-            return &command;
-        }
-    }
-
-    return nullptr;
-}
-
-bool containsIllegalNonMoveAction(const std::vector<TurnCommand>& pendingCommands) {
-    return std::any_of(
-        pendingCommands.begin(), pendingCommands.end(),
-        [](const TurnCommand& command) { return command.type != TurnCommand::Move; });
+bool hasQueuedMoveCommand(const std::vector<TurnCommand>& pendingCommands) {
+    return std::any_of(pendingCommands.begin(), pendingCommands.end(),
+        [](const TurnCommand& command) { return command.type == TurnCommand::Move; });
 }
 
 bool isPseudoLegalMove(const Piece& piece,
@@ -47,43 +38,37 @@ bool isPseudoLegalMove(const Piece& piece,
     return std::find(pseudoLegalMoves.begin(), pseudoLegalMoves.end(), destination) != pseudoLegalMoves.end();
 }
 
-class PendingMovePreviewGuard {
-public:
-    PendingMovePreviewGuard(Kingdom& kingdom, const std::vector<TurnCommand>& pendingCommands)
-        : m_piece(nullptr), m_originalPosition(0, 0) {
-        const TurnCommand* moveCommand = findPendingMoveCommand(pendingCommands);
-        if (!moveCommand) {
-            return;
-        }
-
-        m_piece = kingdom.getPieceById(moveCommand->pieceId);
-        if (!m_piece) {
-            return;
-        }
-
-        m_originalPosition = m_piece->position;
-        m_piece->position = moveCommand->origin;
-    }
-
-    ~PendingMovePreviewGuard() {
-        if (m_piece) {
-            m_piece->position = m_originalPosition;
+bool hasAnyPseudoLegalResponse(const GameSnapshot& snapshot,
+                               KingdomId activeKingdom,
+                               int globalMaxRange) {
+    const SnapKingdom& kingdom = snapshot.kingdom(activeKingdom);
+    for (const SnapPiece& piece : kingdom.pieces) {
+        if (!ForwardModel::getPseudoLegalMoves(snapshot, piece, globalMaxRange).empty()) {
+            return true;
         }
     }
 
-private:
-    Piece* m_piece;
-    sf::Vector2i m_originalPosition;
-};
+    return false;
+}
 
 } // namespace
 
-bool CheckResponseRules::isActiveKingInCheck(Kingdom& kingdom,
-                                             Board& board,
+bool CheckResponseRules::isActiveKingInCheck(const Kingdom& activeKingdom,
+                                             const Kingdom& enemyKingdom,
+                                             const Board& board,
+                                             const std::vector<Building>& publicBuildings,
+                                             int turnNumber,
                                              const std::vector<TurnCommand>& pendingCommands,
                                              const GameConfig& config) {
-    PendingMovePreviewGuard previewGuard(kingdom, pendingCommands);
-    return CheckSystem::isInCheck(kingdom.id, board, config);
+    const PendingTurnProjectionResult projection = PendingTurnProjection::project(
+        board, activeKingdom, enemyKingdom, publicBuildings,
+        turnNumber, pendingCommands, config);
+    if (!projection.valid) {
+        return true;
+    }
+
+    return ForwardModel::isInCheck(
+        projection.snapshot, activeKingdom.id, config.getGlobalMaxRange());
 }
 
 std::vector<sf::Vector2i> CheckResponseRules::filterLegalMovesForPiece(Piece& piece,
@@ -147,24 +132,21 @@ bool CheckResponseRules::hasAnyLegalResponse(Kingdom& kingdom,
     return false;
 }
 
-CheckTurnValidation CheckResponseRules::validatePendingTurn(Kingdom& activeKingdom,
-                                                            Board& board,
+CheckTurnValidation CheckResponseRules::validatePendingTurn(const Kingdom& activeKingdom,
+                                                            const Kingdom& enemyKingdom,
+                                                            const Board& board,
+                                                            const std::vector<Building>& publicBuildings,
+                                                            int turnNumber,
                                                             const std::vector<TurnCommand>& pendingCommands,
                                                             const GameConfig& config) {
     CheckTurnValidation validation;
-    PendingMovePreviewGuard previewGuard(activeKingdom, pendingCommands);
 
-    validation.activeKingInCheck = CheckSystem::isInCheck(activeKingdom.id, board, config);
-    validation.hasAnyLegalResponse = hasAnyLegalResponse(activeKingdom, board, config);
-
-    const TurnCommand* moveCommand = findPendingMoveCommand(pendingCommands);
-    validation.hasQueuedMove = (moveCommand != nullptr);
-
-    if (validation.activeKingInCheck && containsIllegalNonMoveAction(pendingCommands)) {
-        validation.valid = false;
-        validation.errorMessage = "A kingdom in check may only submit a move that resolves the check.";
-        return validation;
-    }
+    validation.activeKingInCheck = CheckSystem::isInCheckFast(
+        activeKingdom, enemyKingdom, board, config);
+    Kingdom activeCopy = activeKingdom;
+    Board boardCopy = board;
+    validation.hasAnyLegalResponse = hasAnyLegalResponse(activeCopy, boardCopy, config);
+    validation.hasQueuedMove = hasQueuedMoveCommand(pendingCommands);
 
     if (validation.activeKingInCheck && !validation.hasAnyLegalResponse) {
         validation.valid = false;
@@ -172,36 +154,43 @@ CheckTurnValidation CheckResponseRules::validatePendingTurn(Kingdom& activeKingd
         return validation;
     }
 
-    if (!moveCommand) {
+    if (pendingCommands.empty()) {
         if (validation.activeKingInCheck) {
             validation.valid = false;
-            validation.errorMessage = "A kingdom in check cannot pass its turn and must resolve the check with a legal move.";
+            validation.errorMessage = "A kingdom in check cannot pass its turn and must resolve the check before ending the turn.";
         }
         return validation;
     }
 
-    Piece* movingPiece = activeKingdom.getPieceById(moveCommand->pieceId);
-    if (!movingPiece) {
-        validation.valid = false;
-        validation.errorMessage = "The queued move references a piece that does not exist anymore.";
-        return validation;
+    bool projectedKingInCheck = validation.activeKingInCheck;
+    std::vector<TurnCommand> prefixCommands;
+    prefixCommands.reserve(pendingCommands.size());
+    for (const TurnCommand& command : pendingCommands) {
+        if (projectedKingInCheck && command.type != TurnCommand::Move) {
+            validation.valid = false;
+            validation.errorMessage = "Non-move actions stay locked until the queued move sequence has resolved the check.";
+            return validation;
+        }
+
+        prefixCommands.push_back(command);
+        const PendingTurnProjectionResult prefixProjection = PendingTurnProjection::project(
+            board, activeKingdom, enemyKingdom, publicBuildings,
+            turnNumber, prefixCommands, config);
+        if (!prefixProjection.valid) {
+            validation.valid = false;
+            validation.errorMessage = prefixProjection.errorMessage;
+            return validation;
+        }
+
+        projectedKingInCheck = ForwardModel::isInCheck(
+            prefixProjection.snapshot, activeKingdom.id, config.getGlobalMaxRange());
     }
 
-    if (!isPseudoLegalMove(*movingPiece, moveCommand->destination, board, config)) {
-        validation.valid = false;
-        validation.errorMessage = "The queued move is not geometrically legal for the selected piece.";
-        return validation;
-    }
-
-    if (!moveKeepsKingSafe(*movingPiece,
-                           moveCommand->origin,
-                           moveCommand->destination,
-                           board,
-                           config)) {
+    if (projectedKingInCheck) {
         validation.valid = false;
         validation.errorMessage = validation.activeKingInCheck
-            ? "The queued move does not resolve the current check."
-            : "The queued move would leave the king in check.";
+            ? "The queued turn still leaves the king in check."
+            : "The queued turn would leave the king in check.";
         return validation;
     }
 

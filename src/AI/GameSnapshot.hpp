@@ -1,5 +1,6 @@
 #pragma once
 #include <algorithm>
+#include <map>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -218,6 +219,28 @@ struct SnapKingdom {
     }
 };
 
+struct SnapTurnBudget {
+    int movementPointsMax = 0;
+    int movementPointsRemaining = 0;
+    int buildPointsMax = 0;
+    int buildPointsRemaining = 0;
+    std::map<int, int> pieceMoveCounts;
+
+    int moveCountForPiece(int pieceId) const {
+        const auto it = pieceMoveCounts.find(pieceId);
+        return (it == pieceMoveCounts.end()) ? 0 : it->second;
+    }
+
+    void setMoveCountForPiece(int pieceId, int count) {
+        if (count <= 0) {
+            pieceMoveCounts.erase(pieceId);
+            return;
+        }
+
+        pieceMoveCounts[pieceId] = count;
+    }
+};
+
 /// Shared immutable terrain grid (never changes during simulation)
 struct TerrainGrid {
     int radius = 25;
@@ -241,6 +264,8 @@ struct GameSnapshot {
     std::shared_ptr<const TerrainGrid> terrain; // shared across clones
     SnapKingdom white;
     SnapKingdom black;
+    SnapTurnBudget whiteTurnBudget;
+    SnapTurnBudget blackTurnBudget;
     std::vector<SnapBuilding> publicBuildings;  // neutral/public buildings
     int turnNumber = 1;
 
@@ -250,6 +275,12 @@ struct GameSnapshot {
     }
     const SnapKingdom& kingdom(KingdomId id) const {
         return id == KingdomId::White ? white : black;
+    }
+    SnapTurnBudget& turnBudget(KingdomId id) {
+        return id == KingdomId::White ? whiteTurnBudget : blackTurnBudget;
+    }
+    const SnapTurnBudget& turnBudget(KingdomId id) const {
+        return id == KingdomId::White ? whiteTurnBudget : blackTurnBudget;
     }
     SnapKingdom& enemyKingdom(KingdomId id) {
         return id == KingdomId::White ? black : white;
@@ -294,6 +325,8 @@ struct GameSnapshot {
         s.terrain = terrain;
         s.white = white;
         s.black = black;
+        s.whiteTurnBudget = whiteTurnBudget;
+        s.blackTurnBudget = blackTurnBudget;
         s.publicBuildings = publicBuildings;
         s.turnNumber = turnNumber;
         return s;

@@ -111,7 +111,8 @@ std::vector<sf::Vector2i> CheckmateSolver::computeEscapeSquares(
 // =========================================================================
 
 bool CheckmateSolver::canDefendCheck(const GameSnapshot& s, KingdomId defender,
-                                       int globalMaxRange) {
+                                       int globalMaxRange,
+                                       const GameConfig& config) {
     // For each defender piece (not king, king escape already checked),
     // try all moves. If any results in the king NOT being in check, return true.
     for (auto& piece : s.kingdom(defender).pieces) {
@@ -119,7 +120,7 @@ bool CheckmateSolver::canDefendCheck(const GameSnapshot& s, KingdomId defender,
         auto moves = ForwardModel::getLegalMoves(s, piece, globalMaxRange);
         for (auto& dest : moves) {
             GameSnapshot sim = s.clone();
-            ForwardModel::applyMove(sim, piece.id, dest, defender);
+            ForwardModel::applyMove(sim, piece.id, dest, defender, config);
             if (!ForwardModel::isInCheck(sim, defender, globalMaxRange))
                 return true;
         }
@@ -153,7 +154,8 @@ static bool s_isLegalKingEscape(const GameSnapshot& sim, sf::Vector2i /*kingPos*
 
 std::optional<MateMove> CheckmateSolver::findMateIn1(const GameSnapshot& snapshot,
                                                        KingdomId aiKingdom,
-                                                       int globalMaxRange) const {
+                                                       int globalMaxRange,
+                                                       const GameConfig& config) const {
     auto* eKing = snapshot.enemyKingdom(aiKingdom).getKing();
     if (!eKing) return std::nullopt;
     sf::Vector2i eKingPos = eKing->position;
@@ -177,7 +179,7 @@ std::optional<MateMove> CheckmateSolver::findMateIn1(const GameSnapshot& snapsho
 
             // Full simulation
             GameSnapshot sim = snapshot.clone();
-            ForwardModel::applyMove(sim, piece.id, dest, aiKingdom);
+            ForwardModel::applyMove(sim, piece.id, dest, aiKingdom, config);
 
             // Verify king is actually in check after the move
             if (!ForwardModel::isInCheck(sim, enemyId, globalMaxRange))
@@ -200,7 +202,7 @@ std::optional<MateMove> CheckmateSolver::findMateIn1(const GameSnapshot& snapsho
 
             // 2. Try interpositions / captures by other pieces
             if (!canEscape)
-                canEscape = canDefendCheck(sim, enemyId, globalMaxRange);
+                canEscape = canDefendCheck(sim, enemyId, globalMaxRange, config);
 
             if (!canEscape)
                 return MateMove{piece.id, dest};
@@ -218,16 +220,18 @@ std::optional<MateMove> CheckmateSolver::findMateInN(const GameSnapshot& snapsho
                                                        KingdomId aiKingdom,
                                                        int maxDepth,
                                                        int globalMaxRange,
-                                                       int budgetMs) const {
+                                                       int budgetMs,
+                                                       const GameConfig& config) const {
     TimeBudget timer(budgetMs);
-    return alphaBetaMate(snapshot, aiKingdom, 0, maxDepth, globalMaxRange, timer);
+    return alphaBetaMate(snapshot, aiKingdom, 0, maxDepth, globalMaxRange, timer, config);
 }
 
 std::optional<MateMove> CheckmateSolver::alphaBetaMate(const GameSnapshot& s,
                                                          KingdomId ai,
                                                          int depth, int maxDepth,
                                                          int globalMaxRange,
-                                                         TimeBudget& timer) const {
+                                                         TimeBudget& timer,
+                                                         const GameConfig& config) const {
     if (timer.expired()) return std::nullopt;
     if (depth >= maxDepth) return std::nullopt;
 
@@ -242,7 +246,7 @@ std::optional<MateMove> CheckmateSolver::alphaBetaMate(const GameSnapshot& s,
             auto moves = ForwardModel::getLegalMoves(s, piece, globalMaxRange);
             for (auto& dest : moves) {
                 GameSnapshot sim = s.clone();
-                ForwardModel::applyMove(sim, piece.id, dest, ai);
+                ForwardModel::applyMove(sim, piece.id, dest, ai, config);
 
                 // Check if it's checkmate
                 if (ForwardModel::isCheckmate(sim, enemyId, globalMaxRange))
@@ -254,7 +258,7 @@ std::optional<MateMove> CheckmateSolver::alphaBetaMate(const GameSnapshot& s,
 
                 // Recurse as enemy's turn
                 auto result = alphaBetaMate(sim, ai, depth + 1, maxDepth,
-                                             globalMaxRange, timer);
+                                             globalMaxRange, timer, config);
                 if (result.has_value() && depth == 0)
                     return MateMove{piece.id, dest};
                 if (result.has_value())
@@ -269,12 +273,12 @@ std::optional<MateMove> CheckmateSolver::alphaBetaMate(const GameSnapshot& s,
             auto moves = ForwardModel::getLegalMoves(s, piece, globalMaxRange);
             for (auto& dest : moves) {
                 GameSnapshot sim = s.clone();
-                ForwardModel::applyMove(sim, piece.id, dest, enemyId);
+                ForwardModel::applyMove(sim, piece.id, dest, enemyId, config);
 
                 if (!ForwardModel::isInCheck(sim, enemyId, globalMaxRange)) {
                     // Enemy found a way out, try to continue from here
                     auto result = alphaBetaMate(sim, ai, depth + 1, maxDepth,
-                                                 globalMaxRange, timer);
+                                                 globalMaxRange, timer, config);
                     if (!result.has_value()) {
                         allLeadToMate = false;
                         break;

@@ -91,7 +91,12 @@ AITurnPlan AIController::computeTurnPlan(Board& board, Kingdom& self, Kingdom& e
     planningTurnSystem.setActiveKingdom(self.id);
 
     auto queuePlanned = [&](const TurnCommand& cmd) {
-        if (planningTurnSystem.queueCommand(cmd)) {
+        if (planningTurnSystem.queueCommand(cmd,
+                                            board,
+                                            self,
+                                            enemy,
+                                            publicBuildings,
+                                            config)) {
             plan.commands.push_back(cmd);
             return true;
         }
@@ -271,7 +276,12 @@ void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
     applyTurnPlanMetadata(plan);
     log.log(turnSystem.getTurnNumber(), self.id, "AI Phase: " + plan.phaseName);
     for (const auto& cmd : plan.commands) {
-        turnSystem.queueCommand(cmd);
+        turnSystem.queueCommand(cmd,
+                                board,
+                                self,
+                                enemy,
+                                publicBuildings,
+                                config);
     }
     log.log(turnSystem.getTurnNumber(), self.id, "AI completed turn planning.");
 }

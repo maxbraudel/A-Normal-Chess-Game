@@ -21,16 +21,20 @@ public:
                                        int turnNumber);
 
     // ---- Legal move generation on snapshots ----
+    static std::vector<sf::Vector2i> getPseudoLegalMoves(const GameSnapshot& s,
+                                                         const SnapPiece& piece,
+                                                         int globalMaxRange);
     static std::vector<sf::Vector2i> getLegalMoves(const GameSnapshot& s,
                                                     const SnapPiece& piece,
                                                     int globalMaxRange);
 
     // ---- Atomic actions ----
     static bool applyMove(GameSnapshot& s, int pieceId, sf::Vector2i dest,
-                          KingdomId mover);
+                          KingdomId mover, const GameConfig& config);
     static bool applyBuild(GameSnapshot& s, KingdomId k, BuildingType type,
-                           sf::Vector2i pos, int width, int height,
-                           int cost, int cellHP);
+                           sf::Vector2i pos, int sourceWidth, int sourceHeight,
+                           int rotationQuarterTurns, int cost, int cellHP,
+                           const GameConfig& config);
     static bool applyProduce(GameSnapshot& s, int barracksId, PieceType type,
                              int cost, int productionTurns, KingdomId k);
     static bool applyMarriage(GameSnapshot& s, KingdomId k);
@@ -48,9 +52,6 @@ public:
 
 private:
     // Movement helpers
-    static std::vector<sf::Vector2i> getPseudoLegalMoves(const GameSnapshot& s,
-                                                         const SnapPiece& piece,
-                                                         int globalMaxRange);
     static std::vector<sf::Vector2i> getPawnMoves(const SnapPiece& piece,
                                                    const GameSnapshot& s);
     static std::vector<sf::Vector2i> getKnightMoves(const SnapPiece& piece,

@@ -37,6 +37,27 @@
         "upgrade_pawn_to_bishop_cost": 20,
         "upgrade_to_rook_cost": 50
     },
+    "turn_points": {
+        "movement_points_per_turn": 5,
+        "build_points_per_turn": 4,
+        "pawn_move_point_cost": 1,
+        "knight_move_point_cost": 2,
+        "bishop_move_point_cost": 2,
+        "rook_move_point_cost": 4,
+        "queen_move_point_cost": 4,
+        "king_move_point_cost": 2,
+        "barracks_build_point_cost": 3,
+        "wood_wall_build_point_cost": 1,
+        "stone_wall_build_point_cost": 2,
+        "bridge_build_point_cost": 2,
+        "arena_build_point_cost": 4,
+        "pawn_move_allowance_per_turn": 1,
+        "knight_move_allowance_per_turn": 1,
+        "bishop_move_allowance_per_turn": 1,
+        "rook_move_allowance_per_turn": 1,
+        "queen_move_allowance_per_turn": 1,
+        "king_move_allowance_per_turn": 1
+    },
     "production": {
         "pawn_turns": 2,
         "knight_turns": 4,

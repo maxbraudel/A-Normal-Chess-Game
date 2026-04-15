@@ -8,6 +8,7 @@
 #include "Systems/TurnCommand.hpp"
 
 class Board;
+class Building;
 class GameConfig;
 class Kingdom;
 class Piece;
@@ -22,8 +23,11 @@ struct CheckTurnValidation {
 
 class CheckResponseRules {
 public:
-    static bool isActiveKingInCheck(Kingdom& kingdom,
-                                    Board& board,
+    static bool isActiveKingInCheck(const Kingdom& activeKingdom,
+                                    const Kingdom& enemyKingdom,
+                                    const Board& board,
+                                    const std::vector<Building>& publicBuildings,
+                                    int turnNumber,
                                     const std::vector<TurnCommand>& pendingCommands,
                                     const GameConfig& config);
 
@@ -41,8 +45,11 @@ public:
                                     Board& board,
                                     const GameConfig& config);
 
-    static CheckTurnValidation validatePendingTurn(Kingdom& activeKingdom,
-                                                   Board& board,
+    static CheckTurnValidation validatePendingTurn(const Kingdom& activeKingdom,
+                                                   const Kingdom& enemyKingdom,
+                                                   const Board& board,
+                                                   const std::vector<Building>& publicBuildings,
+                                                   int turnNumber,
                                                    const std::vector<TurnCommand>& pendingCommands,
                                                    const GameConfig& config);
 };

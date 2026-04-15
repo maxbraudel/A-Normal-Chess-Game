@@ -66,6 +66,25 @@ void GameConfig::setDefaults() {
     m_barracksRepairCostPerCell = 7;
     m_arenaRepairCostPerCell = 7;
     m_bridgeRepairCostPerCell = 5;
+    m_movementPointsPerTurn = 5;
+    m_buildPointsPerTurn = 4;
+    m_pawnMovePointCost = 1;
+    m_knightMovePointCost = 2;
+    m_bishopMovePointCost = 2;
+    m_rookMovePointCost = 4;
+    m_queenMovePointCost = 4;
+    m_kingMovePointCost = 2;
+    m_barracksBuildPointCost = 3;
+    m_woodWallBuildPointCost = 1;
+    m_stoneWallBuildPointCost = 2;
+    m_bridgeBuildPointCost = 2;
+    m_arenaBuildPointCost = 4;
+    m_pawnMoveAllowancePerTurn = 1;
+    m_knightMoveAllowancePerTurn = 1;
+    m_bishopMoveAllowancePerTurn = 1;
+    m_rookMoveAllowancePerTurn = 1;
+    m_queenMoveAllowancePerTurn = 1;
+    m_kingMoveAllowancePerTurn = 1;
     m_pawnRecruitCost = 10;
     m_knightRecruitCost = 30;
     m_bishopRecruitCost = 30;
@@ -225,6 +244,68 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
         "economy.upgrade_pawn_to_bishop_cost", m_upgradePawnToBishopCost);
     m_upgradeToRookCost = clampNonNegativeConfigValue("economy.upgrade_to_rook_cost", m_upgradeToRookCost);
 
+    std::string turnPointSec = extractSection(json, "turn_points");
+    if (!turnPointSec.empty()) {
+        m_movementPointsPerTurn = extractInt(turnPointSec, "movement_points_per_turn", m_movementPointsPerTurn);
+        m_buildPointsPerTurn = extractInt(turnPointSec, "build_points_per_turn", m_buildPointsPerTurn);
+        m_pawnMovePointCost = extractInt(turnPointSec, "pawn_move_point_cost", m_pawnMovePointCost);
+        m_knightMovePointCost = extractInt(turnPointSec, "knight_move_point_cost", m_knightMovePointCost);
+        m_bishopMovePointCost = extractInt(turnPointSec, "bishop_move_point_cost", m_bishopMovePointCost);
+        m_rookMovePointCost = extractInt(turnPointSec, "rook_move_point_cost", m_rookMovePointCost);
+        m_queenMovePointCost = extractInt(turnPointSec, "queen_move_point_cost", m_queenMovePointCost);
+        m_kingMovePointCost = extractInt(turnPointSec, "king_move_point_cost", m_kingMovePointCost);
+        m_barracksBuildPointCost = extractInt(turnPointSec, "barracks_build_point_cost", m_barracksBuildPointCost);
+        m_woodWallBuildPointCost = extractInt(turnPointSec, "wood_wall_build_point_cost", m_woodWallBuildPointCost);
+        m_stoneWallBuildPointCost = extractInt(turnPointSec, "stone_wall_build_point_cost", m_stoneWallBuildPointCost);
+        m_bridgeBuildPointCost = extractInt(turnPointSec, "bridge_build_point_cost", m_bridgeBuildPointCost);
+        m_arenaBuildPointCost = extractInt(turnPointSec, "arena_build_point_cost", m_arenaBuildPointCost);
+        m_pawnMoveAllowancePerTurn = extractInt(turnPointSec, "pawn_move_allowance_per_turn", m_pawnMoveAllowancePerTurn);
+        m_knightMoveAllowancePerTurn = extractInt(turnPointSec, "knight_move_allowance_per_turn", m_knightMoveAllowancePerTurn);
+        m_bishopMoveAllowancePerTurn = extractInt(turnPointSec, "bishop_move_allowance_per_turn", m_bishopMoveAllowancePerTurn);
+        m_rookMoveAllowancePerTurn = extractInt(turnPointSec, "rook_move_allowance_per_turn", m_rookMoveAllowancePerTurn);
+        m_queenMoveAllowancePerTurn = extractInt(turnPointSec, "queen_move_allowance_per_turn", m_queenMoveAllowancePerTurn);
+        m_kingMoveAllowancePerTurn = extractInt(turnPointSec, "king_move_allowance_per_turn", m_kingMoveAllowancePerTurn);
+    }
+
+    m_movementPointsPerTurn = clampNonNegativeConfigValue(
+        "turn_points.movement_points_per_turn", m_movementPointsPerTurn);
+    m_buildPointsPerTurn = clampNonNegativeConfigValue(
+        "turn_points.build_points_per_turn", m_buildPointsPerTurn);
+    m_pawnMovePointCost = clampNonNegativeConfigValue(
+        "turn_points.pawn_move_point_cost", m_pawnMovePointCost);
+    m_knightMovePointCost = clampNonNegativeConfigValue(
+        "turn_points.knight_move_point_cost", m_knightMovePointCost);
+    m_bishopMovePointCost = clampNonNegativeConfigValue(
+        "turn_points.bishop_move_point_cost", m_bishopMovePointCost);
+    m_rookMovePointCost = clampNonNegativeConfigValue(
+        "turn_points.rook_move_point_cost", m_rookMovePointCost);
+    m_queenMovePointCost = clampNonNegativeConfigValue(
+        "turn_points.queen_move_point_cost", m_queenMovePointCost);
+    m_kingMovePointCost = clampNonNegativeConfigValue(
+        "turn_points.king_move_point_cost", m_kingMovePointCost);
+    m_barracksBuildPointCost = clampNonNegativeConfigValue(
+        "turn_points.barracks_build_point_cost", m_barracksBuildPointCost);
+    m_woodWallBuildPointCost = clampNonNegativeConfigValue(
+        "turn_points.wood_wall_build_point_cost", m_woodWallBuildPointCost);
+    m_stoneWallBuildPointCost = clampNonNegativeConfigValue(
+        "turn_points.stone_wall_build_point_cost", m_stoneWallBuildPointCost);
+    m_bridgeBuildPointCost = clampNonNegativeConfigValue(
+        "turn_points.bridge_build_point_cost", m_bridgeBuildPointCost);
+    m_arenaBuildPointCost = clampNonNegativeConfigValue(
+        "turn_points.arena_build_point_cost", m_arenaBuildPointCost);
+    m_pawnMoveAllowancePerTurn = clampNonNegativeConfigValue(
+        "turn_points.pawn_move_allowance_per_turn", m_pawnMoveAllowancePerTurn);
+    m_knightMoveAllowancePerTurn = clampNonNegativeConfigValue(
+        "turn_points.knight_move_allowance_per_turn", m_knightMoveAllowancePerTurn);
+    m_bishopMoveAllowancePerTurn = clampNonNegativeConfigValue(
+        "turn_points.bishop_move_allowance_per_turn", m_bishopMoveAllowancePerTurn);
+    m_rookMoveAllowancePerTurn = clampNonNegativeConfigValue(
+        "turn_points.rook_move_allowance_per_turn", m_rookMoveAllowancePerTurn);
+    m_queenMoveAllowancePerTurn = clampNonNegativeConfigValue(
+        "turn_points.queen_move_allowance_per_turn", m_queenMoveAllowancePerTurn);
+    m_kingMoveAllowancePerTurn = clampNonNegativeConfigValue(
+        "turn_points.king_move_allowance_per_turn", m_kingMoveAllowancePerTurn);
+
     std::string prodSec = extractSection(json, "production");
     if (!prodSec.empty()) {
         m_pawnTurns = extractInt(prodSec, "pawn_turns", m_pawnTurns);
@@ -301,6 +382,44 @@ int GameConfig::getBarracksCost() const { return m_barracksCost; }
 int GameConfig::getWoodWallCost() const { return m_woodWallCost; }
 int GameConfig::getStoneWallCost() const { return m_stoneWallCost; }
 int GameConfig::getArenaCost() const { return m_arenaCost; }
+
+int GameConfig::getMovementPointsPerTurn() const { return m_movementPointsPerTurn; }
+int GameConfig::getBuildPointsPerTurn() const { return m_buildPointsPerTurn; }
+
+int GameConfig::getMovePointCost(PieceType type) const {
+    switch (type) {
+        case PieceType::Pawn: return m_pawnMovePointCost;
+        case PieceType::Knight: return m_knightMovePointCost;
+        case PieceType::Bishop: return m_bishopMovePointCost;
+        case PieceType::Rook: return m_rookMovePointCost;
+        case PieceType::Queen: return m_queenMovePointCost;
+        case PieceType::King: return m_kingMovePointCost;
+        default: return 0;
+    }
+}
+
+int GameConfig::getBuildPointCost(BuildingType type) const {
+    switch (type) {
+        case BuildingType::Barracks: return m_barracksBuildPointCost;
+        case BuildingType::WoodWall: return m_woodWallBuildPointCost;
+        case BuildingType::StoneWall: return m_stoneWallBuildPointCost;
+        case BuildingType::Bridge: return m_bridgeBuildPointCost;
+        case BuildingType::Arena: return m_arenaBuildPointCost;
+        default: return 0;
+    }
+}
+
+int GameConfig::getMoveAllowancePerTurn(PieceType type) const {
+    switch (type) {
+        case PieceType::Pawn: return m_pawnMoveAllowancePerTurn;
+        case PieceType::Knight: return m_knightMoveAllowancePerTurn;
+        case PieceType::Bishop: return m_bishopMoveAllowancePerTurn;
+        case PieceType::Rook: return m_rookMoveAllowancePerTurn;
+        case PieceType::Queen: return m_queenMoveAllowancePerTurn;
+        case PieceType::King: return m_kingMoveAllowancePerTurn;
+        default: return 0;
+    }
+}
 
 int GameConfig::getRepairCostPerCell(BuildingType type) const {
     switch (type) {

@@ -39,6 +39,11 @@ public:
     int getStoneWallCost() const;
     int getArenaCost() const;
     int getRepairCostPerCell(BuildingType type) const;
+    int getMovementPointsPerTurn() const;
+    int getBuildPointsPerTurn() const;
+    int getMovePointCost(PieceType type) const;
+    int getBuildPointCost(BuildingType type) const;
+    int getMoveAllowancePerTurn(PieceType type) const;
     int getRecruitCost(PieceType type) const;
     int getUpgradeCost(PieceType from, PieceType to) const;
 
@@ -93,6 +98,25 @@ private:
     int m_barracksRepairCostPerCell;
     int m_arenaRepairCostPerCell;
     int m_bridgeRepairCostPerCell;
+    int m_movementPointsPerTurn;
+    int m_buildPointsPerTurn;
+    int m_pawnMovePointCost;
+    int m_knightMovePointCost;
+    int m_bishopMovePointCost;
+    int m_rookMovePointCost;
+    int m_queenMovePointCost;
+    int m_kingMovePointCost;
+    int m_barracksBuildPointCost;
+    int m_woodWallBuildPointCost;
+    int m_stoneWallBuildPointCost;
+    int m_bridgeBuildPointCost;
+    int m_arenaBuildPointCost;
+    int m_pawnMoveAllowancePerTurn;
+    int m_knightMoveAllowancePerTurn;
+    int m_bishopMoveAllowancePerTurn;
+    int m_rookMoveAllowancePerTurn;
+    int m_queenMoveAllowancePerTurn;
+    int m_kingMoveAllowancePerTurn;
     int m_pawnRecruitCost;
     int m_knightRecruitCost;
     int m_bishopRecruitCost;

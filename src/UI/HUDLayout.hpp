@@ -25,6 +25,8 @@ inline constexpr float kWideMetricWidth = 156.f;
 inline constexpr float kActionWidth = 118.f;
 inline constexpr float kStatusWidth = 360.f;
 inline constexpr float kTopComponentHeight = 40.f;
+inline constexpr float kPointIndicatorWidth = 240.f;
+inline constexpr float kPointIndicatorHeight = 34.f;
 inline constexpr float kNetworkStatusWidth = 280.f;
 inline constexpr float kNetworkStatusHeight = 34.f;
 inline constexpr float kToolbarButtonWidth = 110.f;
@@ -86,6 +88,13 @@ inline float totalMetricWidth() {
 
 inline tgui::Vector2f metricsPanelSize() {
     return {totalMetricWidth(), kTopComponentHeight};
+}
+
+inline tgui::Vector2f pointPanelSize() {
+    return {
+        kPointIndicatorWidth,
+        (kPointIndicatorHeight * 3.f) + (kComponentGap * 2.f)
+    };
 }
 
 inline float metricOffsetX(std::size_t index) {

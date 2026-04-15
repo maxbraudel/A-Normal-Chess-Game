@@ -12,6 +12,7 @@
 #include "Systems/TurnCommand.hpp"
 #include "Systems/CheckResponseRules.hpp"
 #include "Systems/BuildSystem.hpp"
+#include "Systems/PendingTurnProjection.hpp"
 #include "Config/GameConfig.hpp"
 #include "UI/UIManager.hpp"
 
@@ -29,12 +30,11 @@ const auto kSelectionCycleThreshold = std::chrono::milliseconds(350);
 InputHandler::InputHandler()
     : m_currentTool(ToolState::Select), m_selectedPiece(nullptr), m_selectedBuilding(nullptr),
     m_hasSelectedCell(false), m_selectedCell({0, 0}),
-      m_hasMovePreview(false), m_hasBuildPreview(false),
-      m_buildPreviewType(BuildingType::Barracks),
-        m_buildPreviewRotationQuarterTurns(0),
-            m_activeSelectionLayer(SelectionLayer::None), m_hasActiveSelectionCell(false),
-            m_activeSelectionCell({0, 0}), m_isSelectionCycleArmed(false),
-            m_selectionCycleCell({0, 0}),
+    m_hasBuildPreview(false), m_buildPreviewType(BuildingType::Barracks),
+    m_buildPreviewRotationQuarterTurns(0),
+    m_activeSelectionLayer(SelectionLayer::None), m_hasActiveSelectionCell(false),
+    m_activeSelectionCell({0, 0}), m_isSelectionCycleArmed(false),
+    m_selectionCycleCell({0, 0}),
       m_isDragging(false) {}
 
 ToolState InputHandler::getCurrentTool() const { return m_currentTool; }
@@ -49,10 +49,8 @@ bool InputHandler::hasSelectedCell() const { return m_hasSelectedCell; }
 sf::Vector2i InputHandler::getSelectedCell() const { return m_selectedCell; }
 const std::vector<sf::Vector2i>& InputHandler::getValidMoves() const { return m_validMoves; }
 const std::vector<sf::Vector2i>& InputHandler::getDangerMoves() const { return m_dangerMoves; }
-int InputHandler::getCapturePreviewPieceId() const { return m_capturePreviewPieceId; }
-bool InputHandler::hasMovePreview() const { return m_hasMovePreview; }
-sf::Vector2i InputHandler::getMoveFrom() const { return m_moveFrom; }
-sf::Vector2i InputHandler::getMoveTo() const { return m_moveTo; }
+const std::set<int>& InputHandler::getCapturePreviewPieceIds() const { return m_capturePreviewPieceIds; }
+bool InputHandler::hasMovePreview() const { return !m_movePreviewOrigins.empty(); }
 
 BuildingType InputHandler::getBuildPreviewType() const { return m_buildPreviewType; }
 sf::Vector2i InputHandler::getBuildPreviewOrigin() const { return m_buildPreviewOrigin; }
@@ -76,7 +74,7 @@ void InputHandler::clearSelection() {
     m_validMoves.clear();
     m_dangerMoves.clear();
     clearSelectionCycle();
-    // NOTE: does NOT clear move preview — call cancelLiveMove() / clearMovePreview() separately
+    // NOTE: does NOT clear queued move previews — call cancelLiveMove() / clearMovePreview() separately
     m_hasBuildPreview = false;
 }
 
@@ -91,13 +89,12 @@ void InputHandler::selectCell(sf::Vector2i cellPos) {
 }
 
 void InputHandler::activatePieceSelection(Piece* piece, sf::Vector2i cellPos,
-                                          const Board& board, const Kingdom& enemyKingdom,
-                                          const GameConfig& config, bool allowCommands) {
+                                          const InputContext& context, bool allowCommands) {
     m_selectedPiece = piece;
     m_selectedBuilding = nullptr;
     m_hasSelectedCell = false;
-    if (piece && allowCommands && piece->kingdom != enemyKingdom.id) {
-        refreshPieceMoves(piece, const_cast<Board&>(board), enemyKingdom, config);
+    if (piece && allowCommands && piece->kingdom == context.controlledKingdom.id) {
+        refreshPieceMoves(piece, context);
     } else {
         m_validMoves.clear();
         m_dangerMoves.clear();
@@ -153,11 +150,15 @@ LayeredSelectionStack InputHandler::resolveSelectionStackAtCell(const InputConte
     Piece* pieceOverride = nullptr;
     bool suppressCellPiece = false;
 
-    if (m_hasMovePreview && m_movedPiece) {
-        if (cellPos == m_moveTo) {
-            pieceOverride = m_movedPiece;
+    for (const TurnCommand& command : context.turnSystem.getPendingCommands()) {
+        if (command.type != TurnCommand::Move) {
+            continue;
+        }
+
+        if (cellPos == command.destination) {
+            pieceOverride = context.controlledKingdom.getPieceById(command.pieceId);
             suppressCellPiece = true;
-        } else if (cellPos == m_moveFrom) {
+        } else if (cellPos == command.origin) {
             suppressCellPiece = true;
         }
     }
@@ -175,8 +176,7 @@ void InputHandler::applyResolvedSelection(const LayeredSelectionStack& stack,
     switch (layer) {
         case SelectionLayer::Piece:
             activatePieceSelection(stack.piece, stack.cellPos,
-                                   context.board, context.opposingKingdom,
-                                   context.config,
+                                   context,
                                    context.allowCommands && stack.piece
                                        && stack.piece->kingdom == context.controlledKingdom.id);
             return;
@@ -194,54 +194,74 @@ void InputHandler::applyResolvedSelection(const LayeredSelectionStack& stack,
 }
 
 void InputHandler::cancelPieceSelectionContext(const InputContext& context) {
-    if (m_hasMovePreview) {
-        context.turnSystem.cancelMoveCommand();
-        cancelLiveMove();
-    }
-
+    (void) context;
     m_selectedPiece = nullptr;
     m_validMoves.clear();
     m_dangerMoves.clear();
 }
 
-void InputHandler::refreshPieceMoves(Piece* piece, Board& board, const Kingdom& enemyKingdom, const GameConfig& config) {
+void InputHandler::refreshPieceMoves(Piece* piece, const InputContext& context) {
     m_validMoves.clear();
     m_dangerMoves.clear();
-    std::vector<sf::Vector2i> allMoves = MovementRules::getValidMoves(*piece, board, config);
-    std::vector<sf::Vector2i> legalMoves = CheckResponseRules::filterLegalMovesForPiece(*piece, board, config);
-    if (piece->type == PieceType::King) {
-        for (const auto& mv : allMoves) {
-            const Cell& destinationCell = board.getCell(mv.x, mv.y);
-            if (destinationCell.piece
-                && destinationCell.piece->kingdom != piece->kingdom
-                && destinationCell.piece->type == PieceType::King) {
-                continue;
-            }
+    if (!piece || context.turnSystem.hasPendingMoveForPiece(piece->id)) {
+        return;
+    }
 
-            if (std::find(legalMoves.begin(), legalMoves.end(), mv) != legalMoves.end()) {
-                m_validMoves.push_back(mv);
-            } else {
-                m_dangerMoves.push_back(mv);
-            }
+    m_validMoves = PendingTurnProjection::projectedPseudoLegalMovesForPiece(
+        context.board,
+        context.controlledKingdom,
+        context.opposingKingdom,
+        context.publicBuildings,
+        context.turnSystem.getTurnNumber(),
+        context.turnSystem.getPendingCommands(),
+        piece->id,
+        context.config);
+}
+
+void InputHandler::syncQueuedMovePreviewState(const InputContext& context) {
+    for (const auto& [pieceId, origin] : m_movePreviewOrigins) {
+        if (Piece* piece = context.controlledKingdom.getPieceById(pieceId)) {
+            piece->position = origin;
         }
-    } else {
-        m_validMoves = std::move(legalMoves);
+    }
+
+    m_movePreviewOrigins.clear();
+    m_capturePreviewPieceIds.clear();
+
+    for (const TurnCommand& command : context.turnSystem.getPendingCommands()) {
+        if (command.type != TurnCommand::Move) {
+            continue;
+        }
+
+        Piece* piece = context.controlledKingdom.getPieceById(command.pieceId);
+        if (!piece) {
+            continue;
+        }
+
+        m_movePreviewOrigins.emplace(command.pieceId, command.origin);
+        piece->position = command.destination;
+
+        if (Piece* captured = context.opposingKingdom.getPieceAt(command.destination)) {
+            m_capturePreviewPieceIds.insert(captured->id);
+        }
     }
 }
 
-void InputHandler::cancelLiveMove() {
-    if (m_movedPiece) {
-        m_movedPiece->position = m_moveFrom;  // restore visual position
-        m_movedPiece = nullptr;
+void InputHandler::cancelLiveMove(Kingdom& controlledKingdom, const TurnSystem& turnSystem) {
+    (void) turnSystem;
+    for (const auto& [pieceId, origin] : m_movePreviewOrigins) {
+        if (Piece* piece = controlledKingdom.getPieceById(pieceId)) {
+            piece->position = origin;
+        }
     }
-    m_hasMovePreview = false;
-    m_capturePreviewPieceId = -1;
+
+    m_movePreviewOrigins.clear();
+    m_capturePreviewPieceIds.clear();
 }
 
 void InputHandler::clearMovePreview() {
-    m_movedPiece = nullptr;
-    m_hasMovePreview = false;
-    m_capturePreviewPieceId = -1;
+    m_movePreviewOrigins.clear();
+    m_capturePreviewPieceIds.clear();
 }
 
 void InputHandler::handleEvent(const sf::Event& event, const InputContext& context) {
@@ -357,100 +377,55 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
             return;
         }
 
-        // ---- Live move preview: allow retargeting to any original legal move or cancel on origin ----
-        if (m_hasMovePreview) {
-            if (m_selectedPiece == m_movedPiece && cellPos == m_moveFrom) {
-                m_movedPiece->position = m_moveFrom;
-                context.turnSystem.cancelMoveCommand();
+        if (m_selectedPiece) {
+            const TurnCommand* pendingMove = context.turnSystem.getPendingMoveCommand(m_selectedPiece->id);
+            if (pendingMove && cellPos == pendingMove->origin) {
+                Piece* restoredPiece = context.controlledKingdom.getPieceById(m_selectedPiece->id);
+                if (restoredPiece) {
+                    restoredPiece->position = pendingMove->origin;
+                }
 
-                Piece* restoredPiece = m_movedPiece;
-                m_movedPiece = nullptr;
-                m_hasMovePreview = false;
-                m_capturePreviewPieceId = -1;
-                m_moveTo = m_moveFrom;
+                if (context.turnSystem.cancelMoveCommand(m_selectedPiece->id,
+                                                         context.board,
+                                                         context.controlledKingdom,
+                                                         context.opposingKingdom,
+                                                         context.publicBuildings,
+                                                         context.config)) {
+                    syncQueuedMovePreviewState(context);
+                }
 
                 m_selectedPiece = restoredPiece;
                 m_selectedBuilding = nullptr;
                 m_hasSelectedCell = false;
-                setActiveSelectionMetadata(SelectionLayer::Piece, m_moveFrom);
-                armSelectionCycle(m_moveFrom);
+                refreshPieceMoves(restoredPiece, context);
+                setActiveSelectionMetadata(SelectionLayer::Piece, pendingMove->origin);
+                armSelectionCycle(pendingMove->origin);
                 return;
             }
 
-            auto validMoveIt = std::find(m_validMoves.begin(), m_validMoves.end(), cellPos);
-            if (m_movedPiece && validMoveIt != m_validMoves.end()) {
-                if (cellPos == m_movedPiece->position) {
-                    m_selectedPiece = m_movedPiece;
-                    m_selectedBuilding = nullptr;
+            if (!pendingMove) {
+                auto it = std::find(m_validMoves.begin(), m_validMoves.end(), cellPos);
+                if (it != m_validMoves.end()) {
+                    TurnCommand cmd;
+                    cmd.type = TurnCommand::Move;
+                    cmd.pieceId = m_selectedPiece->id;
+                    cmd.origin = m_selectedPiece->position;
+                    cmd.destination = cellPos;
+                    if (context.turnSystem.queueCommand(cmd,
+                                                        context.board,
+                                                        context.controlledKingdom,
+                                                        context.opposingKingdom,
+                                                        context.publicBuildings,
+                                                        context.config)) {
+                        syncQueuedMovePreviewState(context);
+                        m_selectedBuilding = nullptr;
+                        m_hasSelectedCell = false;
+                        setActiveSelectionMetadata(SelectionLayer::Piece, cellPos);
+                        armSelectionCycle(cellPos);
+                        refreshPieceMoves(m_selectedPiece, context);
+                    }
                     return;
                 }
-
-                m_movedPiece->position = cellPos;
-
-                Piece* captured = context.opposingKingdom.getPieceAt(cellPos);
-                m_capturePreviewPieceId = captured ? captured->id : -1;
-
-                context.turnSystem.cancelMoveCommand();
-
-                TurnCommand cmd;
-                cmd.type = TurnCommand::Move;
-                cmd.pieceId = m_movedPiece->id;
-                cmd.origin = m_moveFrom;
-                cmd.destination = cellPos;
-                if (context.turnSystem.queueCommand(cmd)) {
-                    m_moveTo = cellPos;
-                    m_selectedPiece = m_movedPiece;
-                    m_selectedBuilding = nullptr;
-                    m_hasSelectedCell = false;
-                    setActiveSelectionMetadata(SelectionLayer::Piece, cellPos);
-                    armSelectionCycle(cellPos);
-                } else {
-                    m_movedPiece->position = m_moveTo;
-                    Piece* previousCapture = context.opposingKingdom.getPieceAt(m_moveTo);
-                    m_capturePreviewPieceId = previousCapture ? previousCapture->id : -1;
-                }
-                return;
-            }
-
-            cancelPieceSelectionContext(context);
-        }
-
-        // ---- A piece is selected; player clicked a valid destination ----
-        if (m_selectedPiece) {
-            auto it = std::find(m_validMoves.begin(), m_validMoves.end(), cellPos);
-            if (it != m_validMoves.end()) {
-                // Store origin before moving
-                sf::Vector2i origin = m_selectedPiece->position;
-
-                // Apply move visually (piece draws at new position immediately)
-                m_selectedPiece->position = cellPos;
-
-                // Track any enemy piece at the destination for preview-hide
-                Piece* captured = context.opposingKingdom.getPieceAt(cellPos);
-                m_capturePreviewPieceId = captured ? captured->id : -1;
-
-                // Queue the command (includes origin for commitTurn)
-                TurnCommand cmd;
-                cmd.type = TurnCommand::Move;
-                cmd.pieceId = m_selectedPiece->id;
-                cmd.origin = origin;
-                cmd.destination = cellPos;
-                if (context.turnSystem.queueCommand(cmd)) {
-                    m_movedPiece = m_selectedPiece;
-                    m_hasMovePreview = true;
-                    m_moveFrom = origin;
-                    m_moveTo = cellPos;
-                    m_selectedPiece = m_movedPiece;
-                    m_selectedBuilding = nullptr;
-                    m_hasSelectedCell = false;
-                    setActiveSelectionMetadata(SelectionLayer::Piece, cellPos);
-                    armSelectionCycle(cellPos);
-                } else {
-                    // Couldn't queue (already moved this turn): revert visual move
-                    m_selectedPiece->position = origin;
-                    m_capturePreviewPieceId = -1;
-                }
-                return;
             }
         }
 
@@ -476,29 +451,50 @@ void InputHandler::handleBuildTool(const sf::Event& event, const InputContext& c
         sf::Vector2f worldPos = context.camera.screenToWorld({event.mouseButton.x, event.mouseButton.y}, context.window);
         sf::Vector2i cellPos = context.camera.worldToCell(worldPos, context.config.getCellSizePx());
 
-        if (BuildSystem::canBuild(m_buildPreviewType,
-                                  cellPos,
-                                  context.board,
-                                  context.controlledKingdom,
-                                  context.config,
-                                  m_buildPreviewRotationQuarterTurns)) {
-            const TurnCommand* pendingBuild = context.turnSystem.getPendingBuildCommand();
-            if (pendingBuild) {
-                bool samePlacement = pendingBuild->buildingType == m_buildPreviewType
-                    && pendingBuild->buildOrigin == cellPos
-                    && pendingBuild->buildRotationQuarterTurns == m_buildPreviewRotationQuarterTurns;
-                context.turnSystem.cancelBuildCommand();
-                if (samePlacement) {
-                    return;
-                }
+        TurnCommand cmd;
+        cmd.type = TurnCommand::Build;
+        cmd.buildingType = m_buildPreviewType;
+        cmd.buildOrigin = cellPos;
+        cmd.buildRotationQuarterTurns = m_buildPreviewRotationQuarterTurns;
+
+        for (const TurnCommand& pendingCommand : context.turnSystem.getPendingCommands()) {
+            if (pendingCommand.type != TurnCommand::Build) {
+                continue;
             }
 
-            TurnCommand cmd;
-            cmd.type = TurnCommand::Build;
-            cmd.buildingType = m_buildPreviewType;
-            cmd.buildOrigin = cellPos;
-            cmd.buildRotationQuarterTurns = m_buildPreviewRotationQuarterTurns;
-            context.turnSystem.queueCommand(cmd);
+            const bool samePlacement = pendingCommand.buildingType == m_buildPreviewType
+                && pendingCommand.buildOrigin == cellPos
+                && pendingCommand.buildRotationQuarterTurns == m_buildPreviewRotationQuarterTurns;
+            if (!samePlacement) {
+                continue;
+            }
+
+            context.turnSystem.cancelBuildCommand(m_buildPreviewType,
+                                                  cellPos,
+                                                  m_buildPreviewRotationQuarterTurns,
+                                                  context.board,
+                                                  context.controlledKingdom,
+                                                  context.opposingKingdom,
+                                                  context.publicBuildings,
+                                                  context.config);
+            return;
+        }
+
+        if (PendingTurnProjection::canAppendCommand(context.board,
+                                                    context.controlledKingdom,
+                                                    context.opposingKingdom,
+                                                    context.publicBuildings,
+                                                    context.turnSystem.getTurnNumber(),
+                                                    context.turnSystem.getPendingCommands(),
+                                                    cmd,
+                                                    context.config)
+            && context.turnSystem.queueCommand(cmd,
+                                               context.board,
+                                               context.controlledKingdom,
+                                               context.opposingKingdom,
+                                               context.publicBuildings,
+                                               context.config)) {
+            syncQueuedMovePreviewState(context);
         }
     }
 }

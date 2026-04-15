@@ -8,6 +8,10 @@ std::string metricText(std::size_t index, int value) {
     return inGameMetricLabels()[index] + ": " + std::to_string(value);
 }
 
+std::string pointText(const std::string& label, int current, int total) {
+    return label + ": " + std::to_string(current) + "/" + std::to_string(total);
+}
+
 void applyMultiplayerStatusTone(const tgui::Label::Ptr& label, MultiplayerStatusTone tone) {
     if (!label) {
         return;
@@ -54,6 +58,16 @@ void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
     HUDLayout::makeTransparentPanel(m_metricsPanel);
     gui.add(m_metricsPanel, "HUDMetricsPanel");
 
+    m_pointPanel = tgui::Panel::create(HUDLayout::pointPanelSize());
+    m_pointPanel->setPosition(HUDLayout::anchorPositionForSize(
+        HUDAnchor::TopLeft,
+        HUDLayout::pointPanelSize().x,
+        HUDLayout::pointPanelSize().y,
+        HUDLayout::kEdgeMargin,
+        HUDLayout::kEdgeMargin + HUDLayout::kTopComponentHeight + HUDLayout::kComponentGap));
+    HUDLayout::makeTransparentPanel(m_pointPanel);
+    gui.add(m_pointPanel, "HUDPointPanel");
+
     m_statusPanel = tgui::Panel::create(HUDLayout::stackSize(1, HUDLayout::kStatusWidth));
     m_statusPanel->setPosition(HUDLayout::anchorPosition(HUDAnchor::TopCenter, 1, HUDLayout::kStatusWidth));
     HUDLayout::makeTransparentPanel(m_statusPanel);
@@ -80,6 +94,26 @@ void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
                                      HUDLayout::metricWidths()[index], HUDLayout::kTopComponentHeight, 13);
         HUDLayout::placeMetricChild(m_metricLabels[index], index);
         m_metricsPanel->add(m_metricLabels[index]);
+    }
+
+    static const std::array<tgui::Color, 3> pointColors = {
+        tgui::Color(255, 224, 168),
+        tgui::Color(168, 232, 255),
+        tgui::Color(191, 255, 191)
+    };
+    static const std::array<std::string, 3> pointLabels = {
+        "Action Points",
+        "Movement Points",
+        "Build Points"
+    };
+    for (std::size_t index = 0; index < m_pointLabels.size(); ++index) {
+        m_pointLabels[index] = tgui::Label::create(pointText(pointLabels[index], 0, 0));
+        HUDLayout::styleHudIndicator(m_pointLabels[index], pointColors[index],
+                                     HUDLayout::kPointIndicatorWidth,
+                                     HUDLayout::kPointIndicatorHeight,
+                                     13);
+        m_pointLabels[index]->setPosition({0, index * (HUDLayout::kPointIndicatorHeight + HUDLayout::kComponentGap)});
+        m_pointPanel->add(m_pointLabels[index]);
     }
 
     m_statusLabel = tgui::Label::create("Turn 1 | White Kingdom : Idle");
@@ -129,6 +163,7 @@ void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
     m_actionPanel->add(m_resetTurnButton);
 
     m_metricsPanel->setVisible(false);
+    m_pointPanel->setVisible(false);
     m_statusPanel->setVisible(false);
     m_actionPanel->setVisible(false);
     m_networkPanel->setVisible(false);
@@ -137,6 +172,7 @@ void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
 void HUD::show() {
     m_visible = true;
     if (m_metricsPanel) m_metricsPanel->setVisible(true);
+    if (m_pointPanel) m_pointPanel->setVisible(true);
     if (m_statusPanel) m_statusPanel->setVisible(true);
     if (m_actionPanel) m_actionPanel->setVisible(true);
     if (m_networkPanel && m_networkStatusLabel && !m_networkStatusLabel->getText().empty()) {
@@ -147,6 +183,7 @@ void HUD::show() {
 void HUD::hide() {
     m_visible = false;
     if (m_metricsPanel) m_metricsPanel->setVisible(false);
+    if (m_pointPanel) m_pointPanel->setVisible(false);
     if (m_statusPanel) m_statusPanel->setVisible(false);
     if (m_actionPanel) m_actionPanel->setVisible(false);
     if (m_networkPanel) m_networkPanel->setVisible(false);
@@ -161,6 +198,21 @@ void HUD::update(const InGameViewModel& model) {
     if (m_metricLabels[1]) m_metricLabels[1]->setText(metricText(1, model.activeOccupiedCells));
     if (m_metricLabels[2]) m_metricLabels[2]->setText(metricText(2, model.activeTroops));
     if (m_metricLabels[3]) m_metricLabels[3]->setText(metricText(3, model.activeIncome));
+    if (m_pointLabels[0]) {
+        m_pointLabels[0]->setText(pointText("Action Points",
+                                            model.activeActionPointsAvailable,
+                                            model.activeActionPointsTotal));
+    }
+    if (m_pointLabels[1]) {
+        m_pointLabels[1]->setText(pointText("Movement Points",
+                                            model.activeMovementPointsAvailable,
+                                            model.activeMovementPointsTotal));
+    }
+    if (m_pointLabels[2]) {
+        m_pointLabels[2]->setText(pointText("Build Points",
+                                            model.activeBuildPointsAvailable,
+                                            model.activeBuildPointsTotal));
+    }
 
     if (m_statusLabel) {
         m_statusLabel->setText("T" + std::to_string(model.turnNumber) + " | "

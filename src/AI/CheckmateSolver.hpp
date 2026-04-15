@@ -6,6 +6,7 @@
 #include "Kingdom/KingdomId.hpp"
 
 struct AITurnContext;
+class GameConfig;
 
 /// A simple move action (pieceId + destination)
 struct MateMove {
@@ -23,14 +24,16 @@ public:
     /// Find a move that delivers checkmate in 1. Returns nullopt if none found.
     std::optional<MateMove> findMateIn1(const GameSnapshot& snapshot,
                                          KingdomId aiKingdom,
-                                         int globalMaxRange) const;
+                                         int globalMaxRange,
+                                         const GameConfig& config) const;
 
     /// Deeper mate search (2-3 moves). Time-budgeted.
     std::optional<MateMove> findMateInN(const GameSnapshot& snapshot,
                                          KingdomId aiKingdom,
                                          int maxDepth,
                                          int globalMaxRange,
-                                         int budgetMs) const;
+                                         int budgetMs,
+                                         const GameConfig& config) const;
 
 private:
     /// Would moving piece to dest give check to the enemy king?
@@ -45,11 +48,13 @@ private:
 
     /// Can an enemy piece block or capture to defend the check?
     static bool canDefendCheck(const GameSnapshot& s, KingdomId defender,
-                               int globalMaxRange);
+                               int globalMaxRange,
+                               const GameConfig& config);
 
     /// Alpha-beta mate search (on check-giving moves only)
     std::optional<MateMove> alphaBetaMate(const GameSnapshot& s, KingdomId ai,
                                            int depth, int maxDepth,
                                            int globalMaxRange,
-                                           TimeBudget& timer) const;
+                                           TimeBudget& timer,
+                                           const GameConfig& config) const;
 };

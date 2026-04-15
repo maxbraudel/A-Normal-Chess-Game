@@ -580,8 +580,9 @@ void testLayeredSelectionStackSupportsPreviewPieceOverride() {
         addPieceToBoard(white, board, 120, PieceType::King, KingdomId::White, {8, 8});
         addPieceToBoard(black, board, 220, PieceType::Rook, KingdomId::Black, {8, 4});
 
+        const std::vector<Building> publicBuildings;
         const CheckTurnValidation validation = CheckResponseRules::validatePendingTurn(
-            white, board, {}, config);
+            white, black, board, publicBuildings, 1, {}, config);
         expect(!validation.valid && validation.activeKingInCheck,
                "An empty pending turn should be rejected while the kingdom is in check.");
     }
@@ -601,8 +602,9 @@ void testLayeredSelectionStackSupportsPreviewPieceOverride() {
         buildCommand.buildingType = BuildingType::Barracks;
         buildCommand.buildOrigin = {7, 8};
 
+        const std::vector<Building> publicBuildings;
         const CheckTurnValidation validation = CheckResponseRules::validatePendingTurn(
-            white, board, {buildCommand}, config);
+            white, black, board, publicBuildings, 1, {buildCommand}, config);
         expect(!validation.valid,
                "Build and other non-move commands must be rejected while the active kingdom is in check.");
     }
@@ -1350,7 +1352,8 @@ void testTurnSystemSkipsUnaffordableBuild() {
     buildCommand.type = TurnCommand::Build;
     buildCommand.buildingType = BuildingType::Barracks;
     buildCommand.buildOrigin = {2, 2};
-    expect(turnSystem.queueCommand(buildCommand), "Build command should be queueable during planning.");
+            expect(!turnSystem.queueCommand(buildCommand, board, white, black, publicBuildings, config),
+                "Unaffordable build commands should be rejected during planning.");
 
     EventLog eventLog;
     PieceFactory pieceFactory;
@@ -1378,7 +1381,8 @@ void testTurnSystemSkipsUnaffordableProduction() {
     produceCommand.type = TurnCommand::Produce;
     produceCommand.barracksId = 7;
     produceCommand.produceType = PieceType::Pawn;
-    expect(turnSystem.queueCommand(produceCommand), "Produce command should be queueable during planning.");
+            expect(!turnSystem.queueCommand(produceCommand, board, white, black, publicBuildings, config),
+                "Unaffordable production commands should be rejected during planning.");
 
     EventLog eventLog;
     PieceFactory pieceFactory;
@@ -1499,7 +1503,8 @@ void testTurnSystemSkipsUnaffordableProduction() {
         moveCommand.pieceId = 2;
         moveCommand.origin = {3, 4};
         moveCommand.destination = {4, 4};
-        expect(turnSystem.queueCommand(moveCommand), "Initial breach move should queue successfully.");
+         expect(turnSystem.queueCommand(moveCommand, board, white, black, publicBuildings, config),
+             "Initial breach move should queue successfully.");
         turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
 
         expect(black.buildings.size() == 1 && black.buildings.front().isCellBreached(0, 0),
@@ -1540,7 +1545,8 @@ void testTurnSystemSkipsUnaffordableProduction() {
         breachMove.pieceId = 2;
         breachMove.origin = {3, 4};
         breachMove.destination = {4, 4};
-        expect(turnSystem.queueCommand(breachMove), "Breach move should queue successfully.");
+         expect(turnSystem.queueCommand(breachMove, board, white, black, publicBuildings, config),
+             "Breach move should queue successfully.");
         turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
 
         TurnCommand leaveMove;
@@ -1548,7 +1554,8 @@ void testTurnSystemSkipsUnaffordableProduction() {
         leaveMove.pieceId = 2;
         leaveMove.origin = {4, 4};
         leaveMove.destination = {5, 4};
-        expect(turnSystem.queueCommand(leaveMove), "Leaving a breached wall should still be allowed.");
+         expect(turnSystem.queueCommand(leaveMove, board, white, black, publicBuildings, config),
+             "Leaving a breached wall should still be allowed.");
         turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
 
         expect(black.buildings.size() == 1 && black.buildings.front().isCellBreached(0, 0),
@@ -1561,7 +1568,8 @@ void testTurnSystemSkipsUnaffordableProduction() {
         returnMove.pieceId = 2;
         returnMove.origin = {5, 4};
         returnMove.destination = {4, 4};
-        expect(turnSystem.queueCommand(returnMove), "Returning to a breached wall should queue successfully.");
+         expect(turnSystem.queueCommand(returnMove, board, white, black, publicBuildings, config),
+             "Returning to a breached wall should queue successfully.");
         turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
 
         expect(black.buildings.empty(),
@@ -1798,7 +1806,8 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
     upgradeCommand.type = TurnCommand::Upgrade;
     upgradeCommand.upgradePieceId = 11;
     upgradeCommand.upgradeTarget = PieceType::Knight;
-    expect(turnSystem.queueCommand(upgradeCommand), "Upgrade command should be queueable during planning.");
+            expect(!turnSystem.queueCommand(upgradeCommand, board, white, black, publicBuildings, config),
+                "Unaffordable upgrade commands should be rejected during planning.");
 
     EventLog eventLog;
     PieceFactory pieceFactory;

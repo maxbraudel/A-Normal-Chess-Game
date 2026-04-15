@@ -368,7 +368,7 @@ AIDirectorPlan AIDirector::computeTurn(Board& board, Kingdom& self, Kingdom& ene
 
     // --- 3. Detect immediate mate-in-1 ---
     if (timer.hasAtLeast(50)) {
-        auto mate = m_checkmateSolver.findMateIn1(snapshot, aiKingdom, globalMaxRange);
+        auto mate = m_checkmateSolver.findMateIn1(snapshot, aiKingdom, globalMaxRange, config);
         if (mate.has_value()) {
             // Found checkmate! Queue the move.
             auto* piece = snapshot.kingdom(aiKingdom).getPieceById(mate->pieceId);
@@ -391,8 +391,9 @@ AIDirectorPlan AIDirector::computeTurn(Board& board, Kingdom& self, Kingdom& ene
     // --- 4. Deeper mate search if time permits ---
     if (timer.hasAtLeast(100)) {
         auto deepMate = m_checkmateSolver.findMateInN(snapshot, aiKingdom, 4,
-                                                        globalMaxRange,
-                                                        std::min(60, timer.remainingMs() / 3));
+                                globalMaxRange,
+                                std::min(60, timer.remainingMs() / 3),
+                                config);
         if (deepMate.has_value() && deepMate->pieceId >= 0) {
             auto* piece = snapshot.kingdom(aiKingdom).getPieceById(deepMate->pieceId);
             if (piece) {
@@ -487,7 +488,7 @@ void AIDirector::executeMove(AIDirectorPlan& plan, const GameSnapshot& snapshot,
     for (auto& cmd : plan.commands)
         if (cmd.type == TurnCommand::Move) return;
 
-    if (forcePressure && executePressureMove(plan, snapshot, aiKingdom, globalMaxRange)) {
+    if (forcePressure && executePressureMove(plan, snapshot, aiKingdom, globalMaxRange, config)) {
         return;
     }
 
@@ -530,7 +531,8 @@ void AIDirector::executeMove(AIDirectorPlan& plan, const GameSnapshot& snapshot,
 }
 
 bool AIDirector::executePressureMove(AIDirectorPlan& plan, const GameSnapshot& snapshot,
-                                     KingdomId aiKingdom, int globalMaxRange) {
+                                     KingdomId aiKingdom, int globalMaxRange,
+                                     const GameConfig& config) {
     const auto* enemyKing = snapshot.enemyKingdom(aiKingdom).getKing();
     if (!enemyKing) return false;
     const int myCombatPieces = countCombatPieces(snapshot.kingdom(aiKingdom));
@@ -590,7 +592,7 @@ bool AIDirector::executePressureMove(AIDirectorPlan& plan, const GameSnapshot& s
             const int crowdAtDest = countFriendlyNeighbors(snapshot, aiKingdom, dest, 2);
 
             GameSnapshot sim = snapshot.clone();
-            if (!ForwardModel::applyMove(sim, piece.id, dest, aiKingdom)) continue;
+            if (!ForwardModel::applyMove(sim, piece.id, dest, aiKingdom, config)) continue;
             const ThreatMap simThreats = ForwardModel::buildThreatMap(sim, aiKingdom, globalMaxRange);
             const bool givesCheck = ForwardModel::isInCheck(sim, snapshot.enemyKingdom(aiKingdom).id, globalMaxRange);
             const bool isMate = ForwardModel::isCheckmate(sim, defendingKingdom, globalMaxRange);

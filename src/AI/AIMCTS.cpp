@@ -443,14 +443,16 @@ void AIMCTS::applyAction(GameSnapshot& s, const MCTSAction& action, KingdomId k,
                          const GameConfig& config) {
     switch (action.type) {
         case MCTSAction::MOVE:
-            ForwardModel::applyMove(s, action.pieceId, action.destination, k);
+            ForwardModel::applyMove(s, action.pieceId, action.destination, k, config);
             break;
         case MCTSAction::BUILD:
             ForwardModel::applyBuild(s, k, action.bldType, action.destination,
                                      config.getBuildingWidth(action.bldType),
                                      config.getBuildingHeight(action.bldType),
+                                     0,
                                      getBuildCost(action.bldType, config),
-                                     StructureIntegrityRules::defaultCellHP(action.bldType, config));
+                                     StructureIntegrityRules::defaultCellHP(action.bldType, config),
+                                     config);
             break;
         case MCTSAction::PRODUCE:
             ForwardModel::applyProduce(s, action.barracksId, action.prodType,

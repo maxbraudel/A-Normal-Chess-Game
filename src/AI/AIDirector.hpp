@@ -86,5 +86,6 @@ private:
                         const AITurnContext& ctx, KingdomId aiKingdom,
                         StrategicObjective objective, int globalMaxRange);
     bool executePressureMove(AIDirectorPlan& plan, const GameSnapshot& snapshot,
-                             KingdomId aiKingdom, int globalMaxRange);
+                             KingdomId aiKingdom, int globalMaxRange,
+                             const GameConfig& config);
 };
