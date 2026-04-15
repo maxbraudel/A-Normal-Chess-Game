@@ -1,4 +1,5 @@
 #include "Input/InputHandler.hpp"
+
 #include "Render/Camera.hpp"
 #include "Board/Board.hpp"
 #include "Board/Cell.hpp"
@@ -12,12 +13,15 @@
 #include "Systems/BuildSystem.hpp"
 #include "Config/GameConfig.hpp"
 #include "UI/UIManager.hpp"
+
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 
 namespace {
 
 constexpr float kKeyboardPanSpeed = 900.f;
+const auto kSelectionCycleThreshold = std::chrono::milliseconds(350);
 
 } // namespace
 
@@ -26,7 +30,10 @@ InputHandler::InputHandler()
     m_hasSelectedCell(false), m_selectedCell({0, 0}),
       m_hasMovePreview(false), m_hasBuildPreview(false),
       m_buildPreviewType(BuildingType::Barracks),
-    m_buildPreviewRotationQuarterTurns(0),
+        m_buildPreviewRotationQuarterTurns(0),
+            m_activeSelectionLayer(SelectionLayer::None), m_hasActiveSelectionCell(false),
+            m_activeSelectionCell({0, 0}), m_isSelectionCycleArmed(false),
+            m_selectionCycleCell({0, 0}),
       m_isDragging(false) {}
 
 ToolState InputHandler::getCurrentTool() const { return m_currentTool; }
@@ -62,8 +69,12 @@ void InputHandler::clearSelection() {
     m_selectedBuilding = nullptr;
     m_hasSelectedCell = false;
     m_selectedCell = {0, 0};
+    m_activeSelectionLayer = SelectionLayer::None;
+    m_hasActiveSelectionCell = false;
+    m_activeSelectionCell = {0, 0};
     m_validMoves.clear();
     m_dangerMoves.clear();
+    clearSelectionCycle();
     // NOTE: does NOT clear move preview — call cancelLiveMove() / clearMovePreview() separately
     m_hasBuildPreview = false;
 }
@@ -73,6 +84,121 @@ void InputHandler::selectCell(sf::Vector2i cellPos) {
     m_selectedBuilding = nullptr;
     m_selectedCell = cellPos;
     m_hasSelectedCell = true;
+    m_validMoves.clear();
+    m_dangerMoves.clear();
+    setActiveSelectionMetadata(SelectionLayer::Terrain, cellPos);
+}
+
+void InputHandler::activatePieceSelection(Piece* piece, sf::Vector2i cellPos,
+                                          const Board& board, const Kingdom& enemyKingdom,
+                                          const GameConfig& config, bool allowCommands) {
+    m_selectedPiece = piece;
+    m_selectedBuilding = nullptr;
+    m_hasSelectedCell = false;
+    if (piece && allowCommands && piece->kingdom != enemyKingdom.id) {
+        refreshPieceMoves(piece, board, enemyKingdom, config);
+    } else {
+        m_validMoves.clear();
+        m_dangerMoves.clear();
+    }
+    setActiveSelectionMetadata(SelectionLayer::Piece, cellPos);
+}
+
+void InputHandler::activateBuildingSelection(Building* building, sf::Vector2i cellPos) {
+    m_selectedPiece = nullptr;
+    m_selectedBuilding = building;
+    m_hasSelectedCell = false;
+    m_validMoves.clear();
+    m_dangerMoves.clear();
+    setActiveSelectionMetadata(SelectionLayer::Building, cellPos);
+}
+
+void InputHandler::activateTerrainSelection(sf::Vector2i cellPos) {
+    selectCell(cellPos);
+}
+
+void InputHandler::setActiveSelectionMetadata(SelectionLayer layer, sf::Vector2i cellPos) {
+    m_activeSelectionLayer = layer;
+    m_hasActiveSelectionCell = (layer != SelectionLayer::None);
+    m_activeSelectionCell = m_hasActiveSelectionCell ? cellPos : sf::Vector2i{0, 0};
+}
+
+void InputHandler::clearSelectionCycle() {
+    m_isSelectionCycleArmed = false;
+    m_selectionCycleCell = {0, 0};
+}
+
+void InputHandler::armSelectionCycle(sf::Vector2i cellPos) {
+    m_isSelectionCycleArmed = true;
+    m_selectionCycleCell = cellPos;
+    m_selectionCycleArmTime = std::chrono::steady_clock::now();
+}
+
+bool InputHandler::canCycleSelection(sf::Vector2i cellPos) const {
+    if (m_currentTool != ToolState::Select || !m_isSelectionCycleArmed || !m_hasActiveSelectionCell) {
+        return false;
+    }
+
+    if (cellPos != m_selectionCycleCell || cellPos != m_activeSelectionCell) {
+        return false;
+    }
+
+    return (std::chrono::steady_clock::now() - m_selectionCycleArmTime) <= kSelectionCycleThreshold;
+}
+
+LayeredSelectionStack InputHandler::resolveSelectionStackAtCell(const InputContext& context,
+                                                                sf::Vector2i cellPos) const {
+    const Cell& cell = context.board.getCell(cellPos.x, cellPos.y);
+    Piece* pieceOverride = nullptr;
+    bool suppressCellPiece = false;
+
+    if (m_hasMovePreview && m_movedPiece) {
+        if (cellPos == m_moveTo) {
+            pieceOverride = m_movedPiece;
+            suppressCellPiece = true;
+        } else if (cellPos == m_moveFrom) {
+            suppressCellPiece = true;
+        }
+    }
+
+    return resolveCellSelectionStack(cell, cellPos, pieceOverride, suppressCellPiece);
+}
+
+void InputHandler::applyResolvedSelection(const LayeredSelectionStack& stack,
+                                          SelectionLayer layer,
+                                          const InputContext& context) {
+    if (layer != SelectionLayer::Piece && m_activeSelectionLayer == SelectionLayer::Piece) {
+        cancelPieceSelectionContext(context);
+    }
+
+    switch (layer) {
+        case SelectionLayer::Piece:
+            activatePieceSelection(stack.piece, stack.cellPos,
+                                   context.board, context.opposingKingdom,
+                                   context.config,
+                                   context.allowCommands && stack.piece
+                                       && stack.piece->kingdom == context.controlledKingdom.id);
+            return;
+        case SelectionLayer::Building:
+            activateBuildingSelection(stack.building, stack.cellPos);
+            return;
+        case SelectionLayer::Terrain:
+            activateTerrainSelection(stack.cellPos);
+            return;
+        case SelectionLayer::None:
+        default:
+            clearSelection();
+            return;
+    }
+}
+
+void InputHandler::cancelPieceSelectionContext(const InputContext& context) {
+    if (m_hasMovePreview) {
+        context.turnSystem.cancelMoveCommand();
+        cancelLiveMove();
+    }
+
+    m_selectedPiece = nullptr;
     m_validMoves.clear();
     m_dangerMoves.clear();
 }
@@ -192,51 +318,38 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
         sf::Vector2i cellPos = context.camera.worldToCell(worldPos, context.config.getCellSizePx());
 
         if (!context.board.isInBounds(cellPos.x, cellPos.y)) {
+            if (m_activeSelectionLayer == SelectionLayer::Piece) {
+                cancelPieceSelectionContext(context);
+            }
             clearSelection();
             return;
         }
-        Cell& cell = context.board.getCell(cellPos.x, cellPos.y);
+        const Cell& cell = context.board.getCell(cellPos.x, cellPos.y);
         if (!cell.isInCircle) {
+            if (m_activeSelectionLayer == SelectionLayer::Piece) {
+                cancelPieceSelectionContext(context);
+            }
             clearSelection();
+            return;
+        }
+
+        const LayeredSelectionStack stack = resolveSelectionStackAtCell(context, cellPos);
+
+        if (m_hasActiveSelectionCell && cellPos == m_activeSelectionCell) {
+            if (canCycleSelection(cellPos)) {
+                const SelectionLayer nextLayer = stack.nextBelow(m_activeSelectionLayer);
+                applyResolvedSelection(stack, nextLayer, context);
+                clearSelectionCycle();
+                return;
+            }
+
+            armSelectionCycle(cellPos);
             return;
         }
 
         if (!context.allowCommands) {
-            Piece* piece = context.controlledKingdom.getPieceAt(cellPos);
-            if (!piece) {
-                piece = context.opposingKingdom.getPieceAt(cellPos);
-            }
-            if (piece) {
-                m_selectedPiece = piece;
-                m_selectedBuilding = nullptr;
-                m_hasSelectedCell = false;
-                m_validMoves.clear();
-                m_dangerMoves.clear();
-                return;
-            }
-
-            Building* building = context.controlledKingdom.getBuildingAt(cellPos);
-            if (!building) {
-                building = context.opposingKingdom.getBuildingAt(cellPos);
-            }
-            if (!building) {
-                for (auto& b : const_cast<std::vector<Building>&>(context.publicBuildings)) {
-                    if (b.containsCell(cellPos.x, cellPos.y)) {
-                        building = &b;
-                        break;
-                    }
-                }
-            }
-            if (building) {
-                m_selectedBuilding = building;
-                m_selectedPiece = nullptr;
-                m_hasSelectedCell = false;
-                m_validMoves.clear();
-                m_dangerMoves.clear();
-                return;
-            }
-
-            selectCell(cellPos);
+            applyResolvedSelection(stack, stack.top(), context);
+            armSelectionCycle(cellPos);
             return;
         }
 
@@ -255,6 +368,8 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
                 m_selectedPiece = restoredPiece;
                 m_selectedBuilding = nullptr;
                 m_hasSelectedCell = false;
+                setActiveSelectionMetadata(SelectionLayer::Piece, m_moveFrom);
+                armSelectionCycle(m_moveFrom);
                 return;
             }
 
@@ -283,6 +398,8 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
                     m_selectedPiece = m_movedPiece;
                     m_selectedBuilding = nullptr;
                     m_hasSelectedCell = false;
+                    setActiveSelectionMetadata(SelectionLayer::Piece, cellPos);
+                    armSelectionCycle(cellPos);
                 } else {
                     m_movedPiece->position = m_moveTo;
                     Piece* previousCapture = context.opposingKingdom.getPieceAt(m_moveTo);
@@ -291,15 +408,7 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
                 return;
             }
 
-            if (m_movedPiece && cellPos == m_movedPiece->position) {
-                m_selectedPiece = m_movedPiece;
-                m_selectedBuilding = nullptr;
-                m_hasSelectedCell = false;
-                return;
-            }
-
-            selectCell(cellPos);
-            return;
+            cancelPieceSelectionContext(context);
         }
 
         // ---- A piece is selected; player clicked a valid destination ----
@@ -330,6 +439,8 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
                     m_selectedPiece = m_movedPiece;
                     m_selectedBuilding = nullptr;
                     m_hasSelectedCell = false;
+                    setActiveSelectionMetadata(SelectionLayer::Piece, cellPos);
+                    armSelectionCycle(cellPos);
                 } else {
                     // Couldn't queue (already moved this turn): revert visual move
                     m_selectedPiece->position = origin;
@@ -339,51 +450,8 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
             }
         }
 
-        // ---- Try to select a piece ----
-        Piece* piece = context.controlledKingdom.getPieceAt(cellPos);
-        if (piece) {
-            m_selectedPiece = piece;
-            m_selectedBuilding = nullptr;
-            m_hasSelectedCell = false;
-            refreshPieceMoves(piece, context.board, context.opposingKingdom, context.config);
-            m_hasMovePreview = false;
-            return;
-        }
-
-        Piece* enemyPiece = context.opposingKingdom.getPieceAt(cellPos);
-        if (enemyPiece) {
-            m_selectedPiece = enemyPiece;
-            m_selectedBuilding = nullptr;
-            m_hasSelectedCell = false;
-            m_validMoves.clear();
-            m_dangerMoves.clear();
-            m_hasMovePreview = false;
-            return;
-        }
-
-        // ---- Try to select a building ----
-        Building* building = context.controlledKingdom.getBuildingAt(cellPos);
-        if (!building) {
-            building = context.opposingKingdom.getBuildingAt(cellPos);
-        }
-        if (!building) {
-            for (auto& b : const_cast<std::vector<Building>&>(context.publicBuildings)) {
-                if (b.containsCell(cellPos.x, cellPos.y)) {
-                    building = &b;
-                    break;
-                }
-            }
-        }
-        if (building) {
-            m_selectedBuilding = building;
-            m_selectedPiece = nullptr;
-            m_hasSelectedCell = false;
-            m_validMoves.clear();
-            m_dangerMoves.clear();
-            return;
-        }
-
-        selectCell(cellPos);
+        applyResolvedSelection(stack, stack.top(), context);
+        armSelectionCycle(cellPos);
     }
 }
 

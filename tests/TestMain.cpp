@@ -24,6 +24,7 @@
 #include "Core/LocalPlayerContext.hpp"
 #include "Core/GameState.hpp"
 #include "Core/GameStateValidator.hpp"
+#include "Input/LayeredSelection.hpp"
 #include "Multiplayer/MultiplayerClient.hpp"
 #include "Multiplayer/PasswordUtils.hpp"
 #include "Multiplayer/Protocol.hpp"
@@ -283,6 +284,69 @@ void expectPublicBuildingsAvoidWater(const Board& board, const std::vector<Build
                    "Public buildings must not overlap water cells.");
         }
     }
+}
+
+void testLayeredSelectionStackResolvesPriority() {
+    Cell cell;
+    cell.type = CellType::Grass;
+    cell.isInCircle = true;
+
+    Building building;
+    building.type = BuildingType::Barracks;
+    cell.building = &building;
+
+    Piece piece(11, PieceType::Knight, KingdomId::White, {4, 5});
+    cell.piece = &piece;
+
+    const LayeredSelectionStack stack = resolveCellSelectionStack(cell, {4, 5});
+    expect(stack.count == 3, "Stacked cells should expose piece, building, and terrain layers.");
+    expect(stack.top() == SelectionLayer::Piece,
+        "Piece should remain the top selection layer when all three layers exist.");
+    expect(stack.nextBelow(SelectionLayer::Piece) == SelectionLayer::Building,
+        "Cycling down from a piece should expose the underlying building next.");
+    expect(stack.nextBelow(SelectionLayer::Building) == SelectionLayer::Terrain,
+        "Cycling down from a building should expose terrain next.");
+    expect(stack.nextBelow(SelectionLayer::Terrain) == SelectionLayer::Piece,
+        "Cycling down from terrain should wrap back to the topmost piece layer.");
+}
+
+void testLayeredSelectionStackSupportsBuildingTerrainCycle() {
+    Cell cell;
+    cell.type = CellType::Dirt;
+    cell.isInCircle = true;
+
+    Building building;
+    building.type = BuildingType::Farm;
+    cell.building = &building;
+
+    const LayeredSelectionStack stack = resolveCellSelectionStack(cell, {2, 3});
+    expect(stack.count == 2, "Building cells without a piece should expose building plus terrain only.");
+    expect(stack.top() == SelectionLayer::Building,
+        "Building should be the top layer when no piece is present.");
+    expect(stack.nextBelow(SelectionLayer::Building) == SelectionLayer::Terrain,
+        "Cycling down from a building-only stack should reach terrain.");
+    expect(stack.nextBelow(SelectionLayer::Terrain) == SelectionLayer::Building,
+        "Terrain should wrap back to building when those are the only two layers.");
+}
+
+void testLayeredSelectionStackSupportsPreviewPieceOverride() {
+    Cell cell;
+    cell.type = CellType::Grass;
+    cell.isInCircle = true;
+
+    Building building;
+    building.type = BuildingType::Mine;
+    cell.building = &building;
+
+    Piece hiddenPiece(21, PieceType::Pawn, KingdomId::Black, {6, 6});
+    cell.piece = &hiddenPiece;
+    Piece previewPiece(22, PieceType::Rook, KingdomId::White, {6, 6});
+
+    const LayeredSelectionStack stack = resolveCellSelectionStack(cell, {6, 6}, &previewPiece, true);
+    expect(stack.piece == &previewPiece,
+        "Preview resolution should let the visually moved piece override the cell piece pointer.");
+    expect(stack.top() == SelectionLayer::Piece && stack.count == 3,
+        "Preview overrides should still preserve the standard piece > building > terrain stack.");
 }
 
 void testSessionConfigDefaults() {
@@ -1223,6 +1287,9 @@ int main() {
         {"engine world seed", testGameEngineAssignsWorldSeed},
         {"board generator deterministic seed", testBoardGeneratorUsesDeterministicSeed},
         {"board generator terrain balance", testBoardGeneratorProducesGrassDominantTerrain},
+        {"layered selection priority", testLayeredSelectionStackResolvesPriority},
+        {"layered selection building cycle", testLayeredSelectionStackSupportsBuildingTerrainCycle},
+        {"layered selection preview override", testLayeredSelectionStackSupportsPreviewPieceOverride},
         {"save manager roundtrip", testSaveManagerRoundTrip},
         {"save manager string roundtrip", testSaveManagerStringRoundTrip},
         {"multiplayer password digest", testMultiplayerPasswordDigest},

@@ -1,8 +1,10 @@
 #pragma once
-#include <SFML/Window/Event.hpp>
+#include <chrono>
 #include <SFML/System/Vector2.hpp>
+#include <SFML/Window/Event.hpp>
 #include <vector>
 #include "Input/InputContext.hpp"
+#include "Input/LayeredSelection.hpp"
 #include "Input/ToolState.hpp"
 #include "Buildings/BuildingType.hpp"
 
@@ -67,6 +69,13 @@ private:
     sf::Vector2i m_buildPreviewOrigin;
     int m_buildPreviewRotationQuarterTurns;
 
+    SelectionLayer m_activeSelectionLayer;
+    bool m_hasActiveSelectionCell;
+    sf::Vector2i m_activeSelectionCell;
+    bool m_isSelectionCycleArmed;
+    sf::Vector2i m_selectionCycleCell;
+    std::chrono::steady_clock::time_point m_selectionCycleArmTime;
+
     // Camera dragging
     bool m_isDragging;
     sf::Vector2i m_lastMousePos;
@@ -77,4 +86,17 @@ private:
     // Recompute m_validMoves / m_dangerMoves for piece given current preview board state
     void refreshPieceMoves(Piece* piece, const Board& board, const Kingdom& enemyKingdom, const GameConfig& config);
     void selectCell(sf::Vector2i cellPos);
+    void activatePieceSelection(Piece* piece, sf::Vector2i cellPos,
+                                const Board& board, const Kingdom& enemyKingdom,
+                                const GameConfig& config, bool allowCommands);
+    void activateBuildingSelection(Building* building, sf::Vector2i cellPos);
+    void activateTerrainSelection(sf::Vector2i cellPos);
+    void setActiveSelectionMetadata(SelectionLayer layer, sf::Vector2i cellPos);
+    void clearSelectionCycle();
+    void armSelectionCycle(sf::Vector2i cellPos);
+    bool canCycleSelection(sf::Vector2i cellPos) const;
+    LayeredSelectionStack resolveSelectionStackAtCell(const InputContext& context, sf::Vector2i cellPos) const;
+    void applyResolvedSelection(const LayeredSelectionStack& stack, SelectionLayer layer,
+                                const InputContext& context);
+    void cancelPieceSelectionContext(const InputContext& context);
 };
