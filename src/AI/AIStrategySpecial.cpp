@@ -14,12 +14,14 @@
 #include <cmath>
 #include <limits>
 
-std::vector<TurnCommand> AIStrategySpecial::decide(const Board& board, Kingdom& self,
+std::vector<TurnCommand> AIStrategySpecial::decide(const Board& board, const Kingdom& self,
                                                      const Kingdom& enemy,
                                                      const std::vector<Building>& publicBuildings,
                                                      const GameConfig& config, const AIConfig& aiConfig,
                                                      const AIBrain& brain, bool hasMarried) {
     std::vector<TurnCommand> commands;
+    int availableGold = self.gold;
+    const AIPhase phase = brain.getPhase();
 
     // =========================================================================
     // 1. Upgrades: upgrade pieces when possible (no phase restriction)
@@ -31,11 +33,10 @@ std::vector<TurnCommand> AIStrategySpecial::decide(const Board& board, Kingdom& 
         if (piece.type == PieceType::Bishop) ++bishopCount;
     }
 
-    for (auto& piece : self.pieces) {
+    for (const auto& piece : self.pieces) {
         if (piece.type == PieceType::King || piece.type == PieceType::Queen) continue;
 
         PieceType target = PieceType::Pawn;
-        AIPhase phase = brain.getPhase();
 
         switch (piece.type) {
             case PieceType::Pawn:
@@ -54,14 +55,14 @@ std::vector<TurnCommand> AIStrategySpecial::decide(const Board& board, Kingdom& 
         }
 
         if (XPSystem::canUpgrade(piece, target, config)) {
-            int cost = config.getUpgradeCost(piece.type, target);
-            if (self.gold >= cost) {
+            const int cost = config.getUpgradeCost(piece.type, target);
+            if (availableGold >= cost) {
                 TurnCommand cmd;
                 cmd.type = TurnCommand::Upgrade;
                 cmd.upgradePieceId = piece.id;
                 cmd.upgradeTarget = target;
                 commands.push_back(cmd);
-                self.gold -= cost;
+                availableGold -= cost;
                 if (piece.type == PieceType::Pawn) {
                     if (target == PieceType::Knight) ++knightCount;
                     if (target == PieceType::Bishop) ++bishopCount;

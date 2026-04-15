@@ -23,6 +23,16 @@ void alignChunkedStructureDimensions(const char* label, BuildingType type, int& 
     height = expectedHeight;
 }
 
+int clampNonNegativeConfigValue(const char* label, int value) {
+    if (value >= 0) {
+        return value;
+    }
+
+    std::cerr << "GameConfig: Clamping negative " << label << " value "
+              << value << " to 0.\n";
+    return 0;
+}
+
 }
 
 GameConfig::GameConfig() { setDefaults(); }
@@ -180,6 +190,25 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
         m_upgradePawnToBishopCost = extractInt(econSec, "upgrade_pawn_to_bishop_cost", m_upgradePawnToBishopCost);
         m_upgradeToRookCost = extractInt(econSec, "upgrade_to_rook_cost", m_upgradeToRookCost);
     }
+
+    m_startingGold = clampNonNegativeConfigValue("economy.starting_gold", m_startingGold);
+    m_mineIncomePerCellPerTurn = clampNonNegativeConfigValue(
+        "economy.mine_income_per_cell_per_turn", m_mineIncomePerCellPerTurn);
+    m_farmIncomePerCellPerTurn = clampNonNegativeConfigValue(
+        "economy.farm_income_per_cell_per_turn", m_farmIncomePerCellPerTurn);
+    m_barracksCost = clampNonNegativeConfigValue("economy.barracks_cost", m_barracksCost);
+    m_woodWallCost = clampNonNegativeConfigValue("economy.wood_wall_cost", m_woodWallCost);
+    m_stoneWallCost = clampNonNegativeConfigValue("economy.stone_wall_cost", m_stoneWallCost);
+    m_arenaCost = clampNonNegativeConfigValue("economy.arena_cost", m_arenaCost);
+    m_pawnRecruitCost = clampNonNegativeConfigValue("economy.pawn_recruit_cost", m_pawnRecruitCost);
+    m_knightRecruitCost = clampNonNegativeConfigValue("economy.knight_recruit_cost", m_knightRecruitCost);
+    m_bishopRecruitCost = clampNonNegativeConfigValue("economy.bishop_recruit_cost", m_bishopRecruitCost);
+    m_rookRecruitCost = clampNonNegativeConfigValue("economy.rook_recruit_cost", m_rookRecruitCost);
+    m_upgradePawnToKnightCost = clampNonNegativeConfigValue(
+        "economy.upgrade_pawn_to_knight_cost", m_upgradePawnToKnightCost);
+    m_upgradePawnToBishopCost = clampNonNegativeConfigValue(
+        "economy.upgrade_pawn_to_bishop_cost", m_upgradePawnToBishopCost);
+    m_upgradeToRookCost = clampNonNegativeConfigValue("economy.upgrade_to_rook_cost", m_upgradeToRookCost);
 
     std::string prodSec = extractSection(json, "production");
     if (!prodSec.empty()) {

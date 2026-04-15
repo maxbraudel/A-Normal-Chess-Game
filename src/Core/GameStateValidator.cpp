@@ -133,6 +133,10 @@ bool GameStateValidator::validateSaveData(const SaveData& data, std::string* err
             writeError(errorMessage, "Save data kingdom ordering is inconsistent.");
             return false;
         }
+        if (kingdom.gold < 0) {
+            writeError(errorMessage, "Save data contains negative gold for a kingdom.");
+            return false;
+        }
 
         int kingCount = 0;
         for (const auto& piece : kingdom.pieces) {
@@ -203,6 +207,10 @@ bool GameStateValidator::validateRuntimeState(const Board& board,
 
         if (kingdom.id != expectedKingdom) {
             writeError(errorMessage, "Runtime kingdom ordering is inconsistent.");
+            return false;
+        }
+        if (kingdom.gold < 0) {
+            writeError(errorMessage, "Runtime state contains negative gold for a kingdom.");
             return false;
         }
 

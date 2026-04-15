@@ -10,12 +10,15 @@
 
 #include <SFML/System/Time.hpp>
 
+#include "AI/AIBrain.hpp"
+#include "AI/AIStrategySpecial.hpp"
 #include "Board/Board.hpp"
 #include "Board/BoardGenerator.hpp"
 #include "Board/CellType.hpp"
 #include "Buildings/BuildingFactory.hpp"
 #include "Buildings/StructureChunkRegistry.hpp"
 #include "Buildings/BuildingType.hpp"
+#include "Config/AIConfig.hpp"
 #include "Config/GameConfig.hpp"
 #include "Core/GameEngine.hpp"
 #include "Core/LocalPlayerContext.hpp"
@@ -40,6 +43,19 @@ void expect(bool condition, const std::string& message) {
     if (!condition) {
         throw std::runtime_error(message);
     }
+}
+
+Building makeTestBarracks(int id, KingdomId owner, const sf::Vector2i& origin, const GameConfig& config) {
+    Building barracks;
+    barracks.id = id;
+    barracks.type = BuildingType::Barracks;
+    barracks.owner = owner;
+    barracks.isNeutral = false;
+    barracks.origin = origin;
+    barracks.width = config.getBuildingWidth(BuildingType::Barracks);
+    barracks.height = config.getBuildingHeight(BuildingType::Barracks);
+    barracks.cellHP.assign(barracks.width * barracks.height, config.getBarracksCellHP());
+    return barracks;
 }
 
 template <typename Predicate>
@@ -890,6 +906,182 @@ void testTurnSystemSkipsUnaffordableBuild() {
     expect(white.buildings.empty(), "Unaffordable build commands must not create buildings.");
 }
 
+void testTurnSystemSkipsUnaffordableProduction() {
+    GameConfig config;
+    Board board;
+    board.init(5);
+
+    Kingdom white(KingdomId::White);
+    Kingdom black(KingdomId::Black);
+    white.addBuilding(makeTestBarracks(7, KingdomId::White, {0, 0}, config));
+
+    std::vector<Building> publicBuildings;
+    TurnSystem turnSystem;
+    turnSystem.setActiveKingdom(KingdomId::White);
+
+    TurnCommand produceCommand;
+    produceCommand.type = TurnCommand::Produce;
+    produceCommand.barracksId = 7;
+    produceCommand.produceType = PieceType::Pawn;
+    expect(turnSystem.queueCommand(produceCommand), "Produce command should be queueable during planning.");
+
+    EventLog eventLog;
+    PieceFactory pieceFactory;
+    BuildingFactory buildingFactory;
+    turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+
+    expect(white.gold == 0, "Unaffordable production must not change gold.");
+    expect(!white.buildings.front().isProducing, "Unaffordable production must not start barracks production.");
+}
+
+void testTurnSystemSkipsUnaffordableUpgrade() {
+    GameConfig config;
+    Board board;
+    board.init(5);
+
+    Kingdom white(KingdomId::White);
+    Kingdom black(KingdomId::Black);
+    Piece pawn(11, PieceType::Pawn, KingdomId::White, {2, 2});
+    pawn.xp = config.getXPThresholdPawnToKnightOrBishop();
+    white.addPiece(pawn);
+    board.getCell(2, 2).piece = &white.pieces.back();
+
+    std::vector<Building> publicBuildings;
+    TurnSystem turnSystem;
+    turnSystem.setActiveKingdom(KingdomId::White);
+
+    TurnCommand upgradeCommand;
+    upgradeCommand.type = TurnCommand::Upgrade;
+    upgradeCommand.upgradePieceId = 11;
+    upgradeCommand.upgradeTarget = PieceType::Knight;
+    expect(turnSystem.queueCommand(upgradeCommand), "Upgrade command should be queueable during planning.");
+
+    EventLog eventLog;
+    PieceFactory pieceFactory;
+    BuildingFactory buildingFactory;
+    turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+
+    expect(white.gold == 0, "Unaffordable upgrades must not change gold.");
+    expect(white.pieces.front().type == PieceType::Pawn,
+           "Unaffordable upgrades must not change the piece type.");
+}
+
+void testAIStrategySpecialDoesNotMutateRuntimeGold() {
+    GameConfig config;
+    AIConfig aiConfig;
+    Board board;
+    board.init(5);
+
+    Kingdom white(KingdomId::White);
+    white.addPiece(Piece(1, PieceType::King, KingdomId::White, {2, 2}));
+    Piece pawn(2, PieceType::Pawn, KingdomId::White, {1, 2});
+    pawn.xp = config.getXPThresholdPawnToKnightOrBishop();
+    white.addPiece(pawn);
+    white.gold = config.getUpgradeCost(PieceType::Pawn, PieceType::Knight) + 5;
+
+    Kingdom black(KingdomId::Black);
+    black.addPiece(Piece(3, PieceType::King, KingdomId::Black, {4, 4}));
+
+    const int initialGold = white.gold;
+    const AIBrain brain;
+    const auto commands = AIStrategySpecial::decide(
+        board,
+        white,
+        black,
+        {},
+        config,
+        aiConfig,
+        brain,
+        false);
+
+    expect(!commands.empty(), "Special AI should still plan an upgrade when one is affordable.");
+    expect(commands.front().type == TurnCommand::Upgrade,
+           "Special AI should emit an upgrade command for an eligible pawn.");
+    expect(white.gold == initialGold,
+           "Special AI planning must not mutate the runtime kingdom gold reserve.");
+}
+
+void testGameStateValidatorRejectsNegativeSaveGold() {
+    GameConfig config;
+    GameEngine engine;
+    GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, "negative_save_gold_test");
+
+    std::string error;
+    expect(engine.startNewSession(session, config, &error), error);
+
+    SaveData data = engine.createSaveData();
+    data.kingdoms[kingdomIndex(KingdomId::White)].gold = -1;
+
+    expect(!GameStateValidator::validateSaveData(data, &error),
+           "Save validation should reject negative kingdom gold.");
+    expect(!error.empty(), "Save validation should explain negative gold failures.");
+
+    GameEngine restored;
+    expect(!restored.restoreFromSave(data, config, &error),
+           "Restoring a save with negative gold should fail validation.");
+}
+
+void testGameStateValidatorRejectsNegativeRuntimeGold() {
+    GameConfig config;
+    GameEngine engine;
+    GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, "negative_runtime_gold_test");
+
+    std::string error;
+    expect(engine.startNewSession(session, config, &error), error);
+    engine.kingdom(KingdomId::White).gold = -1;
+
+    expect(!engine.validate(&error), "Runtime validation should reject negative kingdom gold.");
+    expect(!error.empty(), "Runtime validation should explain negative gold failures.");
+}
+
+void testGameConfigClampsNegativeEconomyValues() {
+    const std::filesystem::path tempPath =
+        std::filesystem::temp_directory_path() / "anormalchess_negative_economy_test.json";
+    {
+        std::ofstream out(tempPath);
+        out << "{\n"
+            << "  \"economy\": {\n"
+            << "    \"starting_gold\": -10,\n"
+            << "    \"mine_income_per_cell_per_turn\": -3,\n"
+            << "    \"farm_income_per_cell_per_turn\": -2,\n"
+            << "    \"barracks_cost\": -50,\n"
+            << "    \"wood_wall_cost\": -20,\n"
+            << "    \"stone_wall_cost\": -40,\n"
+            << "    \"arena_cost\": -60,\n"
+            << "    \"pawn_recruit_cost\": -10,\n"
+            << "    \"knight_recruit_cost\": -30,\n"
+            << "    \"bishop_recruit_cost\": -30,\n"
+            << "    \"rook_recruit_cost\": -60,\n"
+            << "    \"upgrade_pawn_to_knight_cost\": -20,\n"
+            << "    \"upgrade_pawn_to_bishop_cost\": -20,\n"
+            << "    \"upgrade_to_rook_cost\": -50\n"
+            << "  }\n"
+            << "}\n";
+    }
+
+    GameConfig config;
+    expect(config.loadFromFile(tempPath.string()), "GameConfig should load a negative-economy override file.");
+    std::filesystem::remove(tempPath);
+
+    expect(config.getStartingGold() == 0, "Negative starting gold should be clamped to zero.");
+    expect(config.getMineIncomePerCellPerTurn() == 0, "Negative mine income should be clamped to zero.");
+    expect(config.getFarmIncomePerCellPerTurn() == 0, "Negative farm income should be clamped to zero.");
+    expect(config.getBarracksCost() == 0, "Negative barracks cost should be clamped to zero.");
+    expect(config.getWoodWallCost() == 0, "Negative wood wall cost should be clamped to zero.");
+    expect(config.getStoneWallCost() == 0, "Negative stone wall cost should be clamped to zero.");
+    expect(config.getArenaCost() == 0, "Negative arena cost should be clamped to zero.");
+    expect(config.getRecruitCost(PieceType::Pawn) == 0, "Negative recruit costs should be clamped to zero.");
+    expect(config.getRecruitCost(PieceType::Knight) == 0, "Negative recruit costs should be clamped to zero.");
+    expect(config.getRecruitCost(PieceType::Bishop) == 0, "Negative recruit costs should be clamped to zero.");
+    expect(config.getRecruitCost(PieceType::Rook) == 0, "Negative recruit costs should be clamped to zero.");
+    expect(config.getUpgradeCost(PieceType::Pawn, PieceType::Knight) == 0,
+           "Negative upgrade costs should be clamped to zero.");
+    expect(config.getUpgradeCost(PieceType::Pawn, PieceType::Bishop) == 0,
+           "Negative upgrade costs should be clamped to zero.");
+    expect(config.getUpgradeCost(PieceType::Knight, PieceType::Rook) == 0,
+           "Negative upgrade costs should be clamped to zero.");
+}
+
 void testProjectedIncomeHelper() {
     GameConfig config;
     Board board;
@@ -1005,6 +1197,12 @@ int main() {
         {"multiplayer authenticated disconnect", testMultiplayerServerReportsAuthenticatedDisconnect},
         {"multiplayer reconnect same client", testMultiplayerReconnectReusesSameClientInstance},
         {"turn system affordability", testTurnSystemSkipsUnaffordableBuild},
+        {"turn system unaffordable production", testTurnSystemSkipsUnaffordableProduction},
+        {"turn system unaffordable upgrade", testTurnSystemSkipsUnaffordableUpgrade},
+        {"ai special planning preserves gold", testAIStrategySpecialDoesNotMutateRuntimeGold},
+        {"save validator negative gold", testGameStateValidatorRejectsNegativeSaveGold},
+        {"runtime validator negative gold", testGameStateValidatorRejectsNegativeRuntimeGold},
+        {"game config clamps negative economy", testGameConfigClampsNegativeEconomyValues},
         {"projected income helper", testProjectedIncomeHelper},
         {"structure chunk registry", testStructureChunkRegistry},
         {"chunked structure dimensions", testGameConfigAlignsChunkedStructureDimensions},
