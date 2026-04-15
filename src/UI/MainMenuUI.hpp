@@ -31,6 +31,7 @@ private:
     void showMainScreen();
     void updateSaveButtons();
     void updateCreateDialogLabels();
+    void applyPresetToCreateDialog(GameMode mode);
     void openCreateDialog();
     void closeCreateDialog();
     std::string selectedSaveName() const;
@@ -39,6 +40,7 @@ private:
     static bool isValidSaveName(const std::string& value);
     static bool isValidParticipantName(const std::string& value);
     static GameMode parseGameModeId(const tgui::String& id);
+    static ControllerType parseControllerId(const tgui::String& id);
 
     tgui::Panel::Ptr m_panel;
     tgui::Panel::Ptr m_mainBox;
@@ -50,10 +52,16 @@ private:
     tgui::Label::Ptr m_emptyLabel;
     tgui::EditBox::Ptr m_saveNameEdit;
     tgui::ComboBox::Ptr m_modeCombo;
-    tgui::Label::Ptr m_nameOneLabel;
-    tgui::Label::Ptr m_nameTwoLabel;
-    tgui::EditBox::Ptr m_nameOneEdit;
-    tgui::EditBox::Ptr m_nameTwoEdit;
+    tgui::Label::Ptr m_whiteRoleLabel;
+    tgui::Label::Ptr m_blackRoleLabel;
+    tgui::ComboBox::Ptr m_whiteControllerCombo;
+    tgui::ComboBox::Ptr m_blackControllerCombo;
+    tgui::Label::Ptr m_whiteNameLabel;
+    tgui::Label::Ptr m_blackNameLabel;
+    tgui::EditBox::Ptr m_whiteNameEdit;
+    tgui::EditBox::Ptr m_blackNameEdit;
+    tgui::Label::Ptr m_whiteHintLabel;
+    tgui::Label::Ptr m_blackHintLabel;
     tgui::Label::Ptr m_createErrorLabel;
     std::vector<SaveSummary> m_saves;
 

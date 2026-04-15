@@ -2,95 +2,254 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <cctype>
 #include <filesystem>
 
 namespace fs = std::filesystem;
 
-// --- Simple JSON helpers ---
+namespace {
+
+void skipWhitespace(const std::string& text, std::size_t& pos) {
+    while (pos < text.size() && std::isspace(static_cast<unsigned char>(text[pos])) != 0) {
+        ++pos;
+    }
+}
+
+std::size_t findValueStart(const std::string& json, const std::string& key) {
+    const std::string search = "\"" + key + "\"";
+    std::size_t pos = json.find(search);
+    if (pos == std::string::npos) {
+        return std::string::npos;
+    }
+
+    pos = json.find(':', pos + search.size());
+    if (pos == std::string::npos) {
+        return std::string::npos;
+    }
+
+    ++pos;
+    skipWhitespace(json, pos);
+    return pos;
+}
+
+std::size_t findMatchingDelimiter(const std::string& text,
+                                  std::size_t start,
+                                  char open,
+                                  char close) {
+    if (start >= text.size() || text[start] != open) {
+        return std::string::npos;
+    }
+
+    bool inString = false;
+    int depth = 0;
+    for (std::size_t pos = start; pos < text.size(); ++pos) {
+        const char current = text[pos];
+        if (current == '"' && (pos == 0 || text[pos - 1] != '\\')) {
+            inString = !inString;
+            continue;
+        }
+        if (inString) {
+            continue;
+        }
+        if (current == open) {
+            ++depth;
+        } else if (current == close) {
+            --depth;
+            if (depth == 0) {
+                return pos;
+            }
+        }
+    }
+
+    return std::string::npos;
+}
+
+std::string trim(const std::string& value) {
+    std::size_t start = 0;
+    std::size_t end = value.size();
+    while (start < end && std::isspace(static_cast<unsigned char>(value[start])) != 0) {
+        ++start;
+    }
+    while (end > start && std::isspace(static_cast<unsigned char>(value[end - 1])) != 0) {
+        --end;
+    }
+    return value.substr(start, end - start);
+}
+
+std::string unescapeJsonString(const std::string& value) {
+    std::string result;
+    result.reserve(value.size());
+    for (std::size_t i = 0; i < value.size(); ++i) {
+        const char current = value[i];
+        if (current != '\\' || i + 1 >= value.size()) {
+            result.push_back(current);
+            continue;
+        }
+
+        const char escaped = value[++i];
+        switch (escaped) {
+            case '\\': result.push_back('\\'); break;
+            case '"': result.push_back('"'); break;
+            case 'n': result.push_back('\n'); break;
+            case 'r': result.push_back('\r'); break;
+            case 't': result.push_back('\t'); break;
+            default: result.push_back(escaped); break;
+        }
+    }
+    return result;
+}
+
+}
+
+std::string SaveManager::escapeJsonString(const std::string& value) {
+    std::string escaped;
+    escaped.reserve(value.size());
+    for (const char current : value) {
+        switch (current) {
+            case '\\': escaped += "\\\\"; break;
+            case '"': escaped += "\\\""; break;
+            case '\n': escaped += "\\n"; break;
+            case '\r': escaped += "\\r"; break;
+            case '\t': escaped += "\\t"; break;
+            default: escaped.push_back(current); break;
+        }
+    }
+    return escaped;
+}
 
 std::string SaveManager::extractString(const std::string& json, const std::string& key) {
-    std::string search = "\"" + key + "\"";
-    std::size_t pos = json.find(search);
-    if (pos == std::string::npos) return "";
-    pos = json.find(':', pos);
-    if (pos == std::string::npos) return "";
-    pos = json.find('"', pos + 1);
-    if (pos == std::string::npos) return "";
-    std::size_t end = json.find('"', pos + 1);
-    if (end == std::string::npos) return "";
-    return json.substr(pos + 1, end - pos - 1);
+    std::size_t pos = findValueStart(json, key);
+    if (pos == std::string::npos || pos >= json.size() || json[pos] != '"') {
+        return "";
+    }
+
+    ++pos;
+    const std::size_t start = pos;
+    while (pos < json.size()) {
+        if (json[pos] == '"' && json[pos - 1] != '\\') {
+            return unescapeJsonString(json.substr(start, pos - start));
+        }
+        ++pos;
+    }
+
+    return "";
 }
 
 int SaveManager::extractInt(const std::string& json, const std::string& key, int defaultVal) {
-    std::string search = "\"" + key + "\"";
-    std::size_t pos = json.find(search);
-    if (pos == std::string::npos) return defaultVal;
-    pos = json.find(':', pos);
-    if (pos == std::string::npos) return defaultVal;
-    pos++;
-    while (pos < json.size() && (json[pos] == ' ' || json[pos] == '\t')) pos++;
+    std::size_t pos = findValueStart(json, key);
+    if (pos == std::string::npos) {
+        return defaultVal;
+    }
+
+    std::size_t end = pos;
+    if (end < json.size() && (json[end] == '-' || json[end] == '+')) {
+        ++end;
+    }
+    while (end < json.size() && std::isdigit(static_cast<unsigned char>(json[end])) != 0) {
+        ++end;
+    }
+    if (end == pos) {
+        return defaultVal;
+    }
+
     try {
-        return std::stoi(json.substr(pos));
+        return std::stoi(json.substr(pos, end - pos));
     } catch (...) {
         return defaultVal;
     }
 }
 
-std::string SaveManager::extractSection(const std::string& json, const std::string& key) {
-    std::string search = "\"" + key + "\"";
-    std::size_t pos = json.find(search);
-    if (pos == std::string::npos) return "{}";
-    pos = json.find('{', pos);
-    if (pos == std::string::npos) return "{}";
-    int depth = 1;
-    std::size_t start = pos;
-    pos++;
-    while (pos < json.size() && depth > 0) {
-        if (json[pos] == '{') depth++;
-        else if (json[pos] == '}') depth--;
-        pos++;
+bool SaveManager::extractBool(const std::string& json, const std::string& key, bool defaultVal) {
+    std::size_t pos = findValueStart(json, key);
+    if (pos == std::string::npos) {
+        return defaultVal;
     }
-    return json.substr(start, pos - start);
+    if (json.compare(pos, 4, "true") == 0) {
+        return true;
+    }
+    if (json.compare(pos, 5, "false") == 0) {
+        return false;
+    }
+    return defaultVal;
+}
+
+std::string SaveManager::extractSection(const std::string& json, const std::string& key) {
+    std::size_t pos = findValueStart(json, key);
+    if (pos == std::string::npos || pos >= json.size() || json[pos] != '{') {
+        return "{}";
+    }
+    const std::size_t end = findMatchingDelimiter(json, pos, '{', '}');
+    if (end == std::string::npos) {
+        return "{}";
+    }
+    return json.substr(pos, end - pos + 1);
 }
 
 std::string SaveManager::extractArray(const std::string& json, const std::string& key) {
-    std::string search = "\"" + key + "\"";
-    std::size_t pos = json.find(search);
-    if (pos == std::string::npos) return "[]";
-    pos = json.find('[', pos);
-    if (pos == std::string::npos) return "[]";
-    int depth = 1;
-    std::size_t start = pos;
-    pos++;
-    while (pos < json.size() && depth > 0) {
-        if (json[pos] == '[') depth++;
-        else if (json[pos] == ']') depth--;
-        pos++;
+    std::size_t pos = findValueStart(json, key);
+    if (pos == std::string::npos || pos >= json.size() || json[pos] != '[') {
+        return "[]";
     }
-    return json.substr(start, pos - start);
+    const std::size_t end = findMatchingDelimiter(json, pos, '[', ']');
+    if (end == std::string::npos) {
+        return "[]";
+    }
+    return json.substr(pos, end - pos + 1);
 }
 
 std::vector<std::string> SaveManager::splitArrayElements(const std::string& arrayContent) {
     std::vector<std::string> result;
-    // Find elements between { }
-    std::size_t pos = 0;
-    while (pos < arrayContent.size()) {
-        std::size_t start = arrayContent.find('{', pos);
-        if (start == std::string::npos) break;
-        int depth = 1;
-        std::size_t end = start + 1;
-        while (end < arrayContent.size() && depth > 0) {
-            if (arrayContent[end] == '{') depth++;
-            else if (arrayContent[end] == '}') depth--;
-            end++;
+    if (arrayContent.size() < 2 || arrayContent.front() != '[' || arrayContent.back() != ']') {
+        return result;
+    }
+
+    bool inString = false;
+    int braceDepth = 0;
+    int bracketDepth = 0;
+    std::size_t elementStart = 1;
+
+    for (std::size_t pos = 1; pos + 1 < arrayContent.size(); ++pos) {
+        const char current = arrayContent[pos];
+        if (current == '"' && arrayContent[pos - 1] != '\\') {
+            inString = !inString;
+            continue;
         }
-        result.push_back(arrayContent.substr(start, end - start));
-        pos = end;
+        if (inString) {
+            continue;
+        }
+        if (current == '{') {
+            ++braceDepth;
+        } else if (current == '}') {
+            --braceDepth;
+        } else if (current == '[') {
+            ++bracketDepth;
+        } else if (current == ']') {
+            --bracketDepth;
+        } else if (current == ',' && braceDepth == 0 && bracketDepth == 0) {
+            const std::string element = trim(arrayContent.substr(elementStart, pos - elementStart));
+            if (!element.empty()) {
+                result.push_back(element);
+            }
+            elementStart = pos + 1;
+        }
+    }
+
+    const std::string tail = trim(arrayContent.substr(elementStart, arrayContent.size() - 1 - elementStart));
+    if (!tail.empty()) {
+        result.push_back(tail);
     }
     return result;
 }
 
 // --- Serialization ---
+
+std::string SaveManager::serializeParticipant(const KingdomParticipantConfig& participant) {
+    std::ostringstream ss;
+    ss << "{ \"kingdom\": " << static_cast<int>(participant.kingdom)
+       << ", \"controller\": " << static_cast<int>(participant.controller)
+       << ", \"name\": \"" << escapeJsonString(participant.participantName) << "\" }";
+    return ss.str();
+}
 
 std::string SaveManager::serializePiece(const Piece& p) {
     std::ostringstream ss;
@@ -131,8 +290,24 @@ std::string SaveManager::serializeEvent(const EventLog::Event& e) {
     std::ostringstream ss;
     ss << "{ \"turn\": " << e.turnNumber
        << ", \"kingdom\": " << static_cast<int>(e.kingdom)
-       << ", \"msg\": \"" << e.message << "\" }";
+       << ", \"msg\": \"" << escapeJsonString(e.message) << "\" }";
     return ss.str();
+}
+
+EventLog::Event SaveManager::parseEvent(const std::string& json) {
+    EventLog::Event event;
+    event.turnNumber = extractInt(json, "turn", 1);
+    event.kingdom = static_cast<KingdomId>(extractInt(json, "kingdom", 0));
+    event.message = extractString(json, "msg");
+    return event;
+}
+
+KingdomParticipantConfig SaveManager::parseParticipant(const std::string& json) {
+    KingdomParticipantConfig participant;
+    participant.kingdom = static_cast<KingdomId>(extractInt(json, "kingdom", 0));
+    participant.controller = static_cast<ControllerType>(extractInt(json, "controller", 0));
+    participant.participantName = extractString(json, "name");
+    return participant;
 }
 
 Piece SaveManager::parsePiece(const std::string& json) {
@@ -152,15 +327,12 @@ Building SaveManager::parseBuilding(const std::string& json) {
     b.id = extractInt(json, "id", 0);
     b.type = static_cast<BuildingType>(extractInt(json, "type", 0));
     b.owner = static_cast<KingdomId>(extractInt(json, "owner", 0));
-    // isNeutral
-    b.isNeutral = (json.find("\"isNeutral\": true") != std::string::npos) ||
-                  (json.find("\"isNeutral\":true") != std::string::npos);
+    b.isNeutral = extractBool(json, "isNeutral", false);
     b.origin.x = extractInt(json, "ox", 0);
     b.origin.y = extractInt(json, "oy", 0);
     b.width = extractInt(json, "w", 1);
     b.height = extractInt(json, "h", 1);
-    b.isProducing = (json.find("\"isProducing\": true") != std::string::npos) ||
-                    (json.find("\"isProducing\":true") != std::string::npos);
+    b.isProducing = extractBool(json, "isProducing", false);
     b.producingType = extractInt(json, "producingType", 0);
     b.turnsRemaining = extractInt(json, "turnsRemaining", 0);
 
@@ -193,28 +365,37 @@ bool SaveManager::save(const std::string& filepath, const SaveData& data) {
     std::ofstream file(filepath);
     if (!file.is_open()) return false;
 
+    SaveData normalized = data;
+    normalized.refreshLegacyMetadataFromSession();
+
     file << "{\n";
-    file << "  \"gameName\": \"" << data.gameName << "\",\n";
-    file << "  \"turnNumber\": " << data.turnNumber << ",\n";
-    file << "  \"activeKingdom\": " << static_cast<int>(data.activeKingdom) << ",\n";
-    file << "  \"mapRadius\": " << data.mapRadius << ",\n";
-    file << "  \"gameMode\": " << static_cast<int>(data.mode) << ",\n";
-    file << "  \"whiteController\": " << static_cast<int>(data.controllers[0]) << ",\n";
-    file << "  \"blackController\": " << static_cast<int>(data.controllers[1]) << ",\n";
-    file << "  \"whiteName\": \"" << data.participantNames[0] << "\",\n";
-    file << "  \"blackName\": \"" << data.participantNames[1] << "\",\n";
+    file << "  \"gameName\": \"" << escapeJsonString(normalized.gameName) << "\",\n";
+    file << "  \"turnNumber\": " << normalized.turnNumber << ",\n";
+    file << "  \"activeKingdom\": " << static_cast<int>(normalized.activeKingdom) << ",\n";
+    file << "  \"mapRadius\": " << normalized.mapRadius << ",\n";
+    file << "  \"gameMode\": " << static_cast<int>(normalized.mode) << ",\n";
+    file << "  \"whiteController\": " << static_cast<int>(normalized.controllers[0]) << ",\n";
+    file << "  \"blackController\": " << static_cast<int>(normalized.controllers[1]) << ",\n";
+    file << "  \"whiteName\": \"" << escapeJsonString(normalized.participantNames[0]) << "\",\n";
+    file << "  \"blackName\": \"" << escapeJsonString(normalized.participantNames[1]) << "\",\n";
+    file << "  \"sessionKingdoms\": [";
+    for (int kingdomSlot = 0; kingdomSlot < kNumKingdoms; ++kingdomSlot) {
+        if (kingdomSlot > 0) file << ", ";
+        file << serializeParticipant(normalized.sessionKingdoms[kingdomSlot]);
+    }
+    file << "],\n";
 
     // Grid
     file << "  \"grid\": [\n";
-    for (std::size_t y = 0; y < data.grid.size(); ++y) {
+    for (std::size_t y = 0; y < normalized.grid.size(); ++y) {
         file << "    [";
-        for (std::size_t x = 0; x < data.grid[y].size(); ++x) {
-            file << "{\"t\":" << static_cast<int>(data.grid[y][x].type)
-                 << ",\"c\":" << (data.grid[y][x].isInCircle ? 1 : 0) << "}";
-            if (x + 1 < data.grid[y].size()) file << ",";
+        for (std::size_t x = 0; x < normalized.grid[y].size(); ++x) {
+            file << "{\"t\":" << static_cast<int>(normalized.grid[y][x].type)
+                 << ",\"c\":" << (normalized.grid[y][x].isInCircle ? 1 : 0) << "}";
+            if (x + 1 < normalized.grid[y].size()) file << ",";
         }
         file << "]";
-        if (y + 1 < data.grid.size()) file << ",";
+        if (y + 1 < normalized.grid.size()) file << ",";
         file << "\n";
     }
     file << "  ],\n";
@@ -222,7 +403,7 @@ bool SaveManager::save(const std::string& filepath, const SaveData& data) {
     // Kingdoms (JSON keys "whiteKingdom"/"blackKingdom" kept for backward compatibility)
     static const char* kingdomKeys[] = {"whiteKingdom", "blackKingdom"};
     for (int k = 0; k < kNumKingdoms; ++k) {
-        const auto& kd = data.kingdoms[k];
+        const auto& kd = normalized.kingdoms[k];
         file << "  \"" << kingdomKeys[k] << "\": {\n";
         file << "    \"gold\": " << kd.gold << ",\n";
         file << "    \"pieces\": [";
@@ -242,17 +423,17 @@ bool SaveManager::save(const std::string& filepath, const SaveData& data) {
 
     // Public buildings
     file << "  \"publicBuildings\": [";
-    for (std::size_t i = 0; i < data.publicBuildings.size(); ++i) {
+    for (std::size_t i = 0; i < normalized.publicBuildings.size(); ++i) {
         if (i > 0) file << ", ";
-        file << serializeBuilding(data.publicBuildings[i]);
+        file << serializeBuilding(normalized.publicBuildings[i]);
     }
     file << "],\n";
 
     // Events
     file << "  \"events\": [";
-    for (std::size_t i = 0; i < data.events.size(); ++i) {
+    for (std::size_t i = 0; i < normalized.events.size(); ++i) {
         if (i > 0) file << ", ";
-        file << serializeEvent(data.events[i]);
+        file << serializeEvent(normalized.events[i]);
     }
     file << "]\n";
 
@@ -288,6 +469,16 @@ bool SaveManager::load(const std::string& filepath, SaveData& outData) {
     if (outData.participantNames[0].empty()) outData.participantNames[0] = defaultNames[0];
     if (outData.participantNames[1].empty()) outData.participantNames[1] = defaultNames[1];
 
+    outData.refreshSessionFromLegacyMetadata();
+    const std::string participantsArray = extractArray(json, "sessionKingdoms");
+    const auto participantElements = splitArrayElements(participantsArray);
+    if (participantElements.size() == kNumKingdoms) {
+        for (int kingdomSlot = 0; kingdomSlot < kNumKingdoms; ++kingdomSlot) {
+            outData.sessionKingdoms[kingdomSlot] = parseParticipant(participantElements[kingdomSlot]);
+        }
+    }
+    outData.refreshLegacyMetadataFromSession();
+
     // Parse kingdoms
     // Parse kingdoms (JSON keys kept for backward compatibility)
     static const char* kingdomKeys[] = {"whiteKingdom", "blackKingdom"};
@@ -317,9 +508,24 @@ bool SaveManager::load(const std::string& filepath, SaveData& outData) {
     for (const auto& elem : pubElements)
         outData.publicBuildings.push_back(parseBuilding(elem));
 
-    // Grid loading is heavy for large maps — skip for now if not present
-    // (Board will be regenerated from pieces/buildings state for save compatibility)
+    std::string gridArray = extractArray(json, "grid");
     outData.grid.clear();
+    for (const auto& rowElement : splitArrayElements(gridArray)) {
+        std::vector<SaveData::CellData> row;
+        for (const auto& cellElement : splitArrayElements(rowElement)) {
+            SaveData::CellData cell;
+            cell.type = static_cast<CellType>(extractInt(cellElement, "t", static_cast<int>(CellType::Grass)));
+            cell.isInCircle = extractInt(cellElement, "c", 0) != 0;
+            row.push_back(cell);
+        }
+        outData.grid.push_back(std::move(row));
+    }
+
+    std::string eventsArray = extractArray(json, "events");
+    outData.events.clear();
+    for (const auto& elem : splitArrayElements(eventsArray)) {
+        outData.events.push_back(parseEvent(elem));
+    }
 
     return true;
 }
@@ -346,8 +552,7 @@ std::vector<SaveSummary> SaveManager::listSaveSummaries(const std::string& saves
 
         SaveData data;
         if (load(entry.path().string(), data)) {
-            summary.mode = data.mode;
-            summary.participantNames = data.participantNames;
+            summary.kingdoms = data.sessionKingdoms;
         }
 
         std::error_code timeError;

@@ -25,3 +25,13 @@ Building BuildingFactory::createBuilding(BuildingType type, KingdomId owner, sf:
     b.cellHP.assign(b.width * b.height, hp);
     return b;
 }
+
+void BuildingFactory::reset(int nextId) {
+    m_nextId = nextId;
+}
+
+void BuildingFactory::observeExisting(int existingId) {
+    if (existingId >= m_nextId) {
+        m_nextId = existingId + 1;
+    }
+}

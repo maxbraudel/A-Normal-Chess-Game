@@ -86,44 +86,40 @@ void InputHandler::clearMovePreview() {
     m_capturePreviewPieceId = -1;
 }
 
-void InputHandler::handleEvent(const sf::Event& event, sf::RenderWindow& window,
-                                Camera& camera, Board& board,
-                                TurnSystem& turnSystem, Kingdom& activeKingdom,
-                                Kingdom& enemyKingdom,
-                                const std::vector<Building>& publicBuildings,
-                                UIManager& uiManager, const GameConfig& config,
-                                bool allowCommands) {
+void InputHandler::handleEvent(const sf::Event& event, const InputContext& context) {
+    (void) context.uiManager;
+
     // Camera input (always active)
-    handleCameraInput(event, window, camera);
+    handleCameraInput(event, context.window, context.camera);
 
     // K: center on king
     if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::K) {
-        Piece* king = activeKingdom.getKing();
+        Piece* king = context.controlledKingdom.getKing();
         if (king) {
-            float cx = static_cast<float>(king->position.x * config.getCellSizePx() + config.getCellSizePx() / 2);
-            float cy = static_cast<float>(king->position.y * config.getCellSizePx() + config.getCellSizePx() / 2);
-            camera.centerOn({cx, cy});
-        } else if (!activeKingdom.pieces.empty()) {
-            auto& p = activeKingdom.pieces.front();
-            float cx = static_cast<float>(p.position.x * config.getCellSizePx() + config.getCellSizePx() / 2);
-            float cy = static_cast<float>(p.position.y * config.getCellSizePx() + config.getCellSizePx() / 2);
-            camera.centerOn({cx, cy});
+            float cx = static_cast<float>(king->position.x * context.config.getCellSizePx()
+                                          + context.config.getCellSizePx() / 2);
+            float cy = static_cast<float>(king->position.y * context.config.getCellSizePx()
+                                          + context.config.getCellSizePx() / 2);
+            context.camera.centerOn({cx, cy});
+        } else if (!context.controlledKingdom.pieces.empty()) {
+            auto& p = context.controlledKingdom.pieces.front();
+            float cx = static_cast<float>(p.position.x * context.config.getCellSizePx()
+                                          + context.config.getCellSizePx() / 2);
+            float cy = static_cast<float>(p.position.y * context.config.getCellSizePx()
+                                          + context.config.getCellSizePx() / 2);
+            context.camera.centerOn({cx, cy});
         }
     }
 
     switch (m_currentTool) {
         case ToolState::Select:
-            handleSelectTool(event, window, camera, board, turnSystem,
-                              activeKingdom, enemyKingdom, publicBuildings, config,
-                              allowCommands);
+            handleSelectTool(event, context);
             break;
         case ToolState::Build:
-            if (allowCommands) {
-                handleBuildTool(event, window, camera, board, turnSystem, activeKingdom, config,
-                    true);
+            if (context.allowCommands) {
+                handleBuildTool(event, context);
             } else {
-                handleSelectTool(event, window, camera, board, turnSystem,
-                    activeKingdom, enemyKingdom, publicBuildings, config, false);
+                handleSelectTool(event, context);
             }
             break;
         case ToolState::Journal:
@@ -132,23 +128,17 @@ void InputHandler::handleEvent(const sf::Event& event, sf::RenderWindow& window,
     }
 }
 
-void InputHandler::handleSelectTool(const sf::Event& event, sf::RenderWindow& window,
-                                      Camera& camera, Board& board,
-                                      TurnSystem& turnSystem, Kingdom& activeKingdom,
-                                      Kingdom& enemyKingdom,
-                                      const std::vector<Building>& publicBuildings,
-                                      const GameConfig& config,
-                                      bool allowCommands) {
+void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& context) {
     if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
-        sf::Vector2f worldPos = camera.screenToWorld({event.mouseButton.x, event.mouseButton.y}, window);
-        sf::Vector2i cellPos = camera.worldToCell(worldPos, config.getCellSizePx());
+        sf::Vector2f worldPos = context.camera.screenToWorld({event.mouseButton.x, event.mouseButton.y}, context.window);
+        sf::Vector2i cellPos = context.camera.worldToCell(worldPos, context.config.getCellSizePx());
 
-        if (!board.isInBounds(cellPos.x, cellPos.y)) return;
-        Cell& cell = board.getCell(cellPos.x, cellPos.y);
+        if (!context.board.isInBounds(cellPos.x, cellPos.y)) return;
+        Cell& cell = context.board.getCell(cellPos.x, cellPos.y);
         if (!cell.isInCircle) return;
 
-        if (!allowCommands) {
-            Piece* piece = activeKingdom.getPieceAt(cellPos);
+        if (!context.allowCommands) {
+            Piece* piece = context.controlledKingdom.getPieceAt(cellPos);
             if (piece) {
                 m_selectedPiece = piece;
                 m_selectedBuilding = nullptr;
@@ -157,9 +147,9 @@ void InputHandler::handleSelectTool(const sf::Event& event, sf::RenderWindow& wi
                 return;
             }
 
-            Building* building = activeKingdom.getBuildingAt(cellPos);
+            Building* building = context.controlledKingdom.getBuildingAt(cellPos);
             if (!building) {
-                for (auto& b : const_cast<std::vector<Building>&>(publicBuildings)) {
+                for (auto& b : const_cast<std::vector<Building>&>(context.publicBuildings)) {
                     if (b.containsCell(cellPos.x, cellPos.y)) {
                         building = &b;
                         break;
@@ -182,7 +172,7 @@ void InputHandler::handleSelectTool(const sf::Event& event, sf::RenderWindow& wi
         if (m_hasMovePreview) {
             if (m_selectedPiece == m_movedPiece && cellPos == m_moveFrom) {
                 m_movedPiece->position = m_moveFrom;
-                turnSystem.cancelMoveCommand();
+                context.turnSystem.cancelMoveCommand();
 
                 Piece* restoredPiece = m_movedPiece;
                 m_movedPiece = nullptr;
@@ -205,23 +195,23 @@ void InputHandler::handleSelectTool(const sf::Event& event, sf::RenderWindow& wi
 
                 m_movedPiece->position = cellPos;
 
-                Piece* captured = enemyKingdom.getPieceAt(cellPos);
+                Piece* captured = context.opposingKingdom.getPieceAt(cellPos);
                 m_capturePreviewPieceId = captured ? captured->id : -1;
 
-                turnSystem.cancelMoveCommand();
+                context.turnSystem.cancelMoveCommand();
 
                 TurnCommand cmd;
                 cmd.type = TurnCommand::Move;
                 cmd.pieceId = m_movedPiece->id;
                 cmd.origin = m_moveFrom;
                 cmd.destination = cellPos;
-                if (turnSystem.queueCommand(cmd)) {
+                if (context.turnSystem.queueCommand(cmd)) {
                     m_moveTo = cellPos;
                     m_selectedPiece = m_movedPiece;
                     m_selectedBuilding = nullptr;
                 } else {
                     m_movedPiece->position = m_moveTo;
-                    Piece* previousCapture = enemyKingdom.getPieceAt(m_moveTo);
+                    Piece* previousCapture = context.opposingKingdom.getPieceAt(m_moveTo);
                     m_capturePreviewPieceId = previousCapture ? previousCapture->id : -1;
                 }
                 return;
@@ -249,7 +239,7 @@ void InputHandler::handleSelectTool(const sf::Event& event, sf::RenderWindow& wi
                 m_selectedPiece->position = cellPos;
 
                 // Track any enemy piece at the destination for preview-hide
-                Piece* captured = enemyKingdom.getPieceAt(cellPos);
+                Piece* captured = context.opposingKingdom.getPieceAt(cellPos);
                 m_capturePreviewPieceId = captured ? captured->id : -1;
 
                 // Queue the command (includes origin for commitTurn)
@@ -258,7 +248,7 @@ void InputHandler::handleSelectTool(const sf::Event& event, sf::RenderWindow& wi
                 cmd.pieceId = m_selectedPiece->id;
                 cmd.origin = origin;
                 cmd.destination = cellPos;
-                if (turnSystem.queueCommand(cmd)) {
+                if (context.turnSystem.queueCommand(cmd)) {
                     m_movedPiece = m_selectedPiece;
                     m_hasMovePreview = true;
                     m_moveFrom = origin;
@@ -275,19 +265,19 @@ void InputHandler::handleSelectTool(const sf::Event& event, sf::RenderWindow& wi
         }
 
         // ---- Try to select a piece ----
-        Piece* piece = activeKingdom.getPieceAt(cellPos);
+        Piece* piece = context.controlledKingdom.getPieceAt(cellPos);
         if (piece) {
             m_selectedPiece = piece;
             m_selectedBuilding = nullptr;
-            refreshPieceMoves(piece, board, enemyKingdom, config);
+            refreshPieceMoves(piece, context.board, context.opposingKingdom, context.config);
             m_hasMovePreview = false;
             return;
         }
 
         // ---- Try to select a building ----
-        Building* building = activeKingdom.getBuildingAt(cellPos);
+        Building* building = context.controlledKingdom.getBuildingAt(cellPos);
         if (!building) {
-            for (auto& b : const_cast<std::vector<Building>&>(publicBuildings)) {
+            for (auto& b : const_cast<std::vector<Building>&>(context.publicBuildings)) {
                 if (b.containsCell(cellPos.x, cellPos.y)) {
                     building = &b;
                     break;
@@ -306,41 +296,42 @@ void InputHandler::handleSelectTool(const sf::Event& event, sf::RenderWindow& wi
     }
 }
 
-void InputHandler::handleBuildTool(const sf::Event& event, sf::RenderWindow& window,
-                                     Camera& camera, Board& board,
-                                     TurnSystem& turnSystem, Kingdom& activeKingdom,
-                                     const GameConfig& config,
-                                     bool allowCommands) {
-    if (!allowCommands) {
+void InputHandler::handleBuildTool(const sf::Event& event, const InputContext& context) {
+    if (!context.allowCommands) {
         m_hasBuildPreview = false;
         return;
     }
 
     if (event.type == sf::Event::MouseMoved) {
-        sf::Vector2f worldPos = camera.screenToWorld({event.mouseMove.x, event.mouseMove.y}, window);
-        sf::Vector2i cellPos = camera.worldToCell(worldPos, config.getCellSizePx());
+        sf::Vector2f worldPos = context.camera.screenToWorld({event.mouseMove.x, event.mouseMove.y}, context.window);
+        sf::Vector2i cellPos = context.camera.worldToCell(worldPos, context.config.getCellSizePx());
         m_buildPreviewOrigin = cellPos;
         m_hasBuildPreview = true;
     }
 
     if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
-        sf::Vector2f worldPos = camera.screenToWorld({event.mouseButton.x, event.mouseButton.y}, window);
-        sf::Vector2i cellPos = camera.worldToCell(worldPos, config.getCellSizePx());
+        sf::Vector2f worldPos = context.camera.screenToWorld({event.mouseButton.x, event.mouseButton.y}, context.window);
+        sf::Vector2i cellPos = context.camera.worldToCell(worldPos, context.config.getCellSizePx());
 
-        Piece* king = activeKingdom.getKing();
+        Piece* king = context.controlledKingdom.getKing();
         if (!king) {
             // Check if initial pawn (first piece) can build
-            if (!activeKingdom.pieces.empty()) {
-                king = &activeKingdom.pieces.front();
+            if (!context.controlledKingdom.pieces.empty()) {
+                king = &context.controlledKingdom.pieces.front();
             } else return;
         }
 
-        if (BuildSystem::canBuild(m_buildPreviewType, cellPos, *king, board, activeKingdom, config)) {
-            const TurnCommand* pendingBuild = turnSystem.getPendingBuildCommand();
+        if (BuildSystem::canBuild(m_buildPreviewType,
+                                  cellPos,
+                                  *king,
+                                  context.board,
+                                  context.controlledKingdom,
+                                  context.config)) {
+            const TurnCommand* pendingBuild = context.turnSystem.getPendingBuildCommand();
             if (pendingBuild) {
                 bool samePlacement = pendingBuild->buildingType == m_buildPreviewType
                     && pendingBuild->buildOrigin == cellPos;
-                turnSystem.cancelBuildCommand();
+                context.turnSystem.cancelBuildCommand();
                 if (samePlacement) {
                     return;
                 }
@@ -350,7 +341,7 @@ void InputHandler::handleBuildTool(const sf::Event& event, sf::RenderWindow& win
             cmd.type = TurnCommand::Build;
             cmd.buildingType = m_buildPreviewType;
             cmd.buildOrigin = cellPos;
-            turnSystem.queueCommand(cmd);
+            context.turnSystem.queueCommand(cmd);
         }
     }
 }

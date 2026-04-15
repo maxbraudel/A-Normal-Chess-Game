@@ -27,18 +27,26 @@ file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
     src/*.cpp
 )
 
-# Executable
-add_executable(${PROJECT_NAME} ${SOURCES})
+set(CORE_SOURCES ${SOURCES})
+list(REMOVE_ITEM CORE_SOURCES "${CMAKE_SOURCE_DIR}/src/main.cpp")
 
-target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/src)
+# Core library
+add_library(${PROJECT_NAME}Core STATIC ${CORE_SOURCES})
 
-target_link_libraries(${PROJECT_NAME} PRIVATE
+target_include_directories(${PROJECT_NAME}Core PUBLIC ${CMAKE_SOURCE_DIR}/src)
+
+target_link_libraries(${PROJECT_NAME}Core PUBLIC
     sfml-graphics
     sfml-window
     sfml-system
     TGUI::TGUI
     "C:/msys64/ucrt64/lib/libpthread.dll.a"
 )
+
+# Executable
+add_executable(${PROJECT_NAME} src/main.cpp)
+
+target_link_libraries(${PROJECT_NAME} PRIVATE ${PROJECT_NAME}Core)
 
 # Copy assets to build directory
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
@@ -85,3 +93,11 @@ foreach(DLL ${RUNTIME_DLLS})
         )
     endif()
 endforeach()
+
+enable_testing()
+
+add_executable(${PROJECT_NAME}Tests tests/TestMain.cpp)
+target_link_libraries(${PROJECT_NAME}Tests PRIVATE ${PROJECT_NAME}Core)
+target_include_directories(${PROJECT_NAME}Tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
+
+add_test(NAME ${PROJECT_NAME}Tests COMMAND ${PROJECT_NAME}Tests)

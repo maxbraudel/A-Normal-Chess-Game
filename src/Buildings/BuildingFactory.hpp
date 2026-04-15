@@ -8,6 +8,8 @@ public:
     BuildingFactory();
     Building createBuilding(BuildingType type, KingdomId owner, sf::Vector2i origin,
                             const GameConfig& config);
+    void reset(int nextId = 100);
+    void observeExisting(int existingId);
 private:
     int m_nextId;
 };

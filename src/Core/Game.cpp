@@ -1,9 +1,9 @@
 #include "Core/Game.hpp"
-#include "Board/BoardGenerator.hpp"
 #include "Render/OverlayRenderer.hpp"
 #include "Save/SaveData.hpp"
 #include "Buildings/BuildingType.hpp"
 #include "Systems/BuildSystem.hpp"
+#include "Input/InputContext.hpp"
 #include <algorithm>
 #include <iostream>
 #include <thread>
@@ -62,47 +62,11 @@ struct AIWorldSnapshot {
     std::vector<Building> publicBuildings;
 };
 
-void relinkBoardSnapshot(Board& board,
-                         std::array<Kingdom, kNumKingdoms>& kingdoms,
-                         std::vector<Building>& publicBuildings) {
-    const int diameter = board.getDiameter();
-    for (int y = 0; y < diameter; ++y) {
-        for (int x = 0; x < diameter; ++x) {
-            Cell& cell = board.getCell(x, y);
-            cell.piece = nullptr;
-            cell.building = nullptr;
-        }
-    }
-
-    for (auto& building : publicBuildings) {
-        for (const auto& pos : building.getOccupiedCells()) {
-            if (board.isInBounds(pos.x, pos.y)) {
-                board.getCell(pos.x, pos.y).building = &building;
-            }
-        }
-    }
-
-    for (auto& kingdom : kingdoms) {
-        for (auto& building : kingdom.buildings) {
-            for (const auto& pos : building.getOccupiedCells()) {
-                if (board.isInBounds(pos.x, pos.y)) {
-                    board.getCell(pos.x, pos.y).building = &building;
-                }
-            }
-        }
-        for (auto& piece : kingdom.pieces) {
-            if (board.isInBounds(piece.position.x, piece.position.y)) {
-                board.getCell(piece.position.x, piece.position.y).piece = &piece;
-            }
-        }
-    }
-}
-
 AIWorldSnapshot makeAIWorldSnapshot(const Board& board,
                                     const std::array<Kingdom, kNumKingdoms>& kingdoms,
                                     const std::vector<Building>& publicBuildings) {
     AIWorldSnapshot snapshot{board, kingdoms, publicBuildings};
-    relinkBoardSnapshot(snapshot.board, snapshot.kingdoms, snapshot.publicBuildings);
+    relinkBoardState(snapshot.board, snapshot.kingdoms, snapshot.publicBuildings);
     return snapshot;
 }
 }
@@ -149,30 +113,18 @@ LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 #endif
 
 Game::Game()
-    : m_state(GameState::MainMenu),
-      m_kingdoms{Kingdom(KingdomId::White), Kingdom(KingdomId::Black)},
-    m_controllers(controllersForGameMode(GameMode::HumanVsAI)),
-    m_participantNames(defaultParticipantNames(GameMode::HumanVsAI)) {}
+    : m_state(GameState::MainMenu) {}
 
 KingdomId Game::humanKingdomId() const {
-    for (int i = 0; i < kNumKingdoms; ++i)
-        if (m_controllers[i] == ControllerType::Human)
-            return m_kingdoms[i].id;
-    return KingdomId::White; // fallback
+    return m_engine.humanKingdomId();
 }
 
 std::string Game::participantName(KingdomId id) const {
-    const std::string& configuredName = m_participantNames[kingdomIndex(id)];
-    if (!configuredName.empty()) {
-        return configuredName;
-    }
-
-    return (id == KingdomId::White) ? "White" : "Black";
+    return m_engine.participantName(id);
 }
 
 std::string Game::activeTurnLabel() const {
-    const KingdomId activeId = m_turnSystem.getActiveKingdom();
-    return participantName(activeId) + " (" + controllerTypeLabel(m_controllers[kingdomIndex(activeId)]) + ")";
+    return m_engine.activeTurnLabel();
 }
 
 void Game::run() {
@@ -289,9 +241,9 @@ void Game::handleInput() {
 
         if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::P) {
             if (m_state == GameState::Playing || m_state == GameState::Paused || m_state == GameState::GameOver) {
-                m_debugRecorder.exportHistory(m_gameName,
-                                             m_turnSystem.getTurnNumber(),
-                                             m_turnSystem.getActiveKingdom());
+                m_debugRecorder.exportHistory(gameName(),
+                                             turnSystem().getTurnNumber(),
+                                             turnSystem().getActiveKingdom());
             }
         }
 
@@ -306,9 +258,19 @@ void Game::handleInput() {
             const bool allowCommands = isActiveHuman();
             Kingdom& selectableKingdom = allowCommands ? activeKingdom() : kingdom(humanKingdomId());
             Kingdom& opposingKingdom = allowCommands ? enemyKingdom() : kingdom(opponent(humanKingdomId()));
-            m_input.handleEvent(event, m_window, m_camera, m_board, m_turnSystem,
-                                 selectableKingdom, opposingKingdom, m_publicBuildings,
-                                 m_uiManager, m_config, allowCommands);
+            const InputContext inputContext{
+                m_window,
+                m_camera,
+                board(),
+                turnSystem(),
+                selectableKingdom,
+                opposingKingdom,
+                publicBuildings(),
+                m_uiManager,
+                m_config,
+                allowCommands
+            };
+            m_input.handleEvent(event, inputContext);
         }
     }
 }
@@ -338,8 +300,8 @@ void Game::render() {
     if (m_state == GameState::Playing || m_state == GameState::Paused || m_state == GameState::GameOver) {
         m_camera.applyTo(m_window);
         m_renderer.setSkipPieceId(m_input.getCapturePreviewPieceId());
-        m_renderer.drawWorldBase(m_window, m_camera, m_board, m_kingdoms,
-            m_publicBuildings);
+        m_renderer.drawWorldBase(m_window, m_camera, board(), kingdoms(),
+            publicBuildings());
 
         const bool showActionOverlays = isActiveHuman();
 
@@ -357,7 +319,7 @@ void Game::render() {
             }
         }
 
-        m_renderer.drawPiecesLayer(m_window, m_camera, m_kingdoms);
+        m_renderer.drawPiecesLayer(m_window, m_camera, kingdoms());
 
         // Draw overlays based on input state
         if (m_input.getCurrentTool() == ToolState::Select) {
@@ -381,12 +343,12 @@ void Game::render() {
             Kingdom& builder = activeKingdom();
             Piece* king = builder.getKing();
             bool valid = king && BuildSystem::canBuild(bt, m_input.getBuildPreviewOrigin(),
-                                                        *king, m_board, builder, m_config);
+                                                        *king, board(), builder, m_config);
             m_renderer.getOverlay().drawBuildPreview(m_window, m_camera,
                 m_input.getBuildPreviewOrigin(), bw, bh, m_config.getCellSizePx(), valid);
         }
         if (showActionOverlays) {
-            if (const TurnCommand* pendingBuild = m_turnSystem.getPendingBuildCommand()) {
+            if (const TurnCommand* pendingBuild = turnSystem().getPendingBuildCommand()) {
             int bw = m_config.getBuildingWidth(pendingBuild->buildingType);
             int bh = m_config.getBuildingHeight(pendingBuild->buildingType);
             m_renderer.getOverlay().drawBuildPreview(m_window, m_camera,
@@ -394,8 +356,8 @@ void Game::render() {
             }
         }
         m_renderer.getOverlay().drawZoneIndicators(m_window, m_camera, m_hudView,
-            m_windowSize, m_board,
-            m_publicBuildings, m_kingdoms, m_config.getCellSizePx(), m_assets);
+            m_windowSize, board(),
+            publicBuildings(), kingdoms(), m_config.getCellSizePx(), m_assets);
     }
 
     m_window.setView(m_hudView);
@@ -415,52 +377,16 @@ bool Game::startNewGame(const GameSessionConfig& session, std::string* errorMess
     discardPendingAITurn();
     m_input.clearMovePreview();
     m_input.setTool(ToolState::Select);
-    m_turnSystem.resetPendingCommands();
+    m_engine.resetPendingTurn();
 
-    m_gameName = session.saveName;
-    m_controllers = controllersForGameMode(session.mode);
-    m_participantNames = session.participantNames;
-    const auto defaultNames = defaultParticipantNames(session.mode);
-    for (int i = 0; i < kNumKingdoms; ++i) {
-        if (m_participantNames[i].empty()) {
-            m_participantNames[i] = defaultNames[i];
-        }
+    if (!m_engine.startNewSession(session, m_config, errorMessage)) {
+        return false;
     }
 
-    // Init board
-    m_board.init(m_config.getMapRadius());
-    m_publicBuildings.clear();
-    auto spawnResult = BoardGenerator::generate(m_board, m_config, m_publicBuildings);
-
-    // Init kingdoms
-    for (int i = 0; i < kNumKingdoms; ++i) {
-        KingdomId id = static_cast<KingdomId>(i);
-        m_kingdoms[i] = Kingdom(id);
-        m_kingdoms[i].gold = m_config.getStartingGold();
-    }
-
-    // Create initial kings
-    Piece whiteKing = m_pieceFactory.createPiece(PieceType::King, KingdomId::White, spawnResult.playerSpawn);
-    kingdom(KingdomId::White).addPiece(whiteKing);
-    m_board.getCell(spawnResult.playerSpawn.x, spawnResult.playerSpawn.y).piece = &kingdom(KingdomId::White).pieces.back();
-
-    Piece blackKing = m_pieceFactory.createPiece(PieceType::King, KingdomId::Black, spawnResult.aiSpawn);
-    kingdom(KingdomId::Black).addPiece(blackKing);
-    m_board.getCell(spawnResult.aiSpawn.x, spawnResult.aiSpawn.y).piece = &kingdom(KingdomId::Black).pieces.back();
-
-    // Init turn system
-    m_turnSystem = TurnSystem();
-    m_turnSystem.setActiveKingdom(KingdomId::White);
-    m_turnSystem.setTurnNumber(1);
-
-    // Event log
-    m_eventLog.clear();
-    m_eventLog.log(1, KingdomId::White,
-        "Game started: " + m_gameName + " [" + gameModeLabel(session.mode) + "]");
     m_debugRecorder.reset();
-    m_debugRecorder.recordSnapshot(m_turnSystem.getTurnNumber(),
-                                   m_turnSystem.getActiveKingdom(),
-                                   m_kingdoms,
+    m_debugRecorder.recordSnapshot(turnSystem().getTurnNumber(),
+                                   turnSystem().getActiveKingdom(),
+                                   kingdoms(),
                                    "initial_state_new_game");
 
     // Center camera on the primary human side, or white when spectating AI vs AI.
@@ -484,7 +410,7 @@ bool Game::loadGame(const std::string& saveName) {
     discardPendingAITurn();
     m_input.clearMovePreview();
     m_input.setTool(ToolState::Select);
-    m_turnSystem.resetPendingCommands();
+    m_engine.resetPendingTurn();
 
     SaveData data;
     std::string path = "saves/" + saveName + ".json";
@@ -493,52 +419,19 @@ bool Game::loadGame(const std::string& saveName) {
         return false;
     }
 
-    m_gameName = data.gameName.empty() ? saveName : data.gameName;
-    m_controllers = data.controllers;
-    m_participantNames = data.participantNames;
-
-    // Restore board
-    m_board.init(data.mapRadius);
-    // If grid data was saved, restore it
-    if (!data.grid.empty()) {
-        auto& grid = m_board.getGrid();
-        int diam = m_board.getDiameter();
-        for (int y = 0; y < diam && y < static_cast<int>(data.grid.size()); ++y) {
-            for (int x = 0; x < diam && x < static_cast<int>(data.grid[y].size()); ++x) {
-                grid[y][x].type = data.grid[y][x].type;
-                grid[y][x].isInCircle = data.grid[y][x].isInCircle;
-            }
-        }
-    } else {
-        // Regenerate map (simplified restore — full restore requires grid save)
-        m_publicBuildings.clear();
-        BoardGenerator::generate(m_board, m_config, m_publicBuildings);
+    if (data.gameName.empty()) {
+        data.gameName = saveName;
     }
 
-    // Restore kingdoms
-    for (int i = 0; i < kNumKingdoms; ++i) {
-        KingdomId id = static_cast<KingdomId>(i);
-        m_kingdoms[i] = Kingdom(id);
-        m_kingdoms[i].gold = data.kingdoms[i].gold;
-        for (const auto& p : data.kingdoms[i].pieces) m_kingdoms[i].addPiece(p);
-        for (const auto& b : data.kingdoms[i].buildings) m_kingdoms[i].addBuilding(b);
+    std::string error;
+    if (!m_engine.restoreFromSave(data, m_config, &error)) {
+        std::cerr << "Failed to restore save: " << error << std::endl;
+        return false;
     }
-
-    m_publicBuildings = data.publicBuildings;
-    relinkBoardSnapshot(m_board, m_kingdoms, m_publicBuildings);
-
-    // Restore turn system
-    m_turnSystem = TurnSystem();
-    m_turnSystem.setActiveKingdom(data.activeKingdom);
-    m_turnSystem.setTurnNumber(data.turnNumber);
-
-    // Restore events
-    m_eventLog.clear();
-    for (const auto& e : data.events) m_eventLog.log(e.turnNumber, e.kingdom, e.message);
     m_debugRecorder.reset();
-    m_debugRecorder.recordSnapshot(m_turnSystem.getTurnNumber(),
-                                   m_turnSystem.getActiveKingdom(),
-                                   m_kingdoms,
+    m_debugRecorder.recordSnapshot(turnSystem().getTurnNumber(),
+                                   turnSystem().getActiveKingdom(),
+                                   kingdoms(),
                                    "initial_state_loaded_game");
 
     // Center camera on human player's king
@@ -557,38 +450,8 @@ bool Game::loadGame(const std::string& saveName) {
 }
 
 bool Game::saveGame() {
-    SaveData data;
-    data.gameName = m_gameName;
-    data.turnNumber = m_turnSystem.getTurnNumber();
-    data.activeKingdom = m_turnSystem.getActiveKingdom();
-    data.mapRadius = m_board.getRadius();
-    data.mode = gameModeFromControllers(m_controllers);
-    data.controllers = m_controllers;
-    data.participantNames = m_participantNames;
-
-    // Grid (only save cell types and circle mask)
-    int diam = m_board.getDiameter();
-    data.grid.resize(diam);
-    for (int y = 0; y < diam; ++y) {
-        data.grid[y].resize(diam);
-        for (int x = 0; x < diam; ++x) {
-            const Cell& cell = m_board.getCell(x, y);
-            data.grid[y][x].type = cell.type;
-            data.grid[y][x].isInCircle = cell.isInCircle;
-        }
-    }
-
-    for (int i = 0; i < kNumKingdoms; ++i) {
-        data.kingdoms[i].id = static_cast<KingdomId>(i);
-        data.kingdoms[i].gold = m_kingdoms[i].gold;
-        data.kingdoms[i].pieces.assign(m_kingdoms[i].pieces.begin(), m_kingdoms[i].pieces.end());
-        data.kingdoms[i].buildings = m_kingdoms[i].buildings;
-    }
-
-    data.publicBuildings = m_publicBuildings;
-    data.events = m_eventLog.getEvents();
-
-    std::string path = "saves/" + m_gameName + ".json";
+    SaveData data = m_engine.createSaveData();
+    std::string path = "saves/" + gameName() + ".json";
     if (!m_saveManager.save(path, data)) {
         std::cerr << "Failed to save game!" << std::endl;
         return false;
@@ -598,30 +461,30 @@ bool Game::saveGame() {
 }
 
 void Game::commitPlayerTurn() {
-    KingdomId activeId = m_turnSystem.getActiveKingdom();
+    KingdomId activeId = turnSystem().getActiveKingdom();
     KingdomId enemyId  = opponent(activeId);
 
-    m_turnSystem.commitTurn(m_board, activeKingdom(), enemyKingdom(),
-                             m_publicBuildings, m_config, m_eventLog,
-                             m_pieceFactory, m_buildingFactory);
-    m_debugRecorder.logTurnState(m_turnSystem.getTurnNumber(), m_kingdoms, "after player commit");
-    m_debugRecorder.recordSnapshot(m_turnSystem.getTurnNumber(),
-                                   m_turnSystem.getActiveKingdom(),
-                                   m_kingdoms,
+    turnSystem().commitTurn(board(), activeKingdom(), enemyKingdom(),
+                            publicBuildings(), m_config, eventLog(),
+                            pieceFactory(), buildingFactory());
+    m_debugRecorder.logTurnState(turnSystem().getTurnNumber(), kingdoms(), "after player commit");
+    m_debugRecorder.recordSnapshot(turnSystem().getTurnNumber(),
+                                   turnSystem().getActiveKingdom(),
+                                   kingdoms(),
                                    "after_player_commit");
 
     // Check if opponent is in checkmate
-    if (CheckSystem::isCheckmate(enemyId, m_board, m_config)) {
+    if (CheckSystem::isCheckmate(enemyId, board(), m_config)) {
         m_state = GameState::GameOver;
         std::string winner = participantName(activeId);
-        m_eventLog.log(m_turnSystem.getTurnNumber(), activeId,
-                        "Checkmate! " + winner + " wins!");
+        eventLog().log(turnSystem().getTurnNumber(), activeId,
+                       "Checkmate! " + winner + " wins!");
         m_input.clearMovePreview();
         m_input.clearSelection();
         return;
     }
 
-    m_turnSystem.advanceTurn();
+    turnSystem().advanceTurn();
     m_input.clearMovePreview();
     m_input.clearSelection();
     refreshTurnPhase();
@@ -630,7 +493,7 @@ void Game::commitPlayerTurn() {
 
 void Game::resetPlayerTurn() {
     m_input.cancelLiveMove();  // restore piece position if a live move is pending
-    m_turnSystem.resetPendingCommands();
+    turnSystem().resetPendingCommands();
     m_input.clearSelection();
 }
 
@@ -647,7 +510,7 @@ void Game::setupUICallbacks() {
         discardPendingAITurn();
         m_input.clearMovePreview();
         m_input.setTool(ToolState::Select);
-        m_turnSystem.resetPendingCommands();
+        turnSystem().resetPendingCommands();
         m_state = GameState::MainMenu;
         m_uiManager.hidePauseMenu();
         m_uiManager.showMainMenu();
@@ -702,7 +565,7 @@ void Game::setupUICallbacks() {
     });
     m_uiManager.toolBar().setOnLog([this]() {
         m_input.setTool(ToolState::Journal);
-        m_uiManager.showEventLogPanel(m_eventLog);
+        m_uiManager.showEventLogPanel(eventLog());
     });
 
     // Build tool panel
@@ -712,22 +575,18 @@ void Game::setupUICallbacks() {
     });
 
     // Piece panel upgrade
-    m_uiManager.piecePanel().setOnUpgrade([this](int pieceId) {
+    m_uiManager.piecePanel().setOnUpgrade([this](int pieceId, int targetType) {
         if (!isActiveHuman()) return;
         Piece* piece = activeKingdom().getPieceById(pieceId);
         if (!piece) return;
         TurnCommand cmd;
         cmd.type = TurnCommand::Upgrade;
         cmd.upgradePieceId = piece->id;
-        // Determine next type
-        switch (piece->type) {
-            case PieceType::Pawn:   cmd.upgradeTarget = PieceType::Knight; break;
-            case PieceType::Knight: cmd.upgradeTarget = PieceType::Bishop; break;
-            case PieceType::Bishop: cmd.upgradeTarget = PieceType::Rook;   break;
-            case PieceType::Rook:   cmd.upgradeTarget = PieceType::Queen;  break;
-            default: return;
+        cmd.upgradeTarget = static_cast<PieceType>(targetType);
+        if (!piece->canUpgradeTo(cmd.upgradeTarget, m_config)) {
+            return;
         }
-        m_turnSystem.queueCommand(cmd);
+        turnSystem().queueCommand(cmd);
     });
 
     // Barracks panel produce
@@ -737,14 +596,14 @@ void Game::setupUICallbacks() {
         cmd.type = TurnCommand::Produce;
         cmd.barracksId = barracksId;
         cmd.produceType = static_cast<PieceType>(pieceType);
-        m_turnSystem.queueCommand(cmd);
+        turnSystem().queueCommand(cmd);
     });
 }
 
 void Game::updateUIState() {
     int gold = activeKingdom().gold;
     const bool allowCommands = isActiveHuman();
-    m_uiManager.hud().update(m_turnSystem.getTurnNumber(), activeTurnLabel(), gold, allowCommands);
+    m_uiManager.hud().update(turnSystem().getTurnNumber(), activeTurnLabel(), gold, allowCommands);
     const KingdomId viewedKingdomId = allowCommands ? activeKingdom().id : humanKingdomId();
 
     // Show contextual panels
@@ -761,7 +620,7 @@ void Game::updateUIState() {
 }
 
 void Game::refreshTurnPhase() {
-    m_turnPhase = (m_turnSystem.getActiveKingdom() == KingdomId::White)
+    m_turnPhase = (turnSystem().getActiveKingdom() == KingdomId::White)
         ? TurnPhase::WhiteTurn
         : TurnPhase::BlackTurn;
 }
@@ -779,8 +638,8 @@ void Game::startAITurnIfNeeded() {
         return;
     }
 
-    const KingdomId activeId = m_turnSystem.getActiveKingdom();
-    const int turnNumber = m_turnSystem.getTurnNumber();
+    const KingdomId activeId = turnSystem().getActiveKingdom();
+    const int turnNumber = turnSystem().getTurnNumber();
     const std::uint64_t generation = m_aiTaskGeneration.load(std::memory_order_relaxed);
 
     auto task = std::make_shared<AsyncAITaskState>();
@@ -789,7 +648,7 @@ void Game::startAITurnIfNeeded() {
     task->turnNumber = turnNumber;
     m_aiTask = task;
 
-    AIWorldSnapshot snapshot = makeAIWorldSnapshot(m_board, m_kingdoms, m_publicBuildings);
+    AIWorldSnapshot snapshot = makeAIWorldSnapshot(board(), kingdoms(), publicBuildings());
     GameConfig configCopy = m_config;
 
     if (m_useNewAI) {
@@ -839,8 +698,8 @@ void Game::pollAITurn() {
     const std::uint64_t currentGeneration = m_aiTaskGeneration.load(std::memory_order_relaxed);
     if (task->generation != currentGeneration
         || m_state != GameState::Playing
-        || m_turnSystem.getActiveKingdom() != task->activeKingdom
-        || m_turnSystem.getTurnNumber() != task->turnNumber) {
+        || turnSystem().getActiveKingdom() != task->activeKingdom
+        || turnSystem().getTurnNumber() != task->turnNumber) {
         return;
     }
 
@@ -875,9 +734,9 @@ void Game::pollAITurn() {
             }
             std::cout << '\n';
         }
-        m_eventLog.log(task->turnNumber, task->activeKingdom, "AI Objective: " + directorPlan.objectiveName);
+        eventLog().log(task->turnNumber, task->activeKingdom, "AI Objective: " + directorPlan.objectiveName);
         for (const auto& cmd : directorPlan.commands) {
-            m_turnSystem.queueCommand(cmd);
+            turnSystem().queueCommand(cmd);
         }
     } else {
         m_ai.applyTurnPlanMetadata(plan);
@@ -898,30 +757,32 @@ void Game::pollAITurn() {
             }
             std::cout << '\n';
         }
-        m_eventLog.log(task->turnNumber, task->activeKingdom, "AI Phase: " + plan.phaseName);
+        eventLog().log(task->turnNumber, task->activeKingdom, "AI Phase: " + plan.phaseName);
         for (const auto& cmd : plan.commands) {
-            m_turnSystem.queueCommand(cmd);
+            turnSystem().queueCommand(cmd);
         }
     }
-    m_eventLog.log(task->turnNumber, task->activeKingdom, "AI completed turn planning.");
+    eventLog().log(task->turnNumber, task->activeKingdom, "AI completed turn planning.");
 
-    const KingdomId activeId = m_turnSystem.getActiveKingdom();
+    const KingdomId activeId = turnSystem().getActiveKingdom();
     const KingdomId enemyId = opponent(activeId);
-    m_turnSystem.commitTurn(m_board, activeKingdom(), enemyKingdom(),
-        m_publicBuildings, m_config, m_eventLog,
-        m_pieceFactory, m_buildingFactory);
-    m_debugRecorder.logTurnState(m_turnSystem.getTurnNumber(), m_kingdoms, "after ai commit");
-    m_debugRecorder.recordSnapshot(m_turnSystem.getTurnNumber(),
-                                   m_turnSystem.getActiveKingdom(),
-                                   m_kingdoms,
+    turnSystem().commitTurn(board(), activeKingdom(), enemyKingdom(),
+        publicBuildings(), m_config, eventLog(),
+        pieceFactory(), buildingFactory());
+    m_debugRecorder.logTurnState(turnSystem().getTurnNumber(), kingdoms(), "after ai commit");
+    m_debugRecorder.recordSnapshot(turnSystem().getTurnNumber(),
+                                   turnSystem().getActiveKingdom(),
+                                   kingdoms(),
                                    "after_ai_commit");
-    m_turnSystem.advanceTurn();
-    refreshTurnPhase();
 
-    if (CheckSystem::isCheckmate(enemyId, m_board, m_config)) {
+    if (CheckSystem::isCheckmate(enemyId, board(), m_config)) {
         m_state = GameState::GameOver;
         std::string winner = participantName(activeId);
-        m_eventLog.log(m_turnSystem.getTurnNumber(), activeId,
+        eventLog().log(turnSystem().getTurnNumber(), activeId,
             "Checkmate! " + winner + " wins!");
+        return;
     }
+
+    turnSystem().advanceTurn();
+    refreshTurnPhase();
 }

@@ -141,6 +141,9 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                     case BuildingType::Arena: cost = config.getArenaCost(); break;
                     default: break;
                 }
+                if (activeKingdom.gold < cost) {
+                    break;
+                }
                 activeKingdom.gold -= cost;
                 activeKingdom.addBuilding(building);
 
@@ -159,8 +162,11 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                     if (b.id == cmd.barracksId) { barracks = &b; break; }
                 }
                 if (barracks) {
+                    const int cost = config.getRecruitCost(cmd.produceType);
+                    if (activeKingdom.gold < cost) {
+                        break;
+                    }
                     ProductionSystem::startProduction(*barracks, cmd.produceType, config);
-                    int cost = config.getRecruitCost(cmd.produceType);
                     activeKingdom.gold -= cost;
                     log.log(m_turnNumber, m_activeKingdom, "Started production");
                 }
@@ -170,6 +176,9 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                 Piece* piece = activeKingdom.getPieceById(cmd.upgradePieceId);
                 if (piece) {
                     int cost = config.getUpgradeCost(piece->type, cmd.upgradeTarget);
+                    if (activeKingdom.gold < cost || !XPSystem::canUpgrade(*piece, cmd.upgradeTarget, config)) {
+                        break;
+                    }
                     activeKingdom.gold -= cost;
                     XPSystem::upgrade(*piece, cmd.upgradeTarget);
                     log.log(m_turnNumber, m_activeKingdom, "Upgraded a piece");

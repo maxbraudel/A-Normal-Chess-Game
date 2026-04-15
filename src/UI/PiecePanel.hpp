@@ -12,14 +12,17 @@ public:
     void show(const Piece& piece, const GameConfig& config, bool allowUpgrade);
     void hide();
 
-    void setOnUpgrade(std::function<void(int pieceId)> callback);
+    void setOnUpgrade(std::function<void(int pieceId, int targetType)> callback);
 
 private:
     tgui::Panel::Ptr m_panel;
     tgui::Label::Ptr m_typeLabel;
     tgui::Label::Ptr m_xpLabel;
     tgui::Label::Ptr m_levelLabel;
-    tgui::Button::Ptr m_upgradeBtn;
-    std::function<void(int)> m_onUpgrade;
+    tgui::Button::Ptr m_primaryUpgradeBtn;
+    tgui::Button::Ptr m_secondaryUpgradeBtn;
+    std::function<void(int, int)> m_onUpgrade;
     int m_currentPieceId = -1;
+    int m_primaryUpgradeTarget = -1;
+    int m_secondaryUpgradeTarget = -1;
 };

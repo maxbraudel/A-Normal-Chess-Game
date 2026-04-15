@@ -24,29 +24,30 @@ std::vector<TurnCommand> AIStrategySpecial::decide(const Board& board, Kingdom& 
     // =========================================================================
     // 1. Upgrades: upgrade pieces when possible (no phase restriction)
     // =========================================================================
+    int knightCount = 0;
+    int bishopCount = 0;
+    for (const auto& piece : self.pieces) {
+        if (piece.type == PieceType::Knight) ++knightCount;
+        if (piece.type == PieceType::Bishop) ++bishopCount;
+    }
+
     for (auto& piece : self.pieces) {
         if (piece.type == PieceType::King || piece.type == PieceType::Queen) continue;
 
-        // Smart upgrade path based on phase
         PieceType target = PieceType::Pawn;
         AIPhase phase = brain.getPhase();
 
         switch (piece.type) {
             case PieceType::Pawn:
-                // In aggression/endgame, prefer knights (more tactical)
-                // Otherwise, context-dependent
-                target = PieceType::Knight;
+                if (phase == AIPhase::AGGRESSION || phase == AIPhase::ENDGAME) {
+                    target = PieceType::Knight;
+                } else {
+                    target = (knightCount <= bishopCount) ? PieceType::Knight : PieceType::Bishop;
+                }
                 break;
             case PieceType::Knight:
-                target = PieceType::Bishop;
-                break;
             case PieceType::Bishop:
                 target = PieceType::Rook;
-                break;
-            case PieceType::Rook:
-                // Only upgrade to Queen if we don't have one and have gold
-                if (!self.hasQueen()) target = PieceType::Queen;
-                else continue; // Don't downgrade value by upgrading rook
                 break;
             default:
                 continue;
@@ -60,6 +61,11 @@ std::vector<TurnCommand> AIStrategySpecial::decide(const Board& board, Kingdom& 
                 cmd.upgradePieceId = piece.id;
                 cmd.upgradeTarget = target;
                 commands.push_back(cmd);
+                self.gold -= cost;
+                if (piece.type == PieceType::Pawn) {
+                    if (target == PieceType::Knight) ++knightCount;
+                    if (target == PieceType::Bishop) ++bishopCount;
+                }
             }
         }
     }

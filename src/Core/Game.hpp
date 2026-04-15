@@ -21,16 +21,10 @@
 #include "Core/GameState.hpp"
 #include "Core/TurnPhase.hpp"
 #include "Core/GameClock.hpp"
+#include "Core/GameEngine.hpp"
 #include "Config/GameConfig.hpp"
 #include "Config/AIConfig.hpp"
 #include "Debug/GameStateDebugRecorder.hpp"
-#include "Board/Board.hpp"
-#include "Kingdom/Kingdom.hpp"
-#include "Buildings/Building.hpp"
-#include "Units/PieceFactory.hpp"
-#include "Buildings/BuildingFactory.hpp"
-#include "Systems/TurnSystem.hpp"
-#include "Systems/EventLog.hpp"
 #include "Systems/CheckSystem.hpp"
 #include "AI/AIController.hpp"
 #include "AI/AIDirector.hpp"
@@ -79,19 +73,39 @@ private:
     void handleNativeResize(sf::Vector2u newSize);
 #endif
 
+    Board& board() { return m_engine.board(); }
+    const Board& board() const { return m_engine.board(); }
+
+    std::array<Kingdom, kNumKingdoms>& kingdoms() { return m_engine.kingdoms(); }
+    const std::array<Kingdom, kNumKingdoms>& kingdoms() const { return m_engine.kingdoms(); }
+
+    std::vector<Building>& publicBuildings() { return m_engine.publicBuildings(); }
+    const std::vector<Building>& publicBuildings() const { return m_engine.publicBuildings(); }
+
+    TurnSystem& turnSystem() { return m_engine.turnSystem(); }
+    const TurnSystem& turnSystem() const { return m_engine.turnSystem(); }
+
+    EventLog& eventLog() { return m_engine.eventLog(); }
+    const EventLog& eventLog() const { return m_engine.eventLog(); }
+
+    PieceFactory& pieceFactory() { return m_engine.pieceFactory(); }
+    BuildingFactory& buildingFactory() { return m_engine.buildingFactory(); }
+
+    std::string gameName() const { return m_engine.gameName(); }
+
     // ---- Kingdom helpers (generic, side-agnostic) ----
-    Kingdom&       kingdom(KingdomId id)       { return m_kingdoms[kingdomIndex(id)]; }
-    const Kingdom& kingdom(KingdomId id) const { return m_kingdoms[kingdomIndex(id)]; }
+    Kingdom&       kingdom(KingdomId id)       { return m_engine.kingdom(id); }
+    const Kingdom& kingdom(KingdomId id) const { return m_engine.kingdom(id); }
 
-    Kingdom&       activeKingdom()       { return kingdom(m_turnSystem.getActiveKingdom()); }
-    const Kingdom& activeKingdom() const { return kingdom(m_turnSystem.getActiveKingdom()); }
+    Kingdom&       activeKingdom()       { return m_engine.activeKingdom(); }
+    const Kingdom& activeKingdom() const { return m_engine.activeKingdom(); }
 
-    Kingdom&       enemyKingdom()       { return kingdom(opponent(m_turnSystem.getActiveKingdom())); }
-    const Kingdom& enemyKingdom() const { return kingdom(opponent(m_turnSystem.getActiveKingdom())); }
+    Kingdom&       enemyKingdom()       { return m_engine.enemyKingdom(); }
+    const Kingdom& enemyKingdom() const { return m_engine.enemyKingdom(); }
 
-    bool isHumanControlled(KingdomId id) const { return m_controllers[kingdomIndex(id)] == ControllerType::Human; }
-    bool isActiveHuman() const { return isHumanControlled(m_turnSystem.getActiveKingdom()); }
-    bool isActiveAI()    const { return !isActiveHuman(); }
+    bool isHumanControlled(KingdomId id) const { return m_engine.isHumanControlled(id); }
+    bool isActiveHuman() const { return m_engine.isActiveHuman(); }
+    bool isActiveAI()    const { return m_engine.isActiveAI(); }
 
     KingdomId humanKingdomId() const;
 
@@ -105,8 +119,6 @@ private:
     GameState m_state;
     TurnPhase m_turnPhase = TurnPhase::WhiteTurn;
     GameClock m_clock;
-    std::string m_gameName;
-    std::array<std::string, kNumKingdoms> m_participantNames;
 
     struct AsyncAITaskState {
         std::mutex mutex;
@@ -126,17 +138,7 @@ private:
     GameConfig m_config;
     AIConfig m_aiConfig;
 
-    // Game data
-    Board m_board;
-    std::array<Kingdom, kNumKingdoms> m_kingdoms;
-    std::array<ControllerType, kNumKingdoms> m_controllers;
-    std::vector<Building> m_publicBuildings;
-    PieceFactory m_pieceFactory;
-    BuildingFactory m_buildingFactory;
-
-    // Systems
-    TurnSystem m_turnSystem;
-    EventLog m_eventLog;
+    GameEngine m_engine;
     GameStateDebugRecorder m_debugRecorder;
 
     // AI

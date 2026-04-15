@@ -16,17 +16,59 @@ enum class GameMode {
     AIvsAI = 2
 };
 
+struct KingdomParticipantConfig {
+    KingdomId kingdom = KingdomId::White;
+    ControllerType controller = ControllerType::Human;
+    std::string participantName = "Player";
+};
+
+inline KingdomParticipantConfig makeKingdomParticipantConfig(KingdomId kingdom,
+                                                             ControllerType controller,
+                                                             const std::string& participantName) {
+    return KingdomParticipantConfig{kingdom, controller, participantName};
+}
+
+inline std::array<KingdomParticipantConfig, kNumKingdoms> defaultKingdomParticipants(GameMode mode) {
+    switch (mode) {
+        case GameMode::HumanVsAI:
+            return {
+                makeKingdomParticipantConfig(KingdomId::White, ControllerType::Human, "Player"),
+                makeKingdomParticipantConfig(KingdomId::Black, ControllerType::AI, "AI")
+            };
+        case GameMode::HumanVsHuman:
+            return {
+                makeKingdomParticipantConfig(KingdomId::White, ControllerType::Human, "Player 1"),
+                makeKingdomParticipantConfig(KingdomId::Black, ControllerType::Human, "Player 2")
+            };
+        case GameMode::AIvsAI:
+            return {
+                makeKingdomParticipantConfig(KingdomId::White, ControllerType::AI, "AI 1"),
+                makeKingdomParticipantConfig(KingdomId::Black, ControllerType::AI, "AI 2")
+            };
+    }
+
+    return defaultKingdomParticipants(GameMode::HumanVsAI);
+}
+
 struct GameSessionConfig {
     std::string saveName;
-    GameMode mode = GameMode::HumanVsAI;
-    std::array<std::string, kNumKingdoms> participantNames{"Player", "AI"};
+    std::array<KingdomParticipantConfig, kNumKingdoms> kingdoms =
+        defaultKingdomParticipants(GameMode::HumanVsAI);
 };
 
 struct SaveSummary {
     std::string saveName;
-    GameMode mode = GameMode::HumanVsAI;
-    std::array<std::string, kNumKingdoms> participantNames{"Player", "AI"};
+    std::array<KingdomParticipantConfig, kNumKingdoms> kingdoms =
+        defaultKingdomParticipants(GameMode::HumanVsAI);
 };
+
+inline GameSessionConfig makeDefaultGameSessionConfig(GameMode mode,
+                                                      const std::string& saveName = {}) {
+    GameSessionConfig session;
+    session.saveName = saveName;
+    session.kingdoms = defaultKingdomParticipants(mode);
+    return session;
+}
 
 inline const char* controllerTypeLabel(ControllerType type) {
     switch (type) {
@@ -45,16 +87,36 @@ inline const char* gameModeLabel(GameMode mode) {
     return "Unknown";
 }
 
-inline std::array<ControllerType, kNumKingdoms> controllersForGameMode(GameMode mode) {
-    switch (mode) {
-        case GameMode::HumanVsAI:
-            return {ControllerType::Human, ControllerType::AI};
-        case GameMode::HumanVsHuman:
-            return {ControllerType::Human, ControllerType::Human};
-        case GameMode::AIvsAI:
-            return {ControllerType::AI, ControllerType::AI};
-    }
-    return {ControllerType::Human, ControllerType::AI};
+inline bool isValidControllerType(ControllerType type) {
+    return type == ControllerType::Human || type == ControllerType::AI;
+}
+
+inline const KingdomParticipantConfig& kingdomParticipantConfig(
+    const std::array<KingdomParticipantConfig, kNumKingdoms>& participants,
+    KingdomId kingdom) {
+    return participants[kingdomIndex(kingdom)];
+}
+
+inline KingdomParticipantConfig& kingdomParticipantConfig(
+    std::array<KingdomParticipantConfig, kNumKingdoms>& participants,
+    KingdomId kingdom) {
+    return participants[kingdomIndex(kingdom)];
+}
+
+inline std::array<ControllerType, kNumKingdoms> controllersFromParticipants(
+    const std::array<KingdomParticipantConfig, kNumKingdoms>& participants) {
+    return {
+        kingdomParticipantConfig(participants, KingdomId::White).controller,
+        kingdomParticipantConfig(participants, KingdomId::Black).controller
+    };
+}
+
+inline std::array<std::string, kNumKingdoms> participantNamesFromParticipants(
+    const std::array<KingdomParticipantConfig, kNumKingdoms>& participants) {
+    return {
+        kingdomParticipantConfig(participants, KingdomId::White).participantName,
+        kingdomParticipantConfig(participants, KingdomId::Black).participantName
+    };
 }
 
 inline GameMode gameModeFromControllers(const std::array<ControllerType, kNumKingdoms>& controllers) {
@@ -65,27 +127,58 @@ inline GameMode gameModeFromControllers(const std::array<ControllerType, kNumKin
     return GameMode::HumanVsAI;
 }
 
-inline std::array<std::string, kNumKingdoms> defaultParticipantNames(GameMode mode) {
-    switch (mode) {
-        case GameMode::HumanVsAI:
-            return {"Player", "AI"};
-        case GameMode::HumanVsHuman:
-            return {"Player 1", "Player 2"};
-        case GameMode::AIvsAI:
-            return {"AI 1", "AI 2"};
-    }
-    return {"Player", "AI"};
+inline GameMode gameModeFromParticipants(
+    const std::array<KingdomParticipantConfig, kNumKingdoms>& participants) {
+    return gameModeFromControllers(controllersFromParticipants(participants));
 }
 
-inline const char* participantPrompt(GameMode mode, KingdomId id) {
-    const bool isWhite = (id == KingdomId::White);
-    switch (mode) {
-        case GameMode::HumanVsAI:
-            return isWhite ? "Human player name" : "AI name";
-        case GameMode::HumanVsHuman:
-            return isWhite ? "Player 1 name" : "Player 2 name";
-        case GameMode::AIvsAI:
-            return isWhite ? "AI 1 name" : "AI 2 name";
+inline GameMode gameModeFromSession(const GameSessionConfig& session) {
+    return gameModeFromParticipants(session.kingdoms);
+}
+
+inline std::array<ControllerType, kNumKingdoms> controllersForGameMode(GameMode mode) {
+    return controllersFromParticipants(defaultKingdomParticipants(mode));
+}
+
+inline std::array<std::string, kNumKingdoms> defaultParticipantNames(GameMode mode) {
+    return participantNamesFromParticipants(defaultKingdomParticipants(mode));
+}
+
+inline std::string kingdomLabel(KingdomId kingdom) {
+    return (kingdom == KingdomId::White) ? "White Kingdom" : "Black Kingdom";
+}
+
+inline std::string participantRoleLabel(
+    const std::array<KingdomParticipantConfig, kNumKingdoms>& participants,
+    KingdomId kingdom) {
+    const auto controllers = controllersFromParticipants(participants);
+    const ControllerType controller = kingdomParticipantConfig(participants, kingdom).controller;
+
+    if (controllers[0] == ControllerType::AI && controllers[1] == ControllerType::AI) {
+        return (kingdom == KingdomId::White) ? "AI 1" : "AI 2";
     }
-    return isWhite ? "Player 1 name" : "Player 2 name";
+    if (controllers[0] == ControllerType::Human && controllers[1] == ControllerType::Human) {
+        return (kingdom == KingdomId::White) ? "Player 1" : "Player 2";
+    }
+    return (controller == ControllerType::Human) ? "Human" : "AI";
+}
+
+inline std::string kingdomAssignmentLabel(
+    const std::array<KingdomParticipantConfig, kNumKingdoms>& participants,
+    KingdomId kingdom) {
+    return participantRoleLabel(participants, kingdom) + " - " + kingdomLabel(kingdom);
+}
+
+inline std::string participantNamePrompt(
+    const std::array<KingdomParticipantConfig, kNumKingdoms>& participants,
+    KingdomId kingdom) {
+    return participantRoleLabel(participants, kingdom) + " name";
+}
+
+inline const std::string& participantNameFor(const GameSessionConfig& session, KingdomId kingdom) {
+    return kingdomParticipantConfig(session.kingdoms, kingdom).participantName;
+}
+
+inline ControllerType controllerFor(const GameSessionConfig& session, KingdomId kingdom) {
+    return kingdomParticipantConfig(session.kingdoms, kingdom).controller;
 }

@@ -3,6 +3,8 @@
 #include "Units/PieceType.hpp"
 #include "Config/GameConfig.hpp"
 
+#include <vector>
+
 static std::string pieceTypeName(PieceType type) {
     switch (type) {
         case PieceType::Pawn:   return "Pawn";
@@ -41,13 +43,25 @@ void PiecePanel::init(tgui::Gui& gui) {
     m_levelLabel->getRenderer()->setTextColor(tgui::Color::White);
     m_panel->add(m_levelLabel);
 
-    m_upgradeBtn = tgui::Button::create("Upgrade");
-    m_upgradeBtn->setPosition({10, 110});
-    m_upgradeBtn->setSize({180, 35});
-    m_upgradeBtn->onPress([this]() {
-        if (m_onUpgrade && m_currentPieceId >= 0) m_onUpgrade(m_currentPieceId);
+    m_primaryUpgradeBtn = tgui::Button::create("Upgrade");
+    m_primaryUpgradeBtn->setPosition({10, 110});
+    m_primaryUpgradeBtn->setSize({180, 35});
+    m_primaryUpgradeBtn->onPress([this]() {
+        if (m_onUpgrade && m_currentPieceId >= 0) {
+            m_onUpgrade(m_currentPieceId, m_primaryUpgradeTarget);
+        }
     });
-    m_panel->add(m_upgradeBtn);
+    m_panel->add(m_primaryUpgradeBtn);
+
+    m_secondaryUpgradeBtn = tgui::Button::create("Upgrade");
+    m_secondaryUpgradeBtn->setPosition({10, 155});
+    m_secondaryUpgradeBtn->setSize({180, 35});
+    m_secondaryUpgradeBtn->onPress([this]() {
+        if (m_onUpgrade && m_currentPieceId >= 0) {
+            m_onUpgrade(m_currentPieceId, m_secondaryUpgradeTarget);
+        }
+    });
+    m_panel->add(m_secondaryUpgradeBtn);
 
     m_panel->setVisible(false);
 }
@@ -59,18 +73,40 @@ void PiecePanel::show(const Piece& piece, const GameConfig& config, bool allowUp
     m_xpLabel->setText("XP: " + std::to_string(piece.xp));
     m_levelLabel->setText("Level: " + std::to_string(piece.getLevel()));
 
-    bool canUpgrade = piece.canUpgradeTo(
-        piece.type == PieceType::Pawn ? PieceType::Knight :
-        piece.type == PieceType::Knight ? PieceType::Bishop :
-        piece.type == PieceType::Bishop ? PieceType::Rook :
-        piece.type == PieceType::Rook ? PieceType::Queen : PieceType::King,
-        config);
-    m_upgradeBtn->setVisible(canUpgrade);
-    m_upgradeBtn->setEnabled(canUpgrade && allowUpgrade);
+    std::vector<PieceType> upgradeTargets;
+    if (piece.type == PieceType::Pawn) {
+        if (piece.canUpgradeTo(PieceType::Knight, config)) {
+            upgradeTargets.push_back(PieceType::Knight);
+        }
+        if (piece.canUpgradeTo(PieceType::Bishop, config)) {
+            upgradeTargets.push_back(PieceType::Bishop);
+        }
+    } else if (piece.type == PieceType::Knight || piece.type == PieceType::Bishop) {
+        if (piece.canUpgradeTo(PieceType::Rook, config)) {
+            upgradeTargets.push_back(PieceType::Rook);
+        }
+    }
+
+    const bool hasPrimaryUpgrade = !upgradeTargets.empty();
+    const bool hasSecondaryUpgrade = upgradeTargets.size() > 1;
+
+    m_primaryUpgradeBtn->setVisible(hasPrimaryUpgrade);
+    m_primaryUpgradeBtn->setEnabled(hasPrimaryUpgrade && allowUpgrade);
+    if (hasPrimaryUpgrade) {
+        m_primaryUpgradeBtn->setText("Upgrade to " + pieceTypeName(upgradeTargets[0]));
+        m_primaryUpgradeTarget = static_cast<int>(upgradeTargets[0]);
+    }
+
+    m_secondaryUpgradeBtn->setVisible(hasSecondaryUpgrade);
+    m_secondaryUpgradeBtn->setEnabled(hasSecondaryUpgrade && allowUpgrade);
+    if (hasSecondaryUpgrade) {
+        m_secondaryUpgradeBtn->setText("Upgrade to " + pieceTypeName(upgradeTargets[1]));
+        m_secondaryUpgradeTarget = static_cast<int>(upgradeTargets[1]);
+    }
 
     m_panel->setVisible(true);
 }
 
 void PiecePanel::hide() { if (m_panel) m_panel->setVisible(false); }
 
-void PiecePanel::setOnUpgrade(std::function<void(int)> callback) { m_onUpgrade = std::move(callback); }
+void PiecePanel::setOnUpgrade(std::function<void(int, int)> callback) { m_onUpgrade = std::move(callback); }

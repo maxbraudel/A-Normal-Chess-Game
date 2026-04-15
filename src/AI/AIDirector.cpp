@@ -118,6 +118,39 @@ static int countStrongPieces(const SnapKingdom& kingdom) {
     return count;
 }
 
+static bool canUpgradeSnapshotPiece(const SnapPiece& piece, PieceType target, const GameConfig& config) {
+    if (piece.type == PieceType::Pawn && (target == PieceType::Knight || target == PieceType::Bishop)) {
+        return piece.xp >= config.getXPThresholdPawnToKnightOrBishop();
+    }
+    if ((piece.type == PieceType::Knight || piece.type == PieceType::Bishop) && target == PieceType::Rook) {
+        return piece.xp >= config.getXPThresholdToRook();
+    }
+    return false;
+}
+
+static PieceType choosePawnUpgradeTarget(const SnapKingdom& kingdom) {
+    int knights = 0;
+    int bishops = 0;
+    for (const auto& piece : kingdom.pieces) {
+        if (piece.type == PieceType::Knight) ++knights;
+        if (piece.type == PieceType::Bishop) ++bishops;
+    }
+    return (knights <= bishops) ? PieceType::Knight : PieceType::Bishop;
+}
+
+static PieceType nextUpgradeTarget(const SnapKingdom& kingdom, const SnapPiece& piece) {
+    switch (piece.type) {
+        case PieceType::Pawn:
+            return choosePawnUpgradeTarget(kingdom);
+        case PieceType::Knight:
+            return PieceType::Rook;
+        case PieceType::Bishop:
+            return PieceType::Rook;
+        default:
+            return piece.type;
+    }
+}
+
 static int countPiecesNearEnemyKing(const GameSnapshot& s, KingdomId aiKingdom, int radius) {
     const auto* enemyKing = s.enemyKingdom(aiKingdom).getKing();
     if (!enemyKing) return 0;
@@ -417,11 +450,14 @@ AIDirectorPlan AIDirector::computeTurn(Board& board, Kingdom& self, Kingdom& ene
                                         config.getFarmIncomePerCellPerTurn());
     executeBuild(plan, snapshot, aiKingdom, stratPlan, turnNumber, incomePerTurn, config);
 
-    // --- 8. Produce in ALL free barracks ---
+    // --- 8. Upgrades ---
+    executeUpgrades(plan, snapshot, aiKingdom, config);
+
+    // --- 9. Produce in ALL free barracks ---
     if (shouldContinuePressureProduction)
         executeProductions(plan, snapshot, aiKingdom, stratPlan, turnNumber, config);
 
-    // --- 9. Marriage ---
+    // --- 10. Marriage ---
     if (!forcePressure && stratPlan.shouldMarry)
         executeMarriage(plan, snapshot, aiKingdom);
 
@@ -768,6 +804,78 @@ void AIDirector::executeBuild(AIDirectorPlan& plan, const GameSnapshot& snapshot
         cmd.buildingType = buildSuggestion->type;
         cmd.buildOrigin = buildSuggestion->position;
         plan.commands.push_back(cmd);
+    }
+}
+
+// =========================================================================
+//  executeUpgrades
+// =========================================================================
+
+void AIDirector::executeUpgrades(AIDirectorPlan& plan, const GameSnapshot& snapshot,
+                                 KingdomId aiKingdom, const GameConfig& config) {
+    int availableGold = snapshot.kingdom(aiKingdom).gold;
+
+    for (const auto& command : plan.commands) {
+        if (command.type != TurnCommand::Build) {
+            continue;
+        }
+
+        switch (command.buildingType) {
+            case BuildingType::Barracks:
+                availableGold -= config.getBarracksCost();
+                break;
+            case BuildingType::WoodWall:
+                availableGold -= config.getWoodWallCost();
+                break;
+            case BuildingType::StoneWall:
+                availableGold -= config.getStoneWallCost();
+                break;
+            case BuildingType::Arena:
+                availableGold -= config.getArenaCost();
+                break;
+            default:
+                break;
+        }
+    }
+
+    std::vector<const SnapPiece*> candidates;
+    candidates.reserve(snapshot.kingdom(aiKingdom).pieces.size());
+    for (const auto& piece : snapshot.kingdom(aiKingdom).pieces) {
+        if (piece.type == PieceType::King || piece.type == PieceType::Queen) {
+            continue;
+        }
+        candidates.push_back(&piece);
+    }
+
+    std::sort(candidates.begin(), candidates.end(), [](const SnapPiece* lhs, const SnapPiece* rhs) {
+        return AIEvaluator::pieceValue(lhs->type) > AIEvaluator::pieceValue(rhs->type);
+    });
+
+    SnapKingdom simulatedKingdom = snapshot.kingdom(aiKingdom);
+    for (const SnapPiece* piece : candidates) {
+        const PieceType target = nextUpgradeTarget(simulatedKingdom, *piece);
+        if (target == piece->type) {
+            continue;
+        }
+        if (!canUpgradeSnapshotPiece(*piece, target, config)) {
+            continue;
+        }
+
+        const int cost = config.getUpgradeCost(piece->type, target);
+        if (cost <= 0 || cost > availableGold) {
+            continue;
+        }
+
+        TurnCommand cmd;
+        cmd.type = TurnCommand::Upgrade;
+        cmd.upgradePieceId = piece->id;
+        cmd.upgradeTarget = target;
+        plan.commands.push_back(cmd);
+        availableGold -= cost;
+
+        if (SnapPiece* simulatedPiece = simulatedKingdom.getPieceById(piece->id)) {
+            simulatedPiece->type = target;
+        }
     }
 }
 

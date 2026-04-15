@@ -21,6 +21,8 @@ struct SaveData {
         ControllerType::AI
     };
     std::array<std::string, kNumKingdoms> participantNames{"Player", "AI"};
+    std::array<KingdomParticipantConfig, kNumKingdoms> sessionKingdoms =
+        defaultKingdomParticipants(GameMode::HumanVsAI);
 
     // Grid state
     struct CellData {
@@ -49,4 +51,19 @@ struct SaveData {
 
     // Command history (for future replay)
     std::vector<TurnCommand> commandHistory;
+
+    void refreshLegacyMetadataFromSession() {
+        mode = gameModeFromParticipants(sessionKingdoms);
+        controllers = controllersFromParticipants(sessionKingdoms);
+        participantNames = participantNamesFromParticipants(sessionKingdoms);
+    }
+
+    void refreshSessionFromLegacyMetadata() {
+        sessionKingdoms = defaultKingdomParticipants(mode);
+        for (int kingdomSlot = 0; kingdomSlot < kNumKingdoms; ++kingdomSlot) {
+            sessionKingdoms[kingdomSlot].kingdom = static_cast<KingdomId>(kingdomSlot);
+            sessionKingdoms[kingdomSlot].controller = controllers[kingdomSlot];
+            sessionKingdoms[kingdomSlot].participantName = participantNames[kingdomSlot];
+        }
+    }
 };

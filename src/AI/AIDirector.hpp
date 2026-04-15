@@ -72,6 +72,8 @@ private:
                       KingdomId aiKingdom, const TurnPlan& stratPlan,
                       int turnNumber, int incomePerTurn,
                       const GameConfig& config);
+    void executeUpgrades(AIDirectorPlan& plan, const GameSnapshot& snapshot,
+                         KingdomId aiKingdom, const GameConfig& config);
     void executeProductions(AIDirectorPlan& plan, const GameSnapshot& snapshot,
                              KingdomId aiKingdom, const TurnPlan& stratPlan,
                              int turnNumber, const GameConfig& config);

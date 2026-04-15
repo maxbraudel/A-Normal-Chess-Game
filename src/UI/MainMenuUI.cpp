@@ -6,7 +6,12 @@
 
 namespace {
 std::string buildSaveLabel(const SaveSummary& save) {
-    return save.saveName + " - " + gameModeLabel(save.mode);
+    const auto mode = gameModeFromParticipants(save.kingdoms);
+    const auto& white = kingdomParticipantConfig(save.kingdoms, KingdomId::White);
+    const auto& black = kingdomParticipantConfig(save.kingdoms, KingdomId::Black);
+    return save.saveName + " - " + gameModeLabel(mode)
+        + " | White: " + white.participantName
+        + " | Black: " + black.participantName;
 }
 }
 
@@ -114,7 +119,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     m_createOverlay->setVisible(false);
     m_panel->add(m_createOverlay);
 
-    auto dialog = tgui::Panel::create({520, 410});
+    auto dialog = tgui::Panel::create({560, 540});
     dialog->setPosition({"(&.parent.width - width) / 2", "(&.parent.height - height) / 2"});
     dialog->getRenderer()->setBackgroundColor(tgui::Color(46, 46, 46, 245));
     dialog->getRenderer()->setBorderColor(tgui::Color(120, 120, 120));
@@ -135,10 +140,10 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
 
     m_saveNameEdit = tgui::EditBox::create();
     m_saveNameEdit->setPosition({36, 106});
-    m_saveNameEdit->setSize({448, 34});
+    m_saveNameEdit->setSize({488, 34});
     dialog->add(m_saveNameEdit);
 
-    auto modeLabel = tgui::Label::create("Game mode");
+    auto modeLabel = tgui::Label::create("Session preset");
     modeLabel->setPosition({36, 154});
     modeLabel->setTextSize(18);
     modeLabel->getRenderer()->setTextColor(tgui::Color::White);
@@ -146,46 +151,102 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
 
     m_modeCombo = tgui::ComboBox::create();
     m_modeCombo->setPosition({36, 182});
-    m_modeCombo->setSize({448, 34});
+    m_modeCombo->setSize({488, 34});
     m_modeCombo->addItem("Human vs AI", "human_ai");
     m_modeCombo->addItem("Human vs Human", "human_human");
     m_modeCombo->addItem("AI vs AI", "ai_ai");
     m_modeCombo->setSelectedItemById("human_ai");
     m_modeCombo->onItemSelect([this]() {
-        updateCreateDialogLabels();
+        applyPresetToCreateDialog(parseGameModeId(m_modeCombo->getSelectedItemId()));
     });
     dialog->add(m_modeCombo);
 
-    m_nameOneLabel = tgui::Label::create("Human player name");
-    m_nameOneLabel->setPosition({36, 230});
-    m_nameOneLabel->setTextSize(18);
-    m_nameOneLabel->getRenderer()->setTextColor(tgui::Color::White);
-    dialog->add(m_nameOneLabel);
+    m_whiteRoleLabel = tgui::Label::create("White Kingdom");
+    m_whiteRoleLabel->setPosition({36, 236});
+    m_whiteRoleLabel->setTextSize(20);
+    m_whiteRoleLabel->getRenderer()->setTextColor(tgui::Color::White);
+    dialog->add(m_whiteRoleLabel);
 
-    m_nameOneEdit = tgui::EditBox::create();
-    m_nameOneEdit->setPosition({36, 258});
-    m_nameOneEdit->setSize({448, 34});
-    dialog->add(m_nameOneEdit);
+    auto whiteControllerLabel = tgui::Label::create("Controller");
+    whiteControllerLabel->setPosition({36, 266});
+    whiteControllerLabel->setTextSize(16);
+    whiteControllerLabel->getRenderer()->setTextColor(tgui::Color(220, 220, 220));
+    dialog->add(whiteControllerLabel);
 
-    m_nameTwoLabel = tgui::Label::create("AI name");
-    m_nameTwoLabel->setPosition({36, 304});
-    m_nameTwoLabel->setTextSize(18);
-    m_nameTwoLabel->getRenderer()->setTextColor(tgui::Color::White);
-    dialog->add(m_nameTwoLabel);
+    m_whiteControllerCombo = tgui::ComboBox::create();
+    m_whiteControllerCombo->setPosition({36, 290});
+    m_whiteControllerCombo->setSize({180, 32});
+    m_whiteControllerCombo->addItem("Human", "human");
+    m_whiteControllerCombo->addItem("AI", "ai");
+    m_whiteControllerCombo->onItemSelect([this]() {
+        updateCreateDialogLabels();
+    });
+    dialog->add(m_whiteControllerCombo);
 
-    m_nameTwoEdit = tgui::EditBox::create();
-    m_nameTwoEdit->setPosition({36, 332});
-    m_nameTwoEdit->setSize({448, 34});
-    dialog->add(m_nameTwoEdit);
+    m_whiteNameLabel = tgui::Label::create("Player name");
+    m_whiteNameLabel->setPosition({236, 266});
+    m_whiteNameLabel->setTextSize(16);
+    m_whiteNameLabel->getRenderer()->setTextColor(tgui::Color(220, 220, 220));
+    dialog->add(m_whiteNameLabel);
+
+    m_whiteNameEdit = tgui::EditBox::create();
+    m_whiteNameEdit->setPosition({236, 290});
+    m_whiteNameEdit->setSize({288, 32});
+    dialog->add(m_whiteNameEdit);
+
+    m_whiteHintLabel = tgui::Label::create("White starts first and spawns on the left.");
+    m_whiteHintLabel->setPosition({36, 330});
+    m_whiteHintLabel->setTextSize(14);
+    m_whiteHintLabel->getRenderer()->setTextColor(tgui::Color(180, 180, 180));
+    dialog->add(m_whiteHintLabel);
+
+    m_blackRoleLabel = tgui::Label::create("Black Kingdom");
+    m_blackRoleLabel->setPosition({36, 370});
+    m_blackRoleLabel->setTextSize(20);
+    m_blackRoleLabel->getRenderer()->setTextColor(tgui::Color::White);
+    dialog->add(m_blackRoleLabel);
+
+    auto blackControllerLabel = tgui::Label::create("Controller");
+    blackControllerLabel->setPosition({36, 400});
+    blackControllerLabel->setTextSize(16);
+    blackControllerLabel->getRenderer()->setTextColor(tgui::Color(220, 220, 220));
+    dialog->add(blackControllerLabel);
+
+    m_blackControllerCombo = tgui::ComboBox::create();
+    m_blackControllerCombo->setPosition({36, 424});
+    m_blackControllerCombo->setSize({180, 32});
+    m_blackControllerCombo->addItem("Human", "human");
+    m_blackControllerCombo->addItem("AI", "ai");
+    m_blackControllerCombo->onItemSelect([this]() {
+        updateCreateDialogLabels();
+    });
+    dialog->add(m_blackControllerCombo);
+
+    m_blackNameLabel = tgui::Label::create("Player name");
+    m_blackNameLabel->setPosition({236, 400});
+    m_blackNameLabel->setTextSize(16);
+    m_blackNameLabel->getRenderer()->setTextColor(tgui::Color(220, 220, 220));
+    dialog->add(m_blackNameLabel);
+
+    m_blackNameEdit = tgui::EditBox::create();
+    m_blackNameEdit->setPosition({236, 424});
+    m_blackNameEdit->setSize({288, 32});
+    dialog->add(m_blackNameEdit);
+
+    m_blackHintLabel = tgui::Label::create("Black plays second and spawns on the right.");
+    m_blackHintLabel->setPosition({36, 464});
+    m_blackHintLabel->setTextSize(14);
+    m_blackHintLabel->getRenderer()->setTextColor(tgui::Color(180, 180, 180));
+    dialog->add(m_blackHintLabel);
 
     m_createErrorLabel = tgui::Label::create("");
-    m_createErrorLabel->setPosition({36, 372});
+    m_createErrorLabel->setPosition({36, 496});
     m_createErrorLabel->setTextSize(15);
     m_createErrorLabel->getRenderer()->setTextColor(tgui::Color(255, 120, 120));
     dialog->add(m_createErrorLabel);
 
     auto cancelButton = tgui::Button::create("Cancel");
-    cancelButton->setPosition({292, 372});
+    cancelButton->setPosition({332, 496});
     cancelButton->setSize({92, 30});
     cancelButton->onPress([this]() {
         closeCreateDialog();
@@ -193,14 +254,19 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     dialog->add(cancelButton);
 
     auto createButton = tgui::Button::create("Create");
-    createButton->setPosition({392, 372});
+    createButton->setPosition({432, 496});
     createButton->setSize({92, 30});
     createButton->onPress([this]() {
         GameSessionConfig session;
         session.saveName = trimCopy(m_saveNameEdit->getText().toStdString());
-        session.mode = parseGameModeId(m_modeCombo->getSelectedItemId());
-        session.participantNames[0] = trimCopy(m_nameOneEdit->getText().toStdString());
-        session.participantNames[1] = trimCopy(m_nameTwoEdit->getText().toStdString());
+        session.kingdoms[kingdomIndex(KingdomId::White)] = makeKingdomParticipantConfig(
+            KingdomId::White,
+            parseControllerId(m_whiteControllerCombo->getSelectedItemId()),
+            trimCopy(m_whiteNameEdit->getText().toStdString()));
+        session.kingdoms[kingdomIndex(KingdomId::Black)] = makeKingdomParticipantConfig(
+            KingdomId::Black,
+            parseControllerId(m_blackControllerCombo->getSelectedItemId()),
+            trimCopy(m_blackNameEdit->getText().toStdString()));
 
         if (session.saveName.empty()) {
             m_createErrorLabel->setText("Save name is required.");
@@ -210,12 +276,13 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
             m_createErrorLabel->setText("Save name contains invalid characters.");
             return;
         }
-        if (session.participantNames[0].empty() || session.participantNames[1].empty()) {
+        if (participantNameFor(session, KingdomId::White).empty()
+            || participantNameFor(session, KingdomId::Black).empty()) {
             m_createErrorLabel->setText("Both participant names are required.");
             return;
         }
-        if (!isValidParticipantName(session.participantNames[0])
-            || !isValidParticipantName(session.participantNames[1])) {
+        if (!isValidParticipantName(participantNameFor(session, KingdomId::White))
+            || !isValidParticipantName(participantNameFor(session, KingdomId::Black))) {
             m_createErrorLabel->setText("Names cannot contain quotes or line breaks.");
             return;
         }
@@ -300,14 +367,52 @@ void MainMenuUI::updateSaveButtons() {
 }
 
 void MainMenuUI::updateCreateDialogLabels() {
-    const GameMode mode = parseGameModeId(m_modeCombo ? m_modeCombo->getSelectedItemId() : tgui::String{});
-    const auto defaults = defaultParticipantNames(mode);
+    std::array<KingdomParticipantConfig, kNumKingdoms> participants =
+        defaultKingdomParticipants(parseGameModeId(m_modeCombo ? m_modeCombo->getSelectedItemId() : tgui::String{}));
 
-    if (m_nameOneLabel) m_nameOneLabel->setText(participantPrompt(mode, KingdomId::White));
-    if (m_nameTwoLabel) m_nameTwoLabel->setText(participantPrompt(mode, KingdomId::Black));
-    if (m_nameOneEdit) m_nameOneEdit->setText(defaults[0]);
-    if (m_nameTwoEdit) m_nameTwoEdit->setText(defaults[1]);
+    if (m_whiteControllerCombo) {
+        participants[kingdomIndex(KingdomId::White)].controller =
+            parseControllerId(m_whiteControllerCombo->getSelectedItemId());
+    }
+    if (m_blackControllerCombo) {
+        participants[kingdomIndex(KingdomId::Black)].controller =
+            parseControllerId(m_blackControllerCombo->getSelectedItemId());
+    }
+
+    if (m_whiteRoleLabel) {
+        m_whiteRoleLabel->setText(kingdomAssignmentLabel(participants, KingdomId::White));
+    }
+    if (m_blackRoleLabel) {
+        m_blackRoleLabel->setText(kingdomAssignmentLabel(participants, KingdomId::Black));
+    }
+    if (m_whiteNameLabel) {
+        m_whiteNameLabel->setText(participantNamePrompt(participants, KingdomId::White));
+    }
+    if (m_blackNameLabel) {
+        m_blackNameLabel->setText(participantNamePrompt(participants, KingdomId::Black));
+    }
     if (m_createErrorLabel) m_createErrorLabel->setText("");
+}
+
+void MainMenuUI::applyPresetToCreateDialog(GameMode mode) {
+    const auto defaults = defaultKingdomParticipants(mode);
+
+    if (m_whiteControllerCombo) {
+        m_whiteControllerCombo->setSelectedItemById(
+            defaults[kingdomIndex(KingdomId::White)].controller == ControllerType::Human ? "human" : "ai");
+    }
+    if (m_blackControllerCombo) {
+        m_blackControllerCombo->setSelectedItemById(
+            defaults[kingdomIndex(KingdomId::Black)].controller == ControllerType::Human ? "human" : "ai");
+    }
+    if (m_whiteNameEdit) {
+        m_whiteNameEdit->setText(defaults[kingdomIndex(KingdomId::White)].participantName);
+    }
+    if (m_blackNameEdit) {
+        m_blackNameEdit->setText(defaults[kingdomIndex(KingdomId::Black)].participantName);
+    }
+
+    updateCreateDialogLabels();
 }
 
 void MainMenuUI::openCreateDialog() {
@@ -317,7 +422,7 @@ void MainMenuUI::openCreateDialog() {
 
     if (m_saveNameEdit) m_saveNameEdit->setText("");
     if (m_modeCombo) m_modeCombo->setSelectedItemById("human_ai");
-    updateCreateDialogLabels();
+    applyPresetToCreateDialog(GameMode::HumanVsAI);
     m_createOverlay->setVisible(true);
 }
 
@@ -372,4 +477,8 @@ GameMode MainMenuUI::parseGameModeId(const tgui::String& id) {
         return GameMode::AIvsAI;
     }
     return GameMode::HumanVsAI;
+}
+
+ControllerType MainMenuUI::parseControllerId(const tgui::String& id) {
+    return id.toStdString() == "ai" ? ControllerType::AI : ControllerType::Human;
 }

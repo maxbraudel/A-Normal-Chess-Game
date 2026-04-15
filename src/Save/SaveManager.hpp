@@ -13,14 +13,19 @@ public:
 
 private:
     // Custom JSON serialization helpers
+    static std::string serializeParticipant(const KingdomParticipantConfig& participant);
     static std::string serializePiece(const Piece& p);
     static std::string serializeBuilding(const Building& b);
     static std::string serializeEvent(const EventLog::Event& e);
+    static EventLog::Event parseEvent(const std::string& json);
+    static KingdomParticipantConfig parseParticipant(const std::string& json);
     static Piece parsePiece(const std::string& json);
     static Building parseBuilding(const std::string& json);
 
+    static std::string escapeJsonString(const std::string& value);
     static std::string extractString(const std::string& json, const std::string& key);
     static int extractInt(const std::string& json, const std::string& key, int defaultVal);
+    static bool extractBool(const std::string& json, const std::string& key, bool defaultVal);
     static std::string extractSection(const std::string& json, const std::string& key);
     static std::string extractArray(const std::string& json, const std::string& key);
     static std::vector<std::string> splitArrayElements(const std::string& arrayContent);

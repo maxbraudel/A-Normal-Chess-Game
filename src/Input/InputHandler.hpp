@@ -1,8 +1,8 @@
 #pragma once
 #include <SFML/Window/Event.hpp>
 #include <SFML/System/Vector2.hpp>
-#include <SFML/Graphics/RenderWindow.hpp>
 #include <vector>
+#include "Input/InputContext.hpp"
 #include "Input/ToolState.hpp"
 #include "Buildings/BuildingType.hpp"
 
@@ -19,13 +19,7 @@ class InputHandler {
 public:
     InputHandler();
 
-    void handleEvent(const sf::Event& event, sf::RenderWindow& window,
-                      Camera& camera, Board& board,
-                      TurnSystem& turnSystem, Kingdom& activeKingdom,
-                      Kingdom& enemyKingdom,
-                      const std::vector<Building>& publicBuildings,
-                      UIManager& uiManager, const GameConfig& config,
-                      bool allowCommands = true);
+    void handleEvent(const sf::Event& event, const InputContext& context);
 
     ToolState getCurrentTool() const;
     void setTool(ToolState tool);
@@ -70,18 +64,8 @@ private:
     bool m_isDragging;
     sf::Vector2i m_lastMousePos;
 
-    void handleSelectTool(const sf::Event& event, sf::RenderWindow& window,
-                           Camera& camera, Board& board,
-                           TurnSystem& turnSystem, Kingdom& activeKingdom,
-                           Kingdom& enemyKingdom,
-                           const std::vector<Building>& publicBuildings,
-                           const GameConfig& config,
-                           bool allowCommands);
-    void handleBuildTool(const sf::Event& event, sf::RenderWindow& window,
-                          Camera& camera, Board& board,
-                          TurnSystem& turnSystem, Kingdom& activeKingdom,
-                          const GameConfig& config,
-                          bool allowCommands);
+    void handleSelectTool(const sf::Event& event, const InputContext& context);
+    void handleBuildTool(const sf::Event& event, const InputContext& context);
     void handleCameraInput(const sf::Event& event, sf::RenderWindow& window, Camera& camera);
     // Recompute m_validMoves / m_dangerMoves for piece given current preview board state
     void refreshPieceMoves(Piece* piece, const Board& board, const Kingdom& enemyKingdom, const GameConfig& config);
