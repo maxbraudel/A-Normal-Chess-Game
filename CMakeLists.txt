@@ -49,11 +49,26 @@ add_executable(${PROJECT_NAME} src/main.cpp)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${PROJECT_NAME}Core)
 
-# Copy assets to build directory
-add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${CMAKE_SOURCE_DIR}/assets $<TARGET_FILE_DIR:${PROJECT_NAME}>/assets
+# Sync assets into the build directory whenever any source asset changes.
+file(GLOB_RECURSE ASSET_INPUTS CONFIGURE_DEPENDS
+    ${CMAKE_SOURCE_DIR}/assets/*
 )
+
+set(ASSET_SYNC_STAMP ${CMAKE_BINARY_DIR}/assets.stamp)
+
+add_custom_command(
+    OUTPUT ${ASSET_SYNC_STAMP}
+    COMMAND ${CMAKE_COMMAND} -E remove_directory ${CMAKE_BINARY_DIR}/assets
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/assets
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_SOURCE_DIR}/assets ${CMAKE_BINARY_DIR}/assets
+    COMMAND ${CMAKE_COMMAND} -E touch ${ASSET_SYNC_STAMP}
+    DEPENDS ${ASSET_INPUTS}
+    COMMENT "Syncing assets into build directory"
+)
+
+add_custom_target(${PROJECT_NAME}Assets ALL DEPENDS ${ASSET_SYNC_STAMP})
+add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}Assets)
+add_dependencies(${PROJECT_NAME}Tests ${PROJECT_NAME}Assets)
 
 # Copy saves directory
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD

@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <queue>
 #include <stdexcept>
 #include <string>
 #include <thread>
@@ -10,6 +11,7 @@
 #include <SFML/System/Time.hpp>
 
 #include "Board/Board.hpp"
+#include "Board/BoardGenerator.hpp"
 #include "Board/CellType.hpp"
 #include "Buildings/BuildingFactory.hpp"
 #include "Buildings/StructureChunkRegistry.hpp"
@@ -70,6 +72,111 @@ sf::Vector2i findEmptyTraversableCell(const GameEngine& engine) {
     }
 
     throw std::runtime_error("No empty traversable cell found for test setup.");
+}
+
+std::string buildGenerationSignature(const Board& board,
+                                    const std::vector<Building>& publicBuildings,
+                                    const GenerationResult& generation) {
+    std::string signature;
+    const int diameter = board.getDiameter();
+    signature.reserve(diameter * diameter);
+
+    for (int y = 0; y < diameter; ++y) {
+        for (int x = 0; x < diameter; ++x) {
+            const Cell& cell = board.getCell(x, y);
+            if (!cell.isInCircle) {
+                continue;
+            }
+
+            switch (cell.type) {
+                case CellType::Grass: signature.push_back('G'); break;
+                case CellType::Dirt: signature.push_back('D'); break;
+                case CellType::Water: signature.push_back('W'); break;
+                case CellType::Void: signature.push_back('V'); break;
+            }
+        }
+    }
+
+    signature += '|';
+    for (const auto& building : publicBuildings) {
+        signature += std::to_string(static_cast<int>(building.type));
+        signature += ':';
+        signature += std::to_string(building.origin.x);
+        signature += ',';
+        signature += std::to_string(building.origin.y);
+        signature += ';';
+    }
+
+    signature += '|';
+    signature += std::to_string(generation.playerSpawn.x);
+    signature += ',';
+    signature += std::to_string(generation.playerSpawn.y);
+    signature += '|';
+    signature += std::to_string(generation.aiSpawn.x);
+    signature += ',';
+    signature += std::to_string(generation.aiSpawn.y);
+    return signature;
+}
+
+int largestConnectedRegion(const Board& board, CellType type) {
+    const int diameter = board.getDiameter();
+    std::vector<std::vector<bool>> visited(diameter, std::vector<bool>(diameter, false));
+    const int dx[] = {0, 0, 1, -1};
+    const int dy[] = {1, -1, 0, 0};
+    int best = 0;
+
+    for (int y = 0; y < diameter; ++y) {
+        for (int x = 0; x < diameter; ++x) {
+            if (visited[y][x]) {
+                continue;
+            }
+
+            const Cell& start = board.getCell(x, y);
+            if (!start.isInCircle || start.type != type) {
+                continue;
+            }
+
+            int size = 0;
+            std::queue<sf::Vector2i> frontier;
+            frontier.push({x, y});
+            visited[y][x] = true;
+
+            while (!frontier.empty()) {
+                const sf::Vector2i current = frontier.front();
+                frontier.pop();
+                ++size;
+
+                for (int direction = 0; direction < 4; ++direction) {
+                    const int nx = current.x + dx[direction];
+                    const int ny = current.y + dy[direction];
+                    if (nx < 0 || ny < 0 || nx >= diameter || ny >= diameter || visited[ny][nx]) {
+                        continue;
+                    }
+
+                    const Cell& next = board.getCell(nx, ny);
+                    if (!next.isInCircle || next.type != type) {
+                        continue;
+                    }
+
+                    visited[ny][nx] = true;
+                    frontier.push({nx, ny});
+                }
+            }
+
+            best = std::max(best, size);
+        }
+    }
+
+    return best;
+}
+
+void expectPublicBuildingsAvoidWater(const Board& board, const std::vector<Building>& publicBuildings) {
+    for (const auto& building : publicBuildings) {
+        for (const auto& occupied : building.getOccupiedCells()) {
+            expect(board.getCell(occupied.x, occupied.y).type != CellType::Water,
+                   "Public buildings must not overlap water cells.");
+        }
+    }
 }
 
 void testSessionConfigDefaults() {
@@ -171,12 +278,99 @@ void testGameEngineRestoresFactoryIds() {
     expect(nextPiece.id == 43, "Piece factory should continue after the highest restored piece ID.");
 }
 
+    void testGameEngineAssignsWorldSeed() {
+        GameConfig config;
+        GameEngine engine;
+        GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsAI, "engine_world_seed_test");
+        session.worldSeed = 0;
+
+        std::string error;
+        expect(engine.startNewSession(session, config, &error), error);
+        expect(engine.sessionConfig().worldSeed != 0,
+            "Starting a new session without a seed should generate a non-zero world seed.");
+
+        const SaveData save = engine.createSaveData();
+        expect(save.worldSeed == engine.sessionConfig().worldSeed,
+            "Save data should persist the runtime world seed.");
+    }
+
+    void testBoardGeneratorUsesDeterministicSeed() {
+        GameConfig config;
+
+        Board boardA;
+        boardA.init(25);
+        std::vector<Building> buildingsA;
+        const GenerationResult generationA = BoardGenerator::generate(boardA, config, buildingsA, 1337u);
+
+        Board boardB;
+        boardB.init(25);
+        std::vector<Building> buildingsB;
+        const GenerationResult generationB = BoardGenerator::generate(boardB, config, buildingsB, 1337u);
+
+        Board boardC;
+        boardC.init(25);
+        std::vector<Building> buildingsC;
+        const GenerationResult generationC = BoardGenerator::generate(boardC, config, buildingsC, 7331u);
+
+        expect(buildGenerationSignature(boardA, buildingsA, generationA) == buildGenerationSignature(boardB, buildingsB, generationB),
+            "The same world seed should reproduce identical terrain, public buildings, and spawn cells.");
+        expect(buildGenerationSignature(boardA, buildingsA, generationA) != buildGenerationSignature(boardC, buildingsC, generationC),
+            "Different world seeds should change the generated world.");
+    }
+
+    void testBoardGeneratorProducesGrassDominantTerrain() {
+        GameConfig config;
+        Board board;
+        board.init(25);
+        std::vector<Building> publicBuildings;
+        const GenerationResult generation = BoardGenerator::generate(board, config, publicBuildings, 424242u);
+
+        int traversableCells = 0;
+        int grassCells = 0;
+        int dirtCells = 0;
+        int waterCells = 0;
+        const int diameter = board.getDiameter();
+
+        for (int y = 0; y < diameter; ++y) {
+         for (int x = 0; x < diameter; ++x) {
+             const Cell& cell = board.getCell(x, y);
+             if (!cell.isInCircle) {
+              continue;
+             }
+
+             ++traversableCells;
+             if (cell.type == CellType::Grass) ++grassCells;
+             if (cell.type == CellType::Dirt) ++dirtCells;
+             if (cell.type == CellType::Water) ++waterCells;
+         }
+        }
+
+        expect(grassCells > (dirtCells + waterCells),
+            "Generated terrain should remain grass-dominant overall.");
+        expect(dirtCells > 0 && dirtCells < (traversableCells / 3),
+            "Generated terrain should contain a few dirt patches without overwhelming the map.");
+        expect(waterCells > 0 && waterCells < (traversableCells / 8),
+            "Generated terrain should contain only a small amount of water.");
+        expect(largestConnectedRegion(board, CellType::Water) <= 40,
+            "Water should remain limited to small lakes rather than giant connected regions.");
+        expect(board.getCell(generation.playerSpawn.x, generation.playerSpawn.y).type != CellType::Water,
+            "Player spawn must never be placed on water.");
+        expect(board.getCell(generation.aiSpawn.x, generation.aiSpawn.y).type != CellType::Water,
+            "AI spawn must never be placed on water.");
+        expect(board.getCell(generation.playerSpawn.x, generation.playerSpawn.y).building == nullptr,
+            "Player spawn must never overlap a public building.");
+        expect(board.getCell(generation.aiSpawn.x, generation.aiSpawn.y).building == nullptr,
+            "AI spawn must never overlap a public building.");
+        expectPublicBuildingsAvoidWater(board, publicBuildings);
+    }
+
 void testSaveManagerRoundTrip() {
     SaveData data;
     data.gameName = "save_roundtrip";
     data.turnNumber = 7;
     data.activeKingdom = KingdomId::Black;
     data.mapRadius = 5;
+        data.worldSeed = 123456789u;
     data.sessionKingdoms = defaultKingdomParticipants(GameMode::HumanVsHuman);
     data.sessionKingdoms[0].participantName = "Player \"Alpha\"";
     data.sessionKingdoms[1].participantName = "Player Beta";
@@ -219,6 +413,8 @@ void testSaveManagerRoundTrip() {
            "Event messages should preserve escaped characters.");
     expect(loaded.sessionKingdoms[0].participantName == data.sessionKingdoms[0].participantName,
            "Session participant names should round-trip through SaveManager.");
+          expect(loaded.worldSeed == data.worldSeed,
+              "World seed should round-trip through SaveManager.");
         expect(loaded.controllers[0] == ControllerType::Human && loaded.controllers[1] == ControllerType::Human,
            "Legacy controller metadata should stay aligned with session metadata.");
         expect(loaded.multiplayer.enabled && loaded.multiplayer.port == data.multiplayer.port,
@@ -233,6 +429,7 @@ void testSaveManagerRoundTrip() {
             data.turnNumber = 3;
             data.activeKingdom = KingdomId::White;
             data.mapRadius = 4;
+            data.worldSeed = 987654321u;
             data.sessionKingdoms = defaultKingdomParticipants(GameMode::HumanVsHuman);
             data.multiplayer.enabled = true;
             data.multiplayer.port = 41000;
@@ -247,6 +444,7 @@ void testSaveManagerRoundTrip() {
             SaveData loaded;
             expect(manager.deserialize(serialized, loaded), "SaveManager should deserialize save data from a string snapshot.");
             expect(loaded.gameName == data.gameName, "Serialized string snapshots should preserve the game name.");
+            expect(loaded.worldSeed == data.worldSeed, "Serialized string snapshots should preserve the world seed.");
             expect(loaded.multiplayer.port == data.multiplayer.port, "Serialized string snapshots should preserve multiplayer metadata.");
         }
 
@@ -554,6 +752,9 @@ int main() {
         {"multiplayer validator port", testSessionValidatorRejectsInvalidMultiplayerPort},
         {"local player context", testLocalPlayerContextModes},
         {"engine restore factory sync", testGameEngineRestoresFactoryIds},
+        {"engine world seed", testGameEngineAssignsWorldSeed},
+        {"board generator deterministic seed", testBoardGeneratorUsesDeterministicSeed},
+        {"board generator terrain balance", testBoardGeneratorProducesGrassDominantTerrain},
         {"save manager roundtrip", testSaveManagerRoundTrip},
         {"save manager string roundtrip", testSaveManagerStringRoundTrip},
         {"multiplayer password digest", testMultiplayerPasswordDigest},

@@ -19,6 +19,10 @@ public:
     int getMinPublicBuildingDistance() const;
     int getPlayerSpawnZonePercent() const;
     int getAISpawnZonePercent() const;
+    int getTerrainNoiseScale() const;
+    int getTerrainOctaves() const;
+    int getDirtCoveragePercent() const;
+    int getWaterCoveragePercent() const;
     int getNumDirtBlobs() const;
     int getDirtBlobMinRadius() const;
     int getDirtBlobMaxRadius() const;
@@ -66,6 +70,10 @@ private:
     int m_minPublicBuildingDistance;
     int m_playerSpawnZonePercent;
     int m_aiSpawnZonePercent;
+    int m_terrainNoiseScale;
+    int m_terrainOctaves;
+    int m_dirtCoveragePercent;
+    int m_waterCoveragePercent;
     int m_numDirtBlobs;
     int m_dirtBlobMinRadius;
     int m_dirtBlobMaxRadius;

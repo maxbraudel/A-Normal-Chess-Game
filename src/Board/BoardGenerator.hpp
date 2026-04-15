@@ -1,5 +1,7 @@
 #pragma once
 #include <SFML/System/Vector2.hpp>
+#include <cstdint>
+#include <random>
 
 class Board;
 class GameConfig;
@@ -14,15 +16,18 @@ struct GenerationResult {
 class BoardGenerator {
 public:
     static GenerationResult generate(Board& board, const GameConfig& config,
-                                      std::vector<Building>& publicBuildings);
+                                      std::vector<Building>& publicBuildings,
+                                      std::uint32_t worldSeed);
 
 private:
-    static void placeDirtBlobs(Board& board, const GameConfig& config);
-    static void placeWaterLakes(Board& board, const GameConfig& config);
     static bool isConnected(const Board& board, sf::Vector2i from, sf::Vector2i to);
     static sf::Vector2i findValidBuildingPos(const Board& board,
                                               const std::vector<Building>& existing,
                                               int width, int height, int minDist,
-                                              int avoidLeftX, int avoidRightX);
+                                              int avoidLeftX, int avoidRightX,
+                                              std::mt19937& random);
+    static sf::Vector2i findSpawnCell(const Board& board,
+                                       int minX, int maxX,
+                                       std::mt19937& random);
     static bool canPlaceBuilding(const Board& board, sf::Vector2i origin, int w, int h);
 };

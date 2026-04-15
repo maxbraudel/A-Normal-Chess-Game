@@ -110,6 +110,7 @@ void SaveManager::writeJson(std::ostream& output, const SaveData& data) {
     output << "  \"turnNumber\": " << normalized.turnNumber << ",\n";
     output << "  \"activeKingdom\": " << static_cast<int>(normalized.activeKingdom) << ",\n";
     output << "  \"mapRadius\": " << normalized.mapRadius << ",\n";
+    output << "  \"worldSeed\": " << normalized.worldSeed << ",\n";
     output << "  \"gameMode\": " << static_cast<int>(normalized.mode) << ",\n";
     output << "  \"whiteController\": " << static_cast<int>(normalized.controllers[0]) << ",\n";
     output << "  \"blackController\": " << static_cast<int>(normalized.controllers[1]) << ",\n";
@@ -497,6 +498,7 @@ bool SaveManager::deserialize(const std::string& json, SaveData& outData) {
     outData.turnNumber = extractInt(json, "turnNumber", 1);
     outData.activeKingdom = static_cast<KingdomId>(extractInt(json, "activeKingdom", 0));
     outData.mapRadius = extractInt(json, "mapRadius", 50);
+    outData.worldSeed = static_cast<std::uint32_t>(std::max(0, extractInt(json, "worldSeed", 0)));
     outData.mode = static_cast<GameMode>(extractInt(json, "gameMode", static_cast<int>(outData.mode)));
 
     const auto defaultControllers = controllersForGameMode(outData.mode);

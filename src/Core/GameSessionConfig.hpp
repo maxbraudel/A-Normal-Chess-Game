@@ -69,6 +69,7 @@ inline std::array<KingdomParticipantConfig, kNumKingdoms> defaultKingdomParticip
 
 struct GameSessionConfig {
     std::string saveName;
+    std::uint32_t worldSeed = 0;
     std::array<KingdomParticipantConfig, kNumKingdoms> kingdoms =
         defaultKingdomParticipants(GameMode::HumanVsAI);
     MultiplayerConfig multiplayer{};

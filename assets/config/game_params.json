@@ -7,12 +7,16 @@
         "min_public_building_distance": 10,
         "player_spawn_zone_percent": 25,
         "ai_spawn_zone_percent": 25,
-        "num_dirt_blobs": 30,
-        "dirt_blob_min_radius": 5,
-        "dirt_blob_max_radius": 20,
-        "num_lakes": 8,
-        "lake_min_radius": 3,
-        "lake_max_radius": 10
+        "terrain_noise_scale": 14,
+        "terrain_octaves": 3,
+        "dirt_coverage_percent": 14,
+        "water_coverage_percent": 4,
+        "num_dirt_blobs": 6,
+        "dirt_blob_min_radius": 2,
+        "dirt_blob_max_radius": 5,
+        "num_lakes": 3,
+        "lake_min_radius": 2,
+        "lake_max_radius": 3
     },
     "economy": {
         "starting_gold": 0,

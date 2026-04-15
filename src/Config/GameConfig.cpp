@@ -35,12 +35,16 @@ void GameConfig::setDefaults() {
     m_minPublicBuildingDistance = 10;
     m_playerSpawnZonePercent = 25;
     m_aiSpawnZonePercent = 25;
-    m_numDirtBlobs = 30;
-    m_dirtBlobMinRadius = 5;
-    m_dirtBlobMaxRadius = 20;
-    m_numLakes = 8;
-    m_lakeMinRadius = 3;
-    m_lakeMaxRadius = 10;
+    m_terrainNoiseScale = 14;
+    m_terrainOctaves = 3;
+    m_dirtCoveragePercent = 14;
+    m_waterCoveragePercent = 4;
+    m_numDirtBlobs = 6;
+    m_dirtBlobMinRadius = 2;
+    m_dirtBlobMaxRadius = 5;
+    m_numLakes = 3;
+    m_lakeMinRadius = 2;
+    m_lakeMaxRadius = 3;
 
     m_startingGold = 0;
     m_mineIncomePerCellPerTurn = 10;
@@ -147,6 +151,10 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
         m_minPublicBuildingDistance = extractInt(mapSec, "min_public_building_distance", m_minPublicBuildingDistance);
         m_playerSpawnZonePercent = extractInt(mapSec, "player_spawn_zone_percent", m_playerSpawnZonePercent);
         m_aiSpawnZonePercent = extractInt(mapSec, "ai_spawn_zone_percent", m_aiSpawnZonePercent);
+        m_terrainNoiseScale = extractInt(mapSec, "terrain_noise_scale", m_terrainNoiseScale);
+        m_terrainOctaves = extractInt(mapSec, "terrain_octaves", m_terrainOctaves);
+        m_dirtCoveragePercent = extractInt(mapSec, "dirt_coverage_percent", m_dirtCoveragePercent);
+        m_waterCoveragePercent = extractInt(mapSec, "water_coverage_percent", m_waterCoveragePercent);
         m_numDirtBlobs = extractInt(mapSec, "num_dirt_blobs", m_numDirtBlobs);
         m_dirtBlobMinRadius = extractInt(mapSec, "dirt_blob_min_radius", m_dirtBlobMinRadius);
         m_dirtBlobMaxRadius = extractInt(mapSec, "dirt_blob_max_radius", m_dirtBlobMaxRadius);
@@ -231,6 +239,10 @@ int GameConfig::getNumFarms() const { return m_numFarms; }
 int GameConfig::getMinPublicBuildingDistance() const { return m_minPublicBuildingDistance; }
 int GameConfig::getPlayerSpawnZonePercent() const { return m_playerSpawnZonePercent; }
 int GameConfig::getAISpawnZonePercent() const { return m_aiSpawnZonePercent; }
+int GameConfig::getTerrainNoiseScale() const { return m_terrainNoiseScale; }
+int GameConfig::getTerrainOctaves() const { return m_terrainOctaves; }
+int GameConfig::getDirtCoveragePercent() const { return m_dirtCoveragePercent; }
+int GameConfig::getWaterCoveragePercent() const { return m_waterCoveragePercent; }
 int GameConfig::getNumDirtBlobs() const { return m_numDirtBlobs; }
 int GameConfig::getDirtBlobMinRadius() const { return m_dirtBlobMinRadius; }
 int GameConfig::getDirtBlobMaxRadius() const { return m_dirtBlobMaxRadius; }

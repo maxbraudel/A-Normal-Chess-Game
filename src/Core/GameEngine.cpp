@@ -1,10 +1,39 @@
 #include "Core/GameEngine.hpp"
 
 #include <algorithm>
+#include <random>
 
 #include "Board/BoardGenerator.hpp"
 #include "Config/GameConfig.hpp"
 #include "Core/GameStateValidator.hpp"
+
+namespace {
+
+std::uint32_t makeRandomWorldSeed() {
+    std::random_device randomDevice;
+    std::mt19937 generator(randomDevice());
+    std::uniform_int_distribution<std::uint32_t> dist(1u, 0x7fffffffu);
+    return dist(generator);
+}
+
+std::uint32_t deriveLegacyWorldSeed(const SaveData& data) {
+    std::uint32_t hash = 2166136261u;
+    auto mix = [&](std::uint32_t value) {
+        hash ^= value;
+        hash *= 16777619u;
+    };
+
+    for (const char current : data.gameName) {
+        mix(static_cast<std::uint32_t>(static_cast<unsigned char>(current)));
+    }
+
+    mix(static_cast<std::uint32_t>(data.turnNumber));
+    mix(static_cast<std::uint32_t>(data.mapRadius));
+    mix(static_cast<std::uint32_t>(data.activeKingdom));
+    return (hash == 0) ? 1u : (hash & 0x7fffffffu);
+}
+
+}
 
 void relinkBoardState(Board& board,
                       std::array<Kingdom, kNumKingdoms>& kingdoms,
@@ -55,12 +84,15 @@ bool GameEngine::startNewSession(const GameSessionConfig& session,
     }
 
     m_sessionConfig = session;
+    if (m_sessionConfig.worldSeed == 0) {
+        m_sessionConfig.worldSeed = makeRandomWorldSeed();
+    }
     m_pieceFactory.reset();
     m_buildingFactory.reset();
 
     m_board.init(config.getMapRadius());
     m_publicBuildings.clear();
-    const auto generation = BoardGenerator::generate(m_board, config, m_publicBuildings);
+    const auto generation = BoardGenerator::generate(m_board, config, m_publicBuildings, m_sessionConfig.worldSeed);
 
     for (int kingdomSlot = 0; kingdomSlot < kNumKingdoms; ++kingdomSlot) {
         const auto kingdomId = static_cast<KingdomId>(kingdomSlot);
@@ -95,6 +127,7 @@ bool GameEngine::restoreFromSave(const SaveData& data,
     }
 
     m_sessionConfig.saveName = data.gameName;
+    m_sessionConfig.worldSeed = (data.worldSeed != 0) ? data.worldSeed : deriveLegacyWorldSeed(data);
     m_sessionConfig.kingdoms = data.sessionKingdoms;
     m_sessionConfig.multiplayer = data.multiplayer;
 
@@ -110,7 +143,7 @@ bool GameEngine::restoreFromSave(const SaveData& data,
         }
     } else {
         std::vector<Building> generatedPublicBuildings;
-        BoardGenerator::generate(m_board, config, generatedPublicBuildings);
+        BoardGenerator::generate(m_board, config, generatedPublicBuildings, m_sessionConfig.worldSeed);
     }
 
     for (int kingdomSlot = 0; kingdomSlot < kNumKingdoms; ++kingdomSlot) {
@@ -148,6 +181,7 @@ SaveData GameEngine::createSaveData() const {
     data.turnNumber = m_turnSystem.getTurnNumber();
     data.activeKingdom = m_turnSystem.getActiveKingdom();
     data.mapRadius = m_board.getRadius();
+    data.worldSeed = m_sessionConfig.worldSeed;
     data.sessionKingdoms = m_sessionConfig.kingdoms;
     data.multiplayer = m_sessionConfig.multiplayer;
 

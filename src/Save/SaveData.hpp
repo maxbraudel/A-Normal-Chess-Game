@@ -15,6 +15,7 @@ struct SaveData {
     int turnNumber = 1;
     KingdomId activeKingdom = KingdomId::White;
     int mapRadius = 50;
+    std::uint32_t worldSeed = 0;
     GameMode mode = GameMode::HumanVsAI;
     std::array<ControllerType, kNumKingdoms> controllers{
         ControllerType::Human,
