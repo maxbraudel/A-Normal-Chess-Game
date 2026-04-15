@@ -4,7 +4,7 @@
 BuildingFactory::BuildingFactory() : m_nextId(100) {}
 
 Building BuildingFactory::createBuilding(BuildingType type, KingdomId owner, sf::Vector2i origin,
-                                          const GameConfig& config) {
+                                          const GameConfig& config, int rotationQuarterTurns) {
     Building b;
     b.id = m_nextId++;
     b.type = type;
@@ -13,6 +13,8 @@ Building BuildingFactory::createBuilding(BuildingType type, KingdomId owner, sf:
     b.origin = origin;
     b.width = config.getBuildingWidth(type);
     b.height = config.getBuildingHeight(type);
+    b.rotationQuarterTurns = rotationQuarterTurns;
+    b.flipMask = 0;
     b.isProducing = false;
     b.producingType = 0;
     b.turnsRemaining = 0;

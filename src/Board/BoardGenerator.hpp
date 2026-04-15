@@ -18,6 +18,7 @@ public:
     static GenerationResult generate(Board& board, const GameConfig& config,
                                       std::vector<Building>& publicBuildings,
                                       std::uint32_t worldSeed);
+    static void applyTerrainVisuals(Board& board, std::uint32_t worldSeed);
 
 private:
     static bool isConnected(const Board& board, sf::Vector2i from, sf::Vector2i to);

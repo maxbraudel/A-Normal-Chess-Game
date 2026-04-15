@@ -26,6 +26,7 @@ bool writeTurnCommand(sf::Packet& packet, const TurnCommand& command) {
            << static_cast<sf::Int32>(command.buildingType)
            << command.buildOrigin.x
            << command.buildOrigin.y
+           << static_cast<sf::Int32>(command.buildRotationQuarterTurns)
            << command.barracksId
            << static_cast<sf::Int32>(command.produceType)
            << command.upgradePieceId
@@ -37,6 +38,7 @@ bool writeTurnCommand(sf::Packet& packet, const TurnCommand& command) {
 bool readTurnCommand(sf::Packet& packet, TurnCommand& command) {
     sf::Uint8 type = 0;
     sf::Int32 buildingType = 0;
+    sf::Int32 buildRotationQuarterTurns = 0;
     sf::Int32 produceType = 0;
     sf::Int32 upgradeTarget = 0;
 
@@ -49,6 +51,7 @@ bool readTurnCommand(sf::Packet& packet, TurnCommand& command) {
           >> buildingType
           >> command.buildOrigin.x
           >> command.buildOrigin.y
+          >> buildRotationQuarterTurns
           >> command.barracksId
           >> produceType
           >> command.upgradePieceId
@@ -59,6 +62,7 @@ bool readTurnCommand(sf::Packet& packet, TurnCommand& command) {
 
     command.type = static_cast<TurnCommand::Type>(type);
     command.buildingType = static_cast<BuildingType>(buildingType);
+    command.buildRotationQuarterTurns = buildRotationQuarterTurns;
     command.produceType = static_cast<PieceType>(produceType);
     command.upgradeTarget = static_cast<PieceType>(upgradeTarget);
     return true;

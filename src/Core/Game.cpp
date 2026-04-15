@@ -672,7 +672,7 @@ void Game::render() {
                 const Building* selectedBuilding = m_input.getSelectedBuilding();
                 m_renderer.getOverlay().drawSelectionFrame(m_window, m_camera,
                     m_hudView, m_windowSize, selectedBuilding->origin,
-                    selectedBuilding->width, selectedBuilding->height,
+                    selectedBuilding->getFootprintWidth(), selectedBuilding->getFootprintHeight(),
                     m_config.getCellSizePx());
             } else if (m_input.hasSelectedCell()) {
                 m_renderer.getOverlay().drawSelectionFrame(m_window, m_camera,
@@ -682,21 +682,26 @@ void Game::render() {
         }
         if (showActionOverlays && m_input.hasBuildPreview()) {
             BuildingType bt = m_input.getBuildPreviewType();
-            int bw = m_config.getBuildingWidth(bt);
-            int bh = m_config.getBuildingHeight(bt);
+            const int previewRotationQuarterTurns = m_input.getBuildPreviewRotationQuarterTurns();
+            const int bw = m_config.getBuildingWidth(bt);
+            const int bh = m_config.getBuildingHeight(bt);
             Kingdom& builder = activeKingdom();
             Piece* king = builder.getKing();
             bool valid = king && BuildSystem::canBuild(bt, m_input.getBuildPreviewOrigin(),
-                                                        *king, board(), builder, m_config);
+                                                        *king, board(), builder, m_config,
+                                                        previewRotationQuarterTurns);
             m_renderer.getOverlay().drawBuildPreview(m_window, m_camera,
-                m_input.getBuildPreviewOrigin(), bw, bh, m_config.getCellSizePx(), valid);
+                m_input.getBuildPreviewOrigin(), bt, bw, bh, previewRotationQuarterTurns,
+                0, m_config.getCellSizePx(), valid, m_assets);
         }
         if (showActionOverlays) {
             if (const TurnCommand* pendingBuild = turnSystem().getPendingBuildCommand()) {
-            int bw = m_config.getBuildingWidth(pendingBuild->buildingType);
-            int bh = m_config.getBuildingHeight(pendingBuild->buildingType);
+            const int bw = m_config.getBuildingWidth(pendingBuild->buildingType);
+            const int bh = m_config.getBuildingHeight(pendingBuild->buildingType);
             m_renderer.getOverlay().drawBuildPreview(m_window, m_camera,
-                pendingBuild->buildOrigin, bw, bh, m_config.getCellSizePx(), true);
+                pendingBuild->buildOrigin, pendingBuild->buildingType, bw, bh,
+                pendingBuild->buildRotationQuarterTurns, 0,
+                m_config.getCellSizePx(), true, m_assets);
             }
         }
         m_renderer.getOverlay().drawZoneIndicators(m_window, m_camera, m_hudView,

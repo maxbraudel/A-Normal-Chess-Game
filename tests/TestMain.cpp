@@ -178,7 +178,7 @@ std::string buildGenerationSignature(const Board& board,
                                     const GenerationResult& generation) {
     std::string signature;
     const int diameter = board.getDiameter();
-    signature.reserve(diameter * diameter);
+    signature.reserve(diameter * diameter * 3);
 
     for (int y = 0; y < diameter; ++y) {
         for (int x = 0; x < diameter; ++x) {
@@ -193,6 +193,9 @@ std::string buildGenerationSignature(const Board& board,
                 case CellType::Water: signature.push_back('W'); break;
                 case CellType::Void: signature.push_back('V'); break;
             }
+
+            signature += std::to_string(cell.terrainFlipMask);
+            signature.push_back(',');
         }
     }
 
@@ -203,6 +206,10 @@ std::string buildGenerationSignature(const Board& board,
         signature += std::to_string(building.origin.x);
         signature += ',';
         signature += std::to_string(building.origin.y);
+        signature += ',';
+        signature += std::to_string(building.rotationQuarterTurns);
+        signature += ',';
+        signature += std::to_string(building.flipMask);
         signature += ';';
     }
 
@@ -481,21 +488,37 @@ void testSaveManagerRoundTrip() {
 
     data.grid = {
         {
-            {CellType::Grass, true},
-            {CellType::Water, true}
+            {CellType::Grass, true, 1},
+            {CellType::Water, true, 2}
         },
         {
-            {CellType::Void, false},
-            {CellType::Dirt, true}
+            {CellType::Void, false, 0},
+            {CellType::Dirt, true, 3}
         }
     };
 
     data.kingdoms[0].id = KingdomId::White;
     data.kingdoms[0].gold = 120;
     data.kingdoms[0].pieces.push_back(Piece(0, PieceType::King, KingdomId::White, {0, 0}));
+    Building ownedBarracks = makeTestBarracks(10, KingdomId::White, {1, 1}, GameConfig{});
+    ownedBarracks.rotationQuarterTurns = 1;
+    ownedBarracks.flipMask = 0;
+    data.kingdoms[0].buildings.push_back(ownedBarracks);
     data.kingdoms[1].id = KingdomId::Black;
     data.kingdoms[1].gold = 95;
     data.kingdoms[1].pieces.push_back(Piece(1, PieceType::King, KingdomId::Black, {1, 0}));
+    Building publicMine;
+    publicMine.id = 20;
+    publicMine.type = BuildingType::Mine;
+    publicMine.owner = KingdomId::White;
+    publicMine.isNeutral = true;
+    publicMine.origin = {3, 4};
+    publicMine.width = 6;
+    publicMine.height = 4;
+    publicMine.rotationQuarterTurns = 3;
+    publicMine.flipMask = 2;
+    publicMine.cellHP.assign(publicMine.width * publicMine.height, 1);
+    data.publicBuildings.push_back(publicMine);
     data.events.push_back({7, KingdomId::Black, "AI said \"check\" and held {center}."});
 
     SaveManager manager;
@@ -508,18 +531,28 @@ void testSaveManagerRoundTrip() {
 
     expect(loaded.grid.size() == 2 && loaded.grid[0].size() == 2,
            "Grid data should round-trip through SaveManager.");
+        expect(loaded.grid[0][0].terrainFlipMask == data.grid[0][0].terrainFlipMask
+            && loaded.grid[1][1].terrainFlipMask == data.grid[1][1].terrainFlipMask,
+            "Terrain flip masks should round-trip through SaveManager.");
     expect(loaded.events.size() == 1 && loaded.events[0].message == data.events[0].message,
            "Event messages should preserve escaped characters.");
     expect(loaded.sessionKingdoms[0].participantName == data.sessionKingdoms[0].participantName,
            "Session participant names should round-trip through SaveManager.");
-          expect(loaded.worldSeed == data.worldSeed,
-              "World seed should round-trip through SaveManager.");
+        expect(loaded.worldSeed == data.worldSeed,
+            "World seed should round-trip through SaveManager.");
         expect(loaded.controllers[0] == ControllerType::Human && loaded.controllers[1] == ControllerType::Human,
            "Legacy controller metadata should stay aligned with session metadata.");
         expect(loaded.multiplayer.enabled && loaded.multiplayer.port == data.multiplayer.port,
             "Multiplayer metadata should round-trip through SaveManager.");
         expect(loaded.multiplayer.passwordHash == data.multiplayer.passwordHash,
             "Multiplayer password hash should round-trip through SaveManager.");
+        expect(loaded.kingdoms[0].buildings.size() == 1
+            && loaded.kingdoms[0].buildings[0].rotationQuarterTurns == ownedBarracks.rotationQuarterTurns,
+            "Owned building rotations should round-trip through SaveManager.");
+        expect(loaded.publicBuildings.size() == 1
+            && loaded.publicBuildings[0].flipMask == publicMine.flipMask
+            && loaded.publicBuildings[0].rotationQuarterTurns == publicMine.rotationQuarterTurns,
+            "Public building transforms should round-trip through SaveManager.");
 }
 
         void testSaveManagerStringRoundTrip() {
@@ -567,6 +600,7 @@ void testSaveManagerRoundTrip() {
             command.destination = {3, 4};
             command.buildingType = BuildingType::Barracks;
             command.buildOrigin = {5, 6};
+            command.buildRotationQuarterTurns = 3;
             command.barracksId = 7;
             command.produceType = PieceType::Knight;
             command.upgradePieceId = 8;
@@ -587,6 +621,8 @@ void testSaveManagerRoundTrip() {
             expect(submission.commands.size() == 1, "Turn submission packets should preserve command counts.");
             expect(submission.commands[0].buildOrigin == command.buildOrigin,
                 "Turn submission packets should preserve command payloads.");
+            expect(submission.commands[0].buildRotationQuarterTurns == command.buildRotationQuarterTurns,
+                "Turn submission packets should preserve build rotation payloads.");
             expect(submission.commands[0].upgradeTarget == command.upgradeTarget,
                 "Turn submission packets should preserve enum payloads.");
         }

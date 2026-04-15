@@ -41,6 +41,7 @@ public:
     // Build mode
     BuildingType getBuildPreviewType() const;
     sf::Vector2i getBuildPreviewOrigin() const;
+    int getBuildPreviewRotationQuarterTurns() const;
     bool hasBuildPreview() const;
     void setBuildType(BuildingType type);
 
@@ -64,6 +65,7 @@ private:
     bool m_hasBuildPreview;
     BuildingType m_buildPreviewType;
     sf::Vector2i m_buildPreviewOrigin;
+    int m_buildPreviewRotationQuarterTurns;
 
     // Camera dragging
     bool m_isDragging;

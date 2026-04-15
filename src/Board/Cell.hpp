@@ -7,6 +7,7 @@ class Piece;
 
 struct Cell {
     CellType type = CellType::Void;
+    int terrainFlipMask = 0;
     Building* building = nullptr;
     Piece* piece = nullptr;
     bool isInCircle = false;

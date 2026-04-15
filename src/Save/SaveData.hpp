@@ -30,6 +30,7 @@ struct SaveData {
     struct CellData {
         CellType type = CellType::Grass;
         bool isInCircle = false;
+        int terrainFlipMask = -1;
     };
     std::vector<std::vector<CellData>> grid;
 

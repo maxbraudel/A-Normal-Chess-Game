@@ -8,9 +8,12 @@
 
 bool BuildSystem::canBuild(BuildingType type, sf::Vector2i origin,
                             const Piece& king, const Board& board,
-                            const Kingdom& kingdom, const GameConfig& config) {
-    int w = config.getBuildingWidth(type);
-    int h = config.getBuildingHeight(type);
+                            const Kingdom& kingdom, const GameConfig& config,
+                            int rotationQuarterTurns) {
+    const int baseWidth = config.getBuildingWidth(type);
+    const int baseHeight = config.getBuildingHeight(type);
+    const int w = Building::getFootprintWidthFor(baseWidth, baseHeight, rotationQuarterTurns);
+    const int h = Building::getFootprintHeightFor(baseWidth, baseHeight, rotationQuarterTurns);
 
     // Check budget
     int cost = 0;
@@ -55,7 +58,8 @@ bool BuildSystem::canBuild(BuildingType type, sf::Vector2i origin,
 }
 
 Building BuildSystem::place(BuildingType type, sf::Vector2i origin,
-                             KingdomId owner, Board& board, const GameConfig& config) {
+                             KingdomId owner, Board& board, const GameConfig& config,
+                             int rotationQuarterTurns) {
     Building b;
     b.type = type;
     b.owner = owner;
@@ -63,6 +67,8 @@ Building BuildSystem::place(BuildingType type, sf::Vector2i origin,
     b.origin = origin;
     b.width = config.getBuildingWidth(type);
     b.height = config.getBuildingHeight(type);
+    b.rotationQuarterTurns = rotationQuarterTurns;
+    b.flipMask = 0;
     b.isProducing = false;
     b.producingType = 0;
     b.turnsRemaining = 0;

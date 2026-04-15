@@ -129,7 +129,8 @@ void SaveManager::writeJson(std::ostream& output, const SaveData& data) {
         output << "    [";
         for (std::size_t x = 0; x < normalized.grid[y].size(); ++x) {
             output << "{\"t\":" << static_cast<int>(normalized.grid[y][x].type)
-                   << ",\"c\":" << (normalized.grid[y][x].isInCircle ? 1 : 0) << "}";
+                   << ",\"c\":" << (normalized.grid[y][x].isInCircle ? 1 : 0)
+                   << ",\"f\":" << normalized.grid[y][x].terrainFlipMask << "}";
             if (x + 1 < normalized.grid[y].size()) output << ",";
         }
         output << "]";
@@ -359,6 +360,8 @@ std::string SaveManager::serializeBuilding(const Building& b) {
        << ", \"oy\": " << b.origin.y
        << ", \"w\": " << b.width
        << ", \"h\": " << b.height
+    << ", \"rot\": " << b.rotationQuarterTurns
+    << ", \"fm\": " << b.flipMask
        << ", \"isProducing\": " << (b.isProducing ? "true" : "false")
        << ", \"producingType\": " << b.producingType
        << ", \"turnsRemaining\": " << b.turnsRemaining
@@ -434,6 +437,8 @@ Building SaveManager::parseBuilding(const std::string& json) {
     b.origin.y = extractInt(json, "oy", 0);
     b.width = extractInt(json, "w", 1);
     b.height = extractInt(json, "h", 1);
+    b.rotationQuarterTurns = extractInt(json, "rot", -1);
+    b.flipMask = extractInt(json, "fm", -1);
     b.isProducing = extractBool(json, "isProducing", false);
     b.producingType = extractInt(json, "producingType", 0);
     b.turnsRemaining = extractInt(json, "turnsRemaining", 0);
@@ -561,6 +566,7 @@ bool SaveManager::deserialize(const std::string& json, SaveData& outData) {
             SaveData::CellData cell;
             cell.type = static_cast<CellType>(extractInt(cellElement, "t", static_cast<int>(CellType::Grass)));
             cell.isInCircle = extractInt(cellElement, "c", 0) != 0;
+            cell.terrainFlipMask = extractInt(cellElement, "f", -1);
             row.push_back(cell);
         }
         outData.grid.push_back(std::move(row));

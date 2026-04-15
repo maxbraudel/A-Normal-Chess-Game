@@ -2,6 +2,7 @@
 #include <SFML/Graphics.hpp>
 #include <array>
 #include <vector>
+#include "Buildings/BuildingType.hpp"
 #include "Kingdom/KingdomId.hpp"
 
 class AssetManager;
@@ -23,7 +24,11 @@ public:
     void drawDangerCells(sf::RenderWindow& window, const Camera& camera,
                           const std::vector<sf::Vector2i>& cells, int cellSize);
     void drawBuildPreview(sf::RenderWindow& window, const Camera& camera,
-                           sf::Vector2i origin, int width, int height, int cellSize, bool valid);
+                           sf::Vector2i origin, BuildingType type,
+                           int width, int height,
+                           int rotationQuarterTurns, int flipMask,
+                           int cellSize, bool valid,
+                           const AssetManager& assets);
     void drawZoneIndicators(sf::RenderWindow& window, const Camera& camera,
                              const sf::View& hudView, sf::Vector2u windowSize,
                              const Board& board, const std::vector<Building>& publicBuildings,

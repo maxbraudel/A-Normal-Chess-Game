@@ -26,6 +26,7 @@ InputHandler::InputHandler()
     m_hasSelectedCell(false), m_selectedCell({0, 0}),
       m_hasMovePreview(false), m_hasBuildPreview(false),
       m_buildPreviewType(BuildingType::Barracks),
+    m_buildPreviewRotationQuarterTurns(0),
       m_isDragging(false) {}
 
 ToolState InputHandler::getCurrentTool() const { return m_currentTool; }
@@ -47,8 +48,14 @@ sf::Vector2i InputHandler::getMoveTo() const { return m_moveTo; }
 
 BuildingType InputHandler::getBuildPreviewType() const { return m_buildPreviewType; }
 sf::Vector2i InputHandler::getBuildPreviewOrigin() const { return m_buildPreviewOrigin; }
+int InputHandler::getBuildPreviewRotationQuarterTurns() const { return m_buildPreviewRotationQuarterTurns; }
 bool InputHandler::hasBuildPreview() const { return m_hasBuildPreview; }
-void InputHandler::setBuildType(BuildingType type) { m_buildPreviewType = type; }
+void InputHandler::setBuildType(BuildingType type) {
+    if (m_buildPreviewType != type) {
+        m_buildPreviewRotationQuarterTurns = 0;
+    }
+    m_buildPreviewType = type;
+}
 
 void InputHandler::clearSelection() {
     m_selectedPiece = nullptr;
@@ -130,6 +137,11 @@ void InputHandler::handleEvent(const sf::Event& event, const InputContext& conte
                                           + context.config.getCellSizePx() / 2);
             context.camera.centerOn({cx, cy});
         }
+    }
+
+    if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::R
+        && m_currentTool == ToolState::Build && context.allowCommands) {
+        m_buildPreviewRotationQuarterTurns = (m_buildPreviewRotationQuarterTurns + 1) % 4;
     }
 
     switch (m_currentTool) {
@@ -405,11 +417,13 @@ void InputHandler::handleBuildTool(const sf::Event& event, const InputContext& c
                                   *king,
                                   context.board,
                                   context.controlledKingdom,
-                                  context.config)) {
+                                  context.config,
+                                  m_buildPreviewRotationQuarterTurns)) {
             const TurnCommand* pendingBuild = context.turnSystem.getPendingBuildCommand();
             if (pendingBuild) {
                 bool samePlacement = pendingBuild->buildingType == m_buildPreviewType
-                    && pendingBuild->buildOrigin == cellPos;
+                    && pendingBuild->buildOrigin == cellPos
+                    && pendingBuild->buildRotationQuarterTurns == m_buildPreviewRotationQuarterTurns;
                 context.turnSystem.cancelBuildCommand();
                 if (samePlacement) {
                     return;
@@ -420,6 +434,7 @@ void InputHandler::handleBuildTool(const sf::Event& event, const InputContext& c
             cmd.type = TurnCommand::Build;
             cmd.buildingType = m_buildPreviewType;
             cmd.buildOrigin = cellPos;
+            cmd.buildRotationQuarterTurns = m_buildPreviewRotationQuarterTurns;
             context.turnSystem.queueCommand(cmd);
         }
     }

@@ -18,6 +18,8 @@ namespace {
 constexpr float kPi = 3.14159265f;
 constexpr int kNeighbourDx[8] = {1, 1, 0, -1, -1, -1, 0, 1};
 constexpr int kNeighbourDy[8] = {0, 1, 1, 1, 0, -1, -1, -1};
+constexpr int kFlipHorizontalMask = 1;
+constexpr int kFlipVerticalMask = 2;
 
 struct TerrainComponent {
     std::vector<sf::Vector2i> cells;
@@ -54,6 +56,19 @@ std::uint32_t mixSeed(std::uint32_t seed, std::uint32_t value) {
 float hashValue(std::uint32_t seed, int x, int y) {
     const auto hashed = mixSeed(seed, static_cast<std::uint32_t>(x * 374761393) ^ static_cast<std::uint32_t>(y * 668265263));
     return static_cast<float>(hashed & 0x00ffffffu) / static_cast<float>(0x00ffffffu);
+}
+
+int terrainFlipMaskFor(std::uint32_t worldSeed, int x, int y, CellType type) {
+    if (type == CellType::Void) {
+        return 0;
+    }
+
+    std::uint32_t seed = (worldSeed == 0) ? 1u : worldSeed;
+    seed = mixSeed(seed, static_cast<std::uint32_t>(type) + 1u);
+    const std::uint32_t positionHash = (static_cast<std::uint32_t>(x + 1) * 73856093u)
+        ^ (static_cast<std::uint32_t>(y + 1) * 19349663u);
+    seed = mixSeed(seed, positionHash);
+    return static_cast<int>(seed & (kFlipHorizontalMask | kFlipVerticalMask));
 }
 
 float lerp(float a, float b, float t) {
@@ -475,9 +490,18 @@ GenerationResult BoardGenerator::generate(Board& board, const GameConfig& config
         }
     }
 
+    applyTerrainVisuals(board, worldSeed);
+
+    std::uniform_int_distribution<int> rotationDist(0, 3);
+    std::uniform_int_distribution<int> flipMaskDist(0, kFlipHorizontalMask | kFlipVerticalMask);
+
     const int churchW = config.getBuildingWidth(BuildingType::Church);
     const int churchH = config.getBuildingHeight(BuildingType::Church);
-    const sf::Vector2i churchPos = findValidBuildingPos(board, publicBuildings, churchW, churchH,
+    const int churchRotation = rotationDist(random);
+    const int churchFlipMask = flipMaskDist(random);
+    const int churchFootprintW = Building::getFootprintWidthFor(churchW, churchH, churchRotation);
+    const int churchFootprintH = Building::getFootprintHeightFor(churchW, churchH, churchRotation);
+    const sf::Vector2i churchPos = findValidBuildingPos(board, publicBuildings, churchFootprintW, churchFootprintH,
                                                         0, spawnLeftMax, spawnRightMin, random);
     {
         Building church;
@@ -487,16 +511,16 @@ GenerationResult BoardGenerator::generate(Board& board, const GameConfig& config
         church.origin = churchPos;
         church.width = churchW;
         church.height = churchH;
+        church.rotationQuarterTurns = churchRotation;
+        church.flipMask = churchFlipMask;
         church.isNeutral = true;
         church.cellHP.assign(churchW * churchH, 999);
         church.isProducing = false;
         church.turnsRemaining = 0;
         publicBuildings.push_back(church);
 
-        for (int dy = 0; dy < churchH; ++dy) {
-            for (int dx = 0; dx < churchW; ++dx) {
-                board.getCell(churchPos.x + dx, churchPos.y + dy).building = &publicBuildings.back();
-            }
+        for (const auto& occupiedCell : publicBuildings.back().getOccupiedCells()) {
+            board.getCell(occupiedCell.x, occupiedCell.y).building = &publicBuildings.back();
         }
     }
 
@@ -505,7 +529,11 @@ GenerationResult BoardGenerator::generate(Board& board, const GameConfig& config
     for (int i = 0; i < config.getNumMines(); ++i) {
         const int mineW = config.getBuildingWidth(BuildingType::Mine);
         const int mineH = config.getBuildingHeight(BuildingType::Mine);
-        const sf::Vector2i pos = findValidBuildingPos(board, publicBuildings, mineW, mineH,
+        const int mineRotation = rotationDist(random);
+        const int mineFlipMask = flipMaskDist(random);
+        const int mineFootprintW = Building::getFootprintWidthFor(mineW, mineH, mineRotation);
+        const int mineFootprintH = Building::getFootprintHeightFor(mineW, mineH, mineRotation);
+        const sf::Vector2i pos = findValidBuildingPos(board, publicBuildings, mineFootprintW, mineFootprintH,
                                                       minDist, spawnLeftMax, spawnRightMin, random);
         Building mine;
         mine.id = static_cast<int>(publicBuildings.size());
@@ -514,23 +542,27 @@ GenerationResult BoardGenerator::generate(Board& board, const GameConfig& config
         mine.origin = pos;
         mine.width = mineW;
         mine.height = mineH;
+        mine.rotationQuarterTurns = mineRotation;
+        mine.flipMask = mineFlipMask;
         mine.isNeutral = true;
         mine.cellHP.assign(mineW * mineH, 999);
         mine.isProducing = false;
         mine.turnsRemaining = 0;
         publicBuildings.push_back(mine);
 
-        for (int dy = 0; dy < mineH; ++dy) {
-            for (int dx = 0; dx < mineW; ++dx) {
-                board.getCell(pos.x + dx, pos.y + dy).building = &publicBuildings.back();
-            }
+        for (const auto& occupiedCell : publicBuildings.back().getOccupiedCells()) {
+            board.getCell(occupiedCell.x, occupiedCell.y).building = &publicBuildings.back();
         }
     }
 
     for (int i = 0; i < config.getNumFarms(); ++i) {
         const int farmW = config.getBuildingWidth(BuildingType::Farm);
         const int farmH = config.getBuildingHeight(BuildingType::Farm);
-        const sf::Vector2i pos = findValidBuildingPos(board, publicBuildings, farmW, farmH,
+        const int farmRotation = rotationDist(random);
+        const int farmFlipMask = flipMaskDist(random);
+        const int farmFootprintW = Building::getFootprintWidthFor(farmW, farmH, farmRotation);
+        const int farmFootprintH = Building::getFootprintHeightFor(farmW, farmH, farmRotation);
+        const sf::Vector2i pos = findValidBuildingPos(board, publicBuildings, farmFootprintW, farmFootprintH,
                                                       minDist, spawnLeftMax, spawnRightMin, random);
         Building farm;
         farm.id = static_cast<int>(publicBuildings.size());
@@ -539,22 +571,37 @@ GenerationResult BoardGenerator::generate(Board& board, const GameConfig& config
         farm.origin = pos;
         farm.width = farmW;
         farm.height = farmH;
+        farm.rotationQuarterTurns = farmRotation;
+        farm.flipMask = farmFlipMask;
         farm.isNeutral = true;
         farm.cellHP.assign(farmW * farmH, 999);
         farm.isProducing = false;
         farm.turnsRemaining = 0;
         publicBuildings.push_back(farm);
 
-        for (int dy = 0; dy < farmH; ++dy) {
-            for (int dx = 0; dx < farmW; ++dx) {
-                board.getCell(pos.x + dx, pos.y + dy).building = &publicBuildings.back();
-            }
+        for (const auto& occupiedCell : publicBuildings.back().getOccupiedCells()) {
+            board.getCell(occupiedCell.x, occupiedCell.y).building = &publicBuildings.back();
         }
     }
 
     result.playerSpawn = findSpawnCell(board, 1, spawnLeftMax, random);
     result.aiSpawn = findSpawnCell(board, spawnRightMin, diameter - 2, random);
     return result;
+}
+
+void BoardGenerator::applyTerrainVisuals(Board& board, std::uint32_t worldSeed) {
+    const int diameter = board.getDiameter();
+    for (int y = 0; y < diameter; ++y) {
+        for (int x = 0; x < diameter; ++x) {
+            Cell& cell = board.getCell(x, y);
+            if (!cell.isInCircle || cell.type == CellType::Void) {
+                cell.terrainFlipMask = 0;
+                continue;
+            }
+
+            cell.terrainFlipMask = terrainFlipMaskFor(worldSeed, x, y, cell.type);
+        }
+    }
 }
 
 bool BoardGenerator::isConnected(const Board& board, sf::Vector2i from, sf::Vector2i to) {
@@ -616,8 +663,8 @@ sf::Vector2i BoardGenerator::findValidBuildingPos(const Board& board,
 
             bool tooClose = false;
             for (const auto& building : existing) {
-                const float bx = static_cast<float>(building.origin.x + (building.width / 2));
-                const float by = static_cast<float>(building.origin.y + (building.height / 2));
+                const float bx = static_cast<float>(building.origin.x + (building.getFootprintWidth() / 2));
+                const float by = static_cast<float>(building.origin.y + (building.getFootprintHeight() / 2));
                 const float px = static_cast<float>(x + (width / 2));
                 const float py = static_cast<float>(y + (height / 2));
                 const float distance = std::sqrt(((bx - px) * (bx - px)) + ((by - py) * (by - py)));

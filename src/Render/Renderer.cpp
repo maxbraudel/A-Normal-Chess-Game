@@ -12,6 +12,50 @@
 #include "Systems/TurnSystem.hpp"
 #include <algorithm>
 
+namespace {
+
+constexpr int kFlipHorizontalMask = 1;
+constexpr int kFlipVerticalMask = 2;
+
+void configureSpriteForCell(sf::Sprite& sprite, int cellSize,
+                            float cellX, float cellY,
+                            int rotationQuarterTurns, int flipMask) {
+    const sf::Texture* texture = sprite.getTexture();
+    if (!texture) {
+        return;
+    }
+
+    const sf::Vector2u textureSize = texture->getSize();
+    if (textureSize.x == 0 || textureSize.y == 0) {
+        return;
+    }
+
+    sprite.setOrigin(static_cast<float>(textureSize.x) * 0.5f,
+                     static_cast<float>(textureSize.y) * 0.5f);
+    sprite.setPosition(cellX + (static_cast<float>(cellSize) * 0.5f),
+                       cellY + (static_cast<float>(cellSize) * 0.5f));
+
+    float scaleX = static_cast<float>(cellSize) / static_cast<float>(textureSize.x);
+    float scaleY = static_cast<float>(cellSize) / static_cast<float>(textureSize.y);
+    if ((flipMask & kFlipHorizontalMask) != 0) {
+        scaleX = -scaleX;
+    }
+    if ((flipMask & kFlipVerticalMask) != 0) {
+        scaleY = -scaleY;
+    }
+
+    sprite.setScale(scaleX, scaleY);
+
+    int normalizedRotation = rotationQuarterTurns;
+    if (normalizedRotation < 0) {
+        normalizedRotation = 0;
+    }
+    normalizedRotation %= 4;
+    sprite.setRotation(static_cast<float>(normalizedRotation) * 90.f);
+}
+
+} // namespace
+
 Renderer::Renderer() : m_assets(nullptr), m_cellSize(16) {}
 
 void Renderer::init(const AssetManager& assets, int cellSize) {
@@ -63,16 +107,11 @@ void Renderer::drawBoard(sf::RenderWindow& window, const Camera& camera, const B
             if (!cell.isInCircle) continue;
 
             sprite.setTexture(m_assets->getCellTexture(cell.type));
-            sprite.setPosition(static_cast<float>(x * m_cellSize), static_cast<float>(y * m_cellSize));
-
-            // Scale texture to cell size
-            sf::Vector2u texSize = sprite.getTexture()->getSize();
-            if (texSize.x > 0 && texSize.y > 0) {
-                sprite.setScale(
-                    static_cast<float>(m_cellSize) / static_cast<float>(texSize.x),
-                    static_cast<float>(m_cellSize) / static_cast<float>(texSize.y)
-                );
-            }
+            sprite.setColor(sf::Color::White);
+            configureSpriteForCell(sprite, m_cellSize,
+                                   static_cast<float>(x * m_cellSize),
+                                   static_cast<float>(y * m_cellSize),
+                                   0, cell.terrainFlipMask);
 
             window.draw(sprite);
         }
@@ -99,23 +138,25 @@ void Renderer::drawBuildings(sf::RenderWindow& window, const Camera& camera,
 
 void Renderer::drawSingleBuilding(sf::RenderWindow& window, const Building& building) {
     sf::Sprite sprite;
+    const int footprintWidth = building.getFootprintWidth();
+    const int footprintHeight = building.getFootprintHeight();
 
-    for (int dy = 0; dy < building.height; ++dy) {
-        for (int dx = 0; dx < building.width; ++dx) {
-            sprite.setTexture(m_assets->getBuildingTexture(building.type, dx, dy));
+    for (int dy = 0; dy < footprintHeight; ++dy) {
+        for (int dx = 0; dx < footprintWidth; ++dx) {
+            const sf::Vector2i sourceLocal = building.mapFootprintToSourceLocal(dx, dy);
+            if (sourceLocal.x < 0 || sourceLocal.y < 0) {
+                continue;
+            }
+
+            sprite.setTexture(m_assets->getBuildingTexture(building.type, sourceLocal.x, sourceLocal.y));
 
             int x = building.origin.x + dx;
             int y = building.origin.y + dy;
 
-            sprite.setPosition(static_cast<float>(x * m_cellSize), static_cast<float>(y * m_cellSize));
-
-            sf::Vector2u texSize = sprite.getTexture()->getSize();
-            if (texSize.x > 0 && texSize.y > 0) {
-                sprite.setScale(
-                    static_cast<float>(m_cellSize) / static_cast<float>(texSize.x),
-                    static_cast<float>(m_cellSize) / static_cast<float>(texSize.y)
-                );
-            }
+            configureSpriteForCell(sprite, m_cellSize,
+                                   static_cast<float>(x * m_cellSize),
+                                   static_cast<float>(y * m_cellSize),
+                                   building.rotationQuarterTurns, building.flipMask);
 
             // Gray out destroyed cells
             int hp = building.getCellHP(dx, dy);

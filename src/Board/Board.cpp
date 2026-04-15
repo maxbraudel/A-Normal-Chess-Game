@@ -6,6 +6,7 @@
 
 Board::Board() : m_radius(0), m_diameter(0) {
     m_voidCell.type = CellType::Void;
+    m_voidCell.terrainFlipMask = 0;
     m_voidCell.isInCircle = false;
 }
 
@@ -32,6 +33,7 @@ void Board::init(int radius) {
                 cell.type = CellType::Void;
                 cell.isInCircle = false;
             }
+            cell.terrainFlipMask = 0;
             cell.building = nullptr;
             cell.piece = nullptr;
         }

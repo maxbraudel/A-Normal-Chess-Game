@@ -1,7 +1,9 @@
 #pragma once
-#include <vector>
+#include <algorithm>
 #include <memory>
+#include <vector>
 #include <SFML/System/Vector2.hpp>
+#include "Buildings/Building.hpp"
 #include "Units/PieceType.hpp"
 #include "Buildings/BuildingType.hpp"
 #include "Kingdom/KingdomId.hpp"
@@ -26,25 +28,53 @@ struct SnapBuilding {
     sf::Vector2i origin{0, 0};
     int width = 1;
     int height = 1;
+    int rotationQuarterTurns = 0;
+    int flipMask = 0;
     std::vector<int> cellHP;
     bool isProducing = false;
     PieceType producingType = PieceType::Pawn;
     int turnsRemaining = 0;
 
+    int getFootprintWidth() const {
+        return Building::getFootprintWidthFor(width, height, rotationQuarterTurns);
+    }
+
+    int getFootprintHeight() const {
+        return Building::getFootprintHeightFor(width, height, rotationQuarterTurns);
+    }
+
+    sf::Vector2i mapFootprintToSourceLocal(int localX, int localY) const {
+        return Building::mapFootprintToSourceLocalFor(
+            localX, localY, width, height, rotationQuarterTurns, flipMask);
+    }
+
     bool containsCell(int x, int y) const {
-        return x >= origin.x && x < origin.x + width &&
-               y >= origin.y && y < origin.y + height;
+        return x >= origin.x && x < origin.x + getFootprintWidth() &&
+               y >= origin.y && y < origin.y + getFootprintHeight();
     }
 
     bool isDestroyed() const {
+        if (isNeutral) return false;
         for (int hp : cellHP) if (hp > 0) return false;
         return true;
     }
 
+    void damageCellAt(int localX, int localY) {
+        const sf::Vector2i sourceLocal = mapFootprintToSourceLocal(localX, localY);
+        if (sourceLocal.x < 0 || sourceLocal.y < 0) {
+            return;
+        }
+
+        const int index = sourceLocal.y * width + sourceLocal.x;
+        if (index >= 0 && index < static_cast<int>(cellHP.size())) {
+            cellHP[index] = std::max(0, cellHP[index] - 1);
+        }
+    }
+
     std::vector<sf::Vector2i> getOccupiedCells() const {
         std::vector<sf::Vector2i> cells;
-        for (int dy = 0; dy < height; ++dy)
-            for (int dx = 0; dx < width; ++dx)
+        for (int dy = 0; dy < getFootprintHeight(); ++dy)
+            for (int dx = 0; dx < getFootprintWidth(); ++dx)
                 cells.push_back({origin.x + dx, origin.y + dy});
         return cells;
     }

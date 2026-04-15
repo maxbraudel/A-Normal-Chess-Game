@@ -9,6 +9,9 @@
 
 namespace {
 
+constexpr int kFlipHorizontalMask = 1;
+constexpr int kFlipVerticalMask = 2;
+
 std::uint32_t makeRandomWorldSeed() {
     std::random_device randomDevice;
     std::mt19937 generator(randomDevice());
@@ -31,6 +34,54 @@ std::uint32_t deriveLegacyWorldSeed(const SaveData& data) {
     mix(static_cast<std::uint32_t>(data.mapRadius));
     mix(static_cast<std::uint32_t>(data.activeKingdom));
     return (hash == 0) ? 1u : (hash & 0x7fffffffu);
+}
+
+std::uint32_t mixVisualSeed(std::uint32_t seed, std::uint32_t value) {
+    std::uint32_t hash = seed ^ (value + 0x9e3779b9u + (seed << 6) + (seed >> 2));
+    hash ^= hash >> 16;
+    hash *= 0x7feb352du;
+    hash ^= hash >> 15;
+    hash *= 0x846ca68bu;
+    hash ^= hash >> 16;
+    return hash;
+}
+
+int deriveLegacyPublicBuildingRotation(std::uint32_t worldSeed, const Building& building) {
+    std::uint32_t seed = (worldSeed == 0) ? 1u : worldSeed;
+    seed = mixVisualSeed(seed, static_cast<std::uint32_t>(building.type) + 1u);
+    seed = mixVisualSeed(seed, static_cast<std::uint32_t>(building.origin.x + 1) * 2654435761u);
+    seed = mixVisualSeed(seed, static_cast<std::uint32_t>(building.origin.y + 1) * 2246822519u);
+    return static_cast<int>(seed & 0x3u);
+}
+
+int deriveLegacyPublicBuildingFlipMask(std::uint32_t worldSeed, const Building& building) {
+    std::uint32_t seed = (worldSeed == 0) ? 1u : worldSeed;
+    seed = mixVisualSeed(seed, static_cast<std::uint32_t>(building.type) + 17u);
+    seed = mixVisualSeed(seed, static_cast<std::uint32_t>(building.origin.x + 1) * 3266489917u);
+    seed = mixVisualSeed(seed, static_cast<std::uint32_t>(building.origin.y + 1) * 668265263u);
+    return static_cast<int>(seed & (kFlipHorizontalMask | kFlipVerticalMask));
+}
+
+void normalizeLoadedBuildingVisuals(std::vector<Building>& buildings, std::uint32_t worldSeed) {
+    for (auto& building : buildings) {
+        if (building.rotationQuarterTurns < 0) {
+            building.rotationQuarterTurns = building.isPublic()
+                ? deriveLegacyPublicBuildingRotation(worldSeed, building)
+                : 0;
+        }
+
+        if (building.flipMask < 0) {
+            building.flipMask = building.isPublic()
+                ? deriveLegacyPublicBuildingFlipMask(worldSeed, building)
+                : 0;
+        }
+
+        if (!building.isPublic()) {
+            building.flipMask = 0;
+        } else {
+            building.flipMask &= (kFlipHorizontalMask | kFlipVerticalMask);
+        }
+    }
 }
 
 }
@@ -141,6 +192,15 @@ bool GameEngine::restoreFromSave(const SaveData& data,
                 grid[y][x].isInCircle = data.grid[y][x].isInCircle;
             }
         }
+
+        BoardGenerator::applyTerrainVisuals(m_board, m_sessionConfig.worldSeed);
+        for (int y = 0; y < diameter && y < static_cast<int>(data.grid.size()); ++y) {
+            for (int x = 0; x < diameter && x < static_cast<int>(data.grid[y].size()); ++x) {
+                if (data.grid[y][x].terrainFlipMask >= 0) {
+                    grid[y][x].terrainFlipMask = data.grid[y][x].terrainFlipMask;
+                }
+            }
+        }
     } else {
         std::vector<Building> generatedPublicBuildings;
         BoardGenerator::generate(m_board, config, generatedPublicBuildings, m_sessionConfig.worldSeed);
@@ -156,9 +216,11 @@ bool GameEngine::restoreFromSave(const SaveData& data,
         for (const auto& building : data.kingdoms[kingdomSlot].buildings) {
             m_kingdoms[kingdomSlot].addBuilding(building);
         }
+        normalizeLoadedBuildingVisuals(m_kingdoms[kingdomSlot].buildings, m_sessionConfig.worldSeed);
     }
 
     m_publicBuildings = data.publicBuildings;
+    normalizeLoadedBuildingVisuals(m_publicBuildings, m_sessionConfig.worldSeed);
 
     relinkBoardState(m_board, m_kingdoms, m_publicBuildings);
 
@@ -193,6 +255,7 @@ SaveData GameEngine::createSaveData() const {
             const Cell& cell = m_board.getCell(x, y);
             data.grid[y][x].type = cell.type;
             data.grid[y][x].isInCircle = cell.isInCircle;
+            data.grid[y][x].terrainFlipMask = cell.terrainFlipMask;
         }
     }
 

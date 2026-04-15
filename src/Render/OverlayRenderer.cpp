@@ -12,6 +12,8 @@
 namespace {
 
 const sf::Color kSelectionBlue(80, 160, 255, 240);
+constexpr int kFlipHorizontalMask = 1;
+constexpr int kFlipVerticalMask = 2;
 
 void drawDot(sf::RenderWindow& window, float x, float y, float diameter) {
     sf::RectangleShape dot({diameter, diameter});
@@ -54,6 +56,43 @@ void drawVerticalDotColumn(sf::RenderWindow& window, float x, float startY, floa
     if (endY - lastY > 0.5f) {
         drawDot(window, x, endY, diameter);
     }
+}
+
+void configureSpriteForCell(sf::Sprite& sprite, int cellSize,
+                            float cellX, float cellY,
+                            int rotationQuarterTurns, int flipMask) {
+    const sf::Texture* texture = sprite.getTexture();
+    if (!texture) {
+        return;
+    }
+
+    const sf::Vector2u textureSize = texture->getSize();
+    if (textureSize.x == 0 || textureSize.y == 0) {
+        return;
+    }
+
+    sprite.setOrigin(static_cast<float>(textureSize.x) * 0.5f,
+                     static_cast<float>(textureSize.y) * 0.5f);
+    sprite.setPosition(cellX + (static_cast<float>(cellSize) * 0.5f),
+                       cellY + (static_cast<float>(cellSize) * 0.5f));
+
+    float scaleX = static_cast<float>(cellSize) / static_cast<float>(textureSize.x);
+    float scaleY = static_cast<float>(cellSize) / static_cast<float>(textureSize.y);
+    if ((flipMask & kFlipHorizontalMask) != 0) {
+        scaleX = -scaleX;
+    }
+    if ((flipMask & kFlipVerticalMask) != 0) {
+        scaleY = -scaleY;
+    }
+
+    sprite.setScale(scaleX, scaleY);
+
+    int normalizedRotation = rotationQuarterTurns;
+    if (normalizedRotation < 0) {
+        normalizedRotation = 0;
+    }
+    normalizedRotation %= 4;
+    sprite.setRotation(static_cast<float>(normalizedRotation) * 90.f);
 }
 
 } // namespace
@@ -123,16 +162,43 @@ void OverlayRenderer::drawDangerCells(sf::RenderWindow& window, const Camera& ca
 }
 
 void OverlayRenderer::drawBuildPreview(sf::RenderWindow& window, const Camera& camera,
-                                         sf::Vector2i origin, int width, int height, int cellSize, bool valid) {
+                                         sf::Vector2i origin, BuildingType type,
+                                         int width, int height,
+                                         int rotationQuarterTurns, int flipMask,
+                                         int cellSize, bool valid,
+                                         const AssetManager& assets) {
+    (void)camera;
+
+    const int footprintWidth = Building::getFootprintWidthFor(width, height, rotationQuarterTurns);
+    const int footprintHeight = Building::getFootprintHeightFor(width, height, rotationQuarterTurns);
     sf::Color color = valid ? sf::Color(0, 200, 0, 80) : sf::Color(200, 0, 0, 80);
 
-    for (int dy = 0; dy < height; ++dy) {
-        for (int dx = 0; dx < width; ++dx) {
+    for (int dy = 0; dy < footprintHeight; ++dy) {
+        for (int dx = 0; dx < footprintWidth; ++dx) {
             sf::RectangleShape rect(sf::Vector2f(static_cast<float>(cellSize), static_cast<float>(cellSize)));
             rect.setFillColor(color);
             rect.setPosition(static_cast<float>((origin.x + dx) * cellSize),
                             static_cast<float>((origin.y + dy) * cellSize));
             window.draw(rect);
+        }
+    }
+
+    sf::Sprite sprite;
+    sprite.setColor(sf::Color(255, 255, 255, 128));
+    for (int dy = 0; dy < footprintHeight; ++dy) {
+        for (int dx = 0; dx < footprintWidth; ++dx) {
+            const sf::Vector2i sourceLocal = Building::mapFootprintToSourceLocalFor(
+                dx, dy, width, height, rotationQuarterTurns, flipMask);
+            if (sourceLocal.x < 0 || sourceLocal.y < 0) {
+                continue;
+            }
+
+            sprite.setTexture(assets.getBuildingTexture(type, sourceLocal.x, sourceLocal.y));
+            configureSpriteForCell(sprite, cellSize,
+                                   static_cast<float>((origin.x + dx) * cellSize),
+                                   static_cast<float>((origin.y + dy) * cellSize),
+                                   rotationQuarterTurns, flipMask);
+            window.draw(sprite);
         }
     }
 }
@@ -168,7 +234,7 @@ void OverlayRenderer::drawZoneIndicators(sf::RenderWindow& window, const Camera&
         if (!whitePresent && !blackPresent) continue;
 
         // World-space anchor: horizontally centered above the building, one cell above top edge
-        float worldX = static_cast<float>(building.origin.x * cellSize + building.width * cellSize / 2);
+        float worldX = static_cast<float>(building.origin.x * cellSize + building.getFootprintWidth() * cellSize / 2);
         float worldY = static_cast<float>(building.origin.y * cellSize - cellSize / 2);
 
         // Convert that world point to screen pixels (respects camera pan + zoom)

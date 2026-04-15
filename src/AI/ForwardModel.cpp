@@ -25,6 +25,8 @@ static SnapBuilding toSnapBuilding(const Building& b) {
     sb.origin = b.origin;
     sb.width = b.width;
     sb.height = b.height;
+    sb.rotationQuarterTurns = b.rotationQuarterTurns;
+    sb.flipMask = b.flipMask;
     sb.cellHP = b.cellHP;
     sb.isProducing = b.isProducing;
     sb.producingType = static_cast<PieceType>(b.producingType);
@@ -232,10 +234,7 @@ bool ForwardModel::applyMove(GameSnapshot& s, int pieceId, sf::Vector2i dest,
     if (bld && !bld->isNeutral && bld->owner != mover) {
         int localX = dest.x - bld->origin.x;
         int localY = dest.y - bld->origin.y;
-        int idx = localY * bld->width + localX;
-        if (idx >= 0 && idx < static_cast<int>(bld->cellHP.size())) {
-            bld->cellHP[idx] = std::max(0, bld->cellHP[idx] - 1);
-        }
+        bld->damageCellAt(localX, localY);
     }
 
     piece->position = dest;
@@ -354,11 +353,11 @@ bool ForwardModel::applyMarriage(GameSnapshot& s, KingdomId k) {
 sf::Vector2i ForwardModel::findSpawnCell(const GameSnapshot& s, const SnapBuilding& barracks) {
     // Search adjacent cells in expanding radius
     for (int r = 1; r <= 2; ++r) {
-        for (int dy = -r; dy <= barracks.height - 1 + r; ++dy) {
-            for (int dx = -r; dx <= barracks.width - 1 + r; ++dx) {
+        for (int dy = -r; dy <= barracks.getFootprintHeight() - 1 + r; ++dy) {
+            for (int dx = -r; dx <= barracks.getFootprintWidth() - 1 + r; ++dx) {
                 // Only the border ring for this radius
-                bool isBorder = (dx == -r || dx == barracks.width - 1 + r ||
-                                 dy == -r || dy == barracks.height - 1 + r);
+                bool isBorder = (dx == -r || dx == barracks.getFootprintWidth() - 1 + r ||
+                                 dy == -r || dy == barracks.getFootprintHeight() - 1 + r);
                 if (!isBorder && r > 1) continue;
 
                 int cx = barracks.origin.x + dx;

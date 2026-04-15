@@ -131,7 +131,8 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
             }
             case TurnCommand::Build: {
                 Building building = buildingFactory.createBuilding(
-                    cmd.buildingType, m_activeKingdom, cmd.buildOrigin, config);
+                    cmd.buildingType, m_activeKingdom, cmd.buildOrigin, config,
+                    cmd.buildRotationQuarterTurns);
 
                 int cost = 0;
                 switch (cmd.buildingType) {
