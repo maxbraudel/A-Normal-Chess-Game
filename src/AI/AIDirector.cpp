@@ -451,7 +451,7 @@ AIDirectorPlan AIDirector::computeTurn(Board& board, Kingdom& self, Kingdom& ene
     // --- 6. Tactical layer: MCTS for best move ---
     int mctsBudget = std::max(30, static_cast<int>(timer.remainingMs() * 0.6f));
     executeMove(plan, snapshot, ctx, aiKingdom, stratPlan,
-                globalMaxRange, weights, mctsBudget, forcePressure);
+                globalMaxRange, weights, mctsBudget, config, forcePressure);
 
     // --- 7. Build ---
     int incomePerTurn = estimateIncome(snapshot, aiKingdom,
@@ -480,7 +480,8 @@ AIDirectorPlan AIDirector::computeTurn(Board& board, Kingdom& self, Kingdom& ene
 void AIDirector::executeMove(AIDirectorPlan& plan, const GameSnapshot& snapshot,
                                const AITurnContext& ctx, KingdomId aiKingdom,
                                const TurnPlan& stratPlan, int globalMaxRange,
-                               const EvalWeights& weights, int mctsBudgetMs,
+                                const EvalWeights& weights, int mctsBudgetMs,
+                                const GameConfig& config,
                                bool forcePressure) {
     // Check if we already have a move command
     for (auto& cmd : plan.commands)
@@ -508,7 +509,7 @@ void AIDirector::executeMove(AIDirectorPlan& plan, const GameSnapshot& snapshot,
     if (mctsBudgetMs > 30) {
         MCTSAction best = m_mcts.search(snapshot, aiKingdom,
                                           stratPlan.primaryObjective,
-                                          globalMaxRange, weights, mctsBudgetMs);
+                                          globalMaxRange, weights, mctsBudgetMs, config);
         if (best.type == MCTSAction::MOVE && best.pieceId >= 0) {
             auto* piece = snapshot.kingdom(aiKingdom).getPieceById(best.pieceId);
             if (piece) {

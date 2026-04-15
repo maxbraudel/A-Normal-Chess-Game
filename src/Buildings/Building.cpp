@@ -2,6 +2,8 @@
 #include "Board/Board.hpp"
 #include "Board/Cell.hpp"
 
+#include <algorithm>
+
 namespace {
 
 constexpr int kFlipHorizontalMask = 1;
@@ -21,6 +23,20 @@ int normalizeFlipMask(int flipMask) {
     }
 
     return flipMask & (kFlipHorizontalMask | kFlipVerticalMask);
+}
+
+int getCellIndex(const Building& building, int localX, int localY) {
+    const sf::Vector2i sourceLocal = building.mapFootprintToSourceLocal(localX, localY);
+    if (sourceLocal.x < 0 || sourceLocal.y < 0) {
+        return -1;
+    }
+
+    const int index = sourceLocal.y * building.width + sourceLocal.x;
+    if (index < 0 || index >= static_cast<int>(building.cellHP.size())) {
+        return -1;
+    }
+
+    return index;
 }
 
 } // namespace
@@ -58,8 +74,42 @@ bool Building::hasVerticalFlip() const {
     return (normalizeFlipMask(flipMask) & kFlipVerticalMask) != 0;
 }
 
+bool Building::isWall() const {
+    return type == BuildingType::WoodWall || type == BuildingType::StoneWall;
+}
+
 sf::Vector2i Building::mapFootprintToSourceLocal(int localX, int localY) const {
     return mapFootprintToSourceLocalFor(localX, localY, width, height, rotationQuarterTurns, flipMask);
+}
+
+bool Building::isCellDestroyed(int localX, int localY) const {
+    return getCellHP(localX, localY) <= 0;
+}
+
+bool Building::isCellBreached(int localX, int localY) const {
+    if (type != BuildingType::StoneWall) {
+        return false;
+    }
+
+    const int index = getCellIndex(*this, localX, localY);
+    if (index < 0 || index >= static_cast<int>(cellBreachState.size())) {
+        return false;
+    }
+
+    return cellBreachState[index] != 0 && !isCellDestroyed(localX, localY);
+}
+
+void Building::setCellBreached(int localX, int localY, bool breached) {
+    const int index = getCellIndex(*this, localX, localY);
+    if (index < 0) {
+        return;
+    }
+
+    if (cellBreachState.size() < cellHP.size()) {
+        cellBreachState.resize(cellHP.size(), 0);
+    }
+
+    cellBreachState[index] = breached ? 1 : 0;
 }
 
 int Building::getFootprintWidthFor(int baseWidth, int baseHeight, int rotationQuarterTurns) {
@@ -118,28 +168,53 @@ sf::Vector2i Building::mapFootprintToSourceLocalFor(int localX, int localY,
 }
 
 bool Building::isCellDamaged(int localX, int localY) const {
-    const sf::Vector2i sourceLocal = mapFootprintToSourceLocal(localX, localY);
-    if (sourceLocal.x < 0 || sourceLocal.y < 0) return false;
-    int idx = sourceLocal.y * width + sourceLocal.x;
-    if (idx < 0 || idx >= static_cast<int>(cellHP.size())) return false;
-    int maxHP = cellHP.empty() ? 0 : cellHP[0];
-    return cellHP[idx] < maxHP;
+    const int index = getCellIndex(*this, localX, localY);
+    if (index < 0) return false;
+    const int maxHP = cellHP.empty() ? 0 : cellHP[0];
+    return cellHP[index] < maxHP || isCellBreached(localX, localY);
 }
 
 int Building::getCellHP(int localX, int localY) const {
-    const sf::Vector2i sourceLocal = mapFootprintToSourceLocal(localX, localY);
-    if (sourceLocal.x < 0 || sourceLocal.y < 0) return 0;
-    int idx = sourceLocal.y * width + sourceLocal.x;
-    if (idx < 0 || idx >= static_cast<int>(cellHP.size())) return 0;
-    return cellHP[idx];
+    const int index = getCellIndex(*this, localX, localY);
+    if (index < 0) return 0;
+    return cellHP[index];
+}
+
+void Building::setCellHP(int localX, int localY, int hp) {
+    const int index = getCellIndex(*this, localX, localY);
+    if (index < 0) {
+        return;
+    }
+
+    cellHP[index] = std::max(0, hp);
+    if (cellBreachState.size() < cellHP.size()) {
+        cellBreachState.resize(cellHP.size(), 0);
+    }
+    if (cellHP[index] <= 0) {
+        cellBreachState[index] = 0;
+    }
+}
+
+void Building::destroyCellAt(int localX, int localY) {
+    setCellHP(localX, localY, 0);
+    setCellBreached(localX, localY, false);
+}
+
+void Building::repairCellAt(int localX, int localY, int hp) {
+    setCellHP(localX, localY, hp);
+    setCellBreached(localX, localY, false);
 }
 
 void Building::damageCellAt(int localX, int localY) {
-    const sf::Vector2i sourceLocal = mapFootprintToSourceLocal(localX, localY);
-    if (sourceLocal.x < 0 || sourceLocal.y < 0) return;
-    int idx = sourceLocal.y * width + sourceLocal.x;
-    if (idx >= 0 && idx < static_cast<int>(cellHP.size()) && cellHP[idx] > 0)
-        cellHP[idx]--;
+    const int index = getCellIndex(*this, localX, localY);
+    if (index < 0 || cellHP[index] <= 0) {
+        return;
+    }
+
+    cellHP[index]--;
+    if (cellHP[index] <= 0 && index < static_cast<int>(cellBreachState.size())) {
+        cellBreachState[index] = 0;
+    }
 }
 
 std::vector<sf::Vector2i> Building::getOccupiedCells() const {

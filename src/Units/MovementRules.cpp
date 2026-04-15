@@ -6,6 +6,21 @@
 #include "Buildings/BuildingType.hpp"
 #include "Config/GameConfig.hpp"
 
+namespace {
+
+bool isBlockingWallCell(const Cell& cell, int worldX, int worldY) {
+    if (!cell.building) {
+        return false;
+    }
+
+    const int localX = worldX - cell.building->origin.x;
+    const int localY = worldY - cell.building->origin.y;
+    return cell.building->isWall()
+        && !cell.building->isCellDestroyed(localX, localY);
+}
+
+}
+
 std::vector<sf::Vector2i> MovementRules::getValidMoves(
     const Piece& piece, const Board& board, const GameConfig& config) {
     switch (piece.type) {
@@ -31,13 +46,10 @@ std::vector<sf::Vector2i> MovementRules::getPawnMoves(const Piece& piece, const 
         const Cell& cell = board.getCell(nx, ny);
         if (!cell.isInCircle || cell.type == CellType::Water) continue;
 
-        if (cell.building) {
-            auto bt = cell.building->type;
-            if (bt == BuildingType::WoodWall || bt == BuildingType::StoneWall) {
-                if (cell.building->owner != piece.kingdom && !cell.building->isNeutral)
-                    moves.push_back({nx, ny});
-                continue;
-            }
+        if (isBlockingWallCell(cell, nx, ny)) {
+            if (cell.building->owner != piece.kingdom && !cell.building->isNeutral)
+                moves.push_back({nx, ny});
+            continue;
         }
         if (cell.piece && cell.piece->kingdom == piece.kingdom) continue;
         moves.push_back({nx, ny});
@@ -57,13 +69,10 @@ std::vector<sf::Vector2i> MovementRules::getKnightMoves(const Piece& piece, cons
         const Cell& cell = board.getCell(nx, ny);
         if (!cell.isInCircle || cell.type == CellType::Water) continue;
 
-        if (cell.building) {
-            auto bt = cell.building->type;
-            if (bt == BuildingType::WoodWall || bt == BuildingType::StoneWall) {
-                if (cell.building->owner != piece.kingdom && !cell.building->isNeutral)
-                    moves.push_back({nx, ny});
-                continue;
-            }
+        if (isBlockingWallCell(cell, nx, ny)) {
+            if (cell.building->owner != piece.kingdom && !cell.building->isNeutral)
+                moves.push_back({nx, ny});
+            continue;
         }
         if (cell.piece && cell.piece->kingdom == piece.kingdom) continue;
         moves.push_back({nx, ny});
@@ -118,13 +127,10 @@ std::vector<sf::Vector2i> MovementRules::getKingMoves(const Piece& piece, const 
             const Cell& cell = board.getCell(nx, ny);
             if (!cell.isInCircle || cell.type == CellType::Water) continue;
 
-            if (cell.building) {
-                auto bt = cell.building->type;
-                if (bt == BuildingType::WoodWall || bt == BuildingType::StoneWall) {
-                    if (cell.building->owner != piece.kingdom && !cell.building->isNeutral)
-                        moves.push_back({nx, ny});
-                    continue;
-                }
+            if (isBlockingWallCell(cell, nx, ny)) {
+                if (cell.building->owner != piece.kingdom && !cell.building->isNeutral)
+                    moves.push_back({nx, ny});
+                continue;
             }
             if (cell.piece && cell.piece->kingdom == piece.kingdom) continue;
             moves.push_back({nx, ny});
@@ -143,13 +149,10 @@ std::vector<sf::Vector2i> MovementRules::traceDirection(
         const Cell& cell = board.getCell(nx, ny);
         if (!cell.isInCircle || cell.type == CellType::Water) break;
 
-        if (cell.building) {
-            auto bt = cell.building->type;
-            if (bt == BuildingType::WoodWall || bt == BuildingType::StoneWall) {
-                if (cell.building->owner != piece.kingdom && !cell.building->isNeutral)
-                    moves.push_back({nx, ny});
-                break;
-            }
+        if (isBlockingWallCell(cell, nx, ny)) {
+            if (cell.building->owner != piece.kingdom && !cell.building->isNeutral)
+                moves.push_back({nx, ny});
+            break;
         }
         if (cell.piece && cell.piece->kingdom == piece.kingdom) break;
         moves.push_back({nx, ny});

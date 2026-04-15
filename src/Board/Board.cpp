@@ -1,6 +1,7 @@
 #include "Board/Board.hpp"
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingType.hpp"
+#include "Systems/StructureIntegrityRules.hpp"
 #include "Units/Piece.hpp"
 #include <cmath>
 
@@ -60,9 +61,9 @@ bool Board::isTraversable(int x, int y, KingdomId mover) const {
     if (!cell.isInCircle) return false;
     if (cell.type == CellType::Water) return false;
     if (cell.building) {
-        // Walls block movement
-        if (cell.building->type == BuildingType::WoodWall || cell.building->type == BuildingType::StoneWall) {
-            // Friendly walls also block (except for knights, handled in MovementRules)
+        const int localX = x - cell.building->origin.x;
+        const int localY = y - cell.building->origin.y;
+        if (StructureIntegrityRules::isWallCellBlocking(*cell.building, localX, localY)) {
             return false;
         }
     }

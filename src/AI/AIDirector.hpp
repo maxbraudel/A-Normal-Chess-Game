@@ -66,7 +66,8 @@ private:
     void executeMove(AIDirectorPlan& plan, const GameSnapshot& snapshot,
                      const AITurnContext& ctx, KingdomId aiKingdom,
                      const TurnPlan& stratPlan, int globalMaxRange,
-                     const EvalWeights& weights, int mctsBudgetMs,
+                          const EvalWeights& weights, int mctsBudgetMs,
+                          const GameConfig& config,
                      bool forcePressure);
     void executeBuild(AIDirectorPlan& plan, const GameSnapshot& snapshot,
                       KingdomId aiKingdom, const TurnPlan& stratPlan,

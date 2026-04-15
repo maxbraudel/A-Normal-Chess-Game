@@ -5,11 +5,13 @@
 #include "Kingdom/Kingdom.hpp"
 #include "Buildings/Building.hpp"
 #include "Config/GameConfig.hpp"
+#include "Systems/BuildReachRules.hpp"
+#include "Systems/StructureIntegrityRules.hpp"
 
 bool BuildSystem::canBuild(BuildingType type, sf::Vector2i origin,
-                            const Piece& king, const Board& board,
-                            const Kingdom& kingdom, const GameConfig& config,
-                            int rotationQuarterTurns) {
+                           const Board& board,
+                           const Kingdom& kingdom, const GameConfig& config,
+                           int rotationQuarterTurns) {
     const int baseWidth = config.getBuildingWidth(type);
     const int baseHeight = config.getBuildingHeight(type);
     const int w = Building::getFootprintWidthFor(baseWidth, baseHeight, rotationQuarterTurns);
@@ -40,21 +42,7 @@ bool BuildSystem::canBuild(BuildingType type, sf::Vector2i origin,
         }
     }
 
-    // Check king adjacency: king must be adjacent to at least one cell of the building area
-    bool kingAdjacent = false;
-    for (int dy = 0; dy < h && !kingAdjacent; ++dy) {
-        for (int dx = 0; dx < w && !kingAdjacent; ++dx) {
-            int bx = origin.x + dx;
-            int by = origin.y + dy;
-            int diffX = std::abs(king.position.x - bx);
-            int diffY = std::abs(king.position.y - by);
-            if (diffX <= 1 && diffY <= 1 && (diffX + diffY > 0)) {
-                kingAdjacent = true;
-            }
-        }
-    }
-
-    return kingAdjacent;
+    return footprintHasAdjacentBuilder(origin, w, h, collectBuilderPositions(kingdom.pieces));
 }
 
 Building BuildSystem::place(BuildingType type, sf::Vector2i origin,
@@ -73,11 +61,9 @@ Building BuildSystem::place(BuildingType type, sf::Vector2i origin,
     b.producingType = 0;
     b.turnsRemaining = 0;
 
-    int hp = 1;
-    if (type == BuildingType::StoneWall) hp = config.getStoneWallHP();
-    else if (type == BuildingType::WoodWall) hp = config.getWoodWallHP();
-    else if (type == BuildingType::Barracks) hp = config.getBarracksCellHP();
+    const int hp = StructureIntegrityRules::defaultCellHP(type, config);
     b.cellHP.assign(b.width * b.height, hp);
+    b.cellBreachState.assign(b.width * b.height, 0);
 
     return b;
 }

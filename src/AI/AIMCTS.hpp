@@ -10,6 +10,7 @@
 #include "Kingdom/KingdomId.hpp"
 
 struct EvalWeights;
+class GameConfig;
 
 /// Action that can be taken in a turn
 struct MCTSAction {
@@ -45,21 +46,25 @@ public:
                       StrategicObjective objective,
                       int globalMaxRange,
                       const EvalWeights& weights,
-                      int budgetMs);
+                      int budgetMs,
+                      const GameConfig& config);
 
 private:
     // MCTS phases
     MCTSNode* selection(MCTSNode* node);
     MCTSNode* expansion(MCTSNode* node, KingdomId aiKingdom,
-                        StrategicObjective objective, int globalMaxRange);
+                                StrategicObjective objective, int globalMaxRange,
+                                const GameConfig& config);
     float simulation(const GameSnapshot& state, KingdomId aiKingdom,
-                     int globalMaxRange, const EvalWeights& weights, int rolloutDepth);
+                            int globalMaxRange, const EvalWeights& weights, int rolloutDepth,
+                            const GameConfig& config);
     void backpropagation(MCTSNode* node, float score);
 
     // Action generation with pruning
     std::vector<MCTSAction> generateCandidateActions(
         const GameSnapshot& s, KingdomId k,
-        StrategicObjective objective, int globalMaxRange);
+        StrategicObjective objective, int globalMaxRange,
+        const GameConfig& config);
 
     // Move relevance scoring for pruning
     float scoreMoveRelevance(const GameSnapshot& s, const SnapPiece& piece,
@@ -68,7 +73,8 @@ private:
     // Rollout helpers
     MCTSAction selectRolloutAction(const GameSnapshot& s, KingdomId active,
                                     int globalMaxRange);
-    void applyAction(GameSnapshot& s, const MCTSAction& action, KingdomId k);
+    void applyAction(GameSnapshot& s, const MCTSAction& action, KingdomId k,
+                     const GameConfig& config);
 
     // UCB1
     static float ucb1(const MCTSNode& child, int parentVisits, float C = 1.41f);

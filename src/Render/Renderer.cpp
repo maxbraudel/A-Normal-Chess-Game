@@ -160,7 +160,7 @@ void Renderer::drawSingleBuilding(sf::RenderWindow& window, const Building& buil
 
             // Gray out destroyed cells
             int hp = building.getCellHP(dx, dy);
-            if (hp <= 0 && !building.isPublic()) {
+            if ((hp <= 0 || building.isCellBreached(dx, dy)) && !building.isPublic()) {
                 sprite.setColor(sf::Color(80, 80, 80, 150));
             } else {
                 sprite.setColor(sf::Color::White);

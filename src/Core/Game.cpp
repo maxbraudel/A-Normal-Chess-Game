@@ -735,10 +735,9 @@ void Game::render() {
             const int bw = m_config.getBuildingWidth(bt);
             const int bh = m_config.getBuildingHeight(bt);
             Kingdom& builder = activeKingdom();
-            Piece* king = builder.getKing();
-            bool valid = king && BuildSystem::canBuild(bt, m_input.getBuildPreviewOrigin(),
-                                                        *king, board(), builder, m_config,
-                                                        previewRotationQuarterTurns);
+            bool valid = BuildSystem::canBuild(bt, m_input.getBuildPreviewOrigin(),
+                                               board(), builder, m_config,
+                                               previewRotationQuarterTurns);
             m_renderer.getOverlay().drawBuildPreview(m_window, m_camera,
                 m_input.getBuildPreviewOrigin(), bt, bw, bh, previewRotationQuarterTurns,
                 0, m_config.getCellSizePx(), valid, m_assets);

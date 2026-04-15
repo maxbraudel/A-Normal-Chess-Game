@@ -33,6 +33,7 @@
 #include "Multiplayer/Protocol.hpp"
 #include "Multiplayer/MultiplayerServer.hpp"
 #include "Save/SaveManager.hpp"
+#include "Systems/BuildSystem.hpp"
 #include "Systems/CheckResponseRules.hpp"
 #include "Systems/EconomySystem.hpp"
 #include "Systems/EventLog.hpp"
@@ -62,7 +63,22 @@ Building makeTestBarracks(int id, KingdomId owner, const sf::Vector2i& origin, c
     barracks.width = config.getBuildingWidth(BuildingType::Barracks);
     barracks.height = config.getBuildingHeight(BuildingType::Barracks);
     barracks.cellHP.assign(barracks.width * barracks.height, config.getBarracksCellHP());
+    barracks.cellBreachState.assign(barracks.width * barracks.height, 0);
     return barracks;
+}
+
+Building makeTestStoneWall(int id, KingdomId owner, const sf::Vector2i& origin, const GameConfig& config) {
+    Building wall;
+    wall.id = id;
+    wall.type = BuildingType::StoneWall;
+    wall.owner = owner;
+    wall.isNeutral = false;
+    wall.origin = origin;
+    wall.width = config.getBuildingWidth(BuildingType::StoneWall);
+    wall.height = config.getBuildingHeight(BuildingType::StoneWall);
+    wall.cellHP.assign(wall.width * wall.height, config.getStoneWallHP());
+    wall.cellBreachState.assign(wall.width * wall.height, 0);
+    return wall;
 }
 
 Building makeTestPublicBuilding(BuildingType type, const sf::Vector2i& origin, int width, int height) {
@@ -73,6 +89,7 @@ Building makeTestPublicBuilding(BuildingType type, const sf::Vector2i& origin, i
     building.width = width;
     building.height = height;
     building.cellHP.assign(width * height, 1);
+    building.cellBreachState.assign(width * height, 0);
     return building;
 }
 
@@ -892,7 +909,12 @@ void testSaveManagerRoundTrip() {
     Building ownedBarracks = makeTestBarracks(10, KingdomId::White, {1, 1}, GameConfig{});
     ownedBarracks.rotationQuarterTurns = 1;
     ownedBarracks.flipMask = 0;
+    ownedBarracks.destroyCellAt(0, 0);
     data.kingdoms[0].buildings.push_back(ownedBarracks);
+    Building breachedWall = makeTestStoneWall(11, KingdomId::White, {6, 1}, GameConfig{});
+    breachedWall.setCellHP(0, 0, std::max(1, breachedWall.getCellHP(0, 0) - 1));
+    breachedWall.setCellBreached(0, 0, true);
+    data.kingdoms[0].buildings.push_back(breachedWall);
     data.kingdoms[1].id = KingdomId::Black;
     data.kingdoms[1].gold = 95;
     data.kingdoms[1].pieces.push_back(Piece(1, PieceType::King, KingdomId::Black, {1, 0}));
@@ -935,9 +957,13 @@ void testSaveManagerRoundTrip() {
             "Multiplayer metadata should round-trip through SaveManager.");
         expect(loaded.multiplayer.passwordHash == data.multiplayer.passwordHash,
             "Multiplayer password hash should round-trip through SaveManager.");
-        expect(loaded.kingdoms[0].buildings.size() == 1
+        expect(loaded.kingdoms[0].buildings.size() == 2
             && loaded.kingdoms[0].buildings[0].rotationQuarterTurns == ownedBarracks.rotationQuarterTurns,
             "Owned building rotations should round-trip through SaveManager.");
+        expect(loaded.kingdoms[0].buildings[0].getCellHP(0, 0) == 0,
+            "Destroyed owned building cells should round-trip through SaveManager.");
+        expect(loaded.kingdoms[0].buildings[1].isCellBreached(0, 0),
+            "Stone wall breach state should round-trip through SaveManager.");
         expect(loaded.kingdoms[0].hasSpawnedBishop
             && loaded.kingdoms[0].lastBishopSpawnParity == data.kingdoms[0].lastBishopSpawnParity,
             "Kingdom bishop spawn memory should round-trip through SaveManager.");
@@ -1315,6 +1341,7 @@ void testTurnSystemSkipsUnaffordableBuild() {
 
     Kingdom white(KingdomId::White);
     Kingdom black(KingdomId::Black);
+    addPieceToBoard(white, board, 1, PieceType::King, KingdomId::White, {1, 1});
     std::vector<Building> publicBuildings;
     TurnSystem turnSystem;
     turnSystem.setActiveKingdom(KingdomId::White);
@@ -1361,6 +1388,187 @@ void testTurnSystemSkipsUnaffordableProduction() {
     expect(white.gold == 0, "Unaffordable production must not change gold.");
     expect(!white.buildings.front().isProducing, "Unaffordable production must not start barracks production.");
 }
+
+    void testBuildSystemAllowsPawnAdjacency() {
+        GameConfig config;
+        Board board;
+        board.init(10);
+
+        Kingdom white(KingdomId::White);
+        white.gold = config.getBarracksCost();
+        addPieceToBoard(white, board, 1, PieceType::King, KingdomId::White, {1, 1});
+        addPieceToBoard(white, board, 2, PieceType::Pawn, KingdomId::White, {5, 5});
+
+        expect(BuildSystem::canBuild(BuildingType::Barracks, {6, 5}, board, white, config),
+            "Barracks construction should be valid when a pawn is adjacent even if the king is far away.");
+        expect(!BuildSystem::canBuild(BuildingType::Barracks, {10, 10}, board, white, config),
+            "Build legality should still reject footprints that are not adjacent to any king or pawn builder.");
+    }
+
+    void testTurnSystemRepairsDestroyedOwnedCellWithPawnOccupancy() {
+        GameConfig config;
+        Board board;
+        board.init(10);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 1, PieceType::King, KingdomId::White, {0, 0});
+        addPieceToBoard(white, board, 2, PieceType::Pawn, KingdomId::White, {3, 3});
+        addPieceToBoard(black, board, 3, PieceType::King, KingdomId::Black, {9, 9});
+        white.gold = config.getRepairCostPerCell(BuildingType::Barracks);
+
+        white.addBuilding(makeTestBarracks(80, KingdomId::White, {3, 3}, config));
+        Building& barracks = white.buildings.back();
+        barracks.destroyCellAt(0, 0);
+        linkBuildingOnBoard(barracks, board);
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+        EventLog eventLog;
+        PieceFactory pieceFactory;
+        BuildingFactory buildingFactory;
+
+        turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+
+        expect(white.buildings.front().getCellHP(0, 0) == config.getBarracksCellHP(),
+            "A pawn standing on a destroyed owned cell should repair it during commit.");
+        expect(white.gold == 0,
+            "Repairing a destroyed owned cell should deduct the configured per-cell repair cost.");
+    }
+
+    void testTurnSystemRepairsBeforeIncome() {
+        GameConfig config;
+        Board board;
+        board.init(10);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 1, PieceType::King, KingdomId::White, {0, 0});
+        addPieceToBoard(white, board, 2, PieceType::Pawn, KingdomId::White, {3, 3});
+        addPieceToBoard(white, board, 3, PieceType::Pawn, KingdomId::White, {7, 7});
+        addPieceToBoard(black, board, 4, PieceType::King, KingdomId::Black, {9, 9});
+        white.gold = config.getRepairCostPerCell(BuildingType::Barracks) - 1;
+
+        white.addBuilding(makeTestBarracks(81, KingdomId::White, {3, 3}, config));
+        Building& barracks = white.buildings.back();
+        barracks.destroyCellAt(0, 0);
+        linkBuildingOnBoard(barracks, board);
+
+        std::vector<Building> publicBuildings;
+        publicBuildings.push_back(makeTestPublicBuilding(BuildingType::Mine, {7, 7}, 1, 1));
+        linkBuildingOnBoard(publicBuildings.back(), board);
+
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+        EventLog eventLog;
+        PieceFactory pieceFactory;
+        BuildingFactory buildingFactory;
+
+        turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+
+        expect(white.buildings.front().getCellHP(0, 0) == 0,
+            "Repairs must resolve before income, so post-income gold cannot repair a cell in the same commit.");
+        expect(white.gold == config.getRepairCostPerCell(BuildingType::Barracks) - 1
+                    + config.getMineIncomePerCellPerTurn(),
+            "Income should still be collected after an unaffordable repair attempt is skipped.");
+    }
+
+    void testStoneWallDestroysWhenEnemyStaysOnBreachedCellUntilNextCommit() {
+        GameConfig config;
+        Board board;
+        board.init(10);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 1, PieceType::King, KingdomId::White, {0, 0});
+        addPieceToBoard(white, board, 2, PieceType::Pawn, KingdomId::White, {3, 4});
+        addPieceToBoard(black, board, 3, PieceType::King, KingdomId::Black, {9, 9});
+        black.addBuilding(makeTestStoneWall(82, KingdomId::Black, {4, 4}, config));
+        linkBuildingOnBoard(black.buildings.back(), board);
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+        EventLog eventLog;
+        PieceFactory pieceFactory;
+        BuildingFactory buildingFactory;
+
+        TurnCommand moveCommand;
+        moveCommand.type = TurnCommand::Move;
+        moveCommand.pieceId = 2;
+        moveCommand.origin = {3, 4};
+        moveCommand.destination = {4, 4};
+        expect(turnSystem.queueCommand(moveCommand), "Initial breach move should queue successfully.");
+        turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+
+        expect(black.buildings.size() == 1 && black.buildings.front().isCellBreached(0, 0),
+            "The first enemy occupancy of a stone wall should leave the wall in a persistent breached state.");
+        expect(board.getCell(4, 4).building != nullptr,
+            "A breached stone wall should remain on the board after the first commit.");
+
+        turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+
+        expect(black.buildings.empty(),
+            "A stone wall should be fully destroyed when an enemy piece stays on the breached cell until the next commit.");
+        expect(board.getCell(4, 4).building == nullptr,
+            "Destroyed stone walls should be removed from the board when the breach is finished.");
+    }
+
+    void testStoneWallBreachPersistsAfterAttackerLeavesAndFinishesOnReturn() {
+        GameConfig config;
+        Board board;
+        board.init(10);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 1, PieceType::King, KingdomId::White, {0, 0});
+        addPieceToBoard(white, board, 2, PieceType::Pawn, KingdomId::White, {3, 4});
+        addPieceToBoard(black, board, 3, PieceType::King, KingdomId::Black, {9, 9});
+        black.addBuilding(makeTestStoneWall(83, KingdomId::Black, {4, 4}, config));
+        linkBuildingOnBoard(black.buildings.back(), board);
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+        EventLog eventLog;
+        PieceFactory pieceFactory;
+        BuildingFactory buildingFactory;
+
+        TurnCommand breachMove;
+        breachMove.type = TurnCommand::Move;
+        breachMove.pieceId = 2;
+        breachMove.origin = {3, 4};
+        breachMove.destination = {4, 4};
+        expect(turnSystem.queueCommand(breachMove), "Breach move should queue successfully.");
+        turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+
+        TurnCommand leaveMove;
+        leaveMove.type = TurnCommand::Move;
+        leaveMove.pieceId = 2;
+        leaveMove.origin = {4, 4};
+        leaveMove.destination = {5, 4};
+        expect(turnSystem.queueCommand(leaveMove), "Leaving a breached wall should still be allowed.");
+        turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+
+        expect(black.buildings.size() == 1 && black.buildings.front().isCellBreached(0, 0),
+            "A breached stone wall should stay breached after the attacker leaves the cell.");
+        expect(!board.isTraversable(4, 4, KingdomId::White),
+            "A breached stone wall should still block movement until a later occupancy finishes the destruction.");
+
+        TurnCommand returnMove;
+        returnMove.type = TurnCommand::Move;
+        returnMove.pieceId = 2;
+        returnMove.origin = {5, 4};
+        returnMove.destination = {4, 4};
+        expect(turnSystem.queueCommand(returnMove), "Returning to a breached wall should queue successfully.");
+        turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+
+        expect(black.buildings.empty(),
+            "A later occupancy on a breached stone wall should finish destroying it.");
+        expect(board.getCell(4, 4).building == nullptr,
+            "The board should clear the wall pointer once a breached stone wall is fully destroyed.");
+    }
 
 void testFirstBishopSpawnUsesDefaultNearestRule() {
     GameConfig config;
@@ -1559,7 +1767,8 @@ void testForwardModelMatchesRuntimeBishopSpawnRule() {
                               KingdomId::White,
                               config.getMineIncomePerCellPerTurn(),
                               config.getFarmIncomePerCellPerTurn(),
-                              config.getArenaXPPerTurn());
+                              config.getArenaXPPerTurn(),
+                              config);
 
     expect(snapshot.white.pieces.size() == 1,
            "ForwardModel should spawn a produced bishop when runtime conditions allow it.");
@@ -1683,6 +1892,9 @@ void testGameConfigClampsNegativeEconomyValues() {
             << "    \"wood_wall_cost\": -20,\n"
             << "    \"stone_wall_cost\": -40,\n"
             << "    \"arena_cost\": -60,\n"
+            << "    \"barracks_repair_cost_per_cell\": -7,\n"
+            << "    \"arena_repair_cost_per_cell\": -7,\n"
+            << "    \"bridge_repair_cost_per_cell\": -5,\n"
             << "    \"pawn_recruit_cost\": -10,\n"
             << "    \"knight_recruit_cost\": -30,\n"
             << "    \"bishop_recruit_cost\": -30,\n"
@@ -1705,6 +1917,12 @@ void testGameConfigClampsNegativeEconomyValues() {
     expect(config.getWoodWallCost() == 0, "Negative wood wall cost should be clamped to zero.");
     expect(config.getStoneWallCost() == 0, "Negative stone wall cost should be clamped to zero.");
     expect(config.getArenaCost() == 0, "Negative arena cost should be clamped to zero.");
+        expect(config.getRepairCostPerCell(BuildingType::Barracks) == 0,
+            "Negative barracks repair costs should be clamped to zero.");
+        expect(config.getRepairCostPerCell(BuildingType::Arena) == 0,
+            "Negative arena repair costs should be clamped to zero.");
+        expect(config.getRepairCostPerCell(BuildingType::Bridge) == 0,
+            "Negative bridge repair costs should be clamped to zero.");
     expect(config.getRecruitCost(PieceType::Pawn) == 0, "Negative recruit costs should be clamped to zero.");
     expect(config.getRecruitCost(PieceType::Knight) == 0, "Negative recruit costs should be clamped to zero.");
     expect(config.getRecruitCost(PieceType::Bishop) == 0, "Negative recruit costs should be clamped to zero.");
@@ -1881,6 +2099,11 @@ int main() {
         {"multiplayer reconnect same client", testMultiplayerReconnectReusesSameClientInstance},
         {"turn system affordability", testTurnSystemSkipsUnaffordableBuild},
         {"turn system unaffordable production", testTurnSystemSkipsUnaffordableProduction},
+        {"build system pawn adjacency", testBuildSystemAllowsPawnAdjacency},
+        {"turn system repair with pawn occupancy", testTurnSystemRepairsDestroyedOwnedCellWithPawnOccupancy},
+        {"turn system repairs before income", testTurnSystemRepairsBeforeIncome},
+        {"stone wall destroys after staying breached", testStoneWallDestroysWhenEnemyStaysOnBreachedCellUntilNextCommit},
+        {"stone wall breach persists after leaving", testStoneWallBreachPersistsAfterAttackerLeavesAndFinishesOnReturn},
         {"first bishop spawn uses default rule", testFirstBishopSpawnUsesDefaultNearestRule},
         {"bishop spawn alternates across barracks", testBishopSpawnAlternatesAcrossKingdomBarracks},
         {"bishop spawn fallback parity", testBishopSpawnFallsBackWhenPreferredParityUnavailable},

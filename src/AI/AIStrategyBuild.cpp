@@ -7,6 +7,7 @@
 #include "Units/PieceType.hpp"
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingType.hpp"
+#include "Systems/BuildReachRules.hpp"
 #include "Systems/BuildSystem.hpp"
 #include "Config/GameConfig.hpp"
 #include "Config/AIConfig.hpp"
@@ -43,6 +44,8 @@ std::vector<TurnCommand> AIStrategyBuild::decide(const Board& board, Kingdom& se
     AIPhase phase = brain.getPhase();
     Piece* king = self.getKing();
     if (!king) return commands;
+    const auto builderPositions = collectBuilderPositions(self.pieces);
+    if (builderPositions.empty()) return commands;
 
     // Don't build during crisis or if building priority is low
     if (phase == AIPhase::CRISIS || priorities.building < 0.2f) return commands;
@@ -101,14 +104,16 @@ std::vector<TurnCommand> AIStrategyBuild::decide(const Board& board, Kingdom& se
 
     // Try placing in the enemy direction first, then expand outward
     auto tryPlace = [&](int dx, int dy) -> bool {
-        sf::Vector2i origin = king->position + sf::Vector2i(dx, dy);
-        if (BuildSystem::canBuild(toBuild, origin, *king, board, self, config)) {
-            TurnCommand cmd;
-            cmd.type = TurnCommand::Build;
-            cmd.buildingType = toBuild;
-            cmd.buildOrigin = origin;
-            commands.push_back(cmd);
-            return true;
+        for (const sf::Vector2i& builderPos : builderPositions) {
+            sf::Vector2i origin = builderPos + sf::Vector2i(dx, dy);
+            if (BuildSystem::canBuild(toBuild, origin, board, self, config)) {
+                TurnCommand cmd;
+                cmd.type = TurnCommand::Build;
+                cmd.buildingType = toBuild;
+                cmd.buildOrigin = origin;
+                commands.push_back(cmd);
+                return true;
+            }
         }
         return false;
     };

@@ -32,6 +32,7 @@ struct SnapBuilding {
     int rotationQuarterTurns = 0;
     int flipMask = 0;
     std::vector<int> cellHP;
+    std::vector<int> cellBreachState;
     bool isProducing = false;
     PieceType producingType = PieceType::Pawn;
     int turnsRemaining = 0;
@@ -60,6 +61,79 @@ struct SnapBuilding {
         return true;
     }
 
+    bool isCellDestroyed(int localX, int localY) const {
+        return getCellHP(localX, localY) <= 0;
+    }
+
+    bool isCellBreached(int localX, int localY) const {
+        if (type != BuildingType::StoneWall) return false;
+
+        const sf::Vector2i sourceLocal = mapFootprintToSourceLocal(localX, localY);
+        if (sourceLocal.x < 0 || sourceLocal.y < 0) return false;
+
+        const int index = sourceLocal.y * width + sourceLocal.x;
+        if (index < 0 || index >= static_cast<int>(cellBreachState.size())) return false;
+
+        return cellBreachState[index] != 0 && !isCellDestroyed(localX, localY);
+    }
+
+    void setCellBreached(int localX, int localY, bool breached) {
+        const sf::Vector2i sourceLocal = mapFootprintToSourceLocal(localX, localY);
+        if (sourceLocal.x < 0 || sourceLocal.y < 0) {
+            return;
+        }
+
+        const int index = sourceLocal.y * width + sourceLocal.x;
+        if (index < 0 || index >= static_cast<int>(cellHP.size())) {
+            return;
+        }
+
+        if (cellBreachState.size() < cellHP.size()) {
+            cellBreachState.resize(cellHP.size(), 0);
+        }
+        cellBreachState[index] = breached ? 1 : 0;
+    }
+
+    int getCellHP(int localX, int localY) const {
+        const sf::Vector2i sourceLocal = mapFootprintToSourceLocal(localX, localY);
+        if (sourceLocal.x < 0 || sourceLocal.y < 0) return 0;
+
+        const int index = sourceLocal.y * width + sourceLocal.x;
+        if (index < 0 || index >= static_cast<int>(cellHP.size())) return 0;
+
+        return cellHP[index];
+    }
+
+    void setCellHP(int localX, int localY, int hp) {
+        const sf::Vector2i sourceLocal = mapFootprintToSourceLocal(localX, localY);
+        if (sourceLocal.x < 0 || sourceLocal.y < 0) {
+            return;
+        }
+
+        const int index = sourceLocal.y * width + sourceLocal.x;
+        if (index < 0 || index >= static_cast<int>(cellHP.size())) {
+            return;
+        }
+
+        cellHP[index] = std::max(0, hp);
+        if (cellBreachState.size() < cellHP.size()) {
+            cellBreachState.resize(cellHP.size(), 0);
+        }
+        if (cellHP[index] <= 0) {
+            cellBreachState[index] = 0;
+        }
+    }
+
+    void destroyCellAt(int localX, int localY) {
+        setCellHP(localX, localY, 0);
+        setCellBreached(localX, localY, false);
+    }
+
+    void repairCellAt(int localX, int localY, int hp) {
+        setCellHP(localX, localY, hp);
+        setCellBreached(localX, localY, false);
+    }
+
     void damageCellAt(int localX, int localY) {
         const sf::Vector2i sourceLocal = mapFootprintToSourceLocal(localX, localY);
         if (sourceLocal.x < 0 || sourceLocal.y < 0) {
@@ -69,6 +143,9 @@ struct SnapBuilding {
         const int index = sourceLocal.y * width + sourceLocal.x;
         if (index >= 0 && index < static_cast<int>(cellHP.size())) {
             cellHP[index] = std::max(0, cellHP[index] - 1);
+            if (cellHP[index] <= 0 && index < static_cast<int>(cellBreachState.size())) {
+                cellBreachState[index] = 0;
+            }
         }
     }
 
@@ -199,15 +276,15 @@ struct GameSnapshot {
 
     // Find building at position (kingdom-owned or public)
     const SnapBuilding* buildingAt(sf::Vector2i pos) const {
-        for (auto& b : white.buildings) if (!b.isDestroyed() && b.containsCell(pos.x, pos.y)) return &b;
-        for (auto& b : black.buildings) if (!b.isDestroyed() && b.containsCell(pos.x, pos.y)) return &b;
-        for (auto& b : publicBuildings) if (!b.isDestroyed() && b.containsCell(pos.x, pos.y)) return &b;
+        for (auto& b : white.buildings) if (b.containsCell(pos.x, pos.y)) return &b;
+        for (auto& b : black.buildings) if (b.containsCell(pos.x, pos.y)) return &b;
+        for (auto& b : publicBuildings) if (b.containsCell(pos.x, pos.y)) return &b;
         return nullptr;
     }
     SnapBuilding* buildingAt(sf::Vector2i pos) {
-        for (auto& b : white.buildings) if (!b.isDestroyed() && b.containsCell(pos.x, pos.y)) return &b;
-        for (auto& b : black.buildings) if (!b.isDestroyed() && b.containsCell(pos.x, pos.y)) return &b;
-        for (auto& b : publicBuildings) if (!b.isDestroyed() && b.containsCell(pos.x, pos.y)) return &b;
+        for (auto& b : white.buildings) if (b.containsCell(pos.x, pos.y)) return &b;
+        for (auto& b : black.buildings) if (b.containsCell(pos.x, pos.y)) return &b;
+        for (auto& b : publicBuildings) if (b.containsCell(pos.x, pos.y)) return &b;
         return nullptr;
     }
 

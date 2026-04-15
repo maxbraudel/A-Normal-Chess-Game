@@ -2,12 +2,34 @@
 #include "AI/ForwardModel.hpp"
 #include "AI/AIEvaluator.hpp"
 #include "AI/TimeBudget.hpp"
+#include "Config/GameConfig.hpp"
+#include "Systems/BuildReachRules.hpp"
+#include "Systems/StructureIntegrityRules.hpp"
 #include <cmath>
 #include <algorithm>
 #include <random>
 
 // Thread-local RNG for rollouts
 static thread_local std::mt19937 s_rng{std::random_device{}()};
+
+namespace {
+
+int getBuildCost(BuildingType type, const GameConfig& config) {
+    switch (type) {
+        case BuildingType::Barracks:
+            return config.getBarracksCost();
+        case BuildingType::WoodWall:
+            return config.getWoodWallCost();
+        case BuildingType::StoneWall:
+            return config.getStoneWallCost();
+        case BuildingType::Arena:
+            return config.getArenaCost();
+        default:
+            return 0;
+    }
+}
+
+}
 
 // =========================================================================
 //  UCB1 formula
@@ -30,7 +52,8 @@ MCTSAction AIMCTS::search(const GameSnapshot& rootState,
                             StrategicObjective objective,
                             int globalMaxRange,
                             const EvalWeights& weights,
-                            int budgetMs) {
+                            int budgetMs,
+                            const GameConfig& config) {
     TimeBudget timer(budgetMs);
 
     auto root = std::make_unique<MCTSNode>();
@@ -42,11 +65,11 @@ MCTSAction AIMCTS::search(const GameSnapshot& rootState,
         MCTSNode* leaf = selection(root.get());
 
         // 2. Expansion
-        MCTSNode* expanded = expansion(leaf, aiKingdom, objective, globalMaxRange);
+        MCTSNode* expanded = expansion(leaf, aiKingdom, objective, globalMaxRange, config);
 
         // 3. Simulation (rollout)
         float score = simulation(expanded->state, aiKingdom,
-                                  globalMaxRange, weights, DEFAULT_ROLLOUT_DEPTH);
+                     globalMaxRange, weights, DEFAULT_ROLLOUT_DEPTH, config);
 
         // 4. Backpropagation
         backpropagation(expanded, score);
@@ -93,12 +116,13 @@ MCTSNode* AIMCTS::selection(MCTSNode* node) {
 // =========================================================================
 
 MCTSNode* AIMCTS::expansion(MCTSNode* node, KingdomId aiKingdom,
-                              StrategicObjective objective, int globalMaxRange) {
+                              StrategicObjective objective, int globalMaxRange,
+                              const GameConfig& config) {
     // If already expanded (or terminal), return self
     if (!node->children.empty() || node->visits > 0) {
         // Generate candidate actions
         auto actions = generateCandidateActions(node->state, aiKingdom,
-                                                 objective, globalMaxRange);
+                            objective, globalMaxRange, config);
         if (actions.empty()) return node;
 
         // Limit children
@@ -109,7 +133,7 @@ MCTSNode* AIMCTS::expansion(MCTSNode* node, KingdomId aiKingdom,
             child->state = node->state.clone();
             child->parent = node;
             child->action = actions[i];
-            applyAction(child->state, actions[i], aiKingdom);
+            applyAction(child->state, actions[i], aiKingdom, config);
             node->children.push_back(std::move(child));
         }
 
@@ -127,7 +151,7 @@ MCTSNode* AIMCTS::expansion(MCTSNode* node, KingdomId aiKingdom,
 
 float AIMCTS::simulation(const GameSnapshot& state, KingdomId aiKingdom,
                            int globalMaxRange, const EvalWeights& weights,
-                           int rolloutDepth) {
+                           int rolloutDepth, const GameConfig& config) {
     GameSnapshot s = state.clone();
     KingdomId enemyId = (aiKingdom == KingdomId::White) ? KingdomId::Black : KingdomId::White;
 
@@ -142,8 +166,8 @@ float AIMCTS::simulation(const GameSnapshot& state, KingdomId aiKingdom,
 
         // Select a rollout action using heuristic
         MCTSAction action = selectRolloutAction(s, active, globalMaxRange);
-        applyAction(s, action, active);
-        ForwardModel::advanceTurn(s, active, 10, 5, 2);
+        applyAction(s, action, active, config);
+        ForwardModel::advanceTurn(s, active, 10, 5, 2, config);
     }
 
     return AIEvaluator::evaluate(s, aiKingdom, globalMaxRange, weights);
@@ -167,7 +191,8 @@ void AIMCTS::backpropagation(MCTSNode* node, float score) {
 
 std::vector<MCTSAction> AIMCTS::generateCandidateActions(
     const GameSnapshot& s, KingdomId k,
-    StrategicObjective objective, int globalMaxRange)
+    StrategicObjective objective, int globalMaxRange,
+    const GameConfig& config)
 {
     struct ScoredAction {
         MCTSAction action;
@@ -194,14 +219,7 @@ std::vector<MCTSAction> AIMCTS::generateCandidateActions(
     for (auto& b : s.kingdom(k).buildings) {
         if (b.type != BuildingType::Barracks || b.isDestroyed() || b.isProducing) continue;
         for (PieceType pt : {PieceType::Pawn, PieceType::Knight, PieceType::Bishop, PieceType::Rook}) {
-            int cost = 10;
-            switch (pt) {
-                case PieceType::Pawn:   cost = 10; break;
-                case PieceType::Knight: cost = 30; break;
-                case PieceType::Bishop: cost = 30; break;
-                case PieceType::Rook:   cost = 60; break;
-                default: break;
-            }
+            const int cost = config.getRecruitCost(pt);
             if (s.kingdom(k).gold >= cost) {
                 MCTSAction a;
                 a.type = MCTSAction::PRODUCE;
@@ -215,22 +233,42 @@ std::vector<MCTSAction> AIMCTS::generateCandidateActions(
     // --- BUILD (if objective demands it) ---
     if (objective == StrategicObjective::BUILD_INFRASTRUCTURE ||
         objective == StrategicObjective::ECONOMY_EXPAND) {
-        // Simple: try to build barracks near king
-        auto* king = s.kingdom(k).getKing();
-        if (king && s.kingdom(k).gold >= 50) {
-            for (int dy = -2; dy <= 2; ++dy) {
-                for (int dx = -2; dx <= 2; ++dx) {
-                    sf::Vector2i pos = king->position + sf::Vector2i{dx, dy};
-                    if (s.isTraversable(pos.x, pos.y) && !s.pieceAt(pos) && !s.buildingAt(pos)) {
+        const int barracksCost = config.getBarracksCost();
+        const int barracksWidth = config.getBuildingWidth(BuildingType::Barracks);
+        const int barracksHeight = config.getBuildingHeight(BuildingType::Barracks);
+        if (s.kingdom(k).gold >= barracksCost) {
+            const auto builderPositions = collectBuilderPositions(s.kingdom(k).pieces);
+            for (const sf::Vector2i& builderPos : builderPositions) {
+                bool foundCandidate = false;
+                for (int dy = -2; dy <= 2 && !foundCandidate; ++dy) {
+                    for (int dx = -2; dx <= 2; ++dx) {
+                        sf::Vector2i pos = builderPos + sf::Vector2i{dx, dy};
+                        bool valid = footprintHasAdjacentBuilder(pos, barracksWidth, barracksHeight, builderPositions);
+                        for (int fy = 0; valid && fy < barracksHeight; ++fy) {
+                            for (int fx = 0; fx < barracksWidth; ++fx) {
+                                const sf::Vector2i cellPos{pos.x + fx, pos.y + fy};
+                                if (!s.isTraversable(cellPos.x, cellPos.y) || s.pieceAt(cellPos) || s.buildingAt(cellPos)) {
+                                    valid = false;
+                                    break;
+                                }
+                            }
+                        }
+                        if (!valid) {
+                            continue;
+                        }
+
                         MCTSAction a;
                         a.type = MCTSAction::BUILD;
                         a.destination = pos;
                         a.bldType = BuildingType::Barracks;
                         scored.push_back({a, 15.0f});
-                        break; // one build candidate is enough
+                        foundCandidate = true;
+                        break;
                     }
                 }
-                if (!scored.empty() && scored.back().action.type == MCTSAction::BUILD) break;
+                if (foundCandidate) {
+                    break;
+                }
             }
         }
     }
@@ -401,16 +439,23 @@ MCTSAction AIMCTS::selectRolloutAction(const GameSnapshot& s, KingdomId active,
 //  Apply action to a snapshot
 // =========================================================================
 
-void AIMCTS::applyAction(GameSnapshot& s, const MCTSAction& action, KingdomId k) {
+void AIMCTS::applyAction(GameSnapshot& s, const MCTSAction& action, KingdomId k,
+                         const GameConfig& config) {
     switch (action.type) {
         case MCTSAction::MOVE:
             ForwardModel::applyMove(s, action.pieceId, action.destination, k);
             break;
         case MCTSAction::BUILD:
-            ForwardModel::applyBuild(s, k, action.bldType, action.destination, 2, 2, 50, 3);
+            ForwardModel::applyBuild(s, k, action.bldType, action.destination,
+                                     config.getBuildingWidth(action.bldType),
+                                     config.getBuildingHeight(action.bldType),
+                                     getBuildCost(action.bldType, config),
+                                     StructureIntegrityRules::defaultCellHP(action.bldType, config));
             break;
         case MCTSAction::PRODUCE:
-            ForwardModel::applyProduce(s, action.barracksId, action.prodType, 10, 2, k);
+            ForwardModel::applyProduce(s, action.barracksId, action.prodType,
+                                       config.getRecruitCost(action.prodType),
+                                       config.getProductionTurns(action.prodType), k);
             break;
         case MCTSAction::MARRY:
             ForwardModel::applyMarriage(s, k);

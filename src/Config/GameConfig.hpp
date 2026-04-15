@@ -38,6 +38,7 @@ public:
     int getWoodWallCost() const;
     int getStoneWallCost() const;
     int getArenaCost() const;
+    int getRepairCostPerCell(BuildingType type) const;
     int getRecruitCost(PieceType type) const;
     int getUpgradeCost(PieceType from, PieceType to) const;
 
@@ -89,6 +90,9 @@ private:
     int m_woodWallCost;
     int m_stoneWallCost;
     int m_arenaCost;
+    int m_barracksRepairCostPerCell;
+    int m_arenaRepairCostPerCell;
+    int m_bridgeRepairCostPerCell;
     int m_pawnRecruitCost;
     int m_knightRecruitCost;
     int m_bishopRecruitCost;

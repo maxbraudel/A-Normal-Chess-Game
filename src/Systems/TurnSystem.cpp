@@ -6,14 +6,155 @@
 #include "Config/GameConfig.hpp"
 #include "Systems/EventLog.hpp"
 #include "Systems/CombatSystem.hpp"
+#include "Systems/BuildReachRules.hpp"
 #include "Systems/EconomySystem.hpp"
 #include "Systems/XPSystem.hpp"
 #include "Systems/BuildSystem.hpp"
 #include "Systems/ProductionSystem.hpp"
 #include "Systems/ProductionSpawnRules.hpp"
+#include "Systems/StructureIntegrityRules.hpp"
 #include "Systems/MarriageSystem.hpp"
 #include "Units/PieceFactory.hpp"
 #include "Buildings/BuildingFactory.hpp"
+
+namespace {
+
+int getBuildCost(BuildingType type, const GameConfig& config) {
+    switch (type) {
+        case BuildingType::Barracks:
+            return config.getBarracksCost();
+
+        case BuildingType::WoodWall:
+            return config.getWoodWallCost();
+
+        case BuildingType::StoneWall:
+            return config.getStoneWallCost();
+
+        case BuildingType::Arena:
+            return config.getArenaCost();
+
+        default:
+            return 0;
+    }
+}
+
+void clearBoardBuildingLinks(Board& board) {
+    auto& grid = board.getGrid();
+    for (auto& row : grid) {
+        for (auto& cell : row) {
+            cell.building = nullptr;
+        }
+    }
+}
+
+template <typename BuildingContainer>
+void relinkBuildingContainer(Board& board, BuildingContainer& buildings) {
+    for (auto& building : buildings) {
+        for (const sf::Vector2i& pos : building.getOccupiedCells()) {
+            board.getCell(pos.x, pos.y).building = &building;
+        }
+    }
+}
+
+void relinkAllBuildings(Board& board,
+                        Kingdom& activeKingdom,
+                        Kingdom& enemyKingdom,
+                        std::vector<Building>& publicBuildings) {
+    clearBoardBuildingLinks(board);
+    relinkBuildingContainer(board, publicBuildings);
+    relinkBuildingContainer(board, activeKingdom.buildings);
+    relinkBuildingContainer(board, enemyKingdom.buildings);
+}
+
+void processEnemyStructureOccupancy(Board& board,
+                                    Kingdom& activeKingdom,
+                                    const GameConfig& config,
+                                    EventLog& log,
+                                    int turnNumber) {
+    for (auto& piece : activeKingdom.pieces) {
+        Cell& occupiedCell = board.getCell(piece.position.x, piece.position.y);
+        Building* building = occupiedCell.building;
+        if (!building || building->isNeutral || building->owner == activeKingdom.id) {
+            continue;
+        }
+
+        const int localX = piece.position.x - building->origin.x;
+        const int localY = piece.position.y - building->origin.y;
+        const StructureOccupancyResult result = StructureIntegrityRules::applyEnemyOccupancy(
+            *building, localX, localY, config);
+        if (result == StructureOccupancyResult::None) {
+            continue;
+        }
+
+        piece.xp += config.getDestroyBlockXP();
+
+        switch (result) {
+            case StructureOccupancyResult::Breached:
+                log.log(turnNumber, activeKingdom.id, "Breached enemy stone wall!");
+                break;
+
+            case StructureOccupancyResult::Destroyed:
+                log.log(turnNumber, activeKingdom.id, "Destroyed enemy structure cell!");
+                break;
+
+            case StructureOccupancyResult::Damaged:
+                log.log(turnNumber, activeKingdom.id, "Damaged enemy building!");
+                break;
+
+            case StructureOccupancyResult::None:
+                break;
+        }
+    }
+}
+
+void processFriendlyRepairs(Kingdom& activeKingdom,
+                           const GameConfig& config,
+                           EventLog& log,
+                           int turnNumber) {
+    for (auto& building : activeKingdom.buildings) {
+        if (!StructureIntegrityRules::isRepairableOwnedStructureType(building.type)) {
+            continue;
+        }
+
+        const int footprintWidth = building.getFootprintWidth();
+        const int footprintHeight = building.getFootprintHeight();
+        for (int localY = 0; localY < footprintHeight; ++localY) {
+            for (int localX = 0; localX < footprintWidth; ++localX) {
+                if (!building.isCellDestroyed(localX, localY)) {
+                    continue;
+                }
+
+                const sf::Vector2i cellPos{building.origin.x + localX, building.origin.y + localY};
+                const Piece* occupant = activeKingdom.getPieceAt(cellPos);
+                if (!occupant || !isBuildSupportPieceType(occupant->type)) {
+                    continue;
+                }
+
+                const int repairCost = StructureIntegrityRules::repairCostPerCell(building.type, config);
+                if (activeKingdom.gold < repairCost) {
+                    continue;
+                }
+
+                if (StructureIntegrityRules::repairDestroyedCell(building, localX, localY, config)) {
+                    activeKingdom.gold -= repairCost;
+                    log.log(turnNumber, activeKingdom.id, "Repaired a destroyed building cell!");
+                }
+            }
+        }
+    }
+}
+
+void removeDestroyedStructures(Kingdom& kingdom) {
+    kingdom.buildings.erase(
+        std::remove_if(kingdom.buildings.begin(), kingdom.buildings.end(),
+                       [](const Building& building) {
+                           return building.isDestroyed()
+                               && StructureIntegrityRules::shouldRemoveWhenFullyDestroyed(building.type);
+                       }),
+        kingdom.buildings.end());
+}
+
+} // namespace
 
 TurnSystem::TurnSystem()
     : m_activeKingdom(KingdomId::White), m_turnNumber(1),
@@ -131,29 +272,27 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                 break;
             }
             case TurnCommand::Build: {
+                if (!BuildSystem::canBuild(cmd.buildingType,
+                                           cmd.buildOrigin,
+                                           board,
+                                           activeKingdom,
+                                           config,
+                                           cmd.buildRotationQuarterTurns)) {
+                    break;
+                }
+
+                const int cost = getBuildCost(cmd.buildingType, config);
+                if (activeKingdom.gold < cost) {
+                    break;
+                }
+
                 Building building = buildingFactory.createBuilding(
                     cmd.buildingType, m_activeKingdom, cmd.buildOrigin, config,
                     cmd.buildRotationQuarterTurns);
 
-                int cost = 0;
-                switch (cmd.buildingType) {
-                    case BuildingType::Barracks: cost = config.getBarracksCost(); break;
-                    case BuildingType::WoodWall: cost = config.getWoodWallCost(); break;
-                    case BuildingType::StoneWall: cost = config.getStoneWallCost(); break;
-                    case BuildingType::Arena: cost = config.getArenaCost(); break;
-                    default: break;
-                }
-                if (activeKingdom.gold < cost) {
-                    break;
-                }
                 activeKingdom.gold -= cost;
                 activeKingdom.addBuilding(building);
-
-                // Update board cells
-                Building* placed = &activeKingdom.buildings.back();
-                for (auto& pos : placed->getOccupiedCells()) {
-                    board.getCell(pos.x, pos.y).building = placed;
-                }
+                relinkAllBuildings(board, activeKingdom, enemyKingdom, publicBuildings);
 
                 log.log(m_turnNumber, m_activeKingdom, "Built a building");
                 break;
@@ -202,9 +341,13 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
         }
     }
 
+    relinkAllBuildings(board, activeKingdom, enemyKingdom, publicBuildings);
+
+    processEnemyStructureOccupancy(board, activeKingdom, config, log, m_turnNumber);
+
     // Advance all barracks production
     for (auto& b : activeKingdom.buildings) {
-        if (b.type == BuildingType::Barracks && b.isProducing) {
+        if (b.type == BuildingType::Barracks && b.isProducing && !b.isDestroyed()) {
             ProductionSystem::advanceProduction(b);
             if (ProductionSystem::isProductionComplete(b)) {
                 const PieceType pt = static_cast<PieceType>(b.producingType);
@@ -228,16 +371,11 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
         }
     }
 
-    // Remove destroyed buildings
-    for (int i = static_cast<int>(activeKingdom.buildings.size()) - 1; i >= 0; --i) {
-        if (activeKingdom.buildings[i].isDestroyed()) {
-            auto cells = activeKingdom.buildings[i].getOccupiedCells();
-            for (auto& pos : cells) {
-                board.getCell(pos.x, pos.y).building = nullptr;
-            }
-            activeKingdom.buildings.erase(activeKingdom.buildings.begin() + i);
-        }
-    }
+    processFriendlyRepairs(activeKingdom, config, log, m_turnNumber);
+
+    removeDestroyedStructures(activeKingdom);
+    removeDestroyedStructures(enemyKingdom);
+    relinkAllBuildings(board, activeKingdom, enemyKingdom, publicBuildings);
 
     // Credit income
     EconomySystem::collectIncome(activeKingdom, board, publicBuildings, config, log, m_turnNumber);

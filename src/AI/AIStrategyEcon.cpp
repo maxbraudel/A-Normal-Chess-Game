@@ -9,6 +9,7 @@
 #include "Units/PieceType.hpp"
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingType.hpp"
+#include "Systems/BuildReachRules.hpp"
 #include "Systems/BuildSystem.hpp"
 #include "Systems/ProductionSystem.hpp"
 #include "Config/GameConfig.hpp"
@@ -121,21 +122,23 @@ std::vector<TurnCommand> AIStrategyEcon::decide(Board& board, Kingdom& self,
         }
 
             if (!hasBarracks && self.gold >= config.getBarracksCost()) {
-            Piece* king = self.getKing();
-            if (king) {
+            const auto builderPositions = collectBuilderPositions(self.pieces);
+            if (!builderPositions.empty()) {
                 // Try adjacent cells, expanding outward
-                for (int radius = 1; radius <= 4; ++radius) {
-                    for (int dy = -radius; dy <= radius; ++dy) {
-                        for (int dx = -radius; dx <= radius; ++dx) {
-                            if (std::abs(dx) != radius && std::abs(dy) != radius) continue;
-                            sf::Vector2i origin = king->position + sf::Vector2i(dx, dy);
-                            if (BuildSystem::canBuild(BuildingType::Barracks, origin, *king, board, self, config)) {
-                                TurnCommand cmd;
-                                cmd.type = TurnCommand::Build;
-                                cmd.buildingType = BuildingType::Barracks;
-                                cmd.buildOrigin = origin;
-                                commands.push_back(cmd);
-                                goto barracks_done;
+                for (const sf::Vector2i& builderPos : builderPositions) {
+                    for (int radius = 1; radius <= 4; ++radius) {
+                        for (int dy = -radius; dy <= radius; ++dy) {
+                            for (int dx = -radius; dx <= radius; ++dx) {
+                                if (std::abs(dx) != radius && std::abs(dy) != radius) continue;
+                                sf::Vector2i origin = builderPos + sf::Vector2i(dx, dy);
+                                if (BuildSystem::canBuild(BuildingType::Barracks, origin, board, self, config)) {
+                                    TurnCommand cmd;
+                                    cmd.type = TurnCommand::Build;
+                                    cmd.buildingType = BuildingType::Barracks;
+                                    cmd.buildOrigin = origin;
+                                    commands.push_back(cmd);
+                                    goto barracks_done;
+                                }
                             }
                         }
                     }

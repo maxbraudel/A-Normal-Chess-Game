@@ -5,10 +5,92 @@
 #include "Buildings/Building.hpp"
 #include "Units/Piece.hpp"
 #include "Config/GameConfig.hpp"
+#include "Systems/BuildReachRules.hpp"
 #include "Systems/EconomySystem.hpp"
 #include "Systems/ProductionSpawnRules.hpp"
+#include "Systems/StructureIntegrityRules.hpp"
 #include <cmath>
 #include <algorithm>
+
+namespace {
+
+bool isBlockingWallCell(const SnapBuilding* building, sf::Vector2i pos) {
+    if (!building) {
+        return false;
+    }
+
+    const int localX = pos.x - building->origin.x;
+    const int localY = pos.y - building->origin.y;
+    return StructureIntegrityRules::isWallCellBlocking(*building, localX, localY);
+}
+
+void processEnemyStructureOccupancy(GameSnapshot& snapshot,
+                                    KingdomId activeKingdom,
+                                    const GameConfig& config) {
+    SnapKingdom& active = snapshot.kingdom(activeKingdom);
+    for (auto& piece : active.pieces) {
+        SnapBuilding* building = snapshot.buildingAt(piece.position);
+        if (!building || building->isNeutral || building->owner == activeKingdom) {
+            continue;
+        }
+
+        const int localX = piece.position.x - building->origin.x;
+        const int localY = piece.position.y - building->origin.y;
+        const StructureOccupancyResult result = StructureIntegrityRules::applyEnemyOccupancy(
+            *building, localX, localY, config);
+        if (result != StructureOccupancyResult::None) {
+            piece.xp += config.getDestroyBlockXP();
+        }
+    }
+}
+
+void processFriendlyRepairs(GameSnapshot& snapshot,
+                            KingdomId activeKingdom,
+                            const GameConfig& config) {
+    SnapKingdom& active = snapshot.kingdom(activeKingdom);
+    for (auto& building : active.buildings) {
+        if (!StructureIntegrityRules::isRepairableOwnedStructureType(building.type)) {
+            continue;
+        }
+
+        const int footprintWidth = building.getFootprintWidth();
+        const int footprintHeight = building.getFootprintHeight();
+        for (int localY = 0; localY < footprintHeight; ++localY) {
+            for (int localX = 0; localX < footprintWidth; ++localX) {
+                if (!building.isCellDestroyed(localX, localY)) {
+                    continue;
+                }
+
+                const sf::Vector2i cellPos{building.origin.x + localX, building.origin.y + localY};
+                const SnapPiece* occupant = active.getPieceAt(cellPos);
+                if (!occupant || !isBuildSupportPieceType(occupant->type)) {
+                    continue;
+                }
+
+                const int repairCost = StructureIntegrityRules::repairCostPerCell(building.type, config);
+                if (active.gold < repairCost) {
+                    continue;
+                }
+
+                if (StructureIntegrityRules::repairDestroyedCell(building, localX, localY, config)) {
+                    active.gold -= repairCost;
+                }
+            }
+        }
+    }
+}
+
+void removeDestroyedStructures(SnapKingdom& kingdom) {
+    kingdom.buildings.erase(
+        std::remove_if(kingdom.buildings.begin(), kingdom.buildings.end(),
+                       [](const SnapBuilding& building) {
+                           return building.isDestroyed()
+                               && StructureIntegrityRules::shouldRemoveWhenFullyDestroyed(building.type);
+                       }),
+        kingdom.buildings.end());
+}
+
+} // namespace
 
 // ========================================================================
 // Snapshot creation from real game state
@@ -30,6 +112,7 @@ static SnapBuilding toSnapBuilding(const Building& b) {
     sb.rotationQuarterTurns = b.rotationQuarterTurns;
     sb.flipMask = b.flipMask;
     sb.cellHP = b.cellHP;
+    sb.cellBreachState = b.cellBreachState;
     sb.isProducing = b.isProducing;
     sb.producingType = static_cast<PieceType>(b.producingType);
     sb.turnsRemaining = b.turnsRemaining;
@@ -89,6 +172,10 @@ GameSnapshot ForwardModel::createSnapshot(const Board& board,
 
 bool ForwardModel::canLandOn(const GameSnapshot& s, sf::Vector2i pos, KingdomId mover) {
     if (!s.isTraversable(pos.x, pos.y)) return false;
+    const SnapBuilding* building = s.buildingAt(pos);
+    if (isBlockingWallCell(building, pos)) {
+        return !building->isNeutral && building->owner != mover;
+    }
     const SnapPiece* occ = s.pieceAt(pos);
     if (occ && occ->kingdom == mover) return false; // can't land on own piece
     return true;
@@ -127,6 +214,14 @@ std::vector<sf::Vector2i> ForwardModel::getDirectionalMoves(const SnapPiece& pie
     for (int i = 1; i <= maxRange; ++i) {
         sf::Vector2i dest{piece.position.x + dx * i, piece.position.y + dy * i};
         if (!s.isTraversable(dest.x, dest.y)) break;
+
+        const SnapBuilding* building = s.buildingAt(dest);
+        if (isBlockingWallCell(building, dest)) {
+            if (!building->isNeutral && building->owner != piece.kingdom) {
+                moves.push_back(dest);
+            }
+            break;
+        }
 
         const SnapPiece* occ = s.pieceAt(dest);
         if (occ) {
@@ -262,14 +357,6 @@ bool ForwardModel::applyMove(GameSnapshot& s, int pieceId, sf::Vector2i dest,
         enemyK.removePiece(victim->id);
     }
 
-    // Damage wall/building at destination
-    auto* bld = s.buildingAt(dest);
-    if (bld && !bld->isNeutral && bld->owner != mover) {
-        int localX = dest.x - bld->origin.x;
-        int localY = dest.y - bld->origin.y;
-        bld->damageCellAt(localX, localY);
-    }
-
     piece->position = dest;
     return true;
 }
@@ -290,19 +377,10 @@ bool ForwardModel::applyBuild(GameSnapshot& s, KingdomId k, BuildingType type,
         }
     }
 
-    // Validate king adjacency
-    const SnapPiece* king = myK.getKing();
-    if (!king) return false;
-    bool adjacent = false;
-    for (int dy = 0; dy < height && !adjacent; ++dy) {
-        for (int dx = 0; dx < width && !adjacent; ++dx) {
-            int cx = pos.x + dx, cy = pos.y + dy;
-            if (std::abs(king->position.x - cx) <= 1 && std::abs(king->position.y - cy) <= 1
-                && !(king->position.x == cx && king->position.y == cy))
-                adjacent = true;
-        }
+    if (!footprintHasAdjacentBuilder(pos, width, height,
+                                     collectBuilderPositions(myK.pieces))) {
+        return false;
     }
-    if (!adjacent) return false;
 
     myK.gold -= cost;
 
@@ -316,6 +394,7 @@ bool ForwardModel::applyBuild(GameSnapshot& s, KingdomId k, BuildingType type,
     bld.width = width;
     bld.height = height;
     bld.cellHP.assign(width * height, cellHPValue);
+    bld.cellBreachState.assign(width * height, 0);
     myK.buildings.push_back(bld);
     return true;
 }
@@ -324,7 +403,7 @@ bool ForwardModel::applyProduce(GameSnapshot& s, int barracksId, PieceType type,
                                  int cost, int productionTurns, KingdomId k) {
     SnapKingdom& myK = s.kingdom(k);
     SnapBuilding* barracks = myK.getBuildingById(barracksId);
-    if (!barracks || barracks->isProducing) return false;
+    if (!barracks || barracks->isProducing || barracks->isDestroyed()) return false;
     if (myK.gold < cost) return false;
 
     myK.gold -= cost;
@@ -405,13 +484,15 @@ sf::Vector2i ForwardModel::findSpawnCell(const GameSnapshot& s,
 }
 
 void ForwardModel::advanceTurn(GameSnapshot& s, KingdomId k,
-                                int mineIncomePerCell, int farmIncomePerCell,
-                                int arenaXP) {
+                               int mineIncomePerCell, int farmIncomePerCell,
+                               int arenaXP, const GameConfig& config) {
     SnapKingdom& myK = s.kingdom(k);
+
+    processEnemyStructureOccupancy(s, k, config);
 
     // 1. Advance production timers and spawn
     for (auto& b : myK.buildings) {
-        if (!b.isProducing) continue;
+        if (!b.isProducing || b.isDestroyed()) continue;
         b.turnsRemaining--;
         if (b.turnsRemaining <= 0) {
             const PieceType producedType = b.producingType;
@@ -434,6 +515,10 @@ void ForwardModel::advanceTurn(GameSnapshot& s, KingdomId k,
             // If no space, stays at turnsRemaining=0 and retries next turn
         }
     }
+
+    processFriendlyRepairs(s, k, config);
+
+    removeDestroyedStructures(myK);
 
     // 2. Collect income from net occupation advantage on public resources.
     SnapKingdom& enemyK = s.enemyKingdom(k);
@@ -473,11 +558,6 @@ void ForwardModel::advanceTurn(GameSnapshot& s, KingdomId k,
         }
     }
 
-    // 4. Remove destroyed buildings
-    myK.buildings.erase(
-        std::remove_if(myK.buildings.begin(), myK.buildings.end(),
-                        [](const SnapBuilding& b) { return b.isDestroyed(); }),
-        myK.buildings.end());
 }
 
 // ========================================================================

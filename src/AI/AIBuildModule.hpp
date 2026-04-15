@@ -1,5 +1,6 @@
 #pragma once
 #include <optional>
+#include <vector>
 #include <SFML/System/Vector2.hpp>
 #include "Buildings/BuildingType.hpp"
 #include "AI/AIStrategy.hpp"
@@ -41,6 +42,6 @@ private:
 
     /// Check if a position is valid for a 2×2 barracks
     static bool canBuildBarracksAt(const GameSnapshot& s, sf::Vector2i pos,
-                                    sf::Vector2i kingPos,
+                                    const std::vector<sf::Vector2i>& builderPositions,
                                     const GameConfig& config);
 };

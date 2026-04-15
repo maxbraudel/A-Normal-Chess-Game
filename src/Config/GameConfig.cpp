@@ -63,6 +63,9 @@ void GameConfig::setDefaults() {
     m_woodWallCost = 20;
     m_stoneWallCost = 40;
     m_arenaCost = 60;
+    m_barracksRepairCostPerCell = 7;
+    m_arenaRepairCostPerCell = 7;
+    m_bridgeRepairCostPerCell = 5;
     m_pawnRecruitCost = 10;
     m_knightRecruitCost = 30;
     m_bishopRecruitCost = 30;
@@ -182,6 +185,12 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
         m_woodWallCost = extractInt(econSec, "wood_wall_cost", m_woodWallCost);
         m_stoneWallCost = extractInt(econSec, "stone_wall_cost", m_stoneWallCost);
         m_arenaCost = extractInt(econSec, "arena_cost", m_arenaCost);
+        m_barracksRepairCostPerCell = extractInt(
+            econSec, "barracks_repair_cost_per_cell", m_barracksRepairCostPerCell);
+        m_arenaRepairCostPerCell = extractInt(
+            econSec, "arena_repair_cost_per_cell", m_arenaRepairCostPerCell);
+        m_bridgeRepairCostPerCell = extractInt(
+            econSec, "bridge_repair_cost_per_cell", m_bridgeRepairCostPerCell);
         m_pawnRecruitCost = extractInt(econSec, "pawn_recruit_cost", m_pawnRecruitCost);
         m_knightRecruitCost = extractInt(econSec, "knight_recruit_cost", m_knightRecruitCost);
         m_bishopRecruitCost = extractInt(econSec, "bishop_recruit_cost", m_bishopRecruitCost);
@@ -200,6 +209,12 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
     m_woodWallCost = clampNonNegativeConfigValue("economy.wood_wall_cost", m_woodWallCost);
     m_stoneWallCost = clampNonNegativeConfigValue("economy.stone_wall_cost", m_stoneWallCost);
     m_arenaCost = clampNonNegativeConfigValue("economy.arena_cost", m_arenaCost);
+    m_barracksRepairCostPerCell = clampNonNegativeConfigValue(
+        "economy.barracks_repair_cost_per_cell", m_barracksRepairCostPerCell);
+    m_arenaRepairCostPerCell = clampNonNegativeConfigValue(
+        "economy.arena_repair_cost_per_cell", m_arenaRepairCostPerCell);
+    m_bridgeRepairCostPerCell = clampNonNegativeConfigValue(
+        "economy.bridge_repair_cost_per_cell", m_bridgeRepairCostPerCell);
     m_pawnRecruitCost = clampNonNegativeConfigValue("economy.pawn_recruit_cost", m_pawnRecruitCost);
     m_knightRecruitCost = clampNonNegativeConfigValue("economy.knight_recruit_cost", m_knightRecruitCost);
     m_bishopRecruitCost = clampNonNegativeConfigValue("economy.bishop_recruit_cost", m_bishopRecruitCost);
@@ -286,6 +301,22 @@ int GameConfig::getBarracksCost() const { return m_barracksCost; }
 int GameConfig::getWoodWallCost() const { return m_woodWallCost; }
 int GameConfig::getStoneWallCost() const { return m_stoneWallCost; }
 int GameConfig::getArenaCost() const { return m_arenaCost; }
+
+int GameConfig::getRepairCostPerCell(BuildingType type) const {
+    switch (type) {
+        case BuildingType::Barracks:
+            return m_barracksRepairCostPerCell;
+
+        case BuildingType::Arena:
+            return m_arenaRepairCostPerCell;
+
+        case BuildingType::Bridge:
+            return m_bridgeRepairCostPerCell;
+
+        default:
+            return 0;
+    }
+}
 
 int GameConfig::getRecruitCost(PieceType type) const {
     switch (type) {

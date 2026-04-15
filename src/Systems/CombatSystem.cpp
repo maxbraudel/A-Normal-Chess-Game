@@ -8,7 +8,6 @@
 #include "Buildings/BuildingType.hpp"
 #include "Config/GameConfig.hpp"
 #include "Systems/EventLog.hpp"
-#include "Systems/XPSystem.hpp"
 
 CombatSystem::CombatResult CombatSystem::resolve(
     Piece& attacker, Board& board, sf::Vector2i target,
@@ -38,39 +37,5 @@ CombatSystem::CombatResult CombatSystem::resolve(
         defenderKingdom.removePiece(victim->id);
         return result;
     }
-
-    // Check if target has an enemy wall/building to attack
-    if (targetCell.building && !targetCell.building->isNeutral &&
-        targetCell.building->owner != attacker.kingdom) {
-        auto bt = targetCell.building->type;
-        if (bt == BuildingType::WoodWall || bt == BuildingType::StoneWall ||
-            bt == BuildingType::Barracks) {
-            result.occurred = true;
-            result.targetWasPiece = false;
-
-            int localX = target.x - targetCell.building->origin.x;
-            int localY = target.y - targetCell.building->origin.y;
-            targetCell.building->damageCellAt(localX, localY);
-
-            int xp = config.getDestroyBlockXP();
-            attacker.xp += xp;
-            result.xpGained = xp;
-
-            log.log(turnNumber, attacker.kingdom, "Damaged enemy building!");
-
-            // Check if building fully destroyed
-            if (targetCell.building->isDestroyed()) {
-                auto cells = targetCell.building->getOccupiedCells();
-                int buildingId = targetCell.building->id;
-                for (auto& pos : cells) {
-                    board.getCell(pos.x, pos.y).building = nullptr;
-                }
-                defenderKingdom.removeBuilding(buildingId);
-                log.log(turnNumber, attacker.kingdom, "Enemy building destroyed!");
-            }
-            return result;
-        }
-    }
-
     return result;
 }

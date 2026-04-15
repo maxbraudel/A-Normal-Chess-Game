@@ -1,5 +1,6 @@
 #include "Buildings/BuildingFactory.hpp"
 #include "Config/GameConfig.hpp"
+#include "Systems/StructureIntegrityRules.hpp"
 
 BuildingFactory::BuildingFactory() : m_nextId(100) {}
 
@@ -19,12 +20,9 @@ Building BuildingFactory::createBuilding(BuildingType type, KingdomId owner, sf:
     b.producingType = 0;
     b.turnsRemaining = 0;
 
-    int hp = 1;
-    if (type == BuildingType::StoneWall) hp = config.getStoneWallHP();
-    else if (type == BuildingType::WoodWall) hp = config.getWoodWallHP();
-    else if (type == BuildingType::Barracks) hp = config.getBarracksCellHP();
-
+    const int hp = StructureIntegrityRules::defaultCellHP(type, config);
     b.cellHP.assign(b.width * b.height, hp);
+    b.cellBreachState.assign(b.width * b.height, 0);
     return b;
 }
 

@@ -372,6 +372,12 @@ std::string SaveManager::serializeBuilding(const Building& b) {
         if (i > 0) ss << ",";
         ss << b.cellHP[i];
     }
+    ss << "]"
+       << ", \"breach\": [";
+    for (std::size_t i = 0; i < b.cellBreachState.size(); ++i) {
+        if (i > 0) ss << ",";
+        ss << b.cellBreachState[i];
+    }
     ss << "] }";
     return ss.str();
 }
@@ -457,6 +463,25 @@ Building SaveManager::parseBuilding(const std::string& json) {
             b.cellHP.push_back(val);
         } catch (...) { break; }
         while (pos < hpArr.size() && hpArr[pos] != ',' && hpArr[pos] != ']') pos++;
+    }
+
+    std::string breachArr = extractArray(json, "breach");
+    b.cellBreachState.clear();
+    pos = 1;
+    while (pos < breachArr.size()) {
+        while (pos < breachArr.size() && (breachArr[pos] == ' ' || breachArr[pos] == ',')) pos++;
+        if (pos >= breachArr.size() || breachArr[pos] == ']') break;
+        try {
+            int val = std::stoi(breachArr.substr(pos));
+            b.cellBreachState.push_back(val != 0 ? 1 : 0);
+        } catch (...) {
+            break;
+        }
+        while (pos < breachArr.size() && breachArr[pos] != ',' && breachArr[pos] != ']') pos++;
+    }
+
+    if (b.cellBreachState.size() < b.cellHP.size()) {
+        b.cellBreachState.resize(b.cellHP.size(), 0);
     }
 
     return b;

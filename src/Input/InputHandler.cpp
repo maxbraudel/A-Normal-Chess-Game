@@ -476,17 +476,8 @@ void InputHandler::handleBuildTool(const sf::Event& event, const InputContext& c
         sf::Vector2f worldPos = context.camera.screenToWorld({event.mouseButton.x, event.mouseButton.y}, context.window);
         sf::Vector2i cellPos = context.camera.worldToCell(worldPos, context.config.getCellSizePx());
 
-        Piece* king = context.controlledKingdom.getKing();
-        if (!king) {
-            // Check if initial pawn (first piece) can build
-            if (!context.controlledKingdom.pieces.empty()) {
-                king = &context.controlledKingdom.pieces.front();
-            } else return;
-        }
-
         if (BuildSystem::canBuild(m_buildPreviewType,
                                   cellPos,
-                                  *king,
                                   context.board,
                                   context.controlledKingdom,
                                   context.config,
