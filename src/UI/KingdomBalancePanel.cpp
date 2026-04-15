@@ -23,23 +23,24 @@ void KingdomBalancePanel::init(const tgui::Panel::Ptr& parent) {
 
         widgets.nameLabel = tgui::Label::create("Metric");
         widgets.nameLabel->setPosition({10, y});
-        widgets.nameLabel->setSize({310, 18});
+        widgets.nameLabel->setSize({"&.width - 20", 18});
         HUDLayout::styleSidebarBody(widgets.nameLabel, 14);
+        widgets.nameLabel->getRenderer()->setTextColor(HUDLayout::metricColors()[index]);
         m_panel->add(widgets.nameLabel);
 
         widgets.whiteValueLabel = tgui::Label::create("White 0");
         widgets.whiteValueLabel->setPosition({10, y + 20});
-        widgets.whiteValueLabel->setSize({84, 20});
+        widgets.whiteValueLabel->setSize({100, 20});
         HUDLayout::styleSidebarBody(widgets.whiteValueLabel, 13);
         m_panel->add(widgets.whiteValueLabel);
 
         widgets.balanceBar = tgui::ProgressBar::create();
-        widgets.balanceBar->setPosition({98, y + 22});
-        widgets.balanceBar->setSize({126, 16});
+        widgets.balanceBar->setPosition({116, y + 22});
+        widgets.balanceBar->setSize({"&.width - 232", 16});
         widgets.balanceBar->setMinimum(0);
         widgets.balanceBar->setMaximum(100);
         widgets.balanceBar->setValue(50);
-        widgets.balanceBar->setText("50%");
+        widgets.balanceBar->setText("");
         widgets.balanceBar->getRenderer()->setBackgroundColor(tgui::Color(50, 50, 50, 220));
         widgets.balanceBar->getRenderer()->setFillColor(tgui::Color(220, 220, 220, 240));
         widgets.balanceBar->getRenderer()->setTextColor(tgui::Color::Black);
@@ -48,8 +49,8 @@ void KingdomBalancePanel::init(const tgui::Panel::Ptr& parent) {
         m_panel->add(widgets.balanceBar);
 
         widgets.blackValueLabel = tgui::Label::create("Black 0");
-        widgets.blackValueLabel->setPosition({230, y + 20});
-        widgets.blackValueLabel->setSize({84, 20});
+    widgets.blackValueLabel->setPosition({"&.width - 110", y + 20});
+    widgets.blackValueLabel->setSize({100, 20});
         widgets.blackValueLabel->setHorizontalAlignment(tgui::HorizontalAlignment::Right);
         HUDLayout::styleSidebarBody(widgets.blackValueLabel, 13);
         m_panel->add(widgets.blackValueLabel);
@@ -89,6 +90,6 @@ void KingdomBalancePanel::update(const std::array<KingdomBalanceMetric, 4>& metr
         widgets.whiteValueLabel->setText("White " + std::to_string(metric.whiteValue));
         widgets.blackValueLabel->setText("Black " + std::to_string(metric.blackValue));
         widgets.balanceBar->setValue(whiteShare);
-        widgets.balanceBar->setText(std::to_string(whiteShare) + "% W");
+        widgets.balanceBar->setText("");
     }
 }

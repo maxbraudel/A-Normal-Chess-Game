@@ -2,6 +2,7 @@
 
 #include <TGUI/Backend/SFML-Graphics.hpp>
 #include <TGUI/AllWidgets.hpp>
+#include <array>
 #include <sstream>
 #include <string>
 
@@ -26,7 +27,8 @@ inline constexpr float kTopComponentHeight = 40.f;
 inline constexpr float kToolbarButtonWidth = 110.f;
 inline constexpr float kToolbarHeight = 38.f;
 inline constexpr float kComponentGap = 6.f;
-inline constexpr float kSidebarWidth = 360.f;
+inline constexpr float kLeftSidebarWidth = 360.f;
+inline constexpr float kRightSidebarWidth = 600.f;
 inline constexpr float kSidebarInnerMargin = 12.f;
 inline constexpr float kSidebarSectionGap = 12.f;
 
@@ -37,6 +39,21 @@ inline std::string asLayoutValue(float value) {
 }
 
 inline void styleEmbeddedPanel(const tgui::Panel::Ptr& panel);
+
+inline float sidebarWidth(HUDAnchor anchor) {
+    return (anchor == HUDAnchor::MiddleRight) ? kRightSidebarWidth : kLeftSidebarWidth;
+}
+
+inline const std::array<tgui::Color, 4>& metricColors() {
+    static const std::array<tgui::Color, 4> colors = {
+        tgui::Color(255, 215, 0),
+        tgui::Color(200, 230, 255),
+        tgui::Color(235, 235, 235),
+        tgui::Color(120, 230, 160)
+    };
+
+    return colors;
+}
 
 inline tgui::Vector2f stackSize(int count,
                                 float componentWidth = kMetricWidth,
@@ -93,12 +110,12 @@ inline tgui::Layout sidebarHeight() {
     return tgui::Layout{"(&.height * 7) / 10"};
 }
 
-inline tgui::Layout2d sidebarSize() {
-    return {tgui::Layout{asLayoutValue(kSidebarWidth)}, sidebarHeight()};
+inline tgui::Layout2d sidebarSize(HUDAnchor anchor) {
+    return {tgui::Layout{asLayoutValue(sidebarWidth(anchor))}, sidebarHeight()};
 }
 
 inline tgui::Layout2d sidebarPosition(HUDAnchor anchor) {
-    const std::string width = asLayoutValue(kSidebarWidth);
+    const std::string width = asLayoutValue(sidebarWidth(anchor));
     const std::string margin = asLayoutValue(kEdgeMargin);
     const std::string height = "((&.height * 7) / 10)";
     const auto layout = [](const std::string& x, const std::string& y) {

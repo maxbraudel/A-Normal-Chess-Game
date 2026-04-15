@@ -13,7 +13,7 @@ void UIManager::init(tgui::Gui& gui, const AssetManager& assets) {
     m_hud.init(gui, assets);
     m_pauseMenu.init(gui);
 
-    m_leftSidebar = tgui::Panel::create(HUDLayout::sidebarSize());
+    m_leftSidebar = tgui::Panel::create(HUDLayout::sidebarSize(HUDAnchor::MiddleLeft));
     m_leftSidebar->setPosition(HUDLayout::sidebarPosition(HUDAnchor::MiddleLeft));
     HUDLayout::styleSidebarFrame(m_leftSidebar);
     gui.add(m_leftSidebar, "InGameLeftSidebar");
@@ -36,7 +36,7 @@ void UIManager::init(tgui::Gui& gui, const AssetManager& assets) {
     m_leftContextHint->getRenderer()->setTextColor(tgui::Color(220, 220, 220));
     m_leftEmptyState->add(m_leftContextHint);
 
-    m_rightSidebar = tgui::Panel::create(HUDLayout::sidebarSize());
+    m_rightSidebar = tgui::Panel::create(HUDLayout::sidebarSize(HUDAnchor::MiddleRight));
     m_rightSidebar->setPosition(HUDLayout::sidebarPosition(HUDAnchor::MiddleRight));
     HUDLayout::styleSidebarFrame(m_rightSidebar);
     gui.add(m_rightSidebar, "InGameRightSidebar");

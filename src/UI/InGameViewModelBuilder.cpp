@@ -78,12 +78,12 @@ InGameViewModel buildInGameViewModel(const GameEngine& engine,
     }
 
     model.balanceMetrics = {{
-        {"Gold", whiteKingdom.gold, blackKingdom.gold},
-        {"Income",
+        {inGameMetricLabels()[0], whiteKingdom.gold, blackKingdom.gold},
+        {inGameMetricLabels()[3],
          EconomySystem::calculateProjectedIncome(whiteKingdom, engine.board(), engine.publicBuildings(), config),
          EconomySystem::calculateProjectedIncome(blackKingdom, engine.board(), engine.publicBuildings(), config)},
-        {"Troops", whiteKingdom.pieceCount(), blackKingdom.pieceCount()},
-        {"Occupied Cells", countOccupiedBuildingCells(whiteKingdom), countOccupiedBuildingCells(blackKingdom)}
+        {inGameMetricLabels()[2], whiteKingdom.pieceCount(), blackKingdom.pieceCount()},
+        {inGameMetricLabels()[1], countOccupiedBuildingCells(whiteKingdom), countOccupiedBuildingCells(blackKingdom)}
     }};
 
     return model;

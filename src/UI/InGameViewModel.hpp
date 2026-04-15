@@ -1,8 +1,22 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <string>
 #include <vector>
+
+inline constexpr std::size_t kInGameMetricCount = 4;
+
+inline const std::array<std::string, kInGameMetricCount>& inGameMetricLabels() {
+    static const std::array<std::string, kInGameMetricCount> labels = {
+        "Gold",
+        "Occupied Cells",
+        "Troops",
+        "Income"
+    };
+
+    return labels;
+}
 
 struct InGameEventRow {
     int turnNumber = 0;
@@ -26,5 +40,5 @@ struct InGameViewModel {
     int activeIncome = 0;
     bool allowCommands = false;
     std::vector<InGameEventRow> eventRows;
-    std::array<KingdomBalanceMetric, 4> balanceMetrics{};
+    std::array<KingdomBalanceMetric, kInGameMetricCount> balanceMetrics{};
 };

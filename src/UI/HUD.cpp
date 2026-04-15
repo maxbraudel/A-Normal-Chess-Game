@@ -2,6 +2,14 @@
 #include "Assets/AssetManager.hpp"
 #include "UI/HUDLayout.hpp"
 
+namespace {
+
+std::string metricText(std::size_t index, int value) {
+    return inGameMetricLabels()[index] + ": " + std::to_string(value);
+}
+
+} // namespace
+
 void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
     (void) assets;
 
@@ -20,21 +28,10 @@ void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
     HUDLayout::makeTransparentPanel(m_actionPanel);
     gui.add(m_actionPanel, "HUDActionPanel");
 
-    const std::array<std::string, 4> metricDefaults = {
-        "Gold: 0",
-        "Occupied: 0",
-        "Troops: 0",
-        "Income: 0"
-    };
-    const std::array<tgui::Color, 4> metricColors = {
-        tgui::Color(255, 215, 0),
-        tgui::Color(200, 230, 255),
-        tgui::Color(235, 235, 235),
-        tgui::Color(120, 230, 160)
-    };
     for (std::size_t index = 0; index < m_metricLabels.size(); ++index) {
-        m_metricLabels[index] = tgui::Label::create(metricDefaults[index]);
-        HUDLayout::styleHudIndicator(m_metricLabels[index], metricColors[index]);
+        m_metricLabels[index] = tgui::Label::create(metricText(index, 0));
+        HUDLayout::styleHudIndicator(m_metricLabels[index], HUDLayout::metricColors()[index],
+                                     HUDLayout::kMetricWidth, HUDLayout::kTopComponentHeight, 13);
         HUDLayout::placeStackChild(m_metricLabels[index], static_cast<int>(index), HUDLayout::kMetricWidth);
         m_metricsPanel->add(m_metricLabels[index]);
     }
@@ -92,10 +89,10 @@ void HUD::hide() {
 }
 
 void HUD::update(const InGameViewModel& model) {
-    if (m_metricLabels[0]) m_metricLabels[0]->setText("Gold: " + std::to_string(model.activeGold));
-    if (m_metricLabels[1]) m_metricLabels[1]->setText("Occupied: " + std::to_string(model.activeOccupiedCells));
-    if (m_metricLabels[2]) m_metricLabels[2]->setText("Troops: " + std::to_string(model.activeTroops));
-    if (m_metricLabels[3]) m_metricLabels[3]->setText("Income: " + std::to_string(model.activeIncome));
+    if (m_metricLabels[0]) m_metricLabels[0]->setText(metricText(0, model.activeGold));
+    if (m_metricLabels[1]) m_metricLabels[1]->setText(metricText(1, model.activeOccupiedCells));
+    if (m_metricLabels[2]) m_metricLabels[2]->setText(metricText(2, model.activeTroops));
+    if (m_metricLabels[3]) m_metricLabels[3]->setText(metricText(3, model.activeIncome));
 
     if (m_statusLabel) {
         m_statusLabel->setText("T" + std::to_string(model.turnNumber) + " | "
