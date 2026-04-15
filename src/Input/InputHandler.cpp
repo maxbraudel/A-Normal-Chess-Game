@@ -16,6 +16,7 @@
 
 InputHandler::InputHandler()
     : m_currentTool(ToolState::Select), m_selectedPiece(nullptr), m_selectedBuilding(nullptr),
+    m_hasSelectedCell(false), m_selectedCell({0, 0}),
       m_hasMovePreview(false), m_hasBuildPreview(false),
       m_buildPreviewType(BuildingType::Barracks),
       m_isDragging(false) {}
@@ -28,6 +29,8 @@ void InputHandler::setTool(ToolState tool) {
 
 Piece* InputHandler::getSelectedPiece() const { return m_selectedPiece; }
 Building* InputHandler::getSelectedBuilding() const { return m_selectedBuilding; }
+bool InputHandler::hasSelectedCell() const { return m_hasSelectedCell; }
+sf::Vector2i InputHandler::getSelectedCell() const { return m_selectedCell; }
 const std::vector<sf::Vector2i>& InputHandler::getValidMoves() const { return m_validMoves; }
 const std::vector<sf::Vector2i>& InputHandler::getDangerMoves() const { return m_dangerMoves; }
 int InputHandler::getCapturePreviewPieceId() const { return m_capturePreviewPieceId; }
@@ -43,6 +46,8 @@ void InputHandler::setBuildType(BuildingType type) { m_buildPreviewType = type; 
 void InputHandler::clearSelection() {
     m_selectedPiece = nullptr;
     m_selectedBuilding = nullptr;
+    m_hasSelectedCell = false;
+    m_selectedCell = {0, 0};
     m_validMoves.clear();
     m_dangerMoves.clear();
     // NOTE: does NOT clear move preview — call cancelLiveMove() / clearMovePreview() separately
@@ -139,15 +144,22 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
 
         if (!context.allowCommands) {
             Piece* piece = context.controlledKingdom.getPieceAt(cellPos);
+            if (!piece) {
+                piece = context.opposingKingdom.getPieceAt(cellPos);
+            }
             if (piece) {
                 m_selectedPiece = piece;
                 m_selectedBuilding = nullptr;
+                m_hasSelectedCell = false;
                 m_validMoves.clear();
                 m_dangerMoves.clear();
                 return;
             }
 
             Building* building = context.controlledKingdom.getBuildingAt(cellPos);
+            if (!building) {
+                building = context.opposingKingdom.getBuildingAt(cellPos);
+            }
             if (!building) {
                 for (auto& b : const_cast<std::vector<Building>&>(context.publicBuildings)) {
                     if (b.containsCell(cellPos.x, cellPos.y)) {
@@ -159,12 +171,18 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
             if (building) {
                 m_selectedBuilding = building;
                 m_selectedPiece = nullptr;
+                m_hasSelectedCell = false;
                 m_validMoves.clear();
                 m_dangerMoves.clear();
                 return;
             }
 
-            clearSelection();
+            m_selectedPiece = nullptr;
+            m_selectedBuilding = nullptr;
+            m_selectedCell = cellPos;
+            m_hasSelectedCell = true;
+            m_validMoves.clear();
+            m_dangerMoves.clear();
             return;
         }
 
@@ -182,6 +200,7 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
 
                 m_selectedPiece = restoredPiece;
                 m_selectedBuilding = nullptr;
+                m_hasSelectedCell = false;
                 return;
             }
 
@@ -209,6 +228,7 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
                     m_moveTo = cellPos;
                     m_selectedPiece = m_movedPiece;
                     m_selectedBuilding = nullptr;
+                    m_hasSelectedCell = false;
                 } else {
                     m_movedPiece->position = m_moveTo;
                     Piece* previousCapture = context.opposingKingdom.getPieceAt(m_moveTo);
@@ -220,11 +240,13 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
             if (m_movedPiece && cellPos == m_movedPiece->position) {
                 m_selectedPiece = m_movedPiece;
                 m_selectedBuilding = nullptr;
+                m_hasSelectedCell = false;
                 return;
             }
 
             m_selectedPiece = m_movedPiece;
             m_selectedBuilding = nullptr;
+            m_hasSelectedCell = false;
             return;
         }
 
@@ -255,6 +277,7 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
                     m_moveTo = cellPos;
                     m_selectedPiece = m_movedPiece;
                     m_selectedBuilding = nullptr;
+                    m_hasSelectedCell = false;
                 } else {
                     // Couldn't queue (already moved this turn): revert visual move
                     m_selectedPiece->position = origin;
@@ -269,13 +292,28 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
         if (piece) {
             m_selectedPiece = piece;
             m_selectedBuilding = nullptr;
+            m_hasSelectedCell = false;
             refreshPieceMoves(piece, context.board, context.opposingKingdom, context.config);
+            m_hasMovePreview = false;
+            return;
+        }
+
+        Piece* enemyPiece = context.opposingKingdom.getPieceAt(cellPos);
+        if (enemyPiece) {
+            m_selectedPiece = enemyPiece;
+            m_selectedBuilding = nullptr;
+            m_hasSelectedCell = false;
+            m_validMoves.clear();
+            m_dangerMoves.clear();
             m_hasMovePreview = false;
             return;
         }
 
         // ---- Try to select a building ----
         Building* building = context.controlledKingdom.getBuildingAt(cellPos);
+        if (!building) {
+            building = context.opposingKingdom.getBuildingAt(cellPos);
+        }
         if (!building) {
             for (auto& b : const_cast<std::vector<Building>&>(context.publicBuildings)) {
                 if (b.containsCell(cellPos.x, cellPos.y)) {
@@ -287,12 +325,18 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
         if (building) {
             m_selectedBuilding = building;
             m_selectedPiece = nullptr;
+            m_hasSelectedCell = false;
             m_validMoves.clear();
+            m_dangerMoves.clear();
             return;
         }
 
-        // Clicked empty: deselect
-        clearSelection();
+        m_selectedPiece = nullptr;
+        m_selectedBuilding = nullptr;
+        m_selectedCell = cellPos;
+        m_hasSelectedCell = true;
+        m_validMoves.clear();
+        m_dangerMoves.clear();
     }
 }
 

@@ -2,26 +2,36 @@
 #include "UI/HUDLayout.hpp"
 
 void ToolBar::init(tgui::Gui& gui) {
-    m_panel = tgui::Panel::create(HUDLayout::stackSize(3));
-    m_panel->setPosition(HUDLayout::anchorPosition(HUDAnchor::BottomLeft, 3));
+    m_panel = tgui::Panel::create(HUDLayout::stackSize(3,
+                                                       HUDLayout::kToolbarButtonWidth,
+                                                       HUDLayout::kComponentGap,
+                                                       HUDLayout::kToolbarHeight));
+    m_panel->setPosition(HUDLayout::anchorPosition(HUDAnchor::BottomLeft,
+                                                   3,
+                                                   HUDLayout::kToolbarButtonWidth,
+                                                   HUDLayout::kComponentGap,
+                                                   HUDLayout::kToolbarHeight));
     HUDLayout::makeTransparentPanel(m_panel);
     gui.add(m_panel, "ToolBarPanel");
 
     auto btnSelect = tgui::Button::create("Select");
-    HUDLayout::styleHudButton(btnSelect);
-    HUDLayout::placeStackChild(btnSelect, 0);
+    HUDLayout::styleHudButton(btnSelect, HUDLayout::kToolbarButtonWidth, HUDLayout::kToolbarHeight, 15);
+    HUDLayout::placeStackChild(btnSelect, 0, HUDLayout::kToolbarButtonWidth,
+                               HUDLayout::kComponentGap, HUDLayout::kToolbarHeight);
     btnSelect->onPress([this]() { if (m_onSelect) m_onSelect(); });
     m_panel->add(btnSelect);
 
     auto btnBuild = tgui::Button::create("Build");
-    HUDLayout::styleHudButton(btnBuild);
-    HUDLayout::placeStackChild(btnBuild, 1);
+    HUDLayout::styleHudButton(btnBuild, HUDLayout::kToolbarButtonWidth, HUDLayout::kToolbarHeight, 15);
+    HUDLayout::placeStackChild(btnBuild, 1, HUDLayout::kToolbarButtonWidth,
+                               HUDLayout::kComponentGap, HUDLayout::kToolbarHeight);
     btnBuild->onPress([this]() { if (m_onBuild) m_onBuild(); });
     m_panel->add(btnBuild);
 
-    auto btnLog = tgui::Button::create("Log");
-    HUDLayout::styleHudButton(btnLog);
-    HUDLayout::placeStackChild(btnLog, 2);
+    auto btnLog = tgui::Button::create("Journal");
+    HUDLayout::styleHudButton(btnLog, HUDLayout::kToolbarButtonWidth, HUDLayout::kToolbarHeight, 15);
+    HUDLayout::placeStackChild(btnLog, 2, HUDLayout::kToolbarButtonWidth,
+                               HUDLayout::kComponentGap, HUDLayout::kToolbarHeight);
     btnLog->onPress([this]() { if (m_onLog) m_onLog(); });
     m_panel->add(btnLog);
 

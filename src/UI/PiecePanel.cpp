@@ -1,7 +1,9 @@
 #include "UI/PiecePanel.hpp"
+#include "Core/GameSessionConfig.hpp"
 #include "Units/Piece.hpp"
 #include "Units/PieceType.hpp"
 #include "Config/GameConfig.hpp"
+#include "UI/HUDLayout.hpp"
 
 #include <vector>
 
@@ -17,35 +19,49 @@ static std::string pieceTypeName(PieceType type) {
     }
 }
 
-void PiecePanel::init(tgui::Gui& gui) {
-    m_panel = tgui::Panel::create({200, 250});
-    m_panel->setPosition({"&.width - 210", "50"});
-    m_panel->getRenderer()->setBackgroundColor(tgui::Color(50, 50, 50, 220));
-    m_panel->getRenderer()->setBorderColor(tgui::Color::White);
-    m_panel->getRenderer()->setBorders({1});
-    gui.add(m_panel, "PiecePanel");
+void PiecePanel::init(const tgui::Panel::Ptr& parent) {
+    m_panel = tgui::Panel::create({"&.width", "&.height"});
+    HUDLayout::styleEmbeddedPanel(m_panel);
+    parent->add(m_panel);
+
+    auto titleLabel = tgui::Label::create("Selection");
+    titleLabel->setPosition({10, 10});
+    HUDLayout::styleSidebarTitle(titleLabel);
+    m_panel->add(titleLabel);
+
+    m_ownerLabel = tgui::Label::create("Owner: White Kingdom");
+    m_ownerLabel->setPosition({10, 50});
+    m_ownerLabel->setSize({316, 22});
+    HUDLayout::styleSidebarBody(m_ownerLabel);
+    m_panel->add(m_ownerLabel);
+
+    m_positionLabel = tgui::Label::create("Cell: 0, 0");
+    m_positionLabel->setPosition({10, 80});
+    m_positionLabel->setSize({316, 22});
+    HUDLayout::styleSidebarBody(m_positionLabel);
+    m_panel->add(m_positionLabel);
 
     m_typeLabel = tgui::Label::create("Type: ");
-    m_typeLabel->setPosition({10, 10});
-    m_typeLabel->setTextSize(14);
-    m_typeLabel->getRenderer()->setTextColor(tgui::Color::White);
+    m_typeLabel->setPosition({10, 110});
+    m_typeLabel->setSize({316, 22});
+    HUDLayout::styleSidebarBody(m_typeLabel);
     m_panel->add(m_typeLabel);
 
     m_xpLabel = tgui::Label::create("XP: 0");
-    m_xpLabel->setPosition({10, 40});
-    m_xpLabel->setTextSize(14);
-    m_xpLabel->getRenderer()->setTextColor(tgui::Color::White);
+    m_xpLabel->setPosition({10, 140});
+    m_xpLabel->setSize({316, 22});
+    HUDLayout::styleSidebarBody(m_xpLabel);
     m_panel->add(m_xpLabel);
 
     m_levelLabel = tgui::Label::create("Level: 1");
-    m_levelLabel->setPosition({10, 70});
-    m_levelLabel->setTextSize(14);
-    m_levelLabel->getRenderer()->setTextColor(tgui::Color::White);
+    m_levelLabel->setPosition({10, 170});
+    m_levelLabel->setSize({316, 22});
+    HUDLayout::styleSidebarBody(m_levelLabel);
     m_panel->add(m_levelLabel);
 
     m_primaryUpgradeBtn = tgui::Button::create("Upgrade");
-    m_primaryUpgradeBtn->setPosition({10, 110});
-    m_primaryUpgradeBtn->setSize({180, 35});
+    m_primaryUpgradeBtn->setPosition({10, 220});
+    m_primaryUpgradeBtn->setSize({316, 36});
     m_primaryUpgradeBtn->onPress([this]() {
         if (m_onUpgrade && m_currentPieceId >= 0) {
             m_onUpgrade(m_currentPieceId, m_primaryUpgradeTarget);
@@ -54,8 +70,8 @@ void PiecePanel::init(tgui::Gui& gui) {
     m_panel->add(m_primaryUpgradeBtn);
 
     m_secondaryUpgradeBtn = tgui::Button::create("Upgrade");
-    m_secondaryUpgradeBtn->setPosition({10, 155});
-    m_secondaryUpgradeBtn->setSize({180, 35});
+    m_secondaryUpgradeBtn->setPosition({10, 264});
+    m_secondaryUpgradeBtn->setSize({316, 36});
     m_secondaryUpgradeBtn->onPress([this]() {
         if (m_onUpgrade && m_currentPieceId >= 0) {
             m_onUpgrade(m_currentPieceId, m_secondaryUpgradeTarget);
@@ -69,6 +85,9 @@ void PiecePanel::init(tgui::Gui& gui) {
 void PiecePanel::show(const Piece& piece, const GameConfig& config, bool allowUpgrade) {
     if (!m_panel) return;
     m_currentPieceId = piece.id;
+    m_ownerLabel->setText("Owner: " + kingdomLabel(piece.kingdom));
+    m_positionLabel->setText("Cell: " + std::to_string(piece.position.x) + ", "
+                             + std::to_string(piece.position.y));
     m_typeLabel->setText("Type: " + pieceTypeName(piece.type));
     m_xpLabel->setText("XP: " + std::to_string(piece.xp));
     m_levelLabel->setText("Level: " + std::to_string(piece.getLevel()));

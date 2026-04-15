@@ -1,14 +1,16 @@
 #pragma once
 #include <TGUI/Backend/SFML-Graphics.hpp>
 #include <TGUI/AllWidgets.hpp>
+#include <vector>
 
-class EventLog;
+#include "UI/InGameViewModel.hpp"
 
 class EventLogPanel {
 public:
-    void init(tgui::Gui& gui);
-    void show(const EventLog& log);
+    void init(const tgui::Panel::Ptr& parent);
+    void show();
     void hide();
+    void update(const std::vector<InGameEventRow>& rows);
 
 private:
     tgui::Panel::Ptr m_panel;

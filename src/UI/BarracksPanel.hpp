@@ -9,7 +9,7 @@ class GameConfig;
 
 class BarracksPanel {
 public:
-    void init(tgui::Gui& gui);
+    void init(const tgui::Panel::Ptr& parent);
     void show(const Building& barracks, const Kingdom& kingdom, const GameConfig& config,
               bool allowProduce);
     void hide();
@@ -18,6 +18,9 @@ public:
 
 private:
     tgui::Panel::Ptr m_panel;
+    tgui::Label::Ptr m_ownerLabel;
+    tgui::Label::Ptr m_cellsLabel;
+    tgui::Label::Ptr m_hpLabel;
     tgui::Label::Ptr m_statusLabel;
     tgui::Label::Ptr m_turnsLabel;
     tgui::Button::Ptr m_producePawnBtn;

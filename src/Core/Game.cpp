@@ -4,6 +4,7 @@
 #include "Buildings/BuildingType.hpp"
 #include "Systems/BuildSystem.hpp"
 #include "Input/InputContext.hpp"
+#include "UI/InGameViewModelBuilder.hpp"
 #include <algorithm>
 #include <iostream>
 #include <thread>
@@ -304,11 +305,15 @@ void Game::render() {
             publicBuildings());
 
         const bool showActionOverlays = isActiveHuman();
+        const Piece* selectedPiece = m_input.getSelectedPiece();
+        const bool canShowSelectedPieceActions = showActionOverlays
+            && selectedPiece
+            && selectedPiece->kingdom == activeKingdom().id;
 
-        if (showActionOverlays && m_input.getCurrentTool() == ToolState::Select && m_input.getSelectedPiece()) {
+        if (canShowSelectedPieceActions && m_input.getCurrentTool() == ToolState::Select) {
             sf::Vector2i highlightedOrigin = m_input.hasMovePreview()
                 ? m_input.getMoveFrom()
-                : m_input.getSelectedPiece()->position;
+                : selectedPiece->position;
             m_renderer.getOverlay().drawOriginCell(m_window, m_camera,
                 highlightedOrigin, m_config.getCellSizePx());
             m_renderer.getOverlay().drawReachableCells(m_window, m_camera,
@@ -334,6 +339,10 @@ void Game::render() {
                     m_hudView, m_windowSize, selectedBuilding->origin,
                     selectedBuilding->width, selectedBuilding->height,
                     m_config.getCellSizePx());
+            } else if (m_input.hasSelectedCell()) {
+                m_renderer.getOverlay().drawSelectionFrame(m_window, m_camera,
+                    m_hudView, m_windowSize, m_input.getSelectedCell(),
+                    1, 1, m_config.getCellSizePx());
             }
         }
         if (showActionOverlays && m_input.hasBuildPreview()) {
@@ -481,6 +490,7 @@ void Game::commitPlayerTurn() {
                        "Checkmate! " + winner + " wins!");
         m_input.clearMovePreview();
         m_input.clearSelection();
+        updateUIState();
         return;
     }
 
@@ -543,11 +553,20 @@ void Game::setupUICallbacks() {
     });
 
     // HUD
-    m_uiManager.hud().setOnReset([this]() {
+    m_uiManager.hud().setOnPause([this]() {
+        if (m_state == GameState::Playing) {
+            m_state = GameState::Paused;
+            m_uiManager.showPauseMenu();
+        } else if (m_state == GameState::Paused) {
+            m_state = GameState::Playing;
+            m_uiManager.hidePauseMenu();
+        }
+    });
+    m_uiManager.hud().setOnResetTurn([this]() {
         if (!isActiveHuman()) return;
         resetPlayerTurn();
     });
-    m_uiManager.hud().setOnPlay([this]() {
+    m_uiManager.hud().setOnEndTurn([this]() {
         if (!isActiveHuman()) return;
         commitPlayerTurn();
     });
@@ -555,17 +574,16 @@ void Game::setupUICallbacks() {
     // Toolbar
     m_uiManager.toolBar().setOnSelect([this]() {
         m_input.setTool(ToolState::Select);
-        m_uiManager.hideAllPanels();
-        m_uiManager.showHUD();
+        m_uiManager.showSelectionEmptyState();
     });
     m_uiManager.toolBar().setOnBuild([this]() {
         if (!isActiveHuman()) return;
         m_input.setTool(ToolState::Build);
-        m_uiManager.showBuildToolPanel(activeKingdom(), m_config);
+        m_uiManager.showBuildToolPanel(activeKingdom(), m_config, true);
     });
     m_uiManager.toolBar().setOnLog([this]() {
         m_input.setTool(ToolState::Journal);
-        m_uiManager.showEventLogPanel(eventLog());
+        m_uiManager.showJournalContext();
     });
 
     // Build tool panel
@@ -601,21 +619,45 @@ void Game::setupUICallbacks() {
 }
 
 void Game::updateUIState() {
-    int gold = activeKingdom().gold;
-    const bool allowCommands = isActiveHuman();
-    m_uiManager.hud().update(turnSystem().getTurnNumber(), activeTurnLabel(), gold, allowCommands);
+    const bool allowCommands = (m_state == GameState::Playing) && isActiveHuman();
+    const InGameViewModel viewModel = buildInGameViewModel(m_engine, m_config, m_state, allowCommands);
+    m_uiManager.updateDashboard(viewModel);
     const KingdomId viewedKingdomId = allowCommands ? activeKingdom().id : humanKingdomId();
 
-    // Show contextual panels
-    if (m_input.getSelectedPiece()) {
-        m_uiManager.showPiecePanel(*m_input.getSelectedPiece(), m_config, allowCommands);
-    } else if (m_input.getSelectedBuilding()) {
-        Building* bld = m_input.getSelectedBuilding();
-        if (bld->type == BuildingType::Barracks && bld->owner == viewedKingdomId) {
-            m_uiManager.showBarracksPanel(*bld, kingdom(viewedKingdomId), m_config, allowCommands);
-        } else {
-            m_uiManager.showBuildingPanel(*bld);
-        }
+    switch (m_input.getCurrentTool()) {
+        case ToolState::Build:
+            if (allowCommands) {
+                m_uiManager.showBuildToolPanel(activeKingdom(), m_config, true);
+            } else {
+                m_uiManager.showSelectionEmptyState();
+            }
+            break;
+
+        case ToolState::Journal:
+            m_uiManager.showJournalContext();
+            break;
+
+        case ToolState::Select:
+        default:
+            if (m_input.getSelectedPiece()) {
+                const bool allowUpgrade = allowCommands
+                    && (m_input.getSelectedPiece()->kingdom == viewedKingdomId);
+                m_uiManager.showPiecePanel(*m_input.getSelectedPiece(), m_config, allowUpgrade);
+            } else if (m_input.getSelectedBuilding()) {
+                Building* building = m_input.getSelectedBuilding();
+                if (building->type == BuildingType::Barracks) {
+                    const bool allowProduce = allowCommands && (building->owner == viewedKingdomId);
+                    m_uiManager.showBarracksPanel(*building, kingdom(building->owner), m_config, allowProduce);
+                } else {
+                    m_uiManager.showBuildingPanel(*building);
+                }
+            } else if (m_input.hasSelectedCell()) {
+                const sf::Vector2i cellPos = m_input.getSelectedCell();
+                m_uiManager.showCellPanel(board().getCell(cellPos.x, cellPos.y));
+            } else {
+                m_uiManager.showSelectionEmptyState();
+            }
+            break;
     }
 }
 
@@ -780,6 +822,7 @@ void Game::pollAITurn() {
         std::string winner = participantName(activeId);
         eventLog().log(turnSystem().getTurnNumber(), activeId,
             "Checkmate! " + winner + " wins!");
+        updateUIState();
         return;
     }
 

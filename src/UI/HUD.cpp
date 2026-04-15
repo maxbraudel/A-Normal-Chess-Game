@@ -5,68 +5,106 @@
 void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
     (void) assets;
 
-    m_indicatorPanel = tgui::Panel::create(HUDLayout::stackSize(3));
-    m_indicatorPanel->setPosition(HUDLayout::anchorPosition(HUDAnchor::TopLeft, 3));
-    HUDLayout::makeTransparentPanel(m_indicatorPanel);
-    gui.add(m_indicatorPanel, "HUDIndicatorsPanel");
+    m_metricsPanel = tgui::Panel::create(HUDLayout::stackSize(4, HUDLayout::kMetricWidth));
+    m_metricsPanel->setPosition(HUDLayout::anchorPosition(HUDAnchor::TopLeft, 4, HUDLayout::kMetricWidth));
+    HUDLayout::makeTransparentPanel(m_metricsPanel);
+    gui.add(m_metricsPanel, "HUDMetricsPanel");
 
-    m_panel = tgui::Panel::create(HUDLayout::stackSize(2));
-    m_panel->setPosition(HUDLayout::anchorPosition(HUDAnchor::TopRight, 2));
-    HUDLayout::makeTransparentPanel(m_panel);
-    gui.add(m_panel, "HUDPanel");
+    m_statusPanel = tgui::Panel::create(HUDLayout::stackSize(1, HUDLayout::kStatusWidth));
+    m_statusPanel->setPosition(HUDLayout::anchorPosition(HUDAnchor::TopCenter, 1, HUDLayout::kStatusWidth));
+    HUDLayout::makeTransparentPanel(m_statusPanel);
+    gui.add(m_statusPanel, "HUDStatusPanel");
 
-    m_turnLabel = tgui::Label::create("Turn 1");
-    HUDLayout::styleHudIndicator(m_turnLabel, tgui::Color::White);
-    HUDLayout::placeStackChild(m_turnLabel, 0);
-    m_indicatorPanel->add(m_turnLabel);
+    m_actionPanel = tgui::Panel::create(HUDLayout::stackSize(3, HUDLayout::kActionWidth));
+    m_actionPanel->setPosition(HUDLayout::anchorPosition(HUDAnchor::TopRight, 3, HUDLayout::kActionWidth));
+    HUDLayout::makeTransparentPanel(m_actionPanel);
+    gui.add(m_actionPanel, "HUDActionPanel");
 
-    m_playerLabel = tgui::Label::create("White's turn");
-    HUDLayout::styleHudIndicator(m_playerLabel, tgui::Color::White);
-    HUDLayout::placeStackChild(m_playerLabel, 1);
-    m_indicatorPanel->add(m_playerLabel);
+    const std::array<std::string, 4> metricDefaults = {
+        "Gold: 0",
+        "Occupied: 0",
+        "Troops: 0",
+        "Income: 0"
+    };
+    const std::array<tgui::Color, 4> metricColors = {
+        tgui::Color(255, 215, 0),
+        tgui::Color(200, 230, 255),
+        tgui::Color(235, 235, 235),
+        tgui::Color(120, 230, 160)
+    };
+    for (std::size_t index = 0; index < m_metricLabels.size(); ++index) {
+        m_metricLabels[index] = tgui::Label::create(metricDefaults[index]);
+        HUDLayout::styleHudIndicator(m_metricLabels[index], metricColors[index]);
+        HUDLayout::placeStackChild(m_metricLabels[index], static_cast<int>(index), HUDLayout::kMetricWidth);
+        m_metricsPanel->add(m_metricLabels[index]);
+    }
 
-    m_goldLabel = tgui::Label::create("Gold: 0");
-    HUDLayout::styleHudIndicator(m_goldLabel, tgui::Color(255, 215, 0));
-    HUDLayout::placeStackChild(m_goldLabel, 2);
-    m_indicatorPanel->add(m_goldLabel);
+    m_statusLabel = tgui::Label::create("Turn 1 | White Kingdom : Idle");
+    HUDLayout::styleStatusIndicator(m_statusLabel);
+    HUDLayout::placeStackChild(m_statusLabel, 0, HUDLayout::kStatusWidth);
+    m_statusPanel->add(m_statusLabel);
 
-    m_resetButton = tgui::Button::create("Reset");
-    HUDLayout::styleHudButton(m_resetButton);
-    HUDLayout::placeStackChild(m_resetButton, 0);
-    m_resetButton->onPress([this]() {
-        if (m_onReset) m_onReset();
+    m_pauseButton = tgui::Button::create("Pause");
+    HUDLayout::styleHudButton(m_pauseButton);
+    HUDLayout::placeStackChild(m_pauseButton, 0, HUDLayout::kActionWidth);
+    m_pauseButton->onPress([this]() {
+        if (m_onPause) {
+            m_onPause();
+        }
     });
-    m_panel->add(m_resetButton);
+    m_actionPanel->add(m_pauseButton);
 
-    m_playButton = tgui::Button::create("Play");
-    HUDLayout::styleHudButton(m_playButton);
-    HUDLayout::placeStackChild(m_playButton, 1);
-    m_playButton->onPress([this]() {
-        if (m_onPlay) m_onPlay();
+    m_endTurnButton = tgui::Button::create("End Turn");
+    HUDLayout::styleHudButton(m_endTurnButton);
+    HUDLayout::placeStackChild(m_endTurnButton, 1, HUDLayout::kActionWidth);
+    m_endTurnButton->onPress([this]() {
+        if (m_onEndTurn) {
+            m_onEndTurn();
+        }
     });
-    m_panel->add(m_playButton);
+    m_actionPanel->add(m_endTurnButton);
 
-    m_indicatorPanel->setVisible(false);
-    m_panel->setVisible(false);
+    m_resetTurnButton = tgui::Button::create("Reset Turn");
+    HUDLayout::styleHudButton(m_resetTurnButton);
+    HUDLayout::placeStackChild(m_resetTurnButton, 2, HUDLayout::kActionWidth);
+    m_resetTurnButton->onPress([this]() {
+        if (m_onResetTurn) {
+            m_onResetTurn();
+        }
+    });
+    m_actionPanel->add(m_resetTurnButton);
+
+    m_metricsPanel->setVisible(false);
+    m_statusPanel->setVisible(false);
+    m_actionPanel->setVisible(false);
 }
 
 void HUD::show() {
-    if (m_indicatorPanel) m_indicatorPanel->setVisible(true);
-    if (m_panel) m_panel->setVisible(true);
+    if (m_metricsPanel) m_metricsPanel->setVisible(true);
+    if (m_statusPanel) m_statusPanel->setVisible(true);
+    if (m_actionPanel) m_actionPanel->setVisible(true);
 }
 
 void HUD::hide() {
-    if (m_indicatorPanel) m_indicatorPanel->setVisible(false);
-    if (m_panel) m_panel->setVisible(false);
+    if (m_metricsPanel) m_metricsPanel->setVisible(false);
+    if (m_statusPanel) m_statusPanel->setVisible(false);
+    if (m_actionPanel) m_actionPanel->setVisible(false);
 }
 
-void HUD::update(int turnNumber, const std::string& activePlayerText, int gold, bool allowCommands) {
-    if (m_turnLabel) m_turnLabel->setText("Turn " + std::to_string(turnNumber));
-    if (m_playerLabel) m_playerLabel->setText(activePlayerText);
-    if (m_goldLabel) m_goldLabel->setText("Gold: " + std::to_string(gold));
-    if (m_resetButton) m_resetButton->setEnabled(allowCommands);
-    if (m_playButton) m_playButton->setEnabled(allowCommands);
+void HUD::update(const InGameViewModel& model) {
+    if (m_metricLabels[0]) m_metricLabels[0]->setText("Gold: " + std::to_string(model.activeGold));
+    if (m_metricLabels[1]) m_metricLabels[1]->setText("Occupied: " + std::to_string(model.activeOccupiedCells));
+    if (m_metricLabels[2]) m_metricLabels[2]->setText("Troops: " + std::to_string(model.activeTroops));
+    if (m_metricLabels[3]) m_metricLabels[3]->setText("Income: " + std::to_string(model.activeIncome));
+
+    if (m_statusLabel) {
+        m_statusLabel->setText("T" + std::to_string(model.turnNumber) + " | "
+                               + model.activeTurnLabel + " : " + model.statusLabel);
+    }
+    if (m_endTurnButton) m_endTurnButton->setEnabled(model.allowCommands);
+    if (m_resetTurnButton) m_resetTurnButton->setEnabled(model.allowCommands);
 }
 
-void HUD::setOnReset(std::function<void()> callback) { m_onReset = std::move(callback); }
-void HUD::setOnPlay(std::function<void()> callback) { m_onPlay = std::move(callback); }
+void HUD::setOnPause(std::function<void()> callback) { m_onPause = std::move(callback); }
+void HUD::setOnResetTurn(std::function<void()> callback) { m_onResetTurn = std::move(callback); }
+void HUD::setOnEndTurn(std::function<void()> callback) { m_onEndTurn = std::move(callback); }

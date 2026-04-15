@@ -1,49 +1,87 @@
 #include "UI/BuildToolPanel.hpp"
 #include "Kingdom/Kingdom.hpp"
-#include "Buildings/BuildingType.hpp"
 #include "Config/GameConfig.hpp"
+#include "UI/HUDLayout.hpp"
 
-void BuildToolPanel::init(tgui::Gui& gui) {
-    m_panel = tgui::Panel::create({200, 300});
-    m_panel->setPosition({"&.width - 210", "50"});
-    m_panel->getRenderer()->setBackgroundColor(tgui::Color(50, 50, 50, 220));
-    m_panel->getRenderer()->setBorderColor(tgui::Color::White);
-    m_panel->getRenderer()->setBorders({1});
-    gui.add(m_panel, "BuildToolPanel");
+namespace {
 
-    auto titleLabel = tgui::Label::create("Build");
+const char* buildingTypeName(BuildingType type) {
+    switch (type) {
+        case BuildingType::Barracks: return "Barracks";
+        case BuildingType::WoodWall: return "Wood Wall";
+        case BuildingType::StoneWall: return "Stone Wall";
+        case BuildingType::Arena: return "Arena";
+        default: return "Unknown";
+    }
+}
+
+int buildingCost(BuildingType type, const GameConfig& config) {
+    switch (type) {
+        case BuildingType::Barracks: return config.getBarracksCost();
+        case BuildingType::WoodWall: return config.getWoodWallCost();
+        case BuildingType::StoneWall: return config.getStoneWallCost();
+        case BuildingType::Arena: return config.getArenaCost();
+        default: return 0;
+    }
+}
+
+} // namespace
+
+void BuildToolPanel::init(const tgui::Panel::Ptr& parent) {
+    m_panel = tgui::Panel::create({"&.width", "&.height"});
+    HUDLayout::styleEmbeddedPanel(m_panel);
+    parent->add(m_panel);
+
+    auto titleLabel = tgui::Label::create("Construction");
     titleLabel->setPosition({10, 5});
-    titleLabel->setTextSize(16);
-    titleLabel->getRenderer()->setTextColor(tgui::Color::White);
+    HUDLayout::styleSidebarTitle(titleLabel);
     m_panel->add(titleLabel);
 
-    struct BuildOption { std::string name; BuildingType type; };
-    std::vector<BuildOption> options = {
-        {"Barracks",   BuildingType::Barracks},
-        {"Wood Wall",  BuildingType::WoodWall},
-        {"Stone Wall", BuildingType::StoneWall},
-        {"Bridge",     BuildingType::Bridge},
-        {"Arena",      BuildingType::Arena}
+    auto descriptionLabel = tgui::Label::create("Choose a building for the current turn.");
+    descriptionLabel->setPosition({10, 32});
+    descriptionLabel->setSize({316, 36});
+    descriptionLabel->setAutoSize(false);
+    descriptionLabel->setTextSize(13);
+    descriptionLabel->getRenderer()->setTextColor(tgui::Color(210, 210, 210));
+    m_panel->add(descriptionLabel);
+
+    const std::vector<BuildingType> options = {
+        BuildingType::Barracks,
+        BuildingType::WoodWall,
+        BuildingType::StoneWall,
+        BuildingType::Arena
     };
 
-    float y = 35.0f;
-    for (const auto& opt : options) {
-        auto btn = tgui::Button::create(opt.name);
+    float y = 80.0f;
+    for (BuildingType type : options) {
+        auto btn = tgui::Button::create(buildingTypeName(type));
         btn->setPosition({10, y});
-        btn->setSize({180, 30});
-        int typeInt = static_cast<int>(opt.type);
+        btn->setSize({316, 38});
+        btn->setTextSize(15);
+        const int typeInt = static_cast<int>(type);
         btn->onPress([this, typeInt]() {
             if (m_onSelectBuildType) m_onSelectBuildType(typeInt);
         });
         m_panel->add(btn);
-        y += 40.0f;
+        m_options.push_back({type, btn});
+        y += 48.0f;
     }
 
     m_panel->setVisible(false);
 }
 
-void BuildToolPanel::show(const Kingdom& kingdom, const GameConfig& config) {
-    if (m_panel) m_panel->setVisible(true);
+void BuildToolPanel::show(const Kingdom& kingdom, const GameConfig& config, bool allowBuild) {
+    if (!m_panel) {
+        return;
+    }
+
+    for (auto& option : m_options) {
+        const int cost = buildingCost(option.type, config);
+        option.button->setText(std::string(buildingTypeName(option.type)) + " - " + std::to_string(cost) + "g");
+        option.button->setEnabled(allowBuild && kingdom.gold >= cost);
+    }
+
+    m_panel->setVisible(true);
 }
 
 void BuildToolPanel::hide() { if (m_panel) m_panel->setVisible(false); }

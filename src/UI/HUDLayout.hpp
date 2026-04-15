@@ -2,6 +2,7 @@
 
 #include <TGUI/Backend/SFML-Graphics.hpp>
 #include <TGUI/AllWidgets.hpp>
+#include <sstream>
 #include <string>
 
 enum class HUDAnchor {
@@ -17,72 +18,171 @@ enum class HUDAnchor {
 
 namespace HUDLayout {
 
-inline constexpr float kComponentWidth = 140.f;
-inline constexpr float kComponentHeight = 36.f;
-inline constexpr float kComponentGap = 8.f;
+inline constexpr float kEdgeMargin = 12.f;
+inline constexpr float kMetricWidth = 108.f;
+inline constexpr float kActionWidth = 118.f;
+inline constexpr float kStatusWidth = 360.f;
+inline constexpr float kTopComponentHeight = 40.f;
+inline constexpr float kToolbarButtonWidth = 110.f;
+inline constexpr float kToolbarHeight = 38.f;
+inline constexpr float kComponentGap = 6.f;
+inline constexpr float kSidebarWidth = 360.f;
+inline constexpr float kSidebarInnerMargin = 12.f;
+inline constexpr float kSidebarSectionGap = 12.f;
 
-inline tgui::Vector2f stackSize(int count) {
+inline std::string asLayoutValue(float value) {
+    std::ostringstream stream;
+    stream << value;
+    return stream.str();
+}
+
+inline void styleEmbeddedPanel(const tgui::Panel::Ptr& panel);
+
+inline tgui::Vector2f stackSize(int count,
+                                float componentWidth = kMetricWidth,
+                                float componentGap = kComponentGap,
+                                float componentHeight = kTopComponentHeight) {
     if (count <= 0) {
         return {0.f, 0.f};
     }
     return {
-        count * kComponentWidth + (count - 1) * kComponentGap,
-        kComponentHeight
+        count * componentWidth + (count - 1) * componentGap,
+        componentHeight
     };
 }
 
-inline tgui::Layout2d anchorPosition(HUDAnchor anchor, int count) {
-    const auto size = stackSize(count);
-    const std::string width = std::to_string(size.x);
-    const std::string height = std::to_string(size.y);
+inline tgui::Layout2d anchorPosition(HUDAnchor anchor,
+                                     int count,
+                                     float componentWidth = kMetricWidth,
+                                     float componentGap = kComponentGap,
+                                     float componentHeight = kTopComponentHeight,
+                                     float marginX = kEdgeMargin,
+                                     float marginY = kEdgeMargin) {
+    const auto size = stackSize(count, componentWidth, componentGap, componentHeight);
+    const std::string width = asLayoutValue(size.x);
+    const std::string height = asLayoutValue(size.y);
+    const std::string xMargin = asLayoutValue(marginX);
+    const std::string yMargin = asLayoutValue(marginY);
     const auto layout = [](const std::string& x, const std::string& y) {
         return tgui::Layout2d{tgui::Layout{x}, tgui::Layout{y}};
     };
 
     switch (anchor) {
         case HUDAnchor::TopLeft:
-            return layout("0", "0");
+            return layout(xMargin, yMargin);
         case HUDAnchor::TopCenter:
-            return layout("(&.width - " + width + ") / 2", "0");
+            return layout("(&.width - " + width + ") / 2", yMargin);
         case HUDAnchor::TopRight:
-            return layout("&.width - " + width, "0");
+            return layout("&.width - " + width + " - " + xMargin, yMargin);
         case HUDAnchor::MiddleLeft:
-            return layout("0", "(&.height - " + height + ") / 2");
+            return layout(xMargin, "(&.height - " + height + ") / 2");
         case HUDAnchor::MiddleRight:
-            return layout("&.width - " + width, "(&.height - " + height + ") / 2");
+            return layout("&.width - " + width + " - " + xMargin, "(&.height - " + height + ") / 2");
         case HUDAnchor::BottomLeft:
-            return layout("0", "&.height - " + height);
+            return layout(xMargin, "&.height - " + height + " - " + yMargin);
         case HUDAnchor::BottomCenter:
-            return layout("(&.width - " + width + ") / 2", "&.height - " + height);
+            return layout("(&.width - " + width + ") / 2", "&.height - " + height + " - " + yMargin);
         case HUDAnchor::BottomRight:
-            return layout("&.width - " + width, "&.height - " + height);
+            return layout("&.width - " + width + " - " + xMargin, "&.height - " + height + " - " + yMargin);
     }
 
     return layout("0", "0");
 }
 
-inline void placeStackChild(const tgui::Widget::Ptr& widget, int index) {
-    widget->setPosition({index * (kComponentWidth + kComponentGap), 0});
-    widget->setSize({kComponentWidth, kComponentHeight});
+inline tgui::Layout sidebarHeight() {
+    return tgui::Layout{"(&.height * 7) / 10"};
 }
 
-inline void styleHudButton(const tgui::Button::Ptr& button) {
-    button->setSize({kComponentWidth, kComponentHeight});
-    button->setTextSize(16);
+inline tgui::Layout2d sidebarSize() {
+    return {tgui::Layout{asLayoutValue(kSidebarWidth)}, sidebarHeight()};
 }
 
-inline void styleHudIndicator(const tgui::Label::Ptr& label, const tgui::Color& textColor) {
+inline tgui::Layout2d sidebarPosition(HUDAnchor anchor) {
+    const std::string width = asLayoutValue(kSidebarWidth);
+    const std::string margin = asLayoutValue(kEdgeMargin);
+    const std::string height = "((&.height * 7) / 10)";
+    const auto layout = [](const std::string& x, const std::string& y) {
+        return tgui::Layout2d{tgui::Layout{x}, tgui::Layout{y}};
+    };
+
+    switch (anchor) {
+        case HUDAnchor::MiddleLeft:
+            return layout(margin, "(&.height - " + height + ") / 2");
+        case HUDAnchor::MiddleRight:
+            return layout("&.width - " + width + " - " + margin, "(&.height - " + height + ") / 2");
+        default:
+            return layout(margin, "(&.height - " + height + ") / 2");
+    }
+}
+
+inline void placeStackChild(const tgui::Widget::Ptr& widget,
+                            int index,
+                            float componentWidth = kMetricWidth,
+                            float componentGap = kComponentGap,
+                            float componentHeight = kTopComponentHeight) {
+    widget->setPosition({index * (componentWidth + componentGap), 0});
+    widget->setSize({componentWidth, componentHeight});
+}
+
+inline void styleHudButton(const tgui::Button::Ptr& button,
+                           float width = kActionWidth,
+                           float height = kTopComponentHeight,
+                           unsigned int textSize = 16) {
+    button->setSize({width, height});
+    button->setTextSize(textSize);
+}
+
+inline void styleHudIndicator(const tgui::Label::Ptr& label,
+                              const tgui::Color& textColor,
+                              float width = kMetricWidth,
+                              float height = kTopComponentHeight,
+                              unsigned int textSize = 14) {
     label->setAutoSize(false);
-    label->setSize({kComponentWidth, kComponentHeight});
-    label->setTextSize(16);
+    label->setSize({width, height});
+    label->setTextSize(textSize);
     label->setHorizontalAlignment(tgui::HorizontalAlignment::Center);
     label->setVerticalAlignment(tgui::VerticalAlignment::Center);
     label->getRenderer()->setTextColor(textColor);
+    label->getRenderer()->setBackgroundColor(tgui::Color(18, 18, 18, 185));
+    label->getRenderer()->setBorders({1});
+    label->getRenderer()->setBorderColor(tgui::Color(105, 105, 105));
+    label->getRenderer()->setPadding({8, 6, 8, 6});
+}
+
+inline void styleStatusIndicator(const tgui::Label::Ptr& label) {
+    styleHudIndicator(label, tgui::Color::White, kStatusWidth, kTopComponentHeight, 14);
+}
+
+inline void styleEmbeddedPanel(const tgui::Panel::Ptr& panel) {
+    panel->getRenderer()->setBackgroundColor(tgui::Color(0, 0, 0, 0));
+    panel->getRenderer()->setBorders(0);
 }
 
 inline void makeTransparentPanel(const tgui::Panel::Ptr& panel) {
-    panel->getRenderer()->setBackgroundColor(tgui::Color(0, 0, 0, 0));
-    panel->getRenderer()->setBorders(0);
+    styleEmbeddedPanel(panel);
+}
+
+inline void styleSidebarFrame(const tgui::Panel::Ptr& panel) {
+    panel->getRenderer()->setBackgroundColor(tgui::Color(26, 26, 26, 220));
+    panel->getRenderer()->setBorders({1});
+    panel->getRenderer()->setBorderColor(tgui::Color(155, 155, 155));
+}
+
+inline void styleSidebarSection(const tgui::Panel::Ptr& panel) {
+    panel->getRenderer()->setBackgroundColor(tgui::Color(12, 12, 12, 175));
+    panel->getRenderer()->setBorders({1});
+    panel->getRenderer()->setBorderColor(tgui::Color(85, 85, 85));
+}
+
+inline void styleSidebarTitle(const tgui::Label::Ptr& label) {
+    label->setTextSize(17);
+    label->getRenderer()->setTextColor(tgui::Color::White);
+}
+
+inline void styleSidebarBody(const tgui::Label::Ptr& label, unsigned int textSize = 14) {
+    label->setTextSize(textSize);
+    label->setAutoSize(false);
+    label->getRenderer()->setTextColor(tgui::Color(230, 230, 230));
 }
 
 } // namespace HUDLayout

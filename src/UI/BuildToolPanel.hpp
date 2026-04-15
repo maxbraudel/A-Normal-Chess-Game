@@ -2,19 +2,28 @@
 #include <TGUI/Backend/SFML-Graphics.hpp>
 #include <TGUI/AllWidgets.hpp>
 #include <functional>
+#include <vector>
+
+#include "Buildings/BuildingType.hpp"
 
 class Kingdom;
 class GameConfig;
 
 class BuildToolPanel {
 public:
-    void init(tgui::Gui& gui);
-    void show(const Kingdom& kingdom, const GameConfig& config);
+    void init(const tgui::Panel::Ptr& parent);
+    void show(const Kingdom& kingdom, const GameConfig& config, bool allowBuild);
     void hide();
 
     void setOnSelectBuildType(std::function<void(int buildingType)> callback);
 
 private:
+    struct BuildOptionWidgets {
+        BuildingType type;
+        tgui::Button::Ptr button;
+    };
+
     tgui::Panel::Ptr m_panel;
+    std::vector<BuildOptionWidgets> m_options;
     std::function<void(int)> m_onSelectBuildType;
 };

@@ -10,11 +10,14 @@
 #include "Buildings/BuildingType.hpp"
 #include "Config/GameConfig.hpp"
 #include "Core/GameEngine.hpp"
+#include "Core/GameState.hpp"
 #include "Core/GameStateValidator.hpp"
 #include "Save/SaveManager.hpp"
+#include "Systems/EconomySystem.hpp"
 #include "Systems/EventLog.hpp"
 #include "Systems/TurnCommand.hpp"
 #include "Systems/TurnSystem.hpp"
+#include "UI/InGameViewModelBuilder.hpp"
 #include "Units/Piece.hpp"
 #include "Units/PieceFactory.hpp"
 
@@ -162,6 +165,57 @@ void testTurnSystemSkipsUnaffordableBuild() {
     expect(white.buildings.empty(), "Unaffordable build commands must not create buildings.");
 }
 
+void testProjectedIncomeHelper() {
+    GameConfig config;
+    Board board;
+    board.init(3);
+
+    Kingdom white(KingdomId::White);
+    white.addPiece(Piece(0, PieceType::Pawn, KingdomId::White, {1, 1}));
+
+    Building mine;
+    mine.type = BuildingType::Mine;
+    mine.isNeutral = true;
+    mine.origin = {1, 1};
+    mine.width = 1;
+    mine.height = 1;
+    mine.cellHP = {1};
+
+    std::vector<Building> publicBuildings = {mine};
+    board.getCell(1, 1).piece = &white.pieces.back();
+
+    const int projectedIncome = EconomySystem::calculateProjectedIncome(white, board, publicBuildings, config);
+    expect(projectedIncome == config.getMineIncomePerCellPerTurn(),
+           "Projected income should match occupied public resource cells.");
+
+    Kingdom black(KingdomId::Black);
+    black.addPiece(Piece(1, PieceType::Pawn, KingdomId::Black, {1, 1}));
+    board.getCell(1, 1).piece = &black.pieces.back();
+    const int contestedIncome = EconomySystem::calculateProjectedIncome(white, board, publicBuildings, config);
+    expect(contestedIncome == 0,
+           "Contested public resource cells should not produce projected income.");
+}
+
+void testInGameViewModelBuilder() {
+    GameConfig config;
+    GameEngine engine;
+    GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, "view_model_test");
+
+    std::string error;
+    expect(engine.startNewSession(session, config, &error), error);
+    engine.eventLog().log(1, KingdomId::White, "Opened with a pawn move.");
+
+    const InGameViewModel model = buildInGameViewModel(engine, config, GameState::Playing, true);
+    expect(model.turnNumber == 1, "Dashboard model should expose the active turn number.");
+    expect(model.balanceMetrics[0].label == "Gold", "Dashboard model should expose kingdom balance labels.");
+        expect(model.eventRows.size() >= 2, "Dashboard model should expose event history rows.");
+        expect(model.eventRows.back().actionLabel == "Opened with a pawn move.",
+            "Dashboard model should preserve chronological event text.");
+        expect(model.eventRows.back().actorLabel.find("Player 1") != std::string::npos,
+           "Event rows should use participant names in actor labels.");
+    expect(!model.activeTurnLabel.empty(), "Dashboard model should expose the active turn label.");
+}
+
 }
 
 int main() {
@@ -171,6 +225,8 @@ int main() {
         {"engine restore factory sync", testGameEngineRestoresFactoryIds},
         {"save manager roundtrip", testSaveManagerRoundTrip},
         {"turn system affordability", testTurnSystemSkipsUnaffordableBuild},
+        {"projected income helper", testProjectedIncomeHelper},
+        {"in-game view model builder", testInGameViewModelBuilder},
     };
 
     for (const auto& [name, test] : tests) {

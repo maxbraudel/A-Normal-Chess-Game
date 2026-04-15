@@ -1,6 +1,8 @@
 #include "UI/BuildingPanel.hpp"
+#include "Core/GameSessionConfig.hpp"
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingType.hpp"
+#include "UI/HUDLayout.hpp"
 
 static std::string buildingTypeName(BuildingType type) {
     switch (type) {
@@ -16,30 +18,44 @@ static std::string buildingTypeName(BuildingType type) {
     }
 }
 
-void BuildingPanel::init(tgui::Gui& gui) {
-    m_panel = tgui::Panel::create({200, 180});
-    m_panel->setPosition({"&.width - 210", "50"});
-    m_panel->getRenderer()->setBackgroundColor(tgui::Color(50, 50, 50, 220));
-    m_panel->getRenderer()->setBorderColor(tgui::Color::White);
-    m_panel->getRenderer()->setBorders({1});
-    gui.add(m_panel, "BuildingPanel");
+void BuildingPanel::init(const tgui::Panel::Ptr& parent) {
+    m_panel = tgui::Panel::create({"&.width", "&.height"});
+    HUDLayout::styleEmbeddedPanel(m_panel);
+    parent->add(m_panel);
+
+    auto titleLabel = tgui::Label::create("Selection");
+    titleLabel->setPosition({10, 10});
+    HUDLayout::styleSidebarTitle(titleLabel);
+    m_panel->add(titleLabel);
 
     m_typeLabel = tgui::Label::create("Type: ");
-    m_typeLabel->setPosition({10, 10});
-    m_typeLabel->setTextSize(14);
-    m_typeLabel->getRenderer()->setTextColor(tgui::Color::White);
+    m_typeLabel->setPosition({10, 50});
+    m_typeLabel->setSize({316, 22});
+    HUDLayout::styleSidebarBody(m_typeLabel);
     m_panel->add(m_typeLabel);
 
+    m_ownerLabel = tgui::Label::create("Owner: White Kingdom");
+    m_ownerLabel->setPosition({10, 80});
+    m_ownerLabel->setSize({316, 22});
+    HUDLayout::styleSidebarBody(m_ownerLabel);
+    m_panel->add(m_ownerLabel);
+
+    m_cellsLabel = tgui::Label::create("Occupied Cells: 0");
+    m_cellsLabel->setPosition({10, 110});
+    m_cellsLabel->setSize({316, 22});
+    HUDLayout::styleSidebarBody(m_cellsLabel);
+    m_panel->add(m_cellsLabel);
+
     m_hpLabel = tgui::Label::create("HP: ");
-    m_hpLabel->setPosition({10, 40});
-    m_hpLabel->setTextSize(14);
-    m_hpLabel->getRenderer()->setTextColor(tgui::Color::White);
+    m_hpLabel->setPosition({10, 140});
+    m_hpLabel->setSize({316, 22});
+    HUDLayout::styleSidebarBody(m_hpLabel);
     m_panel->add(m_hpLabel);
 
     m_statusLabel = tgui::Label::create("Status: ");
-    m_statusLabel->setPosition({10, 70});
-    m_statusLabel->setTextSize(14);
-    m_statusLabel->getRenderer()->setTextColor(tgui::Color::White);
+    m_statusLabel->setPosition({10, 170});
+    m_statusLabel->setSize({316, 22});
+    HUDLayout::styleSidebarBody(m_statusLabel);
     m_panel->add(m_statusLabel);
 
     m_panel->setVisible(false);
@@ -48,6 +64,8 @@ void BuildingPanel::init(tgui::Gui& gui) {
 void BuildingPanel::show(const Building& building) {
     if (!m_panel) return;
     m_typeLabel->setText("Type: " + buildingTypeName(building.type));
+    m_ownerLabel->setText("Owner: " + (building.isNeutral ? std::string("Neutral") : kingdomLabel(building.owner)));
+    m_cellsLabel->setText("Occupied Cells: " + std::to_string(building.width * building.height));
 
     // Calculate total HP
     int totalHP = 0;

@@ -26,6 +26,8 @@ public:
 
     Piece* getSelectedPiece() const;
     Building* getSelectedBuilding() const;
+    bool hasSelectedCell() const;
+    sf::Vector2i getSelectedCell() const;
     const std::vector<sf::Vector2i>& getValidMoves() const;
     const std::vector<sf::Vector2i>& getDangerMoves() const; // king squares under enemy threat
     int getCapturePreviewPieceId() const; // id of enemy piece visually hidden during move preview (-1 if none)
@@ -47,6 +49,8 @@ private:
     ToolState m_currentTool;
     Piece* m_selectedPiece;
     Building* m_selectedBuilding;
+    bool m_hasSelectedCell;
+    sf::Vector2i m_selectedCell;
     std::vector<sf::Vector2i> m_validMoves;
     std::vector<sf::Vector2i> m_dangerMoves; // king moves onto threatened squares (shown red, blocked)
     int m_capturePreviewPieceId = -1; // enemy piece hidden during move preview
