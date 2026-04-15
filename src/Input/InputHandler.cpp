@@ -54,6 +54,15 @@ void InputHandler::clearSelection() {
     m_hasBuildPreview = false;
 }
 
+void InputHandler::selectCell(sf::Vector2i cellPos) {
+    m_selectedPiece = nullptr;
+    m_selectedBuilding = nullptr;
+    m_selectedCell = cellPos;
+    m_hasSelectedCell = true;
+    m_validMoves.clear();
+    m_dangerMoves.clear();
+}
+
 void InputHandler::refreshPieceMoves(Piece* piece, const Board& board, const Kingdom& enemyKingdom, const GameConfig& config) {
     m_validMoves.clear();
     m_dangerMoves.clear();
@@ -180,7 +189,7 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
                 return;
             }
 
-            clearSelection();
+            selectCell(cellPos);
             return;
         }
 
@@ -242,7 +251,7 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
                 return;
             }
 
-            clearSelection();
+            selectCell(cellPos);
             return;
         }
 
