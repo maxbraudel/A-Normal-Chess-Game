@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arena Structure Generator</title>
+<link rel="stylesheet" href="./structure-generator.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="./structure-generator-core.js"></script>
+</head>
+<body>
+<div class="structure-app">
+  <aside class="control-rail">
+    <section class="brand-block">
+      <p class="eyebrow">Chunked Pixel Structure Generator</p>
+      <h1 id="buildingTitle"></h1>
+      <p class="subtitle" id="buildingSubtitle"></p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Generator Config</h2>
+          <p>This arena page only defines the footprint, export naming and the scene composition rules.</p>
+        </div>
+      </div>
+      <div class="meta-grid">
+        <div class="meta-card"><span>Chunk Grid</span><strong id="chunkDimensions"></strong></div>
+        <div class="meta-card"><span>Pixel Size</span><strong id="pixelDimensions"></strong></div>
+        <div class="meta-card"><span>Chunk Size</span><strong id="chunkSize"></strong></div>
+        <div class="meta-card"><span>Export ZIP</span><strong id="exportName"></strong></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Workflow Notes</h2>
+          <p>The shared engine still handles previews, chunk guides, chunk names and ZIP export.</p>
+        </div>
+      </div>
+      <ul class="notes-list" id="notesList"></ul>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Export</h2>
+          <p>One click packages the full 4x4 arena into chunk-ready textures.</p>
+        </div>
+      </div>
+      <div class="button-row">
+        <button class="primary-button" id="downloadButton" type="button">Download ZIP Chunks</button>
+        <div class="status-pill" id="downloadStatus"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Chunk Names</h2>
+          <p id="chunkCount"></p>
+        </div>
+      </div>
+      <div class="chunk-name-list" id="chunkNameList"></div>
+    </section>
+  </aside>
+
+  <main class="workspace">
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Master Layout</h2>
+          <p>A detailed top-down stone arena with a sunken sand pit, spectator tiers, braziers, banners, statues and fortified corner towers.</p>
+        </div>
+        <label class="toggle"><input id="chunkGuideToggle" type="checkbox" checked> Show chunk guides</label>
+      </div>
+      <div class="canvas-frame">
+        <canvas id="masterCanvas"></canvas>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Chunk Preview</h2>
+          <p>Exact export order with local previews for every arena chunk.</p>
+        </div>
+      </div>
+      <div class="chunk-preview-grid" id="chunkPreviewGrid"></div>
+    </section>
+  </main>
+</div>
+
+<script>
+const arenaConfig = {
+  title: "Arena Structure Generator",
+  subtitle: "A highly detailed 4x4 chunk top-down arena with layered spectator seating, fortified corner towers, a sunken combat floor, ceremonial stonework and rich gladiator props.",
+  buildingName: "arena",
+  widthChunks: 4,
+  heightChunks: 4,
+  previewScale: 10,
+  chunkPreviewScale: 6,
+  defaultTile: "plazaStone",
+  chunkFileName: ({ buildingName, chunkX, chunkY }) => `${buildingName}_${chunkX + 1}_${chunkY + 1}.png`,
+  zipFileName: ({ buildingName }) => `${buildingName}_chunks.zip`,
+  notes: [
+    "This layout is 4 chunks wide by 4 chunks high, producing a 64x64 master texture.",
+    "The arena uses concentric rings: outer plaza, fortified wall, seating bowl and central sand pit.",
+    "Most detail lives in helper functions so the silhouette stays easy to adapt into another coliseum variant.",
+    "Chunk naming remains configurable through chunkFileName if you need another export convention."
+  ],
+  palette: {
+    plazaStone: "#7f735f",
+    plazaStoneAlt: "#8e826d",
+    plazaStoneDark: "#645846",
+    wallStone: "#a1947b",
+    wallStoneLight: "#b8ac95",
+    wallStoneDark: "#6f6451",
+    towerStone: "#93856c",
+    mortar: "#d2c4ad",
+    sand: "#c9ab67",
+    sandLight: "#dcc481",
+    sandDark: "#ac8c4f",
+    shadow: "#3c3227",
+    pitShadow: "#251f18",
+    gateWood: "#6c4928",
+    gateWoodDark: "#4d3119",
+    bannerRed: "#9e312d",
+    bannerGold: "#d8b45a",
+    bannerBlue: "#37567b",
+    brazier: "#54433a",
+    flameCore: "#f7d67c",
+    flameGlow: "#d4832f",
+    bronze: "#9b6e39",
+    marble: "#d9d3c8",
+    marbleShade: "#b5aea0",
+    moss: "#627548",
+    grate: "#4f4f52",
+    blood: "#7a2a24",
+    cloth: "#6f2731"
+  },
+  draw(structure) {
+    const width = structure.widthPixels;
+    const height = structure.heightPixels;
+
+    function sprinkleStoneNoise(x, y, w, h) {
+      for (let py = y; py < y + h; py += 3) {
+        for (let px = x + ((py - y) % 2); px < x + w; px += 4) {
+          structure.set(px, py, "plazaStoneAlt");
+          if (px + 1 < x + w) {
+            structure.set(px + 1, py, "plazaStoneDark");
+          }
+        }
+      }
+    }
+
+    function crackLine(points) {
+      for (let index = 0; index < points.length; index += 1) {
+        structure.set(points[index][0], points[index][1], "shadow");
+      }
+    }
+
+    function drawCornerTower(x, y) {
+      structure.fillRect(x, y, 10, 10, "towerStone");
+      structure.fillRect(x + 1, y + 1, 8, 8, "wallStone");
+      structure.strokeRect(x, y, 10, 10, "wallStoneDark");
+      structure.lineH(y + 3, x + 1, x + 8, "wallStoneDark");
+      structure.lineH(y + 6, x + 1, x + 8, "wallStoneDark");
+      structure.lineV(x + 3, y + 1, y + 8, "wallStoneDark");
+      structure.lineV(x + 6, y + 1, y + 8, "wallStoneDark");
+      structure.points([
+        [x + 2, y + 2], [x + 7, y + 2], [x + 2, y + 7], [x + 7, y + 7]
+      ], "mortar");
+    }
+
+    function drawBrazier(cx, cy) {
+      structure.fillEllipse(cx, cy, 2, 2, "flameGlow");
+      structure.fillRect(cx - 1, cy, 3, 2, "brazier");
+      structure.set(cx, cy - 1, "flameCore");
+      structure.points([[cx - 1, cy], [cx + 1, cy], [cx, cy + 1]], "flameGlow");
+    }
+
+    function drawBanner(x, y, colorTile) {
+      structure.fillRect(x, y, 2, 6, "bannerGold");
+      structure.fillRect(x + 2, y + 1, 4, 4, colorTile);
+      structure.fillRect(x + 3, y + 5, 2, 2, colorTile);
+      structure.points([[x + 3, y + 2], [x + 4, y + 3]], "bannerGold");
+    }
+
+    function drawStatue(x, y) {
+      structure.fillRect(x + 1, y + 5, 6, 2, "marbleShade");
+      structure.fillRect(x + 2, y + 1, 4, 5, "marble");
+      structure.fillRect(x + 3, y, 2, 2, "marbleShade");
+      structure.points([[x + 2, y + 2], [x + 5, y + 2], [x + 3, y + 4], [x + 4, y + 4]], "shadow");
+    }
+
+    function drawWeaponRack(x, y) {
+      structure.fillRect(x, y + 1, 7, 2, "gateWood");
+      structure.fillRect(x + 1, y, 1, 4, "gateWoodDark");
+      structure.fillRect(x + 5, y, 1, 4, "gateWoodDark");
+      structure.points([[x + 2, y], [x + 3, y + 1], [x + 4, y]], "bronze");
+      structure.lineV(x + 3, y + 1, y + 4, "marble");
+    }
+
+    function drawStairs(x, y, w, h, horizontal) {
+      for (let step = 0; step < (horizontal ? h : w); step += 2) {
+        if (horizontal) {
+          structure.fillRect(x, y + step, w, 1, "wallStoneDark");
+        } else {
+          structure.fillRect(x + step, y, 1, h, "wallStoneDark");
+        }
+      }
+    }
+
+    function drawSeatBand(x, y, w, h, orientation) {
+      structure.fillRect(x, y, w, h, "wallStone");
+      structure.strokeRect(x, y, w, h, "wallStoneDark");
+      if (orientation === "north" || orientation === "south") {
+        for (let py = y + 2; py < y + h; py += 3) {
+          structure.lineH(py, x + 1, x + w - 2, "wallStoneLight");
+          structure.lineH(py + 1, x + 1, x + w - 2, "wallStoneDark");
+        }
+      } else {
+        for (let px = x + 2; px < x + w; px += 3) {
+          structure.lineV(px, y + 1, y + h - 2, "wallStoneLight");
+          structure.lineV(px + 1, y + 1, y + h - 2, "wallStoneDark");
+        }
+      }
+    }
+
+    function drawCentralMedallion(cx, cy) {
+      structure.fillEllipse(cx, cy, 8, 8, "sandLight");
+      structure.fillEllipse(cx, cy, 6, 6, "sand");
+      structure.fillEllipse(cx, cy, 4, 4, "sandLight");
+      structure.lineH(cy, cx - 6, cx + 6, "bronze");
+      structure.lineV(cx, cy - 6, cy + 6, "bronze");
+      structure.points([
+        [cx - 4, cy - 4], [cx + 4, cy - 4], [cx - 4, cy + 4], [cx + 4, cy + 4],
+        [cx - 2, cy], [cx + 2, cy], [cx, cy - 2], [cx, cy + 2]
+      ], "bannerRed");
+    }
+
+    structure.fillRect(0, 0, width, height, "plazaStone");
+    structure.checkerRect(0, 0, width, height, "plazaStone", "plazaStoneAlt", 4);
+    sprinkleStoneNoise(0, 0, width, height);
+
+    structure.strokeRect(1, 1, width - 2, height - 2, "wallStoneDark");
+    structure.strokeRect(3, 3, width - 6, height - 6, "wallStone");
+
+    drawCornerTower(3, 3);
+    drawCornerTower(width - 13, 3);
+    drawCornerTower(3, height - 13);
+    drawCornerTower(width - 13, height - 13);
+
+    structure.fillRect(13, 4, width - 26, 8, "towerStone");
+    structure.fillRect(13, height - 12, width - 26, 8, "towerStone");
+    structure.fillRect(4, 13, 8, height - 26, "towerStone");
+    structure.fillRect(width - 12, 13, 8, height - 26, "towerStone");
+
+    structure.fillRect(14, 5, width - 28, 6, "wallStone");
+    structure.fillRect(14, height - 11, width - 28, 6, "wallStone");
+    structure.fillRect(5, 14, 6, height - 28, "wallStone");
+    structure.fillRect(width - 11, 14, 6, height - 28, "wallStone");
+
+    structure.fillRect(27, 4, 10, 8, "gateWoodDark");
+    structure.fillRect(27, height - 12, 10, 8, "gateWoodDark");
+    structure.fillRect(4, 27, 8, 10, "gateWoodDark");
+    structure.fillRect(width - 12, 27, 8, 10, "gateWoodDark");
+    structure.fillRect(29, 6, 6, 4, "gateWood");
+    structure.fillRect(29, height - 10, 6, 4, "gateWood");
+    structure.fillRect(6, 29, 4, 6, "gateWood");
+    structure.fillRect(width - 10, 29, 4, 6, "gateWood");
+
+    drawSeatBand(15, 13, 34, 9, "north");
+    drawSeatBand(15, 42, 34, 9, "south");
+    drawSeatBand(13, 15, 9, 34, "west");
+    drawSeatBand(42, 15, 9, 34, "east");
+
+    drawStairs(28, 20, 8, 5, true);
+    drawStairs(28, 39, 8, 5, true);
+    drawStairs(20, 28, 5, 8, false);
+    drawStairs(39, 28, 5, 8, false);
+
+    structure.fillRect(22, 22, 20, 20, "pitShadow");
+    structure.fillEllipse(32, 32, 18, 18, "sandDark");
+    structure.fillEllipse(32, 32, 16, 16, "sand");
+    structure.fillEllipse(32, 32, 14, 14, "sandLight");
+    structure.fillEllipse(32, 32, 12, 12, "sand");
+
+    for (let ring = 0; ring < 3; ring += 1) {
+      structure.strokeRect(17 + ring, 17 + ring, 30 - (ring * 2), 30 - (ring * 2), ring % 2 === 0 ? "wallStoneDark" : "wallStoneLight");
+    }
+
+    structure.fillRect(30, 18, 4, 5, "blood");
+    structure.points([[28, 23], [35, 24], [33, 21], [29, 20], [36, 27]], "blood");
+    structure.fillRect(24, 31, 3, 2, "grate");
+    structure.fillRect(38, 31, 3, 2, "grate");
+    structure.fillRect(31, 24, 2, 3, "grate");
+    structure.fillRect(31, 38, 2, 3, "grate");
+
+    drawCentralMedallion(32, 32);
+
+    drawBrazier(19, 19);
+    drawBrazier(45, 19);
+    drawBrazier(19, 45);
+    drawBrazier(45, 45);
+    drawBrazier(32, 14);
+    drawBrazier(32, 50);
+    drawBrazier(14, 32);
+    drawBrazier(50, 32);
+
+    drawBanner(16, 6, "bannerRed");
+    drawBanner(42, 6, "bannerBlue");
+    drawBanner(16, 52, "bannerBlue");
+    drawBanner(42, 52, "bannerRed");
+
+    drawStatue(14, 24);
+    drawStatue(42, 24);
+    drawStatue(24, 14);
+    drawStatue(24, 42);
+
+    drawWeaponRack(19, 9);
+    drawWeaponRack(38, 9);
+    drawWeaponRack(19, 52);
+    drawWeaponRack(38, 52);
+
+    structure.fillRect(28, 7, 8, 2, "cloth");
+    structure.fillRect(28, 55, 8, 2, "cloth");
+    structure.fillRect(7, 28, 2, 8, "cloth");
+    structure.fillRect(55, 28, 2, 8, "cloth");
+
+    structure.points([
+      [12, 12], [51, 12], [12, 51], [51, 51],
+      [21, 8], [42, 8], [21, 55], [42, 55],
+      [8, 21], [55, 21], [8, 42], [55, 42]
+    ], "moss");
+
+    crackLine([[9, 16], [10, 17], [11, 18], [12, 18], [13, 19]]);
+    crackLine([[48, 16], [47, 17], [46, 18], [45, 19], [44, 20]]);
+    crackLine([[17, 49], [18, 48], [19, 47], [20, 47], [21, 46]]);
+    crackLine([[47, 46], [46, 47], [45, 48], [44, 49], [43, 50]]);
+  }
+};
+
+createStructureGenerator(arenaConfig);
+</script>
+</body>
+</html>
