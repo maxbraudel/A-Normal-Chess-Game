@@ -11,6 +11,10 @@ namespace {
 const sf::Color kSelectionBlue(80, 160, 255, 240);
 const sf::Color kReachableCellColor(0, 255, 0, 80);
 const sf::Color kDangerCellColor(255, 40, 40, 90);
+const sf::Color kBuildPreviewValidFill(36, 196, 84, 88);
+const sf::Color kBuildPreviewInvalidFill(214, 52, 52, 96);
+const sf::Color kBuildPreviewValidOutline(92, 255, 144, 196);
+const sf::Color kBuildPreviewInvalidOutline(255, 120, 120, 208);
 const sf::Color kOverlayBackground(24, 24, 28, 220);
 const sf::Color kOverlayOutline(235, 235, 235, 210);
 const sf::Color kOverlayFill(80, 160, 255, 220);
@@ -34,6 +38,13 @@ void drawDot(sf::RenderWindow& window, float x, float y, float diameter) {
     window.draw(dot);
 }
 
+void drawDot(sf::RenderWindow& window, float x, float y, float diameter, const sf::Color& color) {
+    sf::RectangleShape dot({diameter, diameter});
+    dot.setFillColor(color);
+    dot.setPosition(x, y);
+    window.draw(dot);
+}
+
 void drawHorizontalDotRow(sf::RenderWindow& window, float startX, float endX,
                           float y, float diameter, float gapLength) {
     if (endX < startX) {
@@ -49,6 +60,24 @@ void drawHorizontalDotRow(sf::RenderWindow& window, float startX, float endX,
 
     if (endX - lastX > 0.5f) {
         drawDot(window, endX, y, diameter);
+    }
+}
+
+void drawHorizontalDotRow(sf::RenderWindow& window, float startX, float endX,
+                          float y, float diameter, float gapLength, const sf::Color& color) {
+    if (endX < startX) {
+        return;
+    }
+
+    const float step = diameter + gapLength;
+    float lastX = startX;
+    for (float x = startX; x <= endX; x += step) {
+        drawDot(window, x, y, diameter, color);
+        lastX = x;
+    }
+
+    if (endX - lastX > 0.5f) {
+        drawDot(window, endX, y, diameter, color);
     }
 }
 
@@ -68,6 +97,60 @@ void drawVerticalDotColumn(sf::RenderWindow& window, float x, float startY, floa
     if (endY - lastY > 0.5f) {
         drawDot(window, x, endY, diameter);
     }
+}
+
+void drawVerticalDotColumn(sf::RenderWindow& window, float x, float startY, float endY,
+                           float diameter, float gapLength, const sf::Color& color) {
+    if (endY < startY) {
+        return;
+    }
+
+    const float step = diameter + gapLength;
+    float lastY = startY;
+    for (float y = startY; y <= endY; y += step) {
+        drawDot(window, x, y, diameter, color);
+        lastY = y;
+    }
+
+    if (endY - lastY > 0.5f) {
+        drawDot(window, x, endY, diameter, color);
+    }
+}
+
+void drawDottedFrame(sf::RenderWindow& window, const Camera& camera,
+                     const sf::View& hudView, sf::Vector2u windowSize,
+                     sf::Vector2i origin, int width, int height, int cellSize,
+                     const sf::Color& color) {
+    const float dotDiameter = 4.f;
+    const float gapLength = 4.f;
+
+    const sf::Vector2f worldTopLeft(
+        static_cast<float>(origin.x * cellSize),
+        static_cast<float>(origin.y * cellSize));
+    const sf::Vector2f worldBottomRight(
+        static_cast<float>((origin.x + width) * cellSize),
+        static_cast<float>((origin.y + height) * cellSize));
+
+    sf::Vector2f screenTopLeft = camera.worldToScreen(worldTopLeft, windowSize);
+    sf::Vector2f screenBottomRight = camera.worldToScreen(worldBottomRight, windowSize);
+
+    const float leftEdge = std::min(screenTopLeft.x, screenBottomRight.x);
+    const float topEdge = std::min(screenTopLeft.y, screenBottomRight.y);
+    const float rightEdge = std::max(screenTopLeft.x, screenBottomRight.x);
+    const float bottomEdge = std::max(screenTopLeft.y, screenBottomRight.y);
+
+    const float left = leftEdge;
+    const float top = topEdge;
+    const float right = std::max(leftEdge, rightEdge - dotDiameter);
+    const float bottom = std::max(topEdge, bottomEdge - dotDiameter);
+
+    const sf::View savedView = window.getView();
+    window.setView(hudView);
+    drawHorizontalDotRow(window, left, right, top, dotDiameter, gapLength, color);
+    drawHorizontalDotRow(window, left, right, bottom, dotDiameter, gapLength, color);
+    drawVerticalDotColumn(window, left, top, bottom, dotDiameter, gapLength, color);
+    drawVerticalDotColumn(window, right, top, bottom, dotDiameter, gapLength, color);
+    window.setView(savedView);
 }
 
 void configureSpriteForCell(sf::Sprite& sprite, int cellSize,
@@ -317,36 +400,8 @@ void OverlayRenderer::drawOrientationCheckerboard(sf::RenderWindow& window,
 void OverlayRenderer::drawSelectionFrame(sf::RenderWindow& window, const Camera& camera,
                                            const sf::View& hudView, sf::Vector2u windowSize,
                                            sf::Vector2i origin, int width, int height, int cellSize) {
-    const float dotDiameter = 4.f;
-    const float gapLength = 4.f;
-
-    const sf::Vector2f worldTopLeft(
-        static_cast<float>(origin.x * cellSize),
-        static_cast<float>(origin.y * cellSize));
-    const sf::Vector2f worldBottomRight(
-        static_cast<float>((origin.x + width) * cellSize),
-        static_cast<float>((origin.y + height) * cellSize));
-
-    sf::Vector2f screenTopLeft = camera.worldToScreen(worldTopLeft, windowSize);
-    sf::Vector2f screenBottomRight = camera.worldToScreen(worldBottomRight, windowSize);
-
-    const float leftEdge = std::min(screenTopLeft.x, screenBottomRight.x);
-    const float topEdge = std::min(screenTopLeft.y, screenBottomRight.y);
-    const float rightEdge = std::max(screenTopLeft.x, screenBottomRight.x);
-    const float bottomEdge = std::max(screenTopLeft.y, screenBottomRight.y);
-
-    const float left = leftEdge;
-    const float top = topEdge;
-    const float right = std::max(leftEdge, rightEdge - dotDiameter);
-    const float bottom = std::max(topEdge, bottomEdge - dotDiameter);
-
-    const sf::View savedView = window.getView();
-    window.setView(hudView);
-    drawHorizontalDotRow(window, left, right, top, dotDiameter, gapLength);
-    drawHorizontalDotRow(window, left, right, bottom, dotDiameter, gapLength);
-    drawVerticalDotColumn(window, left, top, bottom, dotDiameter, gapLength);
-    drawVerticalDotColumn(window, right, top, bottom, dotDiameter, gapLength);
-    window.setView(savedView);
+    drawDottedFrame(window, camera, hudView, windowSize,
+                    origin, width, height, cellSize, kSelectionBlue);
 }
 
 void OverlayRenderer::drawReachableCells(sf::RenderWindow& window, const Camera& camera,
@@ -382,29 +437,19 @@ void OverlayRenderer::drawDangerCells(sf::RenderWindow& window, const Camera& ca
 }
 
 void OverlayRenderer::drawBuildPreview(sf::RenderWindow& window, const Camera& camera,
+                                         const sf::View& hudView, sf::Vector2u windowSize,
                                          sf::Vector2i origin, BuildingType type,
                                          int width, int height,
                                          int rotationQuarterTurns, int flipMask,
                                          int cellSize, bool valid,
                                          const AssetManager& assets) {
-    (void)camera;
-
     const int footprintWidth = Building::getFootprintWidthFor(width, height, rotationQuarterTurns);
     const int footprintHeight = Building::getFootprintHeightFor(width, height, rotationQuarterTurns);
-    sf::Color color = valid ? sf::Color(0, 200, 0, 80) : sf::Color(200, 0, 0, 80);
-
-    for (int dy = 0; dy < footprintHeight; ++dy) {
-        for (int dx = 0; dx < footprintWidth; ++dx) {
-            sf::RectangleShape rect(sf::Vector2f(static_cast<float>(cellSize), static_cast<float>(cellSize)));
-            rect.setFillColor(color);
-            rect.setPosition(static_cast<float>((origin.x + dx) * cellSize),
-                            static_cast<float>((origin.y + dy) * cellSize));
-            window.draw(rect);
-        }
-    }
+    const sf::Color fillColor = valid ? kBuildPreviewValidFill : kBuildPreviewInvalidFill;
+    const sf::Color outlineColor = valid ? kBuildPreviewValidOutline : kBuildPreviewInvalidOutline;
 
     sf::Sprite sprite;
-    sprite.setColor(sf::Color(255, 255, 255, 255));
+    sprite.setColor(sf::Color(255, 255, 255, 128));
     for (int dy = 0; dy < footprintHeight; ++dy) {
         for (int dx = 0; dx < footprintWidth; ++dx) {
             const sf::Vector2i sourceLocal = Building::mapFootprintToSourceLocalFor(
@@ -419,8 +464,17 @@ void OverlayRenderer::drawBuildPreview(sf::RenderWindow& window, const Camera& c
                                    static_cast<float>((origin.y + dy) * cellSize),
                                    rotationQuarterTurns, flipMask);
             window.draw(sprite);
+
+            sf::RectangleShape overlay(sf::Vector2f(static_cast<float>(cellSize), static_cast<float>(cellSize)));
+            overlay.setFillColor(fillColor);
+            overlay.setPosition(static_cast<float>((origin.x + dx) * cellSize),
+                                static_cast<float>((origin.y + dy) * cellSize));
+            window.draw(overlay);
         }
     }
+
+    drawDottedFrame(window, camera, hudView, windowSize,
+                    origin, footprintWidth, footprintHeight, cellSize, outlineColor);
 }
 
 void OverlayRenderer::drawActionMarker(sf::RenderWindow& window, const Camera& camera,

@@ -939,6 +939,7 @@ void Game::render() {
                 turnSystem().getTurnNumber(), turnSystem().getPendingCommands(),
                 previewBuild, m_config);
             m_renderer.getOverlay().drawBuildPreview(m_window, m_camera,
+                m_hudView, m_windowSize,
                 m_input.getBuildPreviewOrigin(), bt, bw, bh, previewRotationQuarterTurns,
                 0, m_config.getCellSizePx(), valid, m_assets);
         }
@@ -951,6 +952,7 @@ void Game::render() {
                 const int bw = m_config.getBuildingWidth(pendingCommand.buildingType);
                 const int bh = m_config.getBuildingHeight(pendingCommand.buildingType);
                 m_renderer.getOverlay().drawBuildPreview(m_window, m_camera,
+                    m_hudView, m_windowSize,
                     pendingCommand.buildOrigin, pendingCommand.buildingType, bw, bh,
                     pendingCommand.buildRotationQuarterTurns, 0,
                     m_config.getCellSizePx(), true, m_assets);

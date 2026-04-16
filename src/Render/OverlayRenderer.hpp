@@ -22,6 +22,7 @@ public:
     void drawDangerCells(sf::RenderWindow& window, const Camera& camera,
                           const std::vector<sf::Vector2i>& cells, int cellSize);
     void drawBuildPreview(sf::RenderWindow& window, const Camera& camera,
+                           const sf::View& hudView, sf::Vector2u windowSize,
                            sf::Vector2i origin, BuildingType type,
                            int width, int height,
                            int rotationQuarterTurns, int flipMask,
