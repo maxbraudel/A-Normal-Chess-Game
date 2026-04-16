@@ -107,7 +107,7 @@ void Renderer::drawBoard(sf::RenderWindow& window, const Camera& camera, const B
             if (!cell.isInCircle) continue;
 
             sprite.setTexture(m_assets->getCellTexture(cell.type));
-            sprite.setColor(sf::Color::White);
+            sprite.setColor(sf::Color(cell.terrainBrightness, cell.terrainBrightness, cell.terrainBrightness));
             configureSpriteForCell(sprite, m_cellSize,
                                    static_cast<float>(x * m_cellSize),
                                    static_cast<float>(y * m_cellSize),

@@ -441,6 +441,8 @@ std::string buildGenerationSignature(const Board& board,
             }
 
             signature += std::to_string(cell.terrainFlipMask);
+            signature.push_back(':');
+            signature += std::to_string(static_cast<int>(cell.terrainBrightness));
             signature.push_back(',');
         }
     }
@@ -3560,6 +3562,54 @@ void testGameEngineRestoresBishopSpawnMemory() {
         expectPublicBuildingsAvoidWater(board, publicBuildings);
     }
 
+    void testBoardGeneratorAppliesDeterministicGrassBrightnessVariation() {
+        GameConfig config;
+
+        Board boardA;
+        boardA.init(25);
+        std::vector<Building> buildingsA;
+        BoardGenerator::generate(boardA, config, buildingsA, 424242u);
+
+        Board boardB;
+        boardB.init(25);
+        std::vector<Building> buildingsB;
+        BoardGenerator::generate(boardB, config, buildingsB, 424242u);
+
+        Board boardC;
+        boardC.init(25);
+        std::vector<Building> buildingsC;
+        BoardGenerator::generate(boardC, config, buildingsC, 424243u);
+
+        int darkerGrassCells = 0;
+        int differentBrightnessCells = 0;
+        const int diameter = boardA.getDiameter();
+        for (int y = 0; y < diameter; ++y) {
+            for (int x = 0; x < diameter; ++x) {
+                const Cell& cellA = boardA.getCell(x, y);
+                const Cell& cellB = boardB.getCell(x, y);
+                const Cell& cellC = boardC.getCell(x, y);
+                if (!cellA.isInCircle) {
+                    continue;
+                }
+
+                expect(cellA.terrainBrightness == cellB.terrainBrightness,
+                    "Grass brightness should be deterministic for a given world seed.");
+
+                if (cellA.type == CellType::Grass && cellA.terrainBrightness < 255) {
+                    ++darkerGrassCells;
+                }
+                if (cellA.terrainBrightness != cellC.terrainBrightness) {
+                    ++differentBrightnessCells;
+                }
+            }
+        }
+
+        expect(darkerGrassCells > 0,
+            "World generation should darken at least some grass cells for visual variation.");
+        expect(differentBrightnessCells > 0,
+            "Changing the world seed should alter at least some terrain brightness values.");
+    }
+
     void testBoardGeneratorCentersChurchWithoutRotation() {
         GameConfig config;
 
@@ -6119,6 +6169,7 @@ int main() {
         {"engine ai staging bankruptcy recovery", testGameEngineStagesAITurnDisbandsToResolveBankruptcy},
         {"board generator deterministic seed", testBoardGeneratorUsesDeterministicSeed},
         {"board generator terrain balance", testBoardGeneratorProducesGrassDominantTerrain},
+        {"board generator grass brightness variation", testBoardGeneratorAppliesDeterministicGrassBrightnessVariation},
         {"board generator centered church", testBoardGeneratorCentersChurchWithoutRotation},
         {"board generator resource dispersion", testBoardGeneratorDispersesPublicResourcesAcrossTypes},
         {"layered selection priority", testLayeredSelectionStackResolvesPriority},

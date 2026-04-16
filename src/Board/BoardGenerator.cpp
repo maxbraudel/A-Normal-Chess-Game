@@ -11,6 +11,7 @@
 #include <cmath>
 #include <limits>
 #include <queue>
+#include <random>
 #include <utility>
 
 namespace {
@@ -20,6 +21,12 @@ constexpr int kNeighbourDx[8] = {1, 1, 0, -1, -1, -1, 0, 1};
 constexpr int kNeighbourDy[8] = {0, 1, 1, 1, 0, -1, -1, -1};
 constexpr int kFlipHorizontalMask = 1;
 constexpr int kFlipVerticalMask = 2;
+constexpr float kGrassShadeMinBrightness = 0.68f;
+constexpr float kGrassShadeKeepDefaultThreshold = 0.90f;
+constexpr float kGrassShadeBetaAlpha = 7.0f;
+constexpr float kGrassShadeBetaBeta = 2.0f;
+constexpr float kGrassShadeContrastExponent = 1.8f;
+constexpr std::uint32_t kGrassShadeSeedSalt = 0x6d2b79f5u;
 
 struct TerrainComponent {
     std::vector<sf::Vector2i> cells;
@@ -66,6 +73,44 @@ std::uint32_t mixSeed(std::uint32_t seed, std::uint32_t value) {
 float hashValue(std::uint32_t seed, int x, int y) {
     const auto hashed = mixSeed(seed, static_cast<std::uint32_t>(x * 374761393) ^ static_cast<std::uint32_t>(y * 668265263));
     return static_cast<float>(hashed & 0x00ffffffu) / static_cast<float>(0x00ffffffu);
+}
+
+float sampleBeta(std::mt19937& random, float alpha, float beta) {
+    std::gamma_distribution<float> firstGamma(alpha, 1.0f);
+    std::gamma_distribution<float> secondGamma(beta, 1.0f);
+    const float first = firstGamma(random);
+    const float second = secondGamma(random);
+    const float sum = first + second;
+    if (sum <= 0.0f) {
+        return 1.0f;
+    }
+
+    return first / sum;
+}
+
+std::uint8_t terrainBrightnessFor(std::uint32_t worldSeed, int x, int y, CellType type) {
+    if (type != CellType::Grass) {
+        return 255;
+    }
+
+    std::uint32_t seed = (worldSeed == 0) ? 1u : worldSeed;
+    seed = mixSeed(seed, kGrassShadeSeedSalt);
+    const std::uint32_t positionHash = (static_cast<std::uint32_t>(x + 1) * 83492791u)
+        ^ (static_cast<std::uint32_t>(y + 1) * 2971215073u);
+    seed = mixSeed(seed, positionHash);
+
+    std::mt19937 random(seed);
+    const float betaSample = sampleBeta(random, kGrassShadeBetaAlpha, kGrassShadeBetaBeta);
+
+    float brightness = 1.0f;
+    if (betaSample < kGrassShadeKeepDefaultThreshold) {
+        const float normalized = std::clamp(betaSample / kGrassShadeKeepDefaultThreshold, 0.0f, 1.0f);
+        const float contrasted = std::pow(normalized, kGrassShadeContrastExponent);
+        brightness = kGrassShadeMinBrightness + ((1.0f - kGrassShadeMinBrightness) * contrasted);
+    }
+
+    const int brightness255 = static_cast<int>(std::round(std::clamp(brightness, 0.0f, 1.0f) * 255.0f));
+    return static_cast<std::uint8_t>(std::clamp(brightness255, 0, 255));
 }
 
 int terrainFlipMaskFor(std::uint32_t worldSeed, int x, int y, CellType type) {
@@ -297,6 +342,7 @@ void prepareCenteredPublicFootprint(Board& board,
             Cell& cell = board.getCell(x, y);
             cell.type = CellType::Grass;
             cell.terrainFlipMask = terrainFlipMaskFor(worldSeed, x, y, cell.type);
+            cell.terrainBrightness = terrainBrightnessFor(worldSeed, x, y, cell.type);
         }
     }
 }
@@ -731,10 +777,12 @@ void BoardGenerator::applyTerrainVisuals(Board& board, std::uint32_t worldSeed) 
             Cell& cell = board.getCell(x, y);
             if (!cell.isInCircle || cell.type == CellType::Void) {
                 cell.terrainFlipMask = 0;
+                cell.terrainBrightness = 255;
                 continue;
             }
 
             cell.terrainFlipMask = terrainFlipMaskFor(worldSeed, x, y, cell.type);
+            cell.terrainBrightness = terrainBrightnessFor(worldSeed, x, y, cell.type);
         }
     }
 }
