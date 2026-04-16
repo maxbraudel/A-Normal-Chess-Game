@@ -481,13 +481,54 @@ Building* Game::findBuildingById(int buildingId) {
     return nullptr;
 }
 
+Building* Game::findBuildingForBookmark(const InputSelectionBookmark& bookmark) {
+    if (Building* building = findBuildingById(bookmark.buildingId)) {
+        return building;
+    }
+
+    if (!bookmark.selectedBuildingOrigin.has_value()) {
+        return nullptr;
+    }
+
+    const auto matchesBookmark = [&bookmark](Building& building) {
+        return building.origin == *bookmark.selectedBuildingOrigin
+            && building.type == bookmark.selectedBuildingType
+            && building.isNeutral == bookmark.selectedBuildingIsNeutral
+            && building.owner == bookmark.selectedBuildingOwner
+            && building.rotationQuarterTurns == bookmark.selectedBuildingRotationQuarterTurns;
+    };
+
+    for (Building& building : displayedPublicBuildings()) {
+        if (matchesBookmark(building)) {
+            return &building;
+        }
+    }
+    for (Building& building : displayedKingdom(KingdomId::White).buildings) {
+        if (matchesBookmark(building)) {
+            return &building;
+        }
+    }
+    for (Building& building : displayedKingdom(KingdomId::Black).buildings) {
+        if (matchesBookmark(building)) {
+            return &building;
+        }
+    }
+
+    return nullptr;
+}
+
 void Game::reconcileSelectionBookmark(const InputSelectionBookmark& bookmark) {
     const InteractionPermissions permissions = currentInteractionPermissions();
     InputContext inputContext = buildInputContext(permissions);
     m_input.reconcileSelection(bookmark,
                                findPieceById(bookmark.pieceId),
-                               findBuildingById(bookmark.buildingId),
+                               findBuildingForBookmark(bookmark),
                                inputContext);
+}
+
+void Game::activateSelectTool() {
+    m_input.setTool(ToolState::Select);
+    m_uiManager.showSelectionEmptyState();
 }
 
 Board& Game::displayedBoard() {
@@ -795,6 +836,16 @@ void Game::handleInput() {
                 centerCameraOnKingdom(localPerspectiveKingdom());
                 continue;
             }
+        }
+
+        if (inInteractiveGameState && !overlaysVisible
+            && !isInGameMenuOpen()
+            && event.type == sf::Event::MouseButtonPressed
+            && event.mouseButton.button == sf::Mouse::Right) {
+            if (currentInteractionPermissions().canUseToolbar) {
+                activateSelectTool();
+            }
+            continue;
         }
 
         const bool handledByGui = m_gui.handleEvent(event);
@@ -1702,8 +1753,7 @@ void Game::setupUICallbacks() {
     // Toolbar
     m_uiManager.toolBar().setOnSelect([this]() {
         if (!currentInteractionPermissions().canUseToolbar) return;
-        m_input.setTool(ToolState::Select);
-        m_uiManager.showSelectionEmptyState();
+        activateSelectTool();
     });
     m_uiManager.toolBar().setOnBuild([this]() {
         const InteractionPermissions permissions = currentInteractionPermissions();

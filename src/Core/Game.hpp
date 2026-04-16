@@ -118,6 +118,8 @@ private:
     void reconcileSelectionBookmark(const InputSelectionBookmark& bookmark);
     Piece* findPieceById(int pieceId);
     Building* findBuildingById(int buildingId);
+    Building* findBuildingForBookmark(const InputSelectionBookmark& bookmark);
+    void activateSelectTool();
     Board& displayedBoard();
     const Board& displayedBoard() const;
     std::array<Kingdom, kNumKingdoms>& displayedKingdoms();

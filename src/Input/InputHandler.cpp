@@ -76,6 +76,11 @@ InputSelectionBookmark InputHandler::createSelectionBookmark() const {
     }
     if (m_selectedBuilding) {
         bookmark.buildingId = m_selectedBuilding->id;
+        bookmark.selectedBuildingOrigin = m_selectedBuilding->origin;
+        bookmark.selectedBuildingType = m_selectedBuilding->type;
+        bookmark.selectedBuildingOwner = m_selectedBuilding->owner;
+        bookmark.selectedBuildingIsNeutral = m_selectedBuilding->isNeutral;
+        bookmark.selectedBuildingRotationQuarterTurns = m_selectedBuilding->rotationQuarterTurns;
     }
     if (m_hasSelectedCell) {
         bookmark.selectedCell = m_selectedCell;
