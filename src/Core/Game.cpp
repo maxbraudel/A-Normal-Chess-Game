@@ -997,42 +997,6 @@ void Game::render() {
                 m_window, m_renderer, m_camera, m_hudView, m_windowSize,
                 kingdomState.buildings, displayedBoard(), m_config, m_assets, overlayPolicy, selectedBuilding);
         }
-        for (const Building& building : displayedPublicBuildings()) {
-            if (!building.isUnderConstruction()) {
-                continue;
-            }
-
-            m_renderer.getOverlay().drawActionMarker(
-                m_window,
-                m_camera,
-                m_hudView,
-                m_windowSize,
-                building.origin,
-                building.getFootprintWidth(),
-                building.getFootprintHeight(),
-                "build_ongoing",
-                m_config.getCellSizePx(),
-                m_assets);
-        }
-        for (const Kingdom& kingdomState : displayedKingdoms()) {
-            for (const Building& building : kingdomState.buildings) {
-                if (!building.isUnderConstruction()) {
-                    continue;
-                }
-
-                m_renderer.getOverlay().drawActionMarker(
-                    m_window,
-                    m_camera,
-                    m_hudView,
-                    m_windowSize,
-                    building.origin,
-                    building.getFootprintWidth(),
-                    building.getFootprintHeight(),
-                    "build_ongoing",
-                    m_config.getCellSizePx(),
-                    m_assets);
-            }
-        }
     }
 
     m_window.setView(m_hudView);

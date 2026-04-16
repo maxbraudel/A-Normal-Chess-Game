@@ -31,6 +31,7 @@ enum class StructureOverlayItemType {
 
 enum class StructureOverlayIndicatorKind {
     Occupation,
+    Construction,
     BarracksProduction
 };
 
@@ -46,6 +47,7 @@ struct StructureOverlayContext {
 
 struct StructureOverlayPolicy {
     StructureOverlayVisibility occupationVisibility = StructureOverlayVisibility::Always;
+    StructureOverlayVisibility constructionVisibility = StructureOverlayVisibility::Always;
     StructureOverlayVisibility barracksProductionVisibility = StructureOverlayVisibility::Always;
 
     StructureOverlayVisibility visibilityFor(StructureOverlayIndicatorKind kind) const;

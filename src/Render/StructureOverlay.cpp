@@ -56,6 +56,8 @@ StructureOverlayVisibility StructureOverlayPolicy::visibilityFor(StructureOverla
     switch (kind) {
         case StructureOverlayIndicatorKind::Occupation:
             return occupationVisibility;
+        case StructureOverlayIndicatorKind::Construction:
+            return constructionVisibility;
         case StructureOverlayIndicatorKind::BarracksProduction:
             return barracksProductionVisibility;
     }
@@ -101,6 +103,7 @@ std::string formatTurnsRemainingLabel(int turnsRemaining) {
 StructureOverlayPolicy makeWorldStructureOverlayPolicy() {
     StructureOverlayPolicy policy;
     policy.occupationVisibility = StructureOverlayVisibility::Always;
+    policy.constructionVisibility = StructureOverlayVisibility::Always;
     policy.barracksProductionVisibility = StructureOverlayVisibility::Always;
     return policy;
 }
@@ -132,6 +135,11 @@ StructureOverlayStack buildStructureOverlay(const Building& building,
         } else {
             statusRow.items.push_back(makeIconItem(makeOwnerShieldIcon(building.owner)));
         }
+    }
+
+    if (building.isUnderConstruction()
+        && policy.shouldShow(StructureOverlayIndicatorKind::Construction, context)) {
+        statusRow.items.push_back(makeIconItem(makeUITextureIcon("build_ongoing")));
     }
 
     if (!statusRow.items.empty()) {

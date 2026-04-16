@@ -570,6 +570,35 @@ void testLayeredSelectionStackTreatsUnderConstructionBuildingAsNormalBuilding() 
             "A black-owned private building should display the black shield icon.");
     }
 
+    void testUnderConstructionStructureOverlayStacksConstructionIconInPrimaryRow() {
+        GameConfig config;
+        Board board;
+        board.init(5);
+
+        Building barracks = makeTestBarracks(11, KingdomId::White, {1, 1}, config);
+        barracks.setConstructionState(BuildingState::UnderConstruction);
+
+        StructureOverlayContext overlayContext;
+        overlayContext.isSelected = false;
+        const StructureOverlayStack overlay = buildStructureOverlay(
+            barracks, board, config, overlayContext, makeWorldStructureOverlayPolicy());
+
+        expect(overlay.rows.size() == 1,
+            "Under-construction private buildings should keep a single primary status row above the structure.");
+        expect(overlay.rows[0].placement == StructureOverlayRowPlacement::Above,
+            "The under-construction status indicators should remain in the primary row above the structure.");
+        expect(overlay.rows[0].items.size() == 2,
+            "Under-construction private buildings should stack the owner and construction indicators side by side in one row.");
+        expect(overlay.rows[0].items[0].type == StructureOverlayItemType::Icon,
+            "The primary under-construction row should begin with the owner icon.");
+        expect(overlay.rows[0].items[0].icon.textureName == "shield_white",
+            "The owner indicator should remain the first item in the primary under-construction row.");
+        expect(overlay.rows[0].items[1].type == StructureOverlayItemType::Icon,
+            "The construction indicator should be added as a second icon in the primary row.");
+        expect(overlay.rows[0].items[1].icon.textureName == "build_ongoing",
+            "Under-construction buildings should expose the hammer icon in the same primary row as other status indicators.");
+    }
+
     void testSelectedStructureOverlayPublicBuildingsUseOccupationIndicator() {
         GameConfig config;
         Board board;
@@ -3269,6 +3298,7 @@ int main() {
         {"public building occupation state", testPublicBuildingOccupationStateResolvesAllOutcomes},
         {"cell traversal water blocked", testCellTraversalTreatsWaterAsNotTraversable},
         {"private building overlay owner shield", testSelectedStructureOverlayPrivateBuildingsUseOwnerShield},
+        {"under construction overlay status row stacks icons", testUnderConstructionStructureOverlayStacksConstructionIconInPrimaryRow},
         {"public building overlay occupation", testSelectedStructureOverlayPublicBuildingsUseOccupationIndicator},
         {"barracks overlay production row", testSelectedStructureOverlayProducingBarracksAddsProgressRow},
         {"check response filters illegal moves", testCheckResponseFiltersMovesThatDoNotResolveCheck},
