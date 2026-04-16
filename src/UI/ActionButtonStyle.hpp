@@ -4,6 +4,8 @@
 
 #include <TGUI/AllWidgets.hpp>
 
+#include "UI/FocusStyle.hpp"
+
 namespace ActionButtonStyle {
 
 inline void applySelectableState(const tgui::Button::Ptr& button,
@@ -37,6 +39,14 @@ inline void applySelectableState(const tgui::Button::Ptr& button,
     renderer->setBorderColorDisabled(borderColor);
     renderer->setBackgroundColorDisabled(backgroundColor);
     renderer->setTextColorDisabled(textColor);
+    renderer->setBorderColorFocused(borderColor);
+    renderer->setBackgroundColorFocused(backgroundColor);
+    renderer->setTextColorFocused(textColor);
+    renderer->setBorderColorDownFocused(borderColor);
+    renderer->setBackgroundColorDownFocused(backgroundColor);
+    renderer->setTextColorDownFocused(textColor);
+
+    FocusStyle::neutralizeButtonFocus(button);
 }
 
 } // namespace ActionButtonStyle

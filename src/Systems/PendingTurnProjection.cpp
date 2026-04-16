@@ -7,6 +7,7 @@
 #include "Board/Board.hpp"
 #include "Buildings/Building.hpp"
 #include "Config/GameConfig.hpp"
+#include "Systems/BuildReachRules.hpp"
 #include "Kingdom/Kingdom.hpp"
 #include "Systems/StructureIntegrityRules.hpp"
 #include "Systems/TurnPointRules.hpp"
@@ -35,6 +36,106 @@ int getGoldBuildCost(BuildingType type, const GameConfig& config) {
         default:
             return 0;
     }
+}
+
+GameSnapshot createProjectionBaseSnapshot(const Board& board,
+                                          const Kingdom& activeKingdom,
+                                          const Kingdom& enemyKingdom,
+                                          const std::vector<Building>& publicBuildings,
+                                          int turnNumber,
+                                          const std::vector<TurnCommand>& commands,
+                                          const GameConfig& config);
+
+bool applyProjectedCommand(GameSnapshot& snapshot,
+                           KingdomId activeKingdom,
+                           const TurnCommand& command,
+                           const GameConfig& config,
+                           std::string* errorMessage);
+
+bool buildHasFinalBuilderCoverage(const TurnCommand& command,
+                                  const std::vector<sf::Vector2i>& builderPositions,
+                                  const GameConfig& config) {
+    if (command.type != TurnCommand::Build) {
+        return true;
+    }
+
+    const int baseWidth = config.getBuildingWidth(command.buildingType);
+    const int baseHeight = config.getBuildingHeight(command.buildingType);
+    const int footprintWidth = Building::getFootprintWidthFor(
+        baseWidth, baseHeight, command.buildRotationQuarterTurns);
+    const int footprintHeight = Building::getFootprintHeightFor(
+        baseWidth, baseHeight, command.buildRotationQuarterTurns);
+    return footprintHasAdjacentBuilder(
+        command.buildOrigin, footprintWidth, footprintHeight, builderPositions);
+}
+
+PendingTurnNormalizationResult normalizeSequentialCommands(
+    const Board& board,
+    const Kingdom& activeKingdom,
+    const Kingdom& enemyKingdom,
+    const std::vector<Building>& publicBuildings,
+    int turnNumber,
+    const std::vector<TurnCommand>& commands,
+    const GameConfig& config,
+    PendingTurnInvalidCommandPolicy invalidCommandPolicy) {
+    PendingTurnNormalizationResult result;
+    result.snapshot = createProjectionBaseSnapshot(
+        board, activeKingdom, enemyKingdom, publicBuildings, turnNumber, commands, config);
+    result.normalizedCommands.reserve(commands.size());
+
+    for (std::size_t index = 0; index < commands.size(); ++index) {
+        const TurnCommand& command = commands[index];
+        std::string commandError;
+        if (applyProjectedCommand(result.snapshot, activeKingdom.id, command, config, &commandError)) {
+            result.normalizedCommands.push_back(command);
+            continue;
+        }
+
+        const bool canDropCommand = invalidCommandPolicy == PendingTurnInvalidCommandPolicy::DropInvalidBuilds
+            && command.type == TurnCommand::Build;
+        if (canDropCommand) {
+            result.droppedCommands.push_back(PendingTurnDroppedCommand{index, command, commandError});
+            continue;
+        }
+
+        result.valid = false;
+        result.errorMessage = std::move(commandError);
+        return result;
+    }
+
+    return result;
+}
+
+std::vector<PendingTurnDroppedCommand> collectFinalCoverageDroppedBuilds(
+    const GameSnapshot& snapshot,
+    KingdomId activeKingdom,
+    const std::vector<TurnCommand>& normalizedCommands,
+    const GameConfig& config,
+    std::vector<TurnCommand>* filteredCommands) {
+    std::vector<PendingTurnDroppedCommand> droppedCommands;
+    if (!filteredCommands) {
+        return droppedCommands;
+    }
+
+    filteredCommands->clear();
+    filteredCommands->reserve(normalizedCommands.size());
+
+    const std::vector<sf::Vector2i> builderPositions = collectBuilderPositions(
+        snapshot.kingdom(activeKingdom).pieces);
+    for (std::size_t index = 0; index < normalizedCommands.size(); ++index) {
+        const TurnCommand& command = normalizedCommands[index];
+        if (buildHasFinalBuilderCoverage(command, builderPositions, config)) {
+            filteredCommands->push_back(command);
+            continue;
+        }
+
+        droppedCommands.push_back(PendingTurnDroppedCommand{
+            index,
+            command,
+            "The queued build is no longer covered by any builder in the final projected turn state."});
+    }
+
+    return droppedCommands;
 }
 
 bool canUpgradeSnapshotPiece(const SnapPiece& piece,
@@ -251,32 +352,52 @@ PendingTurnNormalizationResult PendingTurnProjection::normalize(
     const std::vector<TurnCommand>& commands,
     const GameConfig& config,
     PendingTurnInvalidCommandPolicy invalidCommandPolicy) {
-    PendingTurnNormalizationResult result;
-    result.snapshot = createProjectionBaseSnapshot(
-        board, activeKingdom, enemyKingdom, publicBuildings, turnNumber, commands, config);
-    result.normalizedCommands.reserve(commands.size());
-
-    for (std::size_t index = 0; index < commands.size(); ++index) {
-        const TurnCommand& command = commands[index];
-        std::string commandError;
-        if (applyProjectedCommand(result.snapshot, activeKingdom.id, command, config, &commandError)) {
-            result.normalizedCommands.push_back(command);
-            continue;
-        }
-
-        const bool canDropCommand = invalidCommandPolicy == PendingTurnInvalidCommandPolicy::DropInvalidBuilds
-            && command.type == TurnCommand::Build;
-        if (canDropCommand) {
-            result.droppedCommands.push_back(PendingTurnDroppedCommand{index, command, commandError});
-            continue;
-        }
-
-        result.valid = false;
-        result.errorMessage = std::move(commandError);
+    PendingTurnNormalizationResult result = normalizeSequentialCommands(
+        board,
+        activeKingdom,
+        enemyKingdom,
+        publicBuildings,
+        turnNumber,
+        commands,
+        config,
+        invalidCommandPolicy);
+    if (!result.valid || invalidCommandPolicy != PendingTurnInvalidCommandPolicy::DropInvalidBuilds) {
         return result;
     }
 
-    return result;
+    std::vector<TurnCommand> finalCoverageCommands;
+    std::vector<PendingTurnDroppedCommand> finalCoverageDrops = collectFinalCoverageDroppedBuilds(
+        result.snapshot,
+        activeKingdom.id,
+        result.normalizedCommands,
+        config,
+        &finalCoverageCommands);
+    if (finalCoverageDrops.empty()) {
+        return result;
+    }
+
+    PendingTurnNormalizationResult replay = normalizeSequentialCommands(
+        board,
+        activeKingdom,
+        enemyKingdom,
+        publicBuildings,
+        turnNumber,
+        finalCoverageCommands,
+        config,
+        invalidCommandPolicy);
+    if (!replay.valid) {
+        return replay;
+    }
+
+    replay.droppedCommands.insert(
+        replay.droppedCommands.begin(),
+        result.droppedCommands.begin(),
+        result.droppedCommands.end());
+    replay.droppedCommands.insert(
+        replay.droppedCommands.end(),
+        finalCoverageDrops.begin(),
+        finalCoverageDrops.end());
+    return replay;
 }
 
 PendingTurnProjectionResult PendingTurnProjection::projectWithCandidate(

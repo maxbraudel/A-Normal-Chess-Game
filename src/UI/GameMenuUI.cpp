@@ -1,5 +1,7 @@
 #include "UI/GameMenuUI.hpp"
 
+#include "UI/FocusStyle.hpp"
+
 namespace {
 
 const char* titleForPauseState(GameMenuPauseState pauseState) {
@@ -9,6 +11,10 @@ const char* titleForPauseState(GameMenuPauseState pauseState) {
 } // namespace
 
 void GameMenuUI::init(tgui::Gui& gui) {
+    const auto styleButton = [](const tgui::Button::Ptr& button) {
+        FocusStyle::neutralizeButtonFocus(button);
+    };
+
     m_panel = tgui::Panel::create({"100%", "100%"});
     m_panel->getRenderer()->setBackgroundColor(tgui::Color(0, 0, 0, 160));
     gui.add(m_panel, "GameMenuPanel");
@@ -27,6 +33,7 @@ void GameMenuUI::init(tgui::Gui& gui) {
     m_box->add(m_titleLabel);
 
     m_resumeButton = tgui::Button::create("Resume");
+    styleButton(m_resumeButton);
     m_resumeButton->setPosition({"(&.width - width) / 2", 90});
     m_resumeButton->setSize({200, 45});
     m_resumeButton->onPress([this]() {
@@ -37,6 +44,7 @@ void GameMenuUI::init(tgui::Gui& gui) {
     m_box->add(m_resumeButton);
 
     m_saveButton = tgui::Button::create("Save");
+    styleButton(m_saveButton);
     m_saveButton->setPosition({"(&.width - width) / 2", 150});
     m_saveButton->setSize({200, 45});
     m_saveButton->onPress([this]() {
@@ -47,6 +55,7 @@ void GameMenuUI::init(tgui::Gui& gui) {
     m_box->add(m_saveButton);
 
     m_quitToMainMenuButton = tgui::Button::create("Quit to Main Menu");
+    styleButton(m_quitToMainMenuButton);
     m_quitToMainMenuButton->setPosition({"(&.width - width) / 2", 210});
     m_quitToMainMenuButton->setSize({200, 45});
     m_quitToMainMenuButton->onPress([this]() {

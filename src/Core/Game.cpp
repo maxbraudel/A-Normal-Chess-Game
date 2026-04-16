@@ -64,6 +64,14 @@ bool isBlockedGameplayShortcutKey(sf::Keyboard::Key key) {
         || key == sf::Keyboard::Space;
 }
 
+bool isBlockedGuiNavigationKey(const sf::Event& event) {
+    if (event.type != sf::Event::KeyPressed && event.type != sf::Event::KeyReleased) {
+        return false;
+    }
+
+    return event.key.code == sf::Keyboard::Tab;
+}
+
 std::optional<sf::Vector2i> mouseScreenPositionFromEvent(const sf::Event& event) {
     switch (event.type) {
         case sf::Event::MouseMoved:
@@ -759,6 +767,7 @@ void Game::init() {
 #endif
 
     m_gui.setTarget(m_window);
+    m_gui.setTabKeyUsageEnabled(false);
 
     // Load assets
     m_assets.loadAll("assets");
@@ -869,6 +878,10 @@ void Game::handleInput() {
             if (currentInteractionPermissions().canUseToolbar) {
                 activateSelectTool();
             }
+            continue;
+        }
+
+        if (isBlockedGuiNavigationKey(event)) {
             continue;
         }
 

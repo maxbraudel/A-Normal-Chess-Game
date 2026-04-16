@@ -2,6 +2,7 @@
 
 #include "Assets/AssetManager.hpp"
 #include "Multiplayer/PasswordUtils.hpp"
+#include "UI/FocusStyle.hpp"
 
 #include <cctype>
 #include <limits>
@@ -24,6 +25,16 @@ std::string buildSaveLabel(const SaveSummary& save) {
 void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     (void) assets;
 
+    const auto styleButton = [](const tgui::Button::Ptr& button) {
+        FocusStyle::neutralizeButtonFocus(button);
+    };
+    const auto styleEditBox = [](const tgui::EditBox::Ptr& editBox) {
+        FocusStyle::neutralizeEditBoxFocus(editBox);
+    };
+    const auto styleCheckBox = [](const tgui::CheckBox::Ptr& checkBox) {
+        FocusStyle::neutralizeCheckBoxFocus(checkBox);
+    };
+
     m_panel = tgui::Panel::create({"100%", "100%"});
     m_panel->getRenderer()->setBackgroundColor(tgui::Color(30, 30, 30, 230));
     gui.add(m_panel, "MainMenuPanel");
@@ -39,6 +50,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     m_mainBox->add(title);
 
     auto btnLoad = tgui::Button::create("Load Save");
+    styleButton(btnLoad);
     btnLoad->setPosition({"(&.width - width) / 2", "39%"});
     btnLoad->setSize({220, 52});
     btnLoad->onPress([this]() {
@@ -48,6 +60,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     m_mainBox->add(btnLoad);
 
     auto btnJoin = tgui::Button::create("Join Multiplayer");
+    styleButton(btnJoin);
     btnJoin->setPosition({"(&.width - width) / 2", "51%"});
     btnJoin->setSize({220, 52});
     btnJoin->onPress([this]() {
@@ -56,6 +69,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     m_mainBox->add(btnJoin);
 
     auto btnExit = tgui::Button::create("Exit Game");
+    styleButton(btnExit);
     btnExit->setPosition({"(&.width - width) / 2", "63%"});
     btnExit->setSize({220, 52});
     btnExit->onPress([this]() {
@@ -69,6 +83,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     m_panel->add(m_loadBox);
 
     auto backButton = tgui::Button::create("Back");
+    styleButton(backButton);
     backButton->setPosition({40, 32});
     backButton->setSize({110, 42});
     backButton->onPress([this]() {
@@ -83,6 +98,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     m_loadBox->add(loadTitle);
 
     m_deleteButton = tgui::Button::create("Delete");
+    styleButton(m_deleteButton);
     m_deleteButton->setPosition({"(&.width - 620) / 2", "24%"});
     m_deleteButton->setSize({190, 44});
     m_deleteButton->setEnabled(false);
@@ -95,6 +111,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     m_loadBox->add(m_deleteButton);
 
     auto newSaveButton = tgui::Button::create("New Save");
+    styleButton(newSaveButton);
     newSaveButton->setPosition({"(&.width + 620) / 2 - width", "24%"});
     newSaveButton->setSize({190, 44});
     newSaveButton->onPress([this]() {
@@ -117,6 +134,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     m_loadBox->add(m_emptyLabel);
 
     m_playButton = tgui::Button::create("Play Save");
+    styleButton(m_playButton);
     m_playButton->setPosition({"(&.width - width) / 2", "74%"});
     m_playButton->setSize({240, 48});
     m_playButton->setEnabled(false);
@@ -153,6 +171,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     dialog->add(saveNameLabel);
 
     m_saveNameEdit = tgui::EditBox::create();
+    styleEditBox(m_saveNameEdit);
     m_saveNameEdit->setPosition({36, 106});
     m_saveNameEdit->setSize({488, 34});
     dialog->add(m_saveNameEdit);
@@ -204,6 +223,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     dialog->add(m_whiteNameLabel);
 
     m_whiteNameEdit = tgui::EditBox::create();
+    styleEditBox(m_whiteNameEdit);
     m_whiteNameEdit->setPosition({236, 290});
     m_whiteNameEdit->setSize({288, 32});
     dialog->add(m_whiteNameEdit);
@@ -243,6 +263,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     dialog->add(m_blackNameLabel);
 
     m_blackNameEdit = tgui::EditBox::create();
+    styleEditBox(m_blackNameEdit);
     m_blackNameEdit->setPosition({236, 424});
     m_blackNameEdit->setSize({288, 32});
     dialog->add(m_blackNameEdit);
@@ -254,6 +275,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     dialog->add(m_blackHintLabel);
 
     m_multiplayerCheckBox = tgui::CheckBox::create();
+    styleCheckBox(m_multiplayerCheckBox);
     m_multiplayerCheckBox->setPosition({36, 500});
     m_multiplayerCheckBox->setText("Multiplayer");
     m_multiplayerCheckBox->setTextSize(18);
@@ -276,6 +298,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     dialog->add(m_multiplayerPortLabel);
 
     m_multiplayerPortEdit = tgui::EditBox::create();
+    styleEditBox(m_multiplayerPortEdit);
     m_multiplayerPortEdit->setPosition({36, 588});
     m_multiplayerPortEdit->setSize({180, 32});
     m_multiplayerPortEdit->setInputValidator(tgui::EditBox::Validator::UInt);
@@ -288,6 +311,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     dialog->add(m_multiplayerPasswordLabel);
 
     m_multiplayerPasswordEdit = tgui::EditBox::create();
+    styleEditBox(m_multiplayerPasswordEdit);
     m_multiplayerPasswordEdit->setPosition({236, 588});
     m_multiplayerPasswordEdit->setSize({288, 32});
     m_multiplayerPasswordEdit->setPasswordCharacter('*');
@@ -302,6 +326,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     dialog->add(m_createErrorLabel);
 
     auto cancelButton = tgui::Button::create("Cancel");
+    styleButton(cancelButton);
     cancelButton->setPosition({332, 656});
     cancelButton->setSize({92, 30});
     cancelButton->onPress([this]() {
@@ -310,6 +335,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     dialog->add(cancelButton);
 
     auto createButton = tgui::Button::create("Create");
+    styleButton(createButton);
     createButton->setPosition({432, 656});
     createButton->setSize({92, 30});
     createButton->onPress([this]() {
@@ -403,6 +429,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     joinDialog->add(joinHostLabel);
 
     m_joinHostEdit = tgui::EditBox::create();
+    styleEditBox(m_joinHostEdit);
     m_joinHostEdit->setPosition({36, 114});
     m_joinHostEdit->setSize({428, 34});
     joinDialog->add(m_joinHostEdit);
@@ -414,6 +441,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     joinDialog->add(joinPortLabel);
 
     m_joinPortEdit = tgui::EditBox::create();
+    styleEditBox(m_joinPortEdit);
     m_joinPortEdit->setPosition({36, 198});
     m_joinPortEdit->setSize({180, 34});
     m_joinPortEdit->setInputValidator(tgui::EditBox::Validator::UInt);
@@ -426,6 +454,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     joinDialog->add(joinPasswordLabel);
 
     m_joinPasswordEdit = tgui::EditBox::create();
+    styleEditBox(m_joinPasswordEdit);
     m_joinPasswordEdit->setPosition({36, 282});
     m_joinPasswordEdit->setSize({428, 34});
     m_joinPasswordEdit->setPasswordCharacter('*');
@@ -440,6 +469,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     joinDialog->add(m_joinErrorLabel);
 
     auto joinCancelButton = tgui::Button::create("Cancel");
+    styleButton(joinCancelButton);
     joinCancelButton->setPosition({292, 336});
     joinCancelButton->setSize({78, 30});
     joinCancelButton->onPress([this]() {
@@ -448,6 +478,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     joinDialog->add(joinCancelButton);
 
     auto joinButton = tgui::Button::create("Join Game");
+    styleButton(joinButton);
     joinButton->setPosition({380, 336});
     joinButton->setSize({84, 30});
     joinButton->onPress([this]() {

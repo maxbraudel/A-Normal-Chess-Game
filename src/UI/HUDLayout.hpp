@@ -6,6 +6,8 @@
 #include <sstream>
 #include <string>
 
+#include "UI/FocusStyle.hpp"
+
 enum class HUDAnchor {
     TopLeft,
     TopCenter,
@@ -240,6 +242,7 @@ inline void styleHudButton(const tgui::Button::Ptr& button,
                            unsigned int textSize = 16) {
     button->setSize({width, height});
     button->setTextSize(textSize);
+    FocusStyle::neutralizeButtonFocus(button);
 }
 
 inline void styleHudIndicator(const tgui::Label::Ptr& label,

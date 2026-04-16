@@ -5,6 +5,7 @@
 #include "Buildings/Building.hpp"
 #include "Kingdom/Kingdom.hpp"
 #include "Config/GameConfig.hpp"
+#include "UI/FocusStyle.hpp"
 #include "UI/HUDLayout.hpp"
 
 namespace {
@@ -22,6 +23,10 @@ sf::FloatRect widgetScreenRect(const tgui::Widget::Ptr& widget) {
 }
 
 void UIManager::init(tgui::Gui& gui, const AssetManager& assets) {
+    const auto styleButton = [](const tgui::Button::Ptr& button) {
+        FocusStyle::neutralizeButtonFocus(button);
+    };
+
     m_mainMenu.init(gui, assets);
     m_hud.init(gui, assets);
 
@@ -107,6 +112,7 @@ void UIManager::init(tgui::Gui& gui, const AssetManager& assets) {
     waitingDialog->add(m_multiplayerWaitingMessage);
 
     m_multiplayerWaitingButton = tgui::Button::create("Return to Main Menu");
+    styleButton(m_multiplayerWaitingButton);
     m_multiplayerWaitingButton->setPosition({372, 186});
     m_multiplayerWaitingButton->setSize({144, 30});
     m_multiplayerWaitingButton->onPress([this]() {
@@ -146,6 +152,7 @@ void UIManager::init(tgui::Gui& gui, const AssetManager& assets) {
     alertDialog->add(m_multiplayerAlertMessage);
 
     m_multiplayerAlertSecondaryButton = tgui::Button::create("Cancel");
+    styleButton(m_multiplayerAlertSecondaryButton);
     m_multiplayerAlertSecondaryButton->setPosition({236, 208});
     m_multiplayerAlertSecondaryButton->setSize({124, 34});
     m_multiplayerAlertSecondaryButton->setVisible(false);
@@ -159,6 +166,7 @@ void UIManager::init(tgui::Gui& gui, const AssetManager& assets) {
     alertDialog->add(m_multiplayerAlertSecondaryButton);
 
     m_multiplayerAlertPrimaryButton = tgui::Button::create("OK");
+    styleButton(m_multiplayerAlertPrimaryButton);
     m_multiplayerAlertPrimaryButton->setPosition({372, 208});
     m_multiplayerAlertPrimaryButton->setSize({124, 34});
     m_multiplayerAlertPrimaryButton->onPress([this]() {

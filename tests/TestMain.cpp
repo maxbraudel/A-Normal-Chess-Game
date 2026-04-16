@@ -2914,6 +2914,87 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             "Moving the only supporting builder away should automatically remove the orphaned pending build.");
     }
 
+    void testTurnSystemQueueMoveDropsPendingBuildUnsupportedInFinalState() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        white.gold = config.getWoodWallCost() + 10;
+        Piece& whiteKing = addPieceToBoard(white, board, 6110, PieceType::King, KingdomId::White, {10, 10});
+        addPieceToBoard(black, board, 7110, PieceType::King, KingdomId::Black, {18, 18});
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+        BuildingFactory buildingFactory;
+
+        expect(turnSystem.queueCommand(makeBuildCommand(BuildingType::WoodWall, {11, 10}),
+                                       board,
+                                       white,
+                                       black,
+                                       publicBuildings,
+                                       config,
+                                       &buildingFactory),
+            "The pending build should queue successfully from the builder's current position.");
+
+        const int queuedBuildId = turnSystem.getPendingCommands().front().buildId;
+
+        expect(turnSystem.queueCommand(makeMoveCommand(whiteKing.id, {10, 10}, {9, 10}),
+                                       board,
+                                       white,
+                                       black,
+                                       publicBuildings,
+                                       config),
+            "Queuing a follow-up move should still succeed when the move itself is legal.");
+
+        const TurnCommand* queuedMove = turnSystem.getPendingMoveCommand(whiteKing.id);
+        expect(queuedMove != nullptr && queuedMove->destination == sf::Vector2i(9, 10),
+            "The queued move should remain in the pending command list.");
+        expect(turnSystem.getPendingBuildCommand(queuedBuildId) == nullptr,
+            "A pending build should be dropped immediately when the builder's final projected position no longer covers it.");
+    }
+
+    void testTurnSystemQueueMoveKeepsPendingBuildWhenAnotherFinalBuilderSupportsIt() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        white.gold = config.getWoodWallCost() + 10;
+        Piece& whiteKing = addPieceToBoard(white, board, 6111, PieceType::King, KingdomId::White, {10, 10});
+        addPieceToBoard(white, board, 6112, PieceType::Pawn, KingdomId::White, {12, 11});
+        addPieceToBoard(black, board, 7111, PieceType::King, KingdomId::Black, {18, 18});
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+        BuildingFactory buildingFactory;
+
+        expect(turnSystem.queueCommand(makeBuildCommand(BuildingType::WoodWall, {11, 10}),
+                                       board,
+                                       white,
+                                       black,
+                                       publicBuildings,
+                                       config,
+                                       &buildingFactory),
+            "The pending build should queue successfully while the original builder is adjacent.");
+
+        const int queuedBuildId = turnSystem.getPendingCommands().front().buildId;
+
+        expect(turnSystem.queueCommand(makeMoveCommand(whiteKing.id, {10, 10}, {9, 10}),
+                                       board,
+                                       white,
+                                       black,
+                                       publicBuildings,
+                                       config),
+            "Queuing the builder's follow-up move should succeed when another builder still covers the build in the final state.");
+        expect(turnSystem.getPendingBuildCommand(queuedBuildId) != nullptr,
+            "A pending build should remain queued when another builder still covers it in the final projected state.");
+    }
+
     void testTurnSystemCancelMoveKeepsBuildWhenAnotherBuilderStillSupportsIt() {
         GameConfig config;
         Board board;
@@ -3808,6 +3889,8 @@ int main() {
         {"turn system cancel upgrade", testTurnSystemCancelsQueuedUpgradePerPiece},
         {"selection move rules pending build reselection", testSelectionMoveRulesKeepMovesWhenPendingBuildDependsOnCurrentMove},
         {"turn system replace move drops orphan build", testTurnSystemReplaceMoveDropsOrphanedPendingBuilds},
+        {"turn system queue move drops final unsupported build", testTurnSystemQueueMoveDropsPendingBuildUnsupportedInFinalState},
+        {"turn system queue move keeps final supported build", testTurnSystemQueueMoveKeepsPendingBuildWhenAnotherFinalBuilderSupportsIt},
         {"turn system keep build with other builder", testTurnSystemCancelMoveKeepsBuildWhenAnotherBuilderStillSupportsIt},
         {"turn system stable pending build ids", testTurnSystemAssignsStablePendingBuildIds},
         {"turn system commit preserves reserved build id", testTurnSystemCommitPreservesReservedBuildId},
