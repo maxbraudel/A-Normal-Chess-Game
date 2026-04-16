@@ -6,7 +6,6 @@
 #include "UI/BuildingPanel.hpp"
 #include "UI/BarracksPanel.hpp"
 #include "UI/BuildToolPanel.hpp"
-#include "UI/PendingConstructionPanel.hpp"
 #include "UI/CellPanel.hpp"
 #include "UI/EventLogPanel.hpp"
 #include "UI/PlannedActionsPanel.hpp"
@@ -54,9 +53,6 @@ public:
                            bool allowCancelConstruction,
                            const TurnCommand* pendingProduce = nullptr);
     void showBuildToolPanel(const Kingdom& kingdom, const GameConfig& config, bool allowBuild);
-    void showPendingConstructionPanel(const PendingBuildSelection& selection,
-                                      const GameConfig& config,
-                                      bool allowRemove);
     void showCellPanel(const Cell& cell);
     void showSelectionEmptyState();
     void hideAllPanels();
@@ -88,7 +84,6 @@ public:
     BuildingPanel&  buildingPanel()   { return m_buildingPanel; }
     BarracksPanel&  barracksPanel()   { return m_barracksPanel; }
     BuildToolPanel& buildToolPanel()  { return m_buildToolPanel; }
-    PendingConstructionPanel& pendingConstructionPanel() { return m_pendingConstructionPanel; }
     CellPanel&      cellPanel()       { return m_cellPanel; }
     EventLogPanel&  eventLogPanel()   { return m_eventLogPanel; }
     PlannedActionsPanel& plannedActionsPanel() { return m_plannedActionsPanel; }
@@ -101,7 +96,6 @@ private:
         Building,
         Barracks,
         BuildTool,
-        PendingConstruction,
         Cell
     };
 
@@ -116,7 +110,6 @@ private:
     BuildingPanel   m_buildingPanel;
     BarracksPanel   m_barracksPanel;
     BuildToolPanel  m_buildToolPanel;
-    PendingConstructionPanel m_pendingConstructionPanel;
     CellPanel       m_cellPanel;
     EventLogPanel   m_eventLogPanel;
     PlannedActionsPanel m_plannedActionsPanel;

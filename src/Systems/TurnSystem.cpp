@@ -409,33 +409,6 @@ bool TurnSystem::replaceMoveCommand(const TurnCommand& moveCommand,
     return true;
 }
 
-bool TurnSystem::cancelBuildCommand(BuildingType type,
-                                    sf::Vector2i origin,
-                                    int rotationQuarterTurns,
-                                    const Board& board,
-                                    const Kingdom& activeKingdom,
-                                    const Kingdom& enemyKingdom,
-                                    const std::vector<Building>& publicBuildings,
-                                    const GameConfig& config) {
-    const auto originalSize = m_pendingCommands.size();
-    auto it = std::remove_if(m_pendingCommands.begin(), m_pendingCommands.end(),
-        [type, origin, rotationQuarterTurns](const TurnCommand& c) {
-            return c.type == TurnCommand::Build
-                && c.buildingType == type
-                && c.buildOrigin == origin
-                && c.buildRotationQuarterTurns == rotationQuarterTurns;
-        });
-    m_pendingCommands.erase(it, m_pendingCommands.end());
-    if (m_pendingCommands.size() == originalSize) {
-        return false;
-    }
-
-    rebuildQueuedSpecialState();
-    refreshProjectedBudgetState(board, activeKingdom, enemyKingdom, publicBuildings, config);
-    markPendingStateChanged();
-    return true;
-}
-
 bool TurnSystem::cancelProduceCommand(int barracksId,
                                       const Board& board,
                                       const Kingdom& activeKingdom,
@@ -496,21 +469,6 @@ const TurnCommand* TurnSystem::getPendingMoveCommand(int pieceId) const {
 const TurnCommand* TurnSystem::getPendingBuildCommand(int buildId) const {
     for (const auto& cmd : m_pendingCommands) {
         if (cmd.type == TurnCommand::Build && cmd.buildId == buildId) {
-            return &cmd;
-        }
-    }
-
-    return nullptr;
-}
-
-const TurnCommand* TurnSystem::getPendingBuildCommand(BuildingType type,
-                                                      sf::Vector2i origin,
-                                                      int rotationQuarterTurns) const {
-    for (const auto& cmd : m_pendingCommands) {
-        if (cmd.type == TurnCommand::Build
-            && cmd.buildingType == type
-            && cmd.buildOrigin == origin
-            && cmd.buildRotationQuarterTurns == rotationQuarterTurns) {
             return &cmd;
         }
     }

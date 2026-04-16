@@ -56,14 +56,6 @@ public:
                             const Kingdom& enemyKingdom,
                             const std::vector<Building>& publicBuildings,
                             const GameConfig& config);
-    bool cancelBuildCommand(BuildingType type,
-                            sf::Vector2i origin,
-                            int rotationQuarterTurns,
-                            const Board& board,
-                            const Kingdom& activeKingdom,
-                            const Kingdom& enemyKingdom,
-                            const std::vector<Building>& publicBuildings,
-                            const GameConfig& config);
     bool cancelProduceCommand(int barracksId,
                               const Board& board,
                               const Kingdom& activeKingdom,
@@ -79,9 +71,6 @@ public:
     const std::vector<TurnCommand>& getPendingCommands() const;
     const TurnCommand* getPendingMoveCommand(int pieceId) const;
     const TurnCommand* getPendingBuildCommand(int buildId) const;
-    const TurnCommand* getPendingBuildCommand(BuildingType type,
-                                              sf::Vector2i origin,
-                                              int rotationQuarterTurns) const;
     const TurnCommand* getPendingProduceCommand(int barracksId) const;
     const TurnCommand* getPendingUpgradeCommand(int pieceId) const;
 

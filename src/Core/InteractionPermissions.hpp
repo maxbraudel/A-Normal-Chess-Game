@@ -5,7 +5,6 @@
 #include <SFML/System/Vector2.hpp>
 
 #include "Core/GameState.hpp"
-#include "Input/PendingBuildSelection.hpp"
 #include "Input/ToolState.hpp"
 
 struct InteractionPermissionInputs {
@@ -35,7 +34,6 @@ struct InputSelectionBookmark {
     int pieceId = -1;
     int buildingId = -1;
     std::optional<sf::Vector2i> selectedCell;
-    std::optional<PendingBuildSelection> pendingBuildSelection;
 };
 
 InteractionPermissions computeInteractionPermissions(const InteractionPermissionInputs& inputs);

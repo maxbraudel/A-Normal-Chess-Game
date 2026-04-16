@@ -39,8 +39,7 @@ SelectionLayer LayeredSelectionStack::nextBelow(SelectionLayer currentLayer) con
 
 LayeredSelectionStack resolveCellSelectionStack(const Cell& cell, sf::Vector2i cellPos,
                                                 Piece* pieceOverride,
-                                                bool suppressCellPiece,
-                                                const std::optional<PendingBuildSelection>& pendingBuild) {
+                                                bool suppressCellPiece) {
     LayeredSelectionStack stack;
     stack.cellPos = cellPos;
 
@@ -50,7 +49,6 @@ LayeredSelectionStack resolveCellSelectionStack(const Cell& cell, sf::Vector2i c
 
     stack.piece = pieceOverride ? pieceOverride : (suppressCellPiece ? nullptr : cell.piece);
     stack.building = cell.building;
-    stack.pendingBuild = pendingBuild;
     stack.hasTerrain = true;
 
     if (stack.piece) {
@@ -58,9 +56,6 @@ LayeredSelectionStack resolveCellSelectionStack(const Cell& cell, sf::Vector2i c
     }
     if (stack.building) {
         stack.layers[stack.count++] = SelectionLayer::Building;
-    }
-    if (stack.pendingBuild.has_value()) {
-        stack.layers[stack.count++] = SelectionLayer::PendingBuild;
     }
     stack.layers[stack.count++] = SelectionLayer::Terrain;
 

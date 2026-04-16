@@ -918,12 +918,6 @@ void Game::render() {
                     m_hudView, m_windowSize, selectedBuilding->origin,
                     selectedBuilding->getFootprintWidth(), selectedBuilding->getFootprintHeight(),
                     m_config.getCellSizePx());
-            } else if (m_input.hasSelectedPendingBuild()) {
-                const PendingBuildSelection& pendingBuild = m_input.getSelectedPendingBuild();
-                m_renderer.getOverlay().drawSelectionFrame(m_window, m_camera,
-                    m_hudView, m_windowSize, pendingBuild.origin,
-                    pendingBuild.footprintWidth, pendingBuild.footprintHeight,
-                    m_config.getCellSizePx());
             } else if (m_input.hasSelectedCell()) {
                 m_renderer.getOverlay().drawSelectionFrame(m_window, m_camera,
                     m_hudView, m_windowSize, m_input.getSelectedCell(),
@@ -1764,22 +1758,6 @@ void Game::setupUICallbacks() {
         m_uiManager.buildToolPanel().setSelectedBuildType(buildingType);
     });
 
-    m_uiManager.pendingConstructionPanel().setOnRemove([this](BuildingType type,
-                                                              sf::Vector2i origin,
-                                                              int rotationQuarterTurns) {
-        if (!currentInteractionPermissions().canQueueNonMoveActions) return;
-        if (turnSystem().cancelBuildCommand(type,
-                                            origin,
-                                            rotationQuarterTurns,
-                                            board(),
-                                            activeKingdom(),
-                                            enemyKingdom(),
-                                            publicBuildings(),
-                                            m_config)) {
-            m_input.clearSelection();
-        }
-    });
-
     m_uiManager.buildingPanel().setOnCancelConstruction([this](int buildingId) {
         if (!currentInteractionPermissions().canQueueNonMoveActions) return;
         if (turnSystem().cancelBuildCommand(buildingId,
@@ -1970,10 +1948,6 @@ void Game::updateUIState() {
                                            m_config,
                                            allowUpgrade,
                                            pendingUpgrade);
-            } else if (m_input.hasSelectedPendingBuild()) {
-                m_uiManager.showPendingConstructionPanel(m_input.getSelectedPendingBuild(),
-                                                         m_config,
-                                                         permissions.canQueueNonMoveActions);
             } else if (m_input.getSelectedBuilding()) {
                 Building* building = m_input.getSelectedBuilding();
                 const bool allowCancelConstruction = permissions.canQueueNonMoveActions

@@ -26,45 +26,10 @@ namespace {
 constexpr float kKeyboardPanSpeed = 900.f;
 const auto kSelectionCycleThreshold = std::chrono::milliseconds(350);
 
-std::optional<PendingBuildSelection> findPendingBuildAtCell(const InputContext& context,
-                                                            sf::Vector2i cellPos) {
-    for (const TurnCommand& command : context.turnSystem.getPendingCommands()) {
-        if (command.type != TurnCommand::Build) {
-            continue;
-        }
-
-        PendingBuildSelection selection;
-        selection.type = command.buildingType;
-        selection.origin = command.buildOrigin;
-        selection.rotationQuarterTurns = command.buildRotationQuarterTurns;
-        selection.footprintWidth = Building::getFootprintWidthFor(
-            context.config.getBuildingWidth(command.buildingType),
-            context.config.getBuildingHeight(command.buildingType),
-            command.buildRotationQuarterTurns);
-        selection.footprintHeight = Building::getFootprintHeightFor(
-            context.config.getBuildingWidth(command.buildingType),
-            context.config.getBuildingHeight(command.buildingType),
-            command.buildRotationQuarterTurns);
-
-        if (cellPos.x < selection.origin.x || cellPos.y < selection.origin.y) {
-            continue;
-        }
-        if (cellPos.x >= selection.origin.x + selection.footprintWidth
-            || cellPos.y >= selection.origin.y + selection.footprintHeight) {
-            continue;
-        }
-
-        return selection;
-    }
-
-    return std::nullopt;
-}
-
 } // namespace
 
 InputHandler::InputHandler()
     : m_currentTool(ToolState::Select), m_selectedPiece(nullptr), m_selectedBuilding(nullptr),
-    m_hasSelectedPendingBuild(false),
     m_hasSelectedCell(false), m_selectedCell({0, 0}),
     m_selectedOriginDangerous(false),
     m_hasBuildPreview(false), m_buildPreviewType(BuildingType::Barracks),
@@ -82,8 +47,6 @@ void InputHandler::setTool(ToolState tool) {
 
 Piece* InputHandler::getSelectedPiece() const { return m_selectedPiece; }
 Building* InputHandler::getSelectedBuilding() const { return m_selectedBuilding; }
-bool InputHandler::hasSelectedPendingBuild() const { return m_hasSelectedPendingBuild; }
-const PendingBuildSelection& InputHandler::getSelectedPendingBuild() const { return m_selectedPendingBuild; }
 bool InputHandler::hasSelectedCell() const { return m_hasSelectedCell; }
 sf::Vector2i InputHandler::getSelectedCell() const { return m_selectedCell; }
 const std::vector<sf::Vector2i>& InputHandler::getValidMoves() const { return m_validMoves; }
@@ -112,9 +75,6 @@ InputSelectionBookmark InputHandler::createSelectionBookmark() const {
     if (m_selectedBuilding) {
         bookmark.buildingId = m_selectedBuilding->id;
     }
-    if (m_hasSelectedPendingBuild) {
-        bookmark.pendingBuildSelection = m_selectedPendingBuild;
-    }
     if (m_hasSelectedCell) {
         bookmark.selectedCell = m_selectedCell;
     }
@@ -141,16 +101,6 @@ void InputHandler::reconcileSelection(const InputSelectionBookmark& bookmark,
         return;
     }
 
-    if (!context.useConcretePendingState && bookmark.pendingBuildSelection.has_value()) {
-        const auto& pendingBuild = *bookmark.pendingBuildSelection;
-        if (context.turnSystem.getPendingBuildCommand(pendingBuild.type,
-                                                      pendingBuild.origin,
-                                                      pendingBuild.rotationQuarterTurns) != nullptr) {
-            activatePendingBuildSelection(pendingBuild, pendingBuild.origin);
-            return;
-        }
-    }
-
     if (bookmark.selectedCell.has_value()) {
         const sf::Vector2i cellPos = *bookmark.selectedCell;
         if (context.board.isInBounds(cellPos.x, cellPos.y)) {
@@ -168,8 +118,6 @@ void InputHandler::reconcileSelection(const InputSelectionBookmark& bookmark,
 void InputHandler::clearSelection() {
     m_selectedPiece = nullptr;
     m_selectedBuilding = nullptr;
-    m_hasSelectedPendingBuild = false;
-    m_selectedPendingBuild = {};
     m_hasSelectedCell = false;
     m_selectedCell = {0, 0};
     m_activeSelectionLayer = SelectionLayer::None;
@@ -186,8 +134,6 @@ void InputHandler::clearSelection() {
 void InputHandler::selectCell(sf::Vector2i cellPos) {
     m_selectedPiece = nullptr;
     m_selectedBuilding = nullptr;
-    m_hasSelectedPendingBuild = false;
-    m_selectedPendingBuild = {};
     m_selectedCell = cellPos;
     m_hasSelectedCell = true;
     m_validMoves.clear();
@@ -200,8 +146,6 @@ void InputHandler::activatePieceSelection(Piece* piece, sf::Vector2i cellPos,
                                           const InputContext& context, bool allowCommands) {
     m_selectedPiece = piece;
     m_selectedBuilding = nullptr;
-    m_hasSelectedPendingBuild = false;
-    m_selectedPendingBuild = {};
     m_hasSelectedCell = false;
     if (piece && allowCommands && piece->kingdom == context.controlledKingdom.id) {
         refreshPieceMoves(piece, context);
@@ -216,26 +160,11 @@ void InputHandler::activatePieceSelection(Piece* piece, sf::Vector2i cellPos,
 void InputHandler::activateBuildingSelection(Building* building, sf::Vector2i cellPos) {
     m_selectedPiece = nullptr;
     m_selectedBuilding = building;
-    m_hasSelectedPendingBuild = false;
-    m_selectedPendingBuild = {};
     m_hasSelectedCell = false;
     m_validMoves.clear();
     m_dangerMoves.clear();
     m_selectedOriginDangerous = false;
     setActiveSelectionMetadata(SelectionLayer::Building, cellPos);
-}
-
-void InputHandler::activatePendingBuildSelection(const PendingBuildSelection& selection,
-                                                 sf::Vector2i cellPos) {
-    m_selectedPiece = nullptr;
-    m_selectedBuilding = nullptr;
-    m_hasSelectedPendingBuild = true;
-    m_selectedPendingBuild = selection;
-    m_hasSelectedCell = false;
-    m_validMoves.clear();
-    m_dangerMoves.clear();
-    m_selectedOriginDangerous = false;
-    setActiveSelectionMetadata(SelectionLayer::PendingBuild, cellPos);
 }
 
 void InputHandler::activateTerrainSelection(sf::Vector2i cellPos) {
@@ -275,12 +204,11 @@ LayeredSelectionStack InputHandler::resolveSelectionStackAtCell(const InputConte
                                                                 sf::Vector2i cellPos) const {
     const Cell& cell = context.board.getCell(cellPos.x, cellPos.y);
     if (context.useConcretePendingState) {
-        return resolveCellSelectionStack(cell, cellPos, nullptr, false, std::nullopt);
+        return resolveCellSelectionStack(cell, cellPos, nullptr, false);
     }
 
     Piece* pieceOverride = nullptr;
     bool suppressCellPiece = false;
-    const std::optional<PendingBuildSelection> pendingBuild = findPendingBuildAtCell(context, cellPos);
 
     for (const TurnCommand& command : context.turnSystem.getPendingCommands()) {
         if (command.type != TurnCommand::Move) {
@@ -295,7 +223,7 @@ LayeredSelectionStack InputHandler::resolveSelectionStackAtCell(const InputConte
         }
     }
 
-    return resolveCellSelectionStack(cell, cellPos, pieceOverride, suppressCellPiece, pendingBuild);
+    return resolveCellSelectionStack(cell, cellPos, pieceOverride, suppressCellPiece);
 }
 
 void InputHandler::applyResolvedSelection(const LayeredSelectionStack& stack,
@@ -315,12 +243,6 @@ void InputHandler::applyResolvedSelection(const LayeredSelectionStack& stack,
         case SelectionLayer::Building:
             activateBuildingSelection(stack.building, stack.cellPos);
             return;
-        case SelectionLayer::PendingBuild:
-            if (stack.pendingBuild.has_value()) {
-                activatePendingBuildSelection(*stack.pendingBuild, stack.cellPos);
-                return;
-            }
-            break;
         case SelectionLayer::Terrain:
             activateTerrainSelection(stack.cellPos);
             return;

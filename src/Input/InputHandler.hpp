@@ -7,7 +7,6 @@
 #include <vector>
 #include "Input/InputContext.hpp"
 #include "Input/LayeredSelection.hpp"
-#include "Input/PendingBuildSelection.hpp"
 #include "Input/ToolState.hpp"
 #include "Buildings/BuildingType.hpp"
 
@@ -32,8 +31,6 @@ public:
 
     Piece* getSelectedPiece() const;
     Building* getSelectedBuilding() const;
-    bool hasSelectedPendingBuild() const;
-    const PendingBuildSelection& getSelectedPendingBuild() const;
     bool hasSelectedCell() const;
     sf::Vector2i getSelectedCell() const;
     const std::vector<sf::Vector2i>& getValidMoves() const;
@@ -62,8 +59,6 @@ private:
     ToolState m_currentTool;
     Piece* m_selectedPiece;
     Building* m_selectedBuilding;
-    bool m_hasSelectedPendingBuild;
-    PendingBuildSelection m_selectedPendingBuild;
     bool m_hasSelectedCell;
     sf::Vector2i m_selectedCell;
     std::vector<sf::Vector2i> m_validMoves;
@@ -99,7 +94,6 @@ private:
     void activatePieceSelection(Piece* piece, sf::Vector2i cellPos,
                                 const InputContext& context, bool allowCommands);
     void activateBuildingSelection(Building* building, sf::Vector2i cellPos);
-    void activatePendingBuildSelection(const PendingBuildSelection& selection, sf::Vector2i cellPos);
     void activateTerrainSelection(sf::Vector2i cellPos);
     void setActiveSelectionMetadata(SelectionLayer layer, sf::Vector2i cellPos);
     void clearSelectionCycle();

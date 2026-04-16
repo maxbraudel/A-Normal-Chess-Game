@@ -489,26 +489,23 @@ void testLayeredSelectionStackSupportsPreviewPieceOverride() {
         "Preview overrides should still preserve the standard piece > building > terrain stack.");
 }
 
-void testLayeredSelectionStackSupportsPendingBuildLayer() {
+void testLayeredSelectionStackTreatsUnderConstructionBuildingAsNormalBuilding() {
     Cell cell;
     cell.type = CellType::Grass;
     cell.isInCircle = true;
 
-    PendingBuildSelection pendingBuild;
-    pendingBuild.type = BuildingType::Barracks;
-    pendingBuild.origin = {3, 3};
-    pendingBuild.footprintWidth = 2;
-    pendingBuild.footprintHeight = 2;
+    Building building;
+    building.type = BuildingType::Barracks;
+    building.setConstructionState(BuildingState::UnderConstruction);
+    cell.building = &building;
 
-    const LayeredSelectionStack stack = resolveCellSelectionStack(cell, {3, 3}, nullptr, false, pendingBuild);
+    const LayeredSelectionStack stack = resolveCellSelectionStack(cell, {3, 3});
     expect(stack.count == 2,
-        "Pending construction cells without piece or building should expose pending build plus terrain.");
-    expect(stack.top() == SelectionLayer::PendingBuild,
-        "Pending construction should be the top selection layer when present on an otherwise empty cell.");
-    expect(stack.nextBelow(SelectionLayer::PendingBuild) == SelectionLayer::Terrain,
-        "Cycling below a pending construction should expose terrain next.");
-    expect(stack.pendingBuild.has_value() && stack.pendingBuild->origin == pendingBuild.origin,
-        "The layered selection stack should preserve the pending construction metadata.");
+        "Under-construction buildings should still use the normal building plus terrain selection stack.");
+    expect(stack.top() == SelectionLayer::Building,
+        "Under-construction buildings should be selected through the normal building layer.");
+    expect(stack.nextBelow(SelectionLayer::Building) == SelectionLayer::Terrain,
+        "Cycling below an under-construction building should expose terrain next.");
 }
 
     void testPublicBuildingOccupationStateResolvesAllOutcomes() {
@@ -2614,6 +2611,8 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
                                        config),
             "The dependent build should queue successfully before replacing the move.");
 
+        const int queuedBuildId = turnSystem.getPendingCommands().back().buildId;
+
         expect(turnSystem.replaceMoveCommand(makeMoveCommand(whiteKing.id, {10, 10}, {9, 10}),
                                              board,
                                              white,
@@ -2625,7 +2624,7 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
         const TurnCommand* updatedMove = turnSystem.getPendingMoveCommand(whiteKing.id);
         expect(updatedMove != nullptr && updatedMove->destination == sf::Vector2i(9, 10),
             "Replacing the queued move should keep the new destination in the pending command list.");
-        expect(turnSystem.getPendingBuildCommand(BuildingType::WoodWall, {12, 10}, 0) == nullptr,
+        expect(turnSystem.getPendingBuildCommand(queuedBuildId) == nullptr,
             "Moving the only supporting builder away should automatically remove the orphaned pending build.");
     }
 
@@ -2660,11 +2659,13 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
                                        config),
             "The build should queue successfully while multiple builders can support it.");
 
+        const int queuedBuildId = turnSystem.getPendingCommands().back().buildId;
+
         expect(turnSystem.cancelMoveCommand(whiteKing.id, board, white, black, publicBuildings, config),
             "Cancelling the queued move should succeed.");
         expect(turnSystem.getPendingMoveCommand(whiteKing.id) == nullptr,
             "Cancelling the queued move should remove the move command itself.");
-        expect(turnSystem.getPendingBuildCommand(BuildingType::WoodWall, {12, 10}, 0) != nullptr,
+        expect(turnSystem.getPendingBuildCommand(queuedBuildId) != nullptr,
             "A pending build should remain queued when another adjacent builder still supports it after move cancellation.");
     }
 
@@ -3264,7 +3265,7 @@ int main() {
         {"layered selection priority", testLayeredSelectionStackResolvesPriority},
         {"layered selection building cycle", testLayeredSelectionStackSupportsBuildingTerrainCycle},
         {"layered selection preview override", testLayeredSelectionStackSupportsPreviewPieceOverride},
-        {"layered selection pending build", testLayeredSelectionStackSupportsPendingBuildLayer},
+        {"layered selection under construction building", testLayeredSelectionStackTreatsUnderConstructionBuildingAsNormalBuilding},
         {"public building occupation state", testPublicBuildingOccupationStateResolvesAllOutcomes},
         {"cell traversal water blocked", testCellTraversalTreatsWaterAsNotTraversable},
         {"private building overlay owner shield", testSelectedStructureOverlayPrivateBuildingsUseOwnerShield},
