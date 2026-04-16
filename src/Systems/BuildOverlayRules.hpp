@@ -10,6 +10,7 @@
 #include "Board/Board.hpp"
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingType.hpp"
+#include "Buildings/StructurePlacementProfile.hpp"
 #include "Config/GameConfig.hpp"
 #include "Kingdom/Kingdom.hpp"
 #include "Systems/BuildReachRules.hpp"
@@ -21,6 +22,7 @@ namespace BuildOverlayRules {
 
 struct BuildOverlayMap {
     std::vector<sf::Vector2i> validOrigins;
+    std::vector<sf::Vector2i> validAnchorCells;
     std::vector<sf::Vector2i> coverageCells;
 };
 
@@ -179,6 +181,7 @@ inline BuildOverlayMap collectBuildOverlayMap(const Board& board,
     std::vector<std::uint8_t> visitedOrigins(static_cast<std::size_t>(diameter * diameter), 0);
     std::vector<std::uint8_t> coverageMask(static_cast<std::size_t>(diameter * diameter), 0);
     map.validOrigins.reserve(builderPositions.size() * static_cast<std::size_t>(footprintWidth + 2) * static_cast<std::size_t>(footprintHeight + 2));
+    map.validAnchorCells.reserve(map.validOrigins.capacity());
 
     for (const sf::Vector2i& builderPos : builderPositions) {
         const int minOriginX = std::max(0, builderPos.x - footprintWidth);
@@ -213,6 +216,12 @@ inline BuildOverlayMap collectBuildOverlayMap(const Board& board,
                 }
 
                 map.validOrigins.push_back({originX, originY});
+                map.validAnchorCells.push_back(StructurePlacementProfiles::anchorCellFromOrigin(
+                    buildingType,
+                    {originX, originY},
+                    baseWidth,
+                    baseHeight,
+                    rotationQuarterTurns));
                 for (int localY = 0; localY < footprintHeight; ++localY) {
                     for (int localX = 0; localX < footprintWidth; ++localX) {
                         coverageMask[detail::cellIndex(originX + localX, originY + localY, diameter)] = 1;

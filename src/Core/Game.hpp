@@ -230,7 +230,7 @@ private:
     bool m_lanHostRemoteSessionEstablished = false;
     bool m_waitingForRemoteTurnResult = false;
     std::string m_multiplayerHostJoinHint;
-    std::vector<sf::Vector2i> m_buildableOriginsOverlay;
+    std::vector<sf::Vector2i> m_buildableAnchorCellsOverlay;
     std::vector<sf::Vector2i> m_buildableCellsOverlay;
     std::uint64_t m_buildableCellsOverlayRevision = 0;
     int m_buildableCellsOverlayTurnNumber = -1;

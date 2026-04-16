@@ -8,6 +8,7 @@
 #include "Units/PieceType.hpp"
 #include "Units/MovementRules.hpp"
 #include "Buildings/Building.hpp"
+#include "Buildings/StructurePlacementProfile.hpp"
 #include "Systems/TurnSystem.hpp"
 #include "Systems/TurnCommand.hpp"
 #include "Systems/CheckResponseRules.hpp"
@@ -33,11 +34,12 @@ InputHandler::InputHandler()
     m_hasSelectedCell(false), m_selectedCell({0, 0}),
     m_selectedOriginDangerous(false),
     m_hasBuildPreview(false), m_buildPreviewType(BuildingType::Barracks),
+    m_buildPreviewAnchorCell({0, 0}),
     m_buildPreviewRotationQuarterTurns(0),
     m_activeSelectionLayer(SelectionLayer::None), m_hasActiveSelectionCell(false),
     m_activeSelectionCell({0, 0}), m_isSelectionCycleArmed(false),
     m_selectionCycleCell({0, 0}),
-      m_isDragging(false) {}
+    m_isDragging(false) {}
 
 ToolState InputHandler::getCurrentTool() const { return m_currentTool; }
 void InputHandler::setTool(ToolState tool) {
@@ -56,7 +58,7 @@ const std::set<int>& InputHandler::getCapturePreviewPieceIds() const { return m_
 bool InputHandler::hasMovePreview() const { return !m_movePreviewOrigins.empty(); }
 
 BuildingType InputHandler::getBuildPreviewType() const { return m_buildPreviewType; }
-sf::Vector2i InputHandler::getBuildPreviewOrigin() const { return m_buildPreviewOrigin; }
+sf::Vector2i InputHandler::getBuildPreviewAnchorCell() const { return m_buildPreviewAnchorCell; }
 int InputHandler::getBuildPreviewRotationQuarterTurns() const { return m_buildPreviewRotationQuarterTurns; }
 bool InputHandler::hasBuildPreview() const { return m_hasBuildPreview; }
 void InputHandler::setBuildType(BuildingType type) {
@@ -86,7 +88,7 @@ InputSelectionBookmark InputHandler::createSelectionBookmark() const {
         bookmark.selectedCell = m_selectedCell;
     }
     if (m_currentTool == ToolState::Build && m_hasBuildPreview) {
-        bookmark.buildPreviewOrigin = m_buildPreviewOrigin;
+        bookmark.buildPreviewAnchorCell = m_buildPreviewAnchorCell;
     }
     return bookmark;
 }
@@ -135,8 +137,8 @@ void InputHandler::restoreBuildPreviewState(const InputSelectionBookmark& bookma
     m_buildPreviewType = bookmark.buildPreviewType;
     m_buildPreviewRotationQuarterTurns = bookmark.buildPreviewRotationQuarterTurns;
 
-    if (bookmark.tool == ToolState::Build && bookmark.buildPreviewOrigin.has_value()) {
-        m_buildPreviewOrigin = *bookmark.buildPreviewOrigin;
+    if (bookmark.tool == ToolState::Build && bookmark.buildPreviewAnchorCell.has_value()) {
+        m_buildPreviewAnchorCell = *bookmark.buildPreviewAnchorCell;
         m_hasBuildPreview = true;
         return;
     }
@@ -585,7 +587,7 @@ void InputHandler::handleBuildTool(const sf::Event& event, const InputContext& c
     if (event.type == sf::Event::MouseMoved) {
         sf::Vector2f worldPos = context.camera.screenToWorld({event.mouseMove.x, event.mouseMove.y}, context.window);
         sf::Vector2i cellPos = context.camera.worldToCell(worldPos, context.config.getCellSizePx());
-        m_buildPreviewOrigin = cellPos;
+        m_buildPreviewAnchorCell = cellPos;
         m_hasBuildPreview = true;
     }
 
@@ -595,12 +597,17 @@ void InputHandler::handleBuildTool(const sf::Event& event, const InputContext& c
 
     if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {
         sf::Vector2f worldPos = context.camera.screenToWorld({event.mouseButton.x, event.mouseButton.y}, context.window);
-        sf::Vector2i cellPos = context.camera.worldToCell(worldPos, context.config.getCellSizePx());
+        const sf::Vector2i anchorCell = context.camera.worldToCell(worldPos, context.config.getCellSizePx());
+        const sf::Vector2i canonicalOrigin = StructurePlacementProfiles::originFromAnchorCell(
+            m_buildPreviewType,
+            anchorCell,
+            m_buildPreviewRotationQuarterTurns,
+            context.config);
 
         TurnCommand cmd;
         cmd.type = TurnCommand::Build;
         cmd.buildingType = m_buildPreviewType;
-        cmd.buildOrigin = cellPos;
+        cmd.buildOrigin = canonicalOrigin;
         cmd.buildRotationQuarterTurns = m_buildPreviewRotationQuarterTurns;
 
         for (const TurnCommand& pendingCommand : context.turnSystem.getPendingCommands()) {
@@ -609,7 +616,7 @@ void InputHandler::handleBuildTool(const sf::Event& event, const InputContext& c
             }
 
             const bool samePlacement = pendingCommand.buildingType == m_buildPreviewType
-                && pendingCommand.buildOrigin == cellPos
+                && pendingCommand.buildOrigin == canonicalOrigin
                 && pendingCommand.buildRotationQuarterTurns == m_buildPreviewRotationQuarterTurns;
             if (!samePlacement) {
                 continue;

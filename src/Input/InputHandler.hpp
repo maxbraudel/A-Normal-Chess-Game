@@ -43,7 +43,7 @@ public:
 
     // Build mode
     BuildingType getBuildPreviewType() const;
-    sf::Vector2i getBuildPreviewOrigin() const;
+    sf::Vector2i getBuildPreviewAnchorCell() const;
     int getBuildPreviewRotationQuarterTurns() const;
     bool hasBuildPreview() const;
     void setBuildType(BuildingType type);
@@ -69,7 +69,7 @@ private:
 
     bool m_hasBuildPreview;
     BuildingType m_buildPreviewType;
-    sf::Vector2i m_buildPreviewOrigin;
+    sf::Vector2i m_buildPreviewAnchorCell;
     int m_buildPreviewRotationQuarterTurns;
 
     SelectionLayer m_activeSelectionLayer;

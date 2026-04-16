@@ -19,6 +19,7 @@
 #include "Board/CellTraversal.hpp"
 #include "Board/CellType.hpp"
 #include "Buildings/BuildingFactory.hpp"
+#include "Buildings/StructurePlacementProfile.hpp"
 #include "Buildings/StructureChunkRegistry.hpp"
 #include "Buildings/BuildingType.hpp"
 #include "Config/AIConfig.hpp"
@@ -204,6 +205,14 @@ bool sameCellSet(std::vector<sf::Vector2i> lhs,
     std::sort(rhs.begin(), rhs.end(), order);
     rhs.erase(std::unique(rhs.begin(), rhs.end()), rhs.end());
     return lhs == rhs;
+}
+
+void expectVec2i(sf::Vector2i actual,
+                 sf::Vector2i expected,
+                 const std::string& message) {
+    expect(actual == expected,
+        message + " Expected {" + std::to_string(expected.x) + ", " + std::to_string(expected.y)
+        + "}, got {" + std::to_string(actual.x) + ", " + std::to_string(actual.y) + "}.");
 }
 
 TurnCommand makeMoveCommand(int pieceId,
@@ -3142,6 +3151,56 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             "The build coverage map should gain at least one new cell when the projected builder position changes.");
     }
 
+    void testStructurePlacementProfilesUseConfiguredAnchorSourceLocals() {
+        GameConfig config;
+
+        expectVec2i(StructurePlacementProfiles::getAnchorSourceLocal(BuildingType::Barracks, config),
+            {1, 1},
+            "Barracks anchor source local should use the configured near-center chunk.");
+        expectVec2i(StructurePlacementProfiles::getAnchorSourceLocal(BuildingType::Church, config),
+            {1, 1},
+            "Church anchor source local should use the configured near-center chunk.");
+        expectVec2i(StructurePlacementProfiles::getAnchorSourceLocal(BuildingType::Mine, config),
+            {2, 2},
+            "Mine anchor source local should use the configured near-center chunk.");
+        expectVec2i(StructurePlacementProfiles::getAnchorSourceLocal(BuildingType::Farm, config),
+            {2, 1},
+            "Farm anchor source local should use the configured near-center chunk.");
+        expectVec2i(StructurePlacementProfiles::getAnchorSourceLocal(BuildingType::Arena, config),
+            {1, 1},
+            "Arena anchor source local should use the configured near-center chunk.");
+        expectVec2i(StructurePlacementProfiles::getAnchorSourceLocal(BuildingType::WoodWall, config),
+            {0, 0},
+            "Wood wall anchor source local should remain the only chunk.");
+        expectVec2i(StructurePlacementProfiles::getAnchorSourceLocal(BuildingType::StoneWall, config),
+            {0, 0},
+            "Stone wall anchor source local should remain the only chunk.");
+        expectVec2i(StructurePlacementProfiles::getAnchorSourceLocal(BuildingType::Bridge, 1, 1),
+            {0, 0},
+            "Bridge anchor source local should remain the only chunk while its footprint is 1x1.");
+    }
+
+    void testStructurePlacementProfilesRoundTripAnchorConversionAcrossRotations() {
+        GameConfig config;
+        const sf::Vector2i anchorCell{20, 17};
+
+        for (int rotation = 0; rotation < 4; ++rotation) {
+            const sf::Vector2i canonicalOrigin = StructurePlacementProfiles::originFromAnchorCell(
+                BuildingType::Farm,
+                anchorCell,
+                rotation,
+                config);
+            const sf::Vector2i resolvedAnchorCell = StructurePlacementProfiles::anchorCellFromOrigin(
+                BuildingType::Farm,
+                canonicalOrigin,
+                rotation,
+                config);
+            expectVec2i(resolvedAnchorCell,
+                anchorCell,
+                "Anchor conversion should round-trip for all farm rotations.");
+        }
+    }
+
     void testBuildOverlayRulesOriginsMatchBruteForceProjection() {
         GameConfig config;
         Board board;
@@ -3191,6 +3250,29 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
 
         expect(sameCellSet(optimizedOrigins, bruteForceOrigins),
             "Optimized build overlay origins must match brute-force projected build legality exactly.");
+
+        const BuildOverlayRules::BuildOverlayMap overlayMap = BuildOverlayRules::collectBuildOverlayMap(
+            board,
+            white,
+            black,
+            {},
+            1,
+            pendingCommands,
+            BuildingType::Barracks,
+            0,
+            config);
+        std::vector<sf::Vector2i> anchorConvertedOrigins;
+        anchorConvertedOrigins.reserve(overlayMap.validAnchorCells.size());
+        for (const sf::Vector2i& anchorCell : overlayMap.validAnchorCells) {
+            anchorConvertedOrigins.push_back(StructurePlacementProfiles::originFromAnchorCell(
+                BuildingType::Barracks,
+                anchorCell,
+                0,
+                config));
+        }
+
+        expect(sameCellSet(anchorConvertedOrigins, bruteForceOrigins),
+            "Valid anchor cells should convert back to the exact same canonical build origins.");
     }
 
     void testTurnSystemCancelMoveKeepsBuildWhenAnotherBuilderStillSupportsIt() {
@@ -4091,6 +4173,8 @@ int main() {
         {"turn system queue move keeps final supported build", testTurnSystemQueueMoveKeepsPendingBuildWhenAnotherFinalBuilderSupportsIt},
         {"build overlay exposes occupied structure cells", testBuildOverlayRulesExposeOccupiedCellsForMultiCellStructure},
         {"build overlay coverage follows queued move state", testBuildOverlayRulesCoverageFollowsQueuedMoveProjectedState},
+        {"structure placement uses configured anchors", testStructurePlacementProfilesUseConfiguredAnchorSourceLocals},
+        {"structure placement round trips anchors", testStructurePlacementProfilesRoundTripAnchorConversionAcrossRotations},
         {"build overlay origins match brute force", testBuildOverlayRulesOriginsMatchBruteForceProjection},
         {"turn system keep build with other builder", testTurnSystemCancelMoveKeepsBuildWhenAnotherBuilderStillSupportsIt},
         {"turn system stable pending build ids", testTurnSystemAssignsStablePendingBuildIds},

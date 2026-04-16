@@ -45,7 +45,7 @@ struct InputSelectionBookmark {
     int selectedBuildingRotationQuarterTurns = 0;
     BuildingType buildPreviewType = BuildingType::Barracks;
     int buildPreviewRotationQuarterTurns = 0;
-    std::optional<sf::Vector2i> buildPreviewOrigin;
+    std::optional<sf::Vector2i> buildPreviewAnchorCell;
 };
 
 InteractionPermissions computeInteractionPermissions(const InteractionPermissionInputs& inputs);

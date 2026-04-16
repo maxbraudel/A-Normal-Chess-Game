@@ -3,6 +3,7 @@
 #include "Render/StructureOverlay.hpp"
 #include "Save/SaveData.hpp"
 #include "Buildings/BuildingType.hpp"
+#include "Buildings/StructurePlacementProfile.hpp"
 #include "Systems/BuildOverlayRules.hpp"
 #include "Systems/BuildSystem.hpp"
 #include "Systems/PendingTurnProjection.hpp"
@@ -330,7 +331,7 @@ bool Game::canQueueNonMoveActions() const {
 
 void Game::refreshBuildableCellsOverlay(const InteractionPermissions& permissions) {
     if (m_input.getCurrentTool() != ToolState::Build || !permissions.canShowBuildPreview) {
-        m_buildableOriginsOverlay.clear();
+        m_buildableAnchorCellsOverlay.clear();
         m_buildableCellsOverlay.clear();
         m_buildableCellsOverlayCacheValid = false;
         return;
@@ -352,7 +353,7 @@ void Game::refreshBuildableCellsOverlay(const InteractionPermissions& permission
     }
 
     if (!permissions.canQueueNonMoveActions) {
-        m_buildableOriginsOverlay.clear();
+        m_buildableAnchorCellsOverlay.clear();
         m_buildableCellsOverlay.clear();
     } else {
         const BuildOverlayRules::BuildOverlayMap buildOverlayMap = BuildOverlayRules::collectBuildOverlayMap(
@@ -365,8 +366,8 @@ void Game::refreshBuildableCellsOverlay(const InteractionPermissions& permission
             buildType,
             rotationQuarterTurns,
             m_config);
-            m_buildableOriginsOverlay = std::move(buildOverlayMap.validOrigins);
-            m_buildableCellsOverlay = std::move(buildOverlayMap.coverageCells);
+        m_buildableAnchorCellsOverlay = std::move(buildOverlayMap.validAnchorCells);
+        m_buildableCellsOverlay = std::move(buildOverlayMap.coverageCells);
     }
 
     m_buildableCellsOverlayRevision = revision;
@@ -1075,15 +1076,21 @@ void Game::render() {
         if (showBuildPreview && m_input.getCurrentTool() == ToolState::Build && m_input.hasBuildPreview()) {
             BuildingType bt = m_input.getBuildPreviewType();
             const int previewRotationQuarterTurns = m_input.getBuildPreviewRotationQuarterTurns();
+            const sf::Vector2i previewAnchorCell = m_input.getBuildPreviewAnchorCell();
+            const sf::Vector2i previewOrigin = StructurePlacementProfiles::originFromAnchorCell(
+                bt,
+                previewAnchorCell,
+                previewRotationQuarterTurns,
+                m_config);
             const int bw = m_config.getBuildingWidth(bt);
             const int bh = m_config.getBuildingHeight(bt);
             const bool valid = renderPermissions.canQueueNonMoveActions
-                && std::find(m_buildableOriginsOverlay.begin(),
-                             m_buildableOriginsOverlay.end(),
-                             m_input.getBuildPreviewOrigin()) != m_buildableOriginsOverlay.end();
+                && std::find(m_buildableAnchorCellsOverlay.begin(),
+                             m_buildableAnchorCellsOverlay.end(),
+                             previewAnchorCell) != m_buildableAnchorCellsOverlay.end();
             m_renderer.getOverlay().drawBuildPreview(m_window, m_camera,
                 m_hudView, m_windowSize,
-                m_input.getBuildPreviewOrigin(), bt, bw, bh, previewRotationQuarterTurns,
+                previewOrigin, bt, bw, bh, previewRotationQuarterTurns,
                 0, m_config.getCellSizePx(), valid, m_assets);
         }
         if (showActionOverlays && !usingConcretePendingState) {
