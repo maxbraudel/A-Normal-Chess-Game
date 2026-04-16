@@ -45,9 +45,11 @@
 #include "Runtime/FrontendCoordinator.hpp"
 #include "Runtime/InGamePresentationCoordinator.hpp"
 #include "Runtime/InputCoordinator.hpp"
+#include "Runtime/InteractivePermissionsCache.hpp"
 #include "Runtime/MultiplayerJoinCoordinator.hpp"
 #include "Runtime/MultiplayerEventCoordinator.hpp"
 #include "Runtime/MultiplayerRuntimeCoordinator.hpp"
+#include "Runtime/PendingTurnValidationCache.hpp"
 #include "Runtime/PanelActionCoordinator.hpp"
 #include "Runtime/RenderCoordinator.hpp"
 #include "Runtime/SelectionQueryCoordinator.hpp"
@@ -1922,6 +1924,160 @@ void testSessionValidatorRejectsInvalidOrdering() {
             "FrontendCoordinator should also lock queued non-move actions while waiting for host confirmation.");
         expect(waitingPermissions.canInspectWorld,
             "FrontendCoordinator should still allow world inspection while waiting for remote turn confirmation.");
+    }
+
+    void testInteractivePermissionsCacheReusesMatchingRuntimeState() {
+        InteractivePermissionsCache cache;
+        FrontendRuntimeState state;
+        state.gameState = GameState::Playing;
+        state.localPlayerContext = makeLanClientLocalPlayerContext();
+        state.activeKingdom = KingdomId::Black;
+        state.clientAuthenticated = true;
+
+        int resolveCount = 0;
+        const InteractionPermissions first = cache.resolve(state, [&]() {
+            ++resolveCount;
+            InteractionPermissions permissions;
+            permissions.canMoveCamera = true;
+            permissions.canIssueCommands = true;
+            return permissions;
+        });
+        const InteractionPermissions second = cache.resolve(state, [&]() {
+            ++resolveCount;
+            InteractionPermissions permissions;
+            permissions.canMoveCamera = false;
+            return permissions;
+        });
+
+        expect(resolveCount == 1,
+            "InteractivePermissionsCache should reuse cached permissions while the frontend runtime state is unchanged.");
+        expect(first.canMoveCamera && second.canMoveCamera,
+            "InteractivePermissionsCache should keep returning the cached permissions until the runtime state changes.");
+    }
+
+    void testInteractivePermissionsCacheInvalidatesOnStateChangeAndManualReset() {
+        InteractivePermissionsCache cache;
+        FrontendRuntimeState state;
+        state.gameState = GameState::Playing;
+        state.localPlayerContext = makeLanClientLocalPlayerContext();
+        state.activeKingdom = KingdomId::Black;
+        state.clientAuthenticated = true;
+
+        int resolveCount = 0;
+        const InteractionPermissions initial = cache.resolve(state, [&]() {
+            ++resolveCount;
+            InteractionPermissions permissions;
+            permissions.canIssueCommands = true;
+            return permissions;
+        });
+
+        FrontendRuntimeState waitingState = state;
+        waitingState.waitingForRemoteTurnResult = true;
+        const InteractionPermissions afterStateChange = cache.resolve(waitingState, [&]() {
+            ++resolveCount;
+            InteractionPermissions permissions;
+            permissions.canIssueCommands = false;
+            return permissions;
+        });
+
+        cache.invalidate();
+        const InteractionPermissions afterManualInvalidation = cache.resolve(waitingState, [&]() {
+            ++resolveCount;
+            InteractionPermissions permissions;
+            permissions.canIssueCommands = true;
+            return permissions;
+        });
+
+        expect(resolveCount == 3,
+            "InteractivePermissionsCache should recompute after runtime-state changes and after explicit invalidation.");
+        expect(initial.canIssueCommands,
+            "InteractivePermissionsCache should expose the initial resolver result before any invalidation occurs.");
+        expect(!afterStateChange.canIssueCommands,
+            "InteractivePermissionsCache should refresh when the runtime state changes.");
+        expect(afterManualInvalidation.canIssueCommands,
+            "InteractivePermissionsCache should refresh after manual invalidation even if the runtime state stays the same.");
+    }
+
+    void testPendingTurnValidationCacheReusesMatchingTurnState() {
+        PendingTurnValidationCache cache;
+        const PendingTurnValidationCacheKey key{17u, KingdomId::White, 9};
+
+        int resolveCount = 0;
+        const CheckTurnValidation& first = cache.resolve(key, [&]() {
+            ++resolveCount;
+            CheckTurnValidation validation;
+            validation.valid = false;
+            validation.bankrupt = true;
+            validation.projectedEndingGold = -4;
+            return validation;
+        });
+        const CheckTurnValidation& second = cache.resolve(key, [&]() {
+            ++resolveCount;
+            CheckTurnValidation validation;
+            validation.valid = true;
+            validation.projectedEndingGold = 12;
+            return validation;
+        });
+
+        expect(resolveCount == 1,
+            "PendingTurnValidationCache should reuse the cached validation while the pending-turn state key is unchanged.");
+        expect(!first.valid && second.bankrupt && second.projectedEndingGold == -4,
+            "PendingTurnValidationCache should keep returning the cached validation result until the turn-state key changes.");
+    }
+
+    void testPendingTurnValidationCacheInvalidatesOnKeyChangesAndManualReset() {
+        PendingTurnValidationCache cache;
+
+        int resolveCount = 0;
+        const CheckTurnValidation& initial = cache.resolve({3u, KingdomId::White, 11}, [&]() {
+            ++resolveCount;
+            CheckTurnValidation validation;
+            validation.valid = true;
+            validation.projectedEndingGold = 8;
+            return validation;
+        });
+        const CheckTurnValidation& afterRevisionChange = cache.resolve({4u, KingdomId::White, 11}, [&]() {
+            ++resolveCount;
+            CheckTurnValidation validation;
+            validation.valid = false;
+            validation.activeKingInCheck = true;
+            return validation;
+        });
+        const CheckTurnValidation& afterKingdomChange = cache.resolve({4u, KingdomId::Black, 11}, [&]() {
+            ++resolveCount;
+            CheckTurnValidation validation;
+            validation.hasAnyLegalResponse = true;
+            return validation;
+        });
+        const CheckTurnValidation& afterTurnChange = cache.resolve({4u, KingdomId::Black, 12}, [&]() {
+            ++resolveCount;
+            CheckTurnValidation validation;
+            validation.valid = false;
+            validation.projectedKingInCheck = true;
+            return validation;
+        });
+
+        cache.invalidate();
+        const CheckTurnValidation& afterManualInvalidation = cache.resolve({4u, KingdomId::Black, 12}, [&]() {
+            ++resolveCount;
+            CheckTurnValidation validation;
+            validation.bankrupt = true;
+            validation.projectedEndingGold = -9;
+            return validation;
+        });
+
+        expect(resolveCount == 5,
+            "PendingTurnValidationCache should recompute when the revision, active kingdom, turn number, or manual invalidation changes the cache state.");
+        expect(initial.valid && initial.projectedEndingGold == 8,
+            "PendingTurnValidationCache should expose the initial resolver result before later invalidations occur.");
+        expect(!afterRevisionChange.valid && afterRevisionChange.activeKingInCheck,
+            "PendingTurnValidationCache should refresh when the pending-state revision changes.");
+        expect(afterKingdomChange.hasAnyLegalResponse,
+            "PendingTurnValidationCache should refresh when the active kingdom changes.");
+        expect(!afterTurnChange.valid && afterTurnChange.projectedKingInCheck,
+            "PendingTurnValidationCache should refresh when the turn number changes.");
+        expect(afterManualInvalidation.bankrupt && afterManualInvalidation.projectedEndingGold == -9,
+            "PendingTurnValidationCache should refresh after manual invalidation even if the key stays the same.");
     }
 
     void testFrontendCoordinatorBuildsProjectedDashboardAndPiecePanel() {
@@ -5813,6 +5969,10 @@ int main() {
         {"selection query coordinator bookmark fallback", testSelectionQueryCoordinatorResolvesBookmarkFallback},
         {"ui callback coordinator guards", testUICallbackCoordinatorGuardsHudAndToolbarActions},
         {"frontend coordinator hud and waiting lock", testFrontendCoordinatorBuildsHudAndLocksWaitingTurns},
+        {"interactive permissions cache reuse", testInteractivePermissionsCacheReusesMatchingRuntimeState},
+        {"interactive permissions cache invalidation", testInteractivePermissionsCacheInvalidatesOnStateChangeAndManualReset},
+        {"pending turn validation cache reuse", testPendingTurnValidationCacheReusesMatchingTurnState},
+        {"pending turn validation cache invalidation", testPendingTurnValidationCacheInvalidatesOnKeyChangesAndManualReset},
         {"frontend coordinator dashboard and panel presentation", testFrontendCoordinatorBuildsProjectedDashboardAndPiecePanel},
         {"multiplayer event coordinator plans", testMultiplayerEventCoordinatorPlansAlertsAndDisconnects},
         {"multiplayer event coordinator restore and cleanup", testMultiplayerEventCoordinatorRestoresSnapshotsAndClientState},

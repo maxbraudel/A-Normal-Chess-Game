@@ -35,6 +35,7 @@
 #include "Runtime/MultiplayerJoinCoordinator.hpp"
 #include "Runtime/MultiplayerRuntimeCoordinator.hpp"
 #include "Runtime/PanelActionCoordinator.hpp"
+#include "Runtime/PendingTurnValidationCache.hpp"
 #include "Runtime/SelectionQueryCoordinator.hpp"
 #include "Runtime/SessionFlow.hpp"
 #include "Runtime/SessionPresentationCoordinator.hpp"
@@ -108,7 +109,9 @@ private:
     TurnLifecycleCallbacks makeTurnLifecycleCallbacks();
     TurnDraftRuntimeState makeTurnDraftRuntimeState() const;
     BuildOverlayRuntimeState makeBuildOverlayRuntimeState(const InteractionPermissions& permissions) const;
-    CheckTurnValidation validateActivePendingTurn() const;
+    PendingTurnValidationCacheKey makePendingTurnValidationCacheKey() const;
+    const CheckTurnValidation& validateActivePendingTurn() const;
+    void invalidatePendingTurnValidation();
     bool canQueueNonMoveActions() const;
     InteractionPermissions currentInteractionPermissions(const CheckTurnValidation* validation = nullptr) const;
     TurnValidationContext authoritativeTurnContext() const;
@@ -210,6 +213,7 @@ private:
     PanelActionCoordinator m_panelActionCoordinator;
     MultiplayerRuntimeCoordinator m_multiplayerRuntimeCoordinator;
     BuildOverlayCache m_buildOverlayCache;
+    mutable PendingTurnValidationCache m_pendingTurnValidationCache;
 
 #ifdef _WIN32
     WNDPROC m_originalWndProc = nullptr;

@@ -5,6 +5,7 @@
 #include "Systems/BuildSystem.hpp"
 #include "Systems/PendingTurnProjection.hpp"
 #include "Runtime/InputCoordinator.hpp"
+#include "Runtime/InteractivePermissionsCache.hpp"
 #include "Runtime/RenderCoordinator.hpp"
 #include "Runtime/UpdateCoordinator.hpp"
 #include "Input/InputContext.hpp"
@@ -211,9 +212,11 @@ SessionRuntimeCallbacks Game::makeSessionRuntimeCallbacks() {
         },
         [this]() {
             m_engine.resetPendingTurn();
+            invalidatePendingTurnValidation();
         },
         [this]() {
             turnSystem().resetPendingCommands();
+            invalidatePendingTurnValidation();
         },
         [this]() {
             invalidateTurnDraft();
@@ -228,6 +231,7 @@ SessionRuntimeCallbacks Game::makeSessionRuntimeCallbacks() {
             m_uiManager.showHUD();
         },
         [this]() {
+            invalidatePendingTurnValidation();
             updateUIState();
         },
         [this]() {
@@ -237,6 +241,7 @@ SessionRuntimeCallbacks Game::makeSessionRuntimeCallbacks() {
             return captureSelectionBookmark();
         },
         [this](const InputSelectionBookmark& bookmark) {
+            invalidatePendingTurnValidation();
             reconcileSelectionBookmark(bookmark);
         },
         [this]() {
@@ -262,6 +267,7 @@ TurnLifecycleCallbacks Game::makeTurnLifecycleCallbacks() {
             return captureSelectionBookmark();
         },
         [this](const InputSelectionBookmark& bookmark) {
+            invalidatePendingTurnValidation();
             reconcileSelectionBookmark(bookmark);
         },
         [this]() {
@@ -271,6 +277,7 @@ TurnLifecycleCallbacks Game::makeTurnLifecycleCallbacks() {
             refreshTurnPhase();
         },
         [this]() {
+            invalidatePendingTurnValidation();
             updateUIState();
         },
         [this]() {
@@ -305,8 +312,22 @@ TurnValidationContext Game::authoritativeTurnContext() const {
     return m_engine.makeTurnValidationContext(m_config);
 }
 
-CheckTurnValidation Game::validateActivePendingTurn() const {
-    return m_engine.validatePendingTurn(m_config);
+PendingTurnValidationCacheKey Game::makePendingTurnValidationCacheKey() const {
+    PendingTurnValidationCacheKey key;
+    key.pendingStateRevision = turnSystem().getPendingStateRevision();
+    key.activeKingdom = turnSystem().getActiveKingdom();
+    key.turnNumber = turnSystem().getTurnNumber();
+    return key;
+}
+
+const CheckTurnValidation& Game::validateActivePendingTurn() const {
+    return m_pendingTurnValidationCache.resolve(makePendingTurnValidationCacheKey(), [this]() {
+        return m_engine.validatePendingTurn(m_config);
+    });
+}
+
+void Game::invalidatePendingTurnValidation() {
+    m_pendingTurnValidationCache.invalidate();
 }
 
 bool Game::canQueueNonMoveActions() const {
@@ -495,6 +516,7 @@ void Game::toggleInGameMenu() {
 }
 
 void Game::returnToMainMenu() {
+    invalidatePendingTurnValidation();
     m_sessionRuntimeCoordinator.returnToMainMenu(makeSessionRuntimeCallbacks());
 }
 
@@ -609,13 +631,17 @@ void Game::handleNativeResize(sf::Vector2u newSize) {
 
 void Game::handleInput() {
     sf::Event event;
+    InteractivePermissionsCache permissionsCache;
     while (m_window.pollEvent(event)) {
         InteractionPermissions permissions;
         const bool interactiveGameState = m_state == GameState::Playing
             || m_state == GameState::Paused
             || m_state == GameState::GameOver;
         if (interactiveGameState) {
-            permissions = currentInteractionPermissions();
+            const FrontendRuntimeState runtimeState = makeFrontendRuntimeState();
+            permissions = permissionsCache.resolve(runtimeState, [this]() {
+                return currentInteractionPermissions();
+            });
         }
 
         const InputFrameState inputState{
@@ -637,6 +663,7 @@ void Game::handleInput() {
 
             case InputPreGuiActionKind::ToggleInGameMenu:
                 toggleInGameMenu();
+                permissionsCache.invalidate();
                 continue;
 
             case InputPreGuiActionKind::ExportDebugHistory:
@@ -647,6 +674,7 @@ void Game::handleInput() {
 
             case InputPreGuiActionKind::CommitTurn:
                 commitPlayerTurn();
+                permissionsCache.invalidate();
                 continue;
 
             case InputPreGuiActionKind::CenterCameraOnPerspective:
@@ -666,6 +694,9 @@ void Game::handleInput() {
         }
 
         const bool handledByGui = m_gui.handleEvent(event);
+        if (handledByGui) {
+            permissionsCache.invalidate();
+        }
 
         bool worldMouseBlocked = false;
         if (!inputState.overlaysVisible
@@ -683,6 +714,7 @@ void Game::handleInput() {
             ensureTurnDraftUpToDate();
             InputContext inputContext = buildInputContext(inputState.permissions);
             m_input.handleEvent(event, inputContext);
+            permissionsCache.invalidate();
         }
     }
 }
@@ -774,10 +806,12 @@ void Game::render() {
 }
 
 bool Game::startNewGame(const GameSessionConfig& session, std::string* errorMessage) {
+    invalidatePendingTurnValidation();
     return m_sessionRuntimeCoordinator.startNewGame(session, makeSessionRuntimeCallbacks(), errorMessage);
 }
 
 bool Game::loadGame(const std::string& saveName) {
+    invalidatePendingTurnValidation();
     std::string error;
     if (!m_sessionRuntimeCoordinator.loadGame(saveName, makeSessionRuntimeCallbacks(), &error)) {
         std::cerr << "Failed to restore save: " << error << std::endl;
@@ -797,6 +831,7 @@ bool Game::saveGame() {
 }
 
 void Game::commitPlayerTurn() {
+    invalidatePendingTurnValidation();
     m_turnLifecycleCoordinator.commitPlayerTurn(
         isLanClient(),
         isLanHost(),
@@ -805,14 +840,17 @@ void Game::commitPlayerTurn() {
 }
 
 void Game::commitAuthoritativeTurn() {
+    invalidatePendingTurnValidation();
     m_turnLifecycleCoordinator.commitAuthoritativeTurn(isLanHost(), makeTurnLifecycleCallbacks());
 }
 
 void Game::resetPlayerTurn() {
+    invalidatePendingTurnValidation();
     m_turnLifecycleCoordinator.resetPlayerTurn(makeTurnLifecycleCallbacks());
 }
 
 void Game::stopMultiplayer() {
+    invalidatePendingTurnValidation();
     m_multiplayer.resetConnections();
     m_waitingForRemoteTurnResult = false;
     m_localPlayerContext = LocalPlayerContext{};
@@ -828,10 +866,12 @@ bool Game::pushSnapshotToRemote(std::string* errorMessage) {
 }
 
 bool Game::joinMultiplayer(const JoinMultiplayerRequest& request, std::string* errorMessage) {
+    invalidatePendingTurnValidation();
     return m_sessionRuntimeCoordinator.joinMultiplayer(request, makeSessionRuntimeCallbacks(), errorMessage);
 }
 
 bool Game::reconnectToMultiplayerHost(std::string* errorMessage) {
+    invalidatePendingTurnValidation();
     return m_sessionRuntimeCoordinator.reconnectToMultiplayerHost(
         makeSessionRuntimeCallbacks(),
         errorMessage);
@@ -853,12 +893,14 @@ void Game::updateMultiplayer() {
             return captureSelectionBookmark();
         },
         [this](const InputSelectionBookmark& bookmark) {
+            invalidatePendingTurnValidation();
             reconcileSelectionBookmark(bookmark);
         },
         [this]() {
             refreshTurnPhase();
         },
         [this]() {
+            invalidatePendingTurnValidation();
             updateUIState();
         },
         [this]() {
@@ -885,7 +927,7 @@ void Game::updateUIState() {
     const Board& currentDisplayedBoard = displayedBoard();
     const auto& currentDisplayedKingdoms = displayedKingdoms();
     const auto& currentDisplayedPublicBuildings = displayedPublicBuildings();
-    const CheckTurnValidation validation = validateActivePendingTurn();
+    const CheckTurnValidation& validation = validateActivePendingTurn();
     const InteractionPermissions permissions = currentInteractionPermissions(&validation);
     const InGameHudPresentation hudPresentation = buildInGameHudPresentation();
     const Cell* selectedCell = nullptr;
