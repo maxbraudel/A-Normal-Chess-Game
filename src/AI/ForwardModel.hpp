@@ -1,4 +1,5 @@
 #pragma once
+#include <optional>
 #include <vector>
 #include "AI/GameSnapshot.hpp"
 #include "AI/ThreatMap.hpp"
@@ -34,7 +35,8 @@ public:
     static bool applyBuild(GameSnapshot& s, KingdomId k, BuildingType type,
                            sf::Vector2i pos, int sourceWidth, int sourceHeight,
                            int rotationQuarterTurns, int cost, int cellHP,
-                           const GameConfig& config);
+                           const GameConfig& config,
+                           std::optional<int> buildId = std::nullopt);
     static bool applyProduce(GameSnapshot& s, int barracksId, PieceType type,
                              int cost, int productionTurns, KingdomId k);
     static bool applyAutomaticChurchCoronation(GameSnapshot& s, KingdomId k);

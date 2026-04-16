@@ -112,7 +112,7 @@ bool applyProjectedCommand(GameSnapshot& snapshot,
             if (!ForwardModel::applyBuild(snapshot, activeKingdom, command.buildingType,
                                           command.buildOrigin, sourceWidth, sourceHeight,
                                           command.buildRotationQuarterTurns, buildGoldCost,
-                                          defaultCellHP, config)) {
+                                          defaultCellHP, config, command.buildId)) {
                 if (errorMessage) {
                     *errorMessage = "The queued build is not legal in the projected turn state or exceeds available build points.";
                 }

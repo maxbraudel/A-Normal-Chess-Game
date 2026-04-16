@@ -32,6 +32,7 @@ struct SnapBuilding {
     int height = 1;
     int rotationQuarterTurns = 0;
     int flipMask = 0;
+    BuildingState state = BuildingState::Completed;
     std::vector<int> cellHP;
     std::vector<int> cellBreachState;
     bool isProducing = false;
@@ -60,6 +61,18 @@ struct SnapBuilding {
         if (isNeutral) return false;
         for (int hp : cellHP) if (hp > 0) return false;
         return true;
+    }
+
+    bool isUnderConstruction() const {
+        return state == BuildingState::UnderConstruction;
+    }
+
+    bool isUsable() const {
+        return !isUnderConstruction() && !isDestroyed();
+    }
+
+    bool hasActiveGameplayEffects() const {
+        return !isUnderConstruction() && !isDestroyed();
     }
 
     bool isCellDestroyed(int localX, int localY) const {

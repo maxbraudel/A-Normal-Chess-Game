@@ -364,6 +364,7 @@ std::string SaveManager::serializeBuilding(const Building& b) {
        << ", \"h\": " << b.height
     << ", \"rot\": " << b.rotationQuarterTurns
     << ", \"fm\": " << b.flipMask
+         << ", \"state\": " << static_cast<int>(b.state)
        << ", \"isProducing\": " << (b.isProducing ? "true" : "false")
        << ", \"producingType\": " << b.producingType
        << ", \"turnsRemaining\": " << b.turnsRemaining
@@ -447,6 +448,10 @@ Building SaveManager::parseBuilding(const std::string& json) {
     b.height = extractInt(json, "h", 1);
     b.rotationQuarterTurns = extractInt(json, "rot", -1);
     b.flipMask = extractInt(json, "fm", -1);
+    const int rawState = extractInt(json, "state", static_cast<int>(BuildingState::Completed));
+    b.state = (rawState == static_cast<int>(BuildingState::UnderConstruction))
+        ? BuildingState::UnderConstruction
+        : BuildingState::Completed;
     b.isProducing = extractBool(json, "isProducing", false);
     b.producingType = extractInt(json, "producingType", 0);
     b.turnsRemaining = extractInt(json, "turnsRemaining", 0);

@@ -6,6 +6,19 @@ namespace {
 bool isValidKingdomId(KingdomId id) {
     return id == KingdomId::White || id == KingdomId::Black;
 }
+
+bool validateAuthoritativeBuildingState(const Building& building,
+                                        const std::string& scope,
+                                        std::string* errorMessage) {
+    if (!building.isUnderConstruction()) {
+        return true;
+    }
+
+    if (errorMessage) {
+        *errorMessage = scope + " contains an under-construction building in authoritative state.";
+    }
+    return false;
+}
 }
 
 void GameStateValidator::writeError(std::string* errorMessage, const std::string& message) {
@@ -163,6 +176,9 @@ bool GameStateValidator::validateSaveData(const SaveData& data, std::string* err
                 writeError(errorMessage, "Save data contains a building assigned to the wrong kingdom.");
                 return false;
             }
+            if (!validateAuthoritativeBuildingState(building, "Save data", errorMessage)) {
+                return false;
+            }
             if (!buildingIds.insert(building.id).second) {
                 writeError(errorMessage, "Save data contains duplicate building IDs.");
                 return false;
@@ -171,6 +187,9 @@ bool GameStateValidator::validateSaveData(const SaveData& data, std::string* err
     }
 
     for (const auto& building : data.publicBuildings) {
+        if (!validateAuthoritativeBuildingState(building, "Save data", errorMessage)) {
+            return false;
+        }
         if (!buildingIds.insert(building.id).second) {
             writeError(errorMessage, "Save data contains duplicate building IDs.");
             return false;
@@ -248,6 +267,9 @@ bool GameStateValidator::validateRuntimeState(const Board& board,
                 writeError(errorMessage, "Runtime state contains an owned building assigned to the wrong kingdom.");
                 return false;
             }
+            if (!validateAuthoritativeBuildingState(building, "Runtime state", errorMessage)) {
+                return false;
+            }
             if (!buildingIds.insert(building.id).second) {
                 writeError(errorMessage, "Runtime state contains duplicate building IDs.");
                 return false;
@@ -262,6 +284,9 @@ bool GameStateValidator::validateRuntimeState(const Board& board,
     }
 
     for (const auto& building : publicBuildings) {
+        if (!validateAuthoritativeBuildingState(building, "Runtime state", errorMessage)) {
+            return false;
+        }
         if (!buildingIds.insert(building.id).second) {
             writeError(errorMessage, "Runtime state contains duplicate building IDs.");
             return false;

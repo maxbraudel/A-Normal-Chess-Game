@@ -217,7 +217,7 @@ std::vector<MCTSAction> AIMCTS::generateCandidateActions(
 
     // --- PRODUCTIONS (1 per free barracks) ---
     for (auto& b : s.kingdom(k).buildings) {
-        if (b.type != BuildingType::Barracks || b.isDestroyed() || b.isProducing) continue;
+        if (b.type != BuildingType::Barracks || !b.isUsable() || b.isProducing) continue;
         for (PieceType pt : {PieceType::Pawn, PieceType::Knight, PieceType::Bishop, PieceType::Rook}) {
             const int cost = config.getRecruitCost(pt);
             if (s.kingdom(k).gold >= cost) {

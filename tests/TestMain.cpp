@@ -41,10 +41,12 @@
 #include "Systems/CheckSystem.hpp"
 #include "Systems/EconomySystem.hpp"
 #include "Systems/EventLog.hpp"
+#include "Systems/PendingTurnProjection.hpp"
 #include "Systems/ProductionSpawnRules.hpp"
 #include "Systems/ProductionSystem.hpp"
 #include "Systems/PublicBuildingOccupation.hpp"
 #include "Systems/SelectionMoveRules.hpp"
+#include "Systems/StructureIntegrityRules.hpp"
 #include "Systems/TurnCommand.hpp"
 #include "Systems/TurnSystem.hpp"
 #include "UI/InGameViewModelBuilder.hpp"
@@ -1572,6 +1574,7 @@ void testSaveManagerRoundTrip() {
     Building ownedBarracks = makeTestBarracks(10, KingdomId::White, {1, 1}, GameConfig{});
     ownedBarracks.rotationQuarterTurns = 1;
     ownedBarracks.flipMask = 0;
+    ownedBarracks.setConstructionState(BuildingState::UnderConstruction);
     ownedBarracks.destroyCellAt(0, 0);
     data.kingdoms[0].buildings.push_back(ownedBarracks);
     Building breachedWall = makeTestStoneWall(11, KingdomId::White, {6, 1}, GameConfig{});
@@ -1623,6 +1626,8 @@ void testSaveManagerRoundTrip() {
         expect(loaded.kingdoms[0].buildings.size() == 2
             && loaded.kingdoms[0].buildings[0].rotationQuarterTurns == ownedBarracks.rotationQuarterTurns,
             "Owned building rotations should round-trip through SaveManager.");
+        expect(loaded.kingdoms[0].buildings[0].isUnderConstruction(),
+            "Building construction state should round-trip through SaveManager.");
         expect(loaded.kingdoms[0].buildings[0].getCellHP(0, 0) == 0,
             "Destroyed owned building cells should round-trip through SaveManager.");
         expect(loaded.kingdoms[0].buildings[1].isCellBreached(0, 0),
@@ -2752,6 +2757,117 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             "Replaying a queued build into the turn draft should reserve the building cost from the displayed gold.");
     }
 
+    void testPendingTurnProjectionMaterializesQueuedBuildWithStableId() {
+        GameConfig config;
+        Board board;
+        board.init(8);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        white.gold = config.getBarracksCost() + 50;
+
+        addPieceToBoard(white, board, 1, PieceType::King, KingdomId::White, {1, 1});
+        addPieceToBoard(white, board, 2, PieceType::Pawn, KingdomId::White, {2, 3});
+        addPieceToBoard(black, board, 3, PieceType::King, KingdomId::Black, {6, 6});
+
+        TurnCommand buildCommand = makeBuildCommand(BuildingType::Barracks, {3, 3});
+        buildCommand.buildId = -41;
+        const std::vector<Building> publicBuildings;
+        const std::vector<TurnCommand> commands{buildCommand};
+
+        const PendingTurnProjectionResult projection = PendingTurnProjection::project(
+            board, white, black, publicBuildings, 1, commands, config);
+
+        expect(projection.valid,
+            "A legal queued build should remain valid in the projected turn state.");
+
+        GameSnapshot snapshot = projection.snapshot;
+        SnapBuilding* projectedBuilding = snapshot.kingdom(KingdomId::White).getBuildingById(buildCommand.buildId);
+        expect(projectedBuilding != nullptr,
+            "Projected pending builds should keep their stable build id in the snapshot.");
+        expect(projectedBuilding->isUnderConstruction(),
+            "Projected pending builds should remain under construction until turn advancement.");
+    }
+
+    void testPendingTurnProjectionRejectsProductionFromUnderConstructionBarracks() {
+        GameConfig config;
+        Board board;
+        board.init(8);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        white.gold = config.getBarracksCost() + config.getRecruitCost(PieceType::Pawn) + 50;
+
+        addPieceToBoard(white, board, 1, PieceType::King, KingdomId::White, {1, 1});
+        addPieceToBoard(white, board, 2, PieceType::Pawn, KingdomId::White, {2, 3});
+        addPieceToBoard(black, board, 3, PieceType::King, KingdomId::Black, {6, 6});
+
+        TurnCommand buildCommand = makeBuildCommand(BuildingType::Barracks, {3, 3});
+        buildCommand.buildId = -42;
+
+        TurnCommand produceCommand;
+        produceCommand.type = TurnCommand::Produce;
+        produceCommand.barracksId = buildCommand.buildId;
+        produceCommand.produceType = PieceType::Pawn;
+        const std::vector<Building> publicBuildings;
+        const std::vector<TurnCommand> commands{buildCommand, produceCommand};
+
+        const PendingTurnProjectionResult projection = PendingTurnProjection::project(
+            board, white, black, publicBuildings, 1, commands, config);
+
+        expect(!projection.valid,
+            "A barracks built this turn should not be usable for production before validation.");
+        expect(!projection.errorMessage.empty(),
+            "Rejected projected production should include an explanatory error message.");
+    }
+
+    void testForwardModelCompletesUnderConstructionBarracksOnTurnAdvance() {
+        GameConfig config;
+        Board board;
+        board.init(8);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        white.gold = config.getBarracksCost() + config.getRecruitCost(PieceType::Pawn) + 50;
+
+        addPieceToBoard(white, board, 1, PieceType::King, KingdomId::White, {1, 1});
+        addPieceToBoard(white, board, 2, PieceType::Pawn, KingdomId::White, {2, 3});
+        addPieceToBoard(black, board, 3, PieceType::King, KingdomId::Black, {6, 6});
+
+        GameSnapshot snapshot = ForwardModel::createSnapshot(board, white, black, {}, 1);
+        expect(ForwardModel::applyBuild(snapshot, KingdomId::White, BuildingType::Barracks,
+                                        {3, 3},
+                                        config.getBuildingWidth(BuildingType::Barracks),
+                                        config.getBuildingHeight(BuildingType::Barracks),
+                                        0,
+                                        config.getBarracksCost(),
+                                        StructureIntegrityRules::defaultCellHP(BuildingType::Barracks, config),
+                                        config,
+                                        -43),
+            "ForwardModel should accept a legal barracks build for the active kingdom.");
+        expect(!ForwardModel::applyProduce(snapshot, -43, PieceType::Pawn,
+                                           config.getRecruitCost(PieceType::Pawn),
+                                           config.getProductionTurns(PieceType::Pawn),
+                                           KingdomId::White),
+            "Under-construction barracks should reject production in the same simulated turn.");
+
+        ForwardModel::advanceTurn(snapshot,
+                                  KingdomId::White,
+                                  config.getMineIncomePerCellPerTurn(),
+                                  config.getFarmIncomePerCellPerTurn(),
+                                  config.getArenaXPPerTurn(),
+                                  config);
+
+        SnapBuilding* barracks = snapshot.kingdom(KingdomId::White).getBuildingById(-43);
+        expect(barracks != nullptr && !barracks->isUnderConstruction(),
+            "Turn advancement should complete newly built barracks in snapshot simulation.");
+        expect(ForwardModel::applyProduce(snapshot, -43, PieceType::Pawn,
+                                          config.getRecruitCost(PieceType::Pawn),
+                                          config.getProductionTurns(PieceType::Pawn),
+                                          KingdomId::White),
+            "Completed barracks should become usable for production on later simulated turns.");
+    }
+
     void testUnderConstructionResourceBuildingsDoNotGrantIncome() {
         GameConfig config;
         Board board;
@@ -2905,6 +3021,46 @@ void testGameStateValidatorRejectsNegativeRuntimeGold() {
 
     expect(!engine.validate(&error), "Runtime validation should reject negative kingdom gold.");
     expect(!error.empty(), "Runtime validation should explain negative gold failures.");
+}
+
+void testGameStateValidatorRejectsUnderConstructionSaveBuilding() {
+    GameConfig config;
+    GameEngine engine;
+    GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, "under_construction_save_test");
+
+    std::string error;
+    expect(engine.startNewSession(session, config, &error), error);
+
+    SaveData data = engine.createSaveData();
+    Building barracks = makeTestBarracks(77, KingdomId::White, {2, 2}, config);
+    barracks.setConstructionState(BuildingState::UnderConstruction);
+    data.kingdoms[kingdomIndex(KingdomId::White)].buildings.push_back(barracks);
+
+    expect(!GameStateValidator::validateSaveData(data, &error),
+           "Save validation should reject under-construction buildings in authoritative save data.");
+    expect(!error.empty(), "Save validation should explain under-construction building failures.");
+
+    GameEngine restored;
+    expect(!restored.restoreFromSave(data, config, &error),
+           "Restoring a save with under-construction buildings should fail validation.");
+}
+
+void testGameStateValidatorRejectsUnderConstructionRuntimeBuilding() {
+    GameConfig config;
+    GameEngine engine;
+    GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, "under_construction_runtime_test");
+
+    std::string error;
+    expect(engine.startNewSession(session, config, &error), error);
+
+    Building barracks = makeTestBarracks(78, KingdomId::White, {2, 2}, config);
+    barracks.setConstructionState(BuildingState::UnderConstruction);
+    engine.kingdom(KingdomId::White).addBuilding(barracks);
+    relinkBoardState(engine.board(), engine.kingdoms(), engine.publicBuildings());
+
+    expect(!engine.validate(&error),
+           "Runtime validation should reject under-construction buildings in authoritative state.");
+    expect(!error.empty(), "Runtime validation should explain under-construction building failures.");
 }
 
 void testGameConfigClampsNegativeEconomyValues() {
@@ -3170,10 +3326,15 @@ int main() {
         {"turn system keep build with other builder", testTurnSystemCancelMoveKeepsBuildWhenAnotherBuilderStillSupportsIt},
         {"turn system stable pending build ids", testTurnSystemAssignsStablePendingBuildIds},
         {"turn draft materializes under construction build", testTurnDraftMaterializesQueuedBuildingAsUnderConstruction},
+        {"pending turn projection stable build id", testPendingTurnProjectionMaterializesQueuedBuildWithStableId},
+        {"pending turn projection rejects under construction produce", testPendingTurnProjectionRejectsProductionFromUnderConstructionBarracks},
+        {"forward model completes under construction barracks", testForwardModelCompletesUnderConstructionBarracksOnTurnAdvance},
         {"under construction resources grant no income", testUnderConstructionResourceBuildingsDoNotGrantIncome},
         {"ai special planning preserves gold", testAIStrategySpecialDoesNotMutateRuntimeGold},
         {"save validator negative gold", testGameStateValidatorRejectsNegativeSaveGold},
         {"runtime validator negative gold", testGameStateValidatorRejectsNegativeRuntimeGold},
+        {"save validator under construction building", testGameStateValidatorRejectsUnderConstructionSaveBuilding},
+        {"runtime validator under construction building", testGameStateValidatorRejectsUnderConstructionRuntimeBuilding},
         {"game config clamps negative economy", testGameConfigClampsNegativeEconomyValues},
         {"projected income helper", testProjectedIncomeHelper},
         {"resource income helper resource types", testResourceIncomeHelperSupportsBothResourceTypes},

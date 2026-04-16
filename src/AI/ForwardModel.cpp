@@ -108,6 +108,14 @@ void removeDestroyedStructures(SnapKingdom& kingdom) {
         kingdom.buildings.end());
 }
 
+void completeUnderConstructionBuildings(SnapKingdom& kingdom) {
+    for (auto& building : kingdom.buildings) {
+        if (building.isUnderConstruction()) {
+            building.state = BuildingState::Completed;
+        }
+    }
+}
+
 } // namespace
 
 // ========================================================================
@@ -129,6 +137,7 @@ static SnapBuilding toSnapBuilding(const Building& b) {
     sb.height = b.height;
     sb.rotationQuarterTurns = b.rotationQuarterTurns;
     sb.flipMask = b.flipMask;
+    sb.state = b.state;
     sb.cellHP = b.cellHP;
     sb.cellBreachState = b.cellBreachState;
     sb.isProducing = b.isProducing;
@@ -440,7 +449,8 @@ bool ForwardModel::applyMove(GameSnapshot& s, int pieceId, sf::Vector2i dest,
 bool ForwardModel::applyBuild(GameSnapshot& s, KingdomId k, BuildingType type,
                               sf::Vector2i pos, int sourceWidth, int sourceHeight,
                               int rotationQuarterTurns, int cost, int cellHPValue,
-                              const GameConfig& config) {
+                              const GameConfig& config,
+                              std::optional<int> buildId) {
     SnapKingdom& myK = s.kingdom(k);
     SnapTurnBudget& budget = s.turnBudget(k);
     if (budget.movementPointsMax <= 0 && budget.buildPointsMax <= 0
@@ -476,7 +486,7 @@ bool ForwardModel::applyBuild(GameSnapshot& s, KingdomId k, BuildingType type,
 
     SnapBuilding bld;
     static int nextSnapBuildId = 90000;
-    bld.id = nextSnapBuildId++;
+    bld.id = buildId.has_value() ? *buildId : nextSnapBuildId++;
     bld.type = type;
     bld.owner = k;
     bld.isNeutral = false;
@@ -485,6 +495,7 @@ bool ForwardModel::applyBuild(GameSnapshot& s, KingdomId k, BuildingType type,
     bld.height = sourceHeight;
     bld.rotationQuarterTurns = rotationQuarterTurns;
     bld.flipMask = 0;
+    bld.state = BuildingState::UnderConstruction;
     bld.cellHP.assign(sourceWidth * sourceHeight, cellHPValue);
     bld.cellBreachState.assign(sourceWidth * sourceHeight, 0);
     myK.buildings.push_back(bld);
@@ -495,7 +506,7 @@ bool ForwardModel::applyProduce(GameSnapshot& s, int barracksId, PieceType type,
                                  int cost, int productionTurns, KingdomId k) {
     SnapKingdom& myK = s.kingdom(k);
     SnapBuilding* barracks = myK.getBuildingById(barracksId);
-    if (!barracks || barracks->isProducing || barracks->isDestroyed()) return false;
+    if (!barracks || !barracks->isUsable() || barracks->isProducing) return false;
     if (myK.gold < cost) return false;
 
     myK.gold -= cost;
@@ -575,6 +586,7 @@ void ForwardModel::advanceTurn(GameSnapshot& s, KingdomId k,
     processFriendlyRepairs(s, k, config);
 
     removeDestroyedStructures(myK);
+    completeUnderConstructionBuildings(myK);
 
     // 2. Collect income from net occupation advantage on public resources.
     SnapKingdom& enemyK = s.enemyKingdom(k);
