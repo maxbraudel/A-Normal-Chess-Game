@@ -156,7 +156,6 @@ bool applyProjectedCommand(GameSnapshot& snapshot,
             }
 
             kingdom.gold -= goldCost;
-            piece->type = command.upgradeTarget;
             return true;
         }
 

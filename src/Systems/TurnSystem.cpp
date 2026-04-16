@@ -596,6 +596,9 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                              std::vector<Building>& publicBuildings,
                              const GameConfig& config, EventLog& log,
                              PieceFactory& pieceFactory, BuildingFactory& buildingFactory) {
+    std::vector<TurnCommand> deferredUpgrades;
+    deferredUpgrades.reserve(m_pendingCommands.size());
+
     // Execute all pending commands
     for (const auto& cmd : m_pendingCommands) {
         switch (cmd.type) {
@@ -681,8 +684,7 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                         break;
                     }
                     activeKingdom.gold -= cost;
-                    XPSystem::upgrade(*piece, cmd.upgradeTarget);
-                    log.log(m_turnNumber, m_activeKingdom, "Upgraded a piece");
+                    deferredUpgrades.push_back(cmd);
                 }
                 break;
             }
@@ -713,6 +715,16 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
             default:
                 break;
         }
+    }
+
+    for (const TurnCommand& cmd : deferredUpgrades) {
+        Piece* piece = activeKingdom.getPieceById(cmd.upgradePieceId);
+        if (!piece || !XPSystem::canUpgrade(*piece, cmd.upgradeTarget, config)) {
+            continue;
+        }
+
+        XPSystem::upgrade(*piece, cmd.upgradeTarget);
+        log.log(m_turnNumber, m_activeKingdom, "Upgraded a piece");
     }
 
     for (auto& building : publicBuildings) {

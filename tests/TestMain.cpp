@@ -49,6 +49,7 @@
 #include "Systems/StructureIntegrityRules.hpp"
 #include "Systems/TurnCommand.hpp"
 #include "Systems/TurnSystem.hpp"
+#include "UI/HUDLayout.hpp"
 #include "UI/InGameViewModelBuilder.hpp"
 #include "Units/MovementRules.hpp"
 #include "Units/Piece.hpp"
@@ -803,6 +804,100 @@ void testLayeredSelectionStackTreatsUnderConstructionBuildingAsNormalBuilding() 
             "King squares that remain under attack should stay classified as red destinations.");
         expect(moveOptions.contains({10, 11}),
             "Red king destinations should remain selectable even though they are unsafe.");
+    }
+
+    void testSelectionMoveRulesIgnoreQueuedUpgradeForLivePieceMoves() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        Piece& pawn = addPieceToBoard(white, board, 322, PieceType::Pawn, KingdomId::White, {8, 8});
+        addPieceToBoard(white, board, 323, PieceType::King, KingdomId::White, {4, 4});
+        addPieceToBoard(black, board, 422, PieceType::King, KingdomId::Black, {16, 16});
+        pawn.xp = config.getXPThresholdPawnToKnightOrBishop();
+        white.gold = config.getUpgradeCost(PieceType::Pawn, PieceType::Bishop) + 5;
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+
+        TurnCommand upgradeCommand;
+        upgradeCommand.type = TurnCommand::Upgrade;
+        upgradeCommand.upgradePieceId = pawn.id;
+        upgradeCommand.upgradeTarget = PieceType::Bishop;
+        expect(turnSystem.queueCommand(upgradeCommand, board, white, black, publicBuildings, config),
+            "Eligible upgrades should queue successfully for live move filtering coverage.");
+
+        const SelectionMoveOptions moveOptions = SelectionMoveRules::classifyPieceMoves(
+            board,
+            white,
+            black,
+            publicBuildings,
+            1,
+            turnSystem.getPendingCommands(),
+            pawn.id,
+            config);
+
+        expect(containsCell(moveOptions.safeMoves, {8, 7}),
+            "Queueing an upgrade must not remove the pawn's current orthogonal live move before commit.");
+        expect(!containsCell(moveOptions.safeMoves, {7, 7}) && !containsCell(moveOptions.unsafeMoves, {7, 7}),
+            "Queueing an upgrade must not grant bishop-style diagonal live moves before commit.");
+    }
+
+    void testTurnSystemAllowsMoveAfterQueuedUpgradeBeforeCommit() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        Piece& pawn = addPieceToBoard(white, board, 324, PieceType::Pawn, KingdomId::White, {8, 8});
+        addPieceToBoard(white, board, 325, PieceType::King, KingdomId::White, {4, 4});
+        addPieceToBoard(black, board, 423, PieceType::King, KingdomId::Black, {16, 16});
+        pawn.xp = config.getXPThresholdPawnToKnightOrBishop();
+        white.gold = config.getUpgradeCost(PieceType::Pawn, PieceType::Bishop) + 5;
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+
+        TurnCommand upgradeCommand;
+        upgradeCommand.type = TurnCommand::Upgrade;
+        upgradeCommand.upgradePieceId = pawn.id;
+        upgradeCommand.upgradeTarget = PieceType::Bishop;
+        expect(turnSystem.queueCommand(upgradeCommand, board, white, black, publicBuildings, config),
+            "Eligible upgrades should queue successfully before testing deferred transformation semantics.");
+
+        TurnCommand moveCommand;
+        moveCommand.type = TurnCommand::Move;
+        moveCommand.pieceId = pawn.id;
+        moveCommand.origin = pawn.position;
+        moveCommand.destination = {8, 7};
+        expect(turnSystem.queueCommand(moveCommand, board, white, black, publicBuildings, config),
+            "A queued upgrade must not prevent the piece from queuing a legal move under its current type before commit.");
+
+        EventLog eventLog;
+        PieceFactory pieceFactory;
+        BuildingFactory buildingFactory;
+        turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+
+        Piece* upgradedPiece = white.getPieceById(pawn.id);
+        expect(upgradedPiece != nullptr, "The upgraded piece should still exist after commit.");
+        expect(upgradedPiece->position == sf::Vector2i(8, 7),
+            "The queued move should resolve before the deferred upgrade is applied at commit.");
+        expect(upgradedPiece->type == PieceType::Bishop,
+            "The queued upgrade should still apply when the turn is validated.");
+        expect(board.getCell(8, 7).piece == upgradedPiece,
+            "The destination cell should contain the moved piece after commit.");
+        expect(white.gold == 5,
+            "Deferred upgrades should still reserve and spend their gold by the end of commit.");
+    }
+
+    void testHudLayoutKeepsNetIncomeWide() {
+        expect(HUDLayout::metricWidths()[3] == HUDLayout::kWideMetricWidth,
+            "Net Income should use the wide metric slot so its label fits without overflow.");
     }
 
     void testPendingTurnValidationRejectsUnsafeQueuedMoveOnlyAtEndTurn() {
@@ -3619,6 +3714,9 @@ int main() {
         {"check response rejects non-move", testCheckResponseRejectsNonMoveActionsWhileInCheck},
         {"selection move rules unsafe non-king selectable", testSelectionMoveRulesClassifyUnsafeNonKingMovesAsSelectable},
         {"selection move rules unsafe king selectable", testSelectionMoveRulesKeepUnsafeKingSquaresSelectable},
+        {"selection move rules ignore queued upgrade live moves", testSelectionMoveRulesIgnoreQueuedUpgradeForLivePieceMoves},
+        {"turn system move after queued upgrade", testTurnSystemAllowsMoveAfterQueuedUpgradeBeforeCommit},
+        {"hud layout net income wide", testHudLayoutKeepsNetIncomeWide},
         {"pending turn unsafe move end-turn rejection", testPendingTurnValidationRejectsUnsafeQueuedMoveOnlyAtEndTurn},
         {"church coronation first rook", testAutomaticChurchCoronationTurnsFirstRookIntoQueen},
         {"church coronation multiple queens", testAutomaticChurchCoronationAllowsMultipleQueens},

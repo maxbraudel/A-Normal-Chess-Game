@@ -68,7 +68,7 @@ inline const std::array<float, 4>& metricWidths() {
         kMetricWidth,
         kWideMetricWidth,
         kMetricWidth,
-        kMetricWidth
+        kWideMetricWidth
     };
 
     return widths;

@@ -40,6 +40,27 @@ std::vector<TurnCommand> pendingCommandsWithoutPieceMove(const std::vector<TurnC
     return filteredCommands;
 }
 
+std::vector<TurnCommand> pendingCommandsWithoutPieceLiveStateChanges(
+    const std::vector<TurnCommand>& pendingCommands,
+    int pieceId) {
+    std::vector<TurnCommand> filteredCommands;
+    filteredCommands.reserve(pendingCommands.size());
+
+    for (const TurnCommand& command : pendingCommands) {
+        if (command.type == TurnCommand::Move && command.pieceId == pieceId) {
+            continue;
+        }
+
+        if (command.type == TurnCommand::Upgrade && command.upgradePieceId == pieceId) {
+            continue;
+        }
+
+        filteredCommands.push_back(command);
+    }
+
+    return filteredCommands;
+}
+
 PendingTurnProjectionResult projectSelectionState(const Board& board,
                                                   const Kingdom& activeKingdom,
                                                   const Kingdom& enemyKingdom,
@@ -63,7 +84,7 @@ PendingTurnProjectionResult projectSelectionState(const Board& board,
         enemyKingdom,
         publicBuildings,
         turnNumber,
-        pendingCommandsWithoutPieceMove(pendingCommands, pieceId),
+        pendingCommandsWithoutPieceLiveStateChanges(pendingCommands, pieceId),
         config,
         PendingTurnInvalidCommandPolicy::DropInvalidBuilds);
     result.snapshot = normalization.snapshot;
