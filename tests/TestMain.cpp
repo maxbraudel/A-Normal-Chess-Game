@@ -1126,6 +1126,8 @@ void testLayeredSelectionStackTreatsUnderConstructionBuildingAsNormalBuilding() 
              "Players must not issue commands outside their actionable turn.");
          expect(!permissions.canShowActionOverlays,
              "Read-only inspection states must not render actionable overlays.");
+         expect(permissions.canShowBuildPreview,
+             "Read-only inspection states should keep the build ghost visible so placement feedback can update without new mouse movement.");
         }
 
         void testInteractionPermissionsKeepBuildPanelReadOnlyDuringCheck() {
@@ -1162,6 +1164,8 @@ void testLayeredSelectionStackTreatsUnderConstructionBuildingAsNormalBuilding() 
              "Game-over state should still allow opening the read-only build panel.");
          expect(!permissions.canIssueCommands,
              "Game-over state must block gameplay commands.");
+         expect(permissions.canShowBuildPreview,
+             "Game-over state should keep the build preview visible for read-only inspection.");
         }
 
         void testTurnSystemMoveLogIncludesPieceType() {

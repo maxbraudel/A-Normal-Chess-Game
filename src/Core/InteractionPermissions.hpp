@@ -4,6 +4,7 @@
 
 #include <SFML/System/Vector2.hpp>
 
+#include "Buildings/BuildingType.hpp"
 #include "Core/GameState.hpp"
 #include "Input/ToolState.hpp"
 
@@ -27,6 +28,7 @@ struct InteractionPermissions {
     bool canIssueCommands = false;
     bool canQueueNonMoveActions = false;
     bool canShowActionOverlays = false;
+    bool canShowBuildPreview = false;
 };
 
 struct InputSelectionBookmark {
@@ -34,6 +36,9 @@ struct InputSelectionBookmark {
     int pieceId = -1;
     int buildingId = -1;
     std::optional<sf::Vector2i> selectedCell;
+    BuildingType buildPreviewType = BuildingType::Barracks;
+    int buildPreviewRotationQuarterTurns = 0;
+    std::optional<sf::Vector2i> buildPreviewOrigin;
 };
 
 InteractionPermissions computeInteractionPermissions(const InteractionPermissionInputs& inputs);

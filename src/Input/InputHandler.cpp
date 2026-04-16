@@ -69,6 +69,8 @@ void InputHandler::setBuildType(BuildingType type) {
 InputSelectionBookmark InputHandler::createSelectionBookmark() const {
     InputSelectionBookmark bookmark;
     bookmark.tool = m_currentTool;
+    bookmark.buildPreviewType = m_buildPreviewType;
+    bookmark.buildPreviewRotationQuarterTurns = m_buildPreviewRotationQuarterTurns;
     if (m_selectedPiece) {
         bookmark.pieceId = m_selectedPiece->id;
     }
@@ -78,6 +80,9 @@ InputSelectionBookmark InputHandler::createSelectionBookmark() const {
     if (m_hasSelectedCell) {
         bookmark.selectedCell = m_selectedCell;
     }
+    if (m_currentTool == ToolState::Build && m_hasBuildPreview) {
+        bookmark.buildPreviewOrigin = m_buildPreviewOrigin;
+    }
     return bookmark;
 }
 
@@ -86,6 +91,8 @@ void InputHandler::reconcileSelection(const InputSelectionBookmark& bookmark,
                                       Building* selectedBuilding,
                                       const InputContext& context) {
     m_currentTool = bookmark.tool;
+    m_buildPreviewType = bookmark.buildPreviewType;
+    m_buildPreviewRotationQuarterTurns = bookmark.buildPreviewRotationQuarterTurns;
 
     if (selectedPiece) {
         activatePieceSelection(selectedPiece,
@@ -93,11 +100,13 @@ void InputHandler::reconcileSelection(const InputSelectionBookmark& bookmark,
                                context,
                                context.permissions.canIssueCommands
                                    && selectedPiece->kingdom == context.controlledKingdom.id);
+        restoreBuildPreviewState(bookmark);
         return;
     }
 
     if (selectedBuilding) {
         activateBuildingSelection(selectedBuilding, selectedBuilding->origin);
+        restoreBuildPreviewState(bookmark);
         return;
     }
 
@@ -107,12 +116,27 @@ void InputHandler::reconcileSelection(const InputSelectionBookmark& bookmark,
             const Cell& cell = context.board.getCell(cellPos.x, cellPos.y);
             if (cell.isInCircle) {
                 activateTerrainSelection(cellPos);
+                restoreBuildPreviewState(bookmark);
                 return;
             }
         }
     }
 
     clearSelection();
+    restoreBuildPreviewState(bookmark);
+}
+
+void InputHandler::restoreBuildPreviewState(const InputSelectionBookmark& bookmark) {
+    m_buildPreviewType = bookmark.buildPreviewType;
+    m_buildPreviewRotationQuarterTurns = bookmark.buildPreviewRotationQuarterTurns;
+
+    if (bookmark.tool == ToolState::Build && bookmark.buildPreviewOrigin.has_value()) {
+        m_buildPreviewOrigin = *bookmark.buildPreviewOrigin;
+        m_hasBuildPreview = true;
+        return;
+    }
+
+    m_hasBuildPreview = false;
 }
 
 void InputHandler::clearSelection() {
@@ -552,16 +576,15 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
 }
 
 void InputHandler::handleBuildTool(const sf::Event& event, const InputContext& context) {
-    if (!context.permissions.canIssueCommands || !context.permissions.canQueueNonMoveActions) {
-        m_hasBuildPreview = false;
-        return;
-    }
-
     if (event.type == sf::Event::MouseMoved) {
         sf::Vector2f worldPos = context.camera.screenToWorld({event.mouseMove.x, event.mouseMove.y}, context.window);
         sf::Vector2i cellPos = context.camera.worldToCell(worldPos, context.config.getCellSizePx());
         m_buildPreviewOrigin = cellPos;
         m_hasBuildPreview = true;
+    }
+
+    if (!context.permissions.canIssueCommands || !context.permissions.canQueueNonMoveActions) {
+        return;
     }
 
     if (event.type == sf::Event::MouseButtonPressed && event.mouseButton.button == sf::Mouse::Left) {

@@ -871,7 +871,9 @@ void Game::render() {
             displayedPublicBuildings());
         const bool usingConcretePendingState = shouldUseTurnDraft() && m_turnDraft.isValid();
 
-        const bool showActionOverlays = currentInteractionPermissions().canShowActionOverlays;
+        const InteractionPermissions renderPermissions = currentInteractionPermissions();
+        const bool showActionOverlays = renderPermissions.canShowActionOverlays;
+        const bool showBuildPreview = renderPermissions.canShowBuildPreview;
         const Piece* selectedPiece = m_input.getSelectedPiece();
         const bool canShowSelectedPieceActions = showActionOverlays
             && selectedPiece
@@ -924,7 +926,7 @@ void Game::render() {
                     1, 1, m_config.getCellSizePx());
             }
         }
-        if (showActionOverlays && m_input.hasBuildPreview()) {
+        if (showBuildPreview && m_input.getCurrentTool() == ToolState::Build && m_input.hasBuildPreview()) {
             BuildingType bt = m_input.getBuildPreviewType();
             const int previewRotationQuarterTurns = m_input.getBuildPreviewRotationQuarterTurns();
             const int bw = m_config.getBuildingWidth(bt);
@@ -934,10 +936,11 @@ void Game::render() {
             previewBuild.buildingType = bt;
             previewBuild.buildOrigin = m_input.getBuildPreviewOrigin();
             previewBuild.buildRotationQuarterTurns = previewRotationQuarterTurns;
-            const bool valid = PendingTurnProjection::canAppendCommand(
-                board(), activeKingdom(), enemyKingdom(), publicBuildings(),
-                turnSystem().getTurnNumber(), turnSystem().getPendingCommands(),
-                previewBuild, m_config);
+            const bool valid = renderPermissions.canQueueNonMoveActions
+                && PendingTurnProjection::canAppendCommand(
+                    board(), activeKingdom(), enemyKingdom(), publicBuildings(),
+                    turnSystem().getTurnNumber(), turnSystem().getPendingCommands(),
+                    previewBuild, m_config);
             m_renderer.getOverlay().drawBuildPreview(m_window, m_camera,
                 m_hudView, m_windowSize,
                 m_input.getBuildPreviewOrigin(), bt, bw, bh, previewRotationQuarterTurns,

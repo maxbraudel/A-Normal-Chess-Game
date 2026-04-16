@@ -38,6 +38,40 @@ void updateProduceButton(const tgui::Button::Ptr& button,
         enabled);
 }
 
+    void updateAllProduceButtons(const GameConfig& config,
+                     const Kingdom& kingdom,
+                     bool allowProduce,
+                     const TurnCommand* pendingProduce,
+                     const tgui::Button::Ptr& pawnButton,
+                     const tgui::Button::Ptr& knightButton,
+                     const tgui::Button::Ptr& bishopButton,
+                     const tgui::Button::Ptr& rookButton) {
+        updateProduceButton(pawnButton,
+                PieceType::Pawn,
+                config.getRecruitCost(PieceType::Pawn),
+                allowProduce,
+                kingdom.gold,
+                pendingProduce);
+        updateProduceButton(knightButton,
+                PieceType::Knight,
+                config.getRecruitCost(PieceType::Knight),
+                allowProduce,
+                kingdom.gold,
+                pendingProduce);
+        updateProduceButton(bishopButton,
+                PieceType::Bishop,
+                config.getRecruitCost(PieceType::Bishop),
+                allowProduce,
+                kingdom.gold,
+                pendingProduce);
+        updateProduceButton(rookButton,
+                PieceType::Rook,
+                config.getRecruitCost(PieceType::Rook),
+                allowProduce,
+                kingdom.gold,
+                pendingProduce);
+    }
+
 } // namespace
 
 void BarracksPanel::init(const tgui::Panel::Ptr& parent) {
@@ -159,17 +193,25 @@ void BarracksPanel::show(const Building& barracks,
     if (barracks.isUnderConstruction()) {
         m_statusLabel->setText("Status: Under construction");
         m_turnsLabel->setText("Will complete when the turn is validated");
-        m_producePawnBtn->setEnabled(false);
-        m_produceKnightBtn->setEnabled(false);
-        m_produceBishopBtn->setEnabled(false);
-        m_produceRookBtn->setEnabled(false);
+        updateAllProduceButtons(config,
+                                kingdom,
+                                false,
+                                nullptr,
+                                m_producePawnBtn,
+                                m_produceKnightBtn,
+                                m_produceBishopBtn,
+                                m_produceRookBtn);
     } else if (barracks.isProducing) {
         m_statusLabel->setText("Status: Producing...");
         m_turnsLabel->setText("Turns left: " + std::to_string(barracks.turnsRemaining));
-        m_producePawnBtn->setEnabled(false);
-        m_produceKnightBtn->setEnabled(false);
-        m_produceBishopBtn->setEnabled(false);
-        m_produceRookBtn->setEnabled(false);
+        updateAllProduceButtons(config,
+                                kingdom,
+                                false,
+                                nullptr,
+                                m_producePawnBtn,
+                                m_produceKnightBtn,
+                                m_produceBishopBtn,
+                                m_produceRookBtn);
     } else {
         if (pendingProduce) {
             m_statusLabel->setText("Status: Production queued");
@@ -179,34 +221,14 @@ void BarracksPanel::show(const Building& barracks,
             m_turnsLabel->setText("");
         }
 
-        int pawnCost = config.getRecruitCost(PieceType::Pawn);
-        int knightCost = config.getRecruitCost(PieceType::Knight);
-        int bishopCost = config.getRecruitCost(PieceType::Bishop);
-        int rookCost = config.getRecruitCost(PieceType::Rook);
-        updateProduceButton(m_producePawnBtn,
-                            PieceType::Pawn,
-                            pawnCost,
-                            allowProduce,
-                            kingdom.gold,
-                            pendingProduce);
-        updateProduceButton(m_produceKnightBtn,
-                            PieceType::Knight,
-                            knightCost,
-                            allowProduce,
-                            kingdom.gold,
-                            pendingProduce);
-        updateProduceButton(m_produceBishopBtn,
-                            PieceType::Bishop,
-                            bishopCost,
-                            allowProduce,
-                            kingdom.gold,
-                            pendingProduce);
-        updateProduceButton(m_produceRookBtn,
-                            PieceType::Rook,
-                            rookCost,
-                            allowProduce,
-                            kingdom.gold,
-                            pendingProduce);
+        updateAllProduceButtons(config,
+                                kingdom,
+                                allowProduce,
+                                pendingProduce,
+                                m_producePawnBtn,
+                                m_produceKnightBtn,
+                                m_produceBishopBtn,
+                                m_produceRookBtn);
     }
     m_panel->setVisible(true);
 }

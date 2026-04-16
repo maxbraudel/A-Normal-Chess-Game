@@ -103,4 +103,5 @@ private:
     void applyResolvedSelection(const LayeredSelectionStack& stack, SelectionLayer layer,
                                 const InputContext& context);
     void cancelPieceSelectionContext(const InputContext& context);
+    void restoreBuildPreviewState(const InputSelectionBookmark& bookmark);
 };
