@@ -59,6 +59,9 @@ public:
     void showSelectionEmptyState();
     void hideAllPanels();
     void update();
+    void setRightSidebarVisible(bool visible);
+    void toggleRightSidebar();
+    bool isRightSidebarVisible() const;
     void setMultiplayerStatus(const std::string& text, MultiplayerStatusTone tone);
     void clearMultiplayerStatus();
     void showMultiplayerWaitingOverlay(const std::string& title,
@@ -104,6 +107,7 @@ private:
     void activateLeftContext(LeftContextView view);
     void hideLeftContextPanels();
     void setLeftContextMessage(const std::string& title, const std::string& message);
+    void applyRightSidebarVisibility();
 
     MainMenuUI      m_mainMenu;
     HUD             m_hud;
@@ -138,4 +142,5 @@ private:
     std::function<void()> m_onMultiplayerAlertPrimaryAction;
     std::function<void()> m_onMultiplayerAlertSecondaryAction;
     LeftContextView m_currentLeftContext = LeftContextView::None;
+    bool m_rightSidebarRequestedVisible = true;
 };

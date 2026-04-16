@@ -1799,6 +1799,10 @@ void Game::setupUICallbacks() {
                                        m_config,
                                        permissions.canQueueNonMoveActions);
     });
+    m_uiManager.toolBar().setOnOverview([this]() {
+        if (!currentInteractionPermissions().canUseToolbar) return;
+        m_uiManager.toggleRightSidebar();
+    });
 
     // Build tool panel
     m_uiManager.buildToolPanel().setOnSelectBuildType([this](int type) {
@@ -2034,6 +2038,11 @@ void Game::updateUIState() {
 
     viewModel.canEndTurn = permissions.canIssueCommands && validation.valid;
     m_uiManager.updateDashboard(viewModel);
+    m_uiManager.toolBar().applyPresentation(makeToolBarPresentation(
+        m_input.getCurrentTool(),
+        permissions.canUseToolbar,
+        permissions.canOpenBuildPanel,
+        m_uiManager.isRightSidebarVisible()));
     updateMultiplayerPresentation();
     const KingdomId viewedKingdomId = permissions.canIssueCommands ? activeKingdom().id : localPerspectiveKingdom();
 

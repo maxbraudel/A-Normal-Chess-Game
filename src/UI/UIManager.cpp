@@ -185,8 +185,9 @@ void UIManager::showHUD() {
     m_mainMenu.hide();
     m_hud.show();
     m_toolBar.show();
+    m_rightSidebarRequestedVisible = true;
     if (m_leftSidebar) m_leftSidebar->setVisible(false);
-    if (m_rightSidebar) m_rightSidebar->setVisible(true);
+    applyRightSidebarVisibility();
     m_eventLogPanel.show();
     m_plannedActionsPanel.show();
     m_kingdomBalancePanel.show();
@@ -269,6 +270,7 @@ void UIManager::hideAllPanels() {
     m_plannedActionsPanel.hide();
     m_kingdomBalancePanel.hide();
     m_toolBar.hide();
+    m_rightSidebarRequestedVisible = true;
     if (m_leftSidebar) m_leftSidebar->setVisible(false);
     if (m_rightSidebar) m_rightSidebar->setVisible(false);
     m_currentLeftContext = LeftContextView::None;
@@ -276,6 +278,19 @@ void UIManager::hideAllPanels() {
 
 void UIManager::update() {
     // Placeholder for animation updates
+}
+
+void UIManager::setRightSidebarVisible(bool visible) {
+    m_rightSidebarRequestedVisible = visible;
+    applyRightSidebarVisibility();
+}
+
+void UIManager::toggleRightSidebar() {
+    setRightSidebarVisible(!m_rightSidebarRequestedVisible);
+}
+
+bool UIManager::isRightSidebarVisible() const {
+    return m_rightSidebarRequestedVisible;
 }
 
 void UIManager::setMultiplayerStatus(const std::string& text, MultiplayerStatusTone tone) {
@@ -433,6 +448,14 @@ bool UIManager::blocksWorldMouseInput(const sf::Vector2i& screenPos, const sf::V
         if (containsScreenPoint(toolbarRect, screenPos)) {
             return true;
         }
+
+        const sf::FloatRect overviewRect(width - HUDLayout::kToolbarButtonWidth - HUDLayout::kEdgeMargin,
+                                         height - HUDLayout::kToolbarHeight - HUDLayout::kEdgeMargin,
+                                         HUDLayout::kToolbarButtonWidth,
+                                         HUDLayout::kToolbarHeight);
+        if (containsScreenPoint(overviewRect, screenPos)) {
+            return true;
+        }
     }
 
     return false;
@@ -481,4 +504,12 @@ void UIManager::setLeftContextMessage(const std::string& title, const std::strin
     if (m_leftContextHint) {
         m_leftContextHint->setText(message);
     }
+}
+
+void UIManager::applyRightSidebarVisibility() {
+    if (!m_rightSidebar) {
+        return;
+    }
+
+    m_rightSidebar->setVisible(m_hud.isVisible() && m_rightSidebarRequestedVisible);
 }

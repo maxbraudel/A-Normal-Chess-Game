@@ -24,12 +24,17 @@ inline void applySelectableState(const tgui::Button::Ptr& button,
     const tgui::Color textColor = selected
         ? tgui::Color::White
         : (enabled ? tgui::Color::Black : tgui::Color(100, 100, 100));
+    const tgui::Color borderColor(0, 0, 0);
 
     auto renderer = button->getRenderer();
+    renderer->setBorders({1});
+    renderer->setBorderColor(borderColor);
     renderer->setBackgroundColor(backgroundColor);
     renderer->setTextColor(textColor);
+    renderer->setBorderColorHover(borderColor);
     renderer->setBackgroundColorHover(backgroundColor);
     renderer->setTextColorHover(textColor);
+    renderer->setBorderColorDisabled(borderColor);
     renderer->setBackgroundColorDisabled(backgroundColor);
     renderer->setTextColorDisabled(textColor);
 }

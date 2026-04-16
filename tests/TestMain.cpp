@@ -51,6 +51,7 @@
 #include "Systems/TurnSystem.hpp"
 #include "UI/HUDLayout.hpp"
 #include "UI/InGameViewModelBuilder.hpp"
+#include "UI/ToolBar.hpp"
 #include "Units/MovementRules.hpp"
 #include "Units/Piece.hpp"
 #include "Units/PieceFactory.hpp"
@@ -857,7 +858,9 @@ void testLayeredSelectionStackTreatsUnderConstructionBuildingAsNormalBuilding() 
         addPieceToBoard(white, board, 325, PieceType::King, KingdomId::White, {4, 4});
         addPieceToBoard(black, board, 423, PieceType::King, KingdomId::Black, {16, 16});
         pawn.xp = config.getXPThresholdPawnToKnightOrBishop();
-        white.gold = config.getUpgradeCost(PieceType::Pawn, PieceType::Bishop) + 5;
+        const int upgradeCost = config.getUpgradeCost(PieceType::Pawn, PieceType::Bishop);
+        const int startingGold = upgradeCost + 5;
+        white.gold = startingGold;
 
         std::vector<Building> publicBuildings;
         TurnSystem turnSystem;
@@ -891,13 +894,51 @@ void testLayeredSelectionStackTreatsUnderConstructionBuildingAsNormalBuilding() 
             "The queued upgrade should still apply when the turn is validated.");
         expect(board.getCell(8, 7).piece == upgradedPiece,
             "The destination cell should contain the moved piece after commit.");
-        expect(white.gold == 5,
-            "Deferred upgrades should still reserve and spend their gold by the end of commit.");
+        const int expectedEndingGold = std::max(
+            0,
+            startingGold
+                - upgradeCost
+                - config.getPieceUpkeepCost(PieceType::Bishop)
+                - config.getPieceUpkeepCost(PieceType::King));
+        expect(white.gold == expectedEndingGold,
+            "Deferred upgrades should still spend their cost before the normal end-of-turn economy resolves.");
     }
 
     void testHudLayoutKeepsNetIncomeWide() {
         expect(HUDLayout::metricWidths()[3] == HUDLayout::kWideMetricWidth,
             "Net Income should use the wide metric slot so its label fits without overflow.");
+    }
+
+    void testToolBarPresentationTracksSwitcherStates() {
+        const ToolBarPresentation selectOverviewVisible = makeToolBarPresentation(
+            ToolState::Select,
+            true,
+            true,
+            true);
+        expect(selectOverviewVisible.selectSelected,
+            "The Select toolbar button should appear active while the select tool is selected.");
+        expect(!selectOverviewVisible.buildSelected,
+            "The Build toolbar button should not appear active while the select tool is selected.");
+        expect(selectOverviewVisible.buildEnabled,
+            "The Build toolbar button should stay enabled when the build panel is available.");
+        expect(selectOverviewVisible.overviewSelected,
+            "The Overview toolbar button should appear active while the right sidebar is visible.");
+        expect(selectOverviewVisible.overviewEnabled,
+            "The Overview toolbar button should stay enabled whenever the toolbar itself is usable.");
+
+        const ToolBarPresentation buildOverviewHidden = makeToolBarPresentation(
+            ToolState::Build,
+            true,
+            false,
+            false);
+        expect(!buildOverviewHidden.selectSelected,
+            "The Select toolbar button should not appear active while the build tool is selected.");
+        expect(buildOverviewHidden.buildSelected,
+            "The Build toolbar button should appear active while the build tool is selected.");
+        expect(!buildOverviewHidden.buildEnabled,
+            "The Build toolbar button should reflect when the build panel is temporarily unavailable.");
+        expect(!buildOverviewHidden.overviewSelected,
+            "The Overview toolbar button should appear inactive while the right sidebar is hidden.");
     }
 
     void testPendingTurnValidationRejectsUnsafeQueuedMoveOnlyAtEndTurn() {
@@ -3717,6 +3758,7 @@ int main() {
         {"selection move rules ignore queued upgrade live moves", testSelectionMoveRulesIgnoreQueuedUpgradeForLivePieceMoves},
         {"turn system move after queued upgrade", testTurnSystemAllowsMoveAfterQueuedUpgradeBeforeCommit},
         {"hud layout net income wide", testHudLayoutKeepsNetIncomeWide},
+        {"toolbar presentation switchers", testToolBarPresentationTracksSwitcherStates},
         {"pending turn unsafe move end-turn rejection", testPendingTurnValidationRejectsUnsafeQueuedMoveOnlyAtEndTurn},
         {"church coronation first rook", testAutomaticChurchCoronationTurnsFirstRookIntoQueen},
         {"church coronation multiple queens", testAutomaticChurchCoronationAllowsMultipleQueens},
