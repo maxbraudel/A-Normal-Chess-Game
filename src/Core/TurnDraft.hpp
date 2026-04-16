@@ -47,6 +47,8 @@ private:
     void applyUpgradeReservation(const TurnCommand& command,
                                  KingdomId activeKingdomId,
                                  const GameConfig& config);
+    bool applyDisbandCommand(const TurnCommand& command,
+                             KingdomId activeKingdomId);
     void setError(const std::string& message, std::string* errorMessage);
 
     Board m_board;

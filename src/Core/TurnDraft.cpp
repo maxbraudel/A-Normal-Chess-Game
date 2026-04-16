@@ -86,6 +86,13 @@ bool TurnDraft::rebuild(const GameEngine& engine,
                 applyUpgradeReservation(command, activeKingdomId, config);
                 break;
 
+            case TurnCommand::Disband:
+                if (!applyDisbandCommand(command, activeKingdomId)) {
+                    setError("Unable to replay a queued piece sacrifice into the local turn draft.", errorMessage);
+                    return false;
+                }
+                break;
+
             case TurnCommand::Marry:
             case TurnCommand::FormGroup:
             case TurnCommand::BreakGroup:
@@ -170,6 +177,29 @@ void TurnDraft::applyUpgradeReservation(const TurnCommand& command,
     activeKingdom.gold = std::max(
         0,
         activeKingdom.gold - config.getUpgradeCost(piece->type, command.upgradeTarget));
+}
+
+bool TurnDraft::applyDisbandCommand(const TurnCommand& command,
+                                    KingdomId activeKingdomId) {
+    Kingdom& activeKingdom = kingdom(activeKingdomId);
+    Piece* piece = activeKingdom.getPieceById(command.pieceId);
+    if (!piece || piece->type == PieceType::King) {
+        return false;
+    }
+
+    const sf::Vector2i piecePosition = piece->position;
+    if (!m_board.isInBounds(piecePosition.x, piecePosition.y)) {
+        return false;
+    }
+
+    Cell& pieceCell = m_board.getCell(piecePosition.x, piecePosition.y);
+    if (pieceCell.piece == piece) {
+        pieceCell.piece = nullptr;
+    }
+
+    activeKingdom.removePiece(piece->id);
+    relinkBoardState(m_board, m_kingdoms, m_publicBuildings);
+    return true;
 }
 
 void TurnDraft::setError(const std::string& message, std::string* errorMessage) {

@@ -69,11 +69,18 @@ public:
                               const Kingdom& enemyKingdom,
                               const std::vector<Building>& publicBuildings,
                               const GameConfig& config);
+    bool cancelDisbandCommand(int pieceId,
+                              const Board& board,
+                              const Kingdom& activeKingdom,
+                              const Kingdom& enemyKingdom,
+                              const std::vector<Building>& publicBuildings,
+                              const GameConfig& config);
     const std::vector<TurnCommand>& getPendingCommands() const;
     const TurnCommand* getPendingMoveCommand(int pieceId) const;
     const TurnCommand* getPendingBuildCommand(int buildId) const;
     const TurnCommand* getPendingProduceCommand(int barracksId) const;
     const TurnCommand* getPendingUpgradeCommand(int pieceId) const;
+    const TurnCommand* getPendingDisbandCommand(int pieceId) const;
 
     bool hasPendingMove() const;
     bool hasPendingBuild() const;
@@ -82,6 +89,7 @@ public:
     bool hasPendingMoveForPiece(int pieceId) const;
     bool hasPendingProduceForBarracks(int barracksId) const;
     bool hasPendingUpgradeForPiece(int pieceId) const;
+    bool hasPendingDisbandForPiece(int pieceId) const;
 
     int getMovementPointsMax() const;
     int getMovementPointsRemaining() const;

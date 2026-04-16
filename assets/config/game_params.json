@@ -33,6 +33,12 @@
         "knight_recruit_cost": 30,
         "bishop_recruit_cost": 30,
         "rook_recruit_cost": 60,
+        "pawn_upkeep_cost": 1,
+        "knight_upkeep_cost": 2,
+        "bishop_upkeep_cost": 2,
+        "rook_upkeep_cost": 4,
+        "queen_upkeep_cost": 7,
+        "king_upkeep_cost": 0,
         "upgrade_pawn_to_knight_cost": 20,
         "upgrade_pawn_to_bishop_cost": 20,
         "upgrade_to_rook_cost": 50

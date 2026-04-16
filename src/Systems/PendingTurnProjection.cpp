@@ -160,6 +160,27 @@ bool applyProjectedCommand(GameSnapshot& snapshot,
             return true;
         }
 
+        case TurnCommand::Disband: {
+            SnapKingdom& kingdom = snapshot.kingdom(activeKingdom);
+            const SnapPiece* piece = kingdom.getPieceById(command.pieceId);
+            if (!piece) {
+                if (errorMessage) {
+                    *errorMessage = "The queued sacrifice references a piece that no longer exists.";
+                }
+                return false;
+            }
+
+            if (piece->type == PieceType::King) {
+                if (errorMessage) {
+                    *errorMessage = "The king cannot be sacrificed.";
+                }
+                return false;
+            }
+
+            kingdom.removePiece(command.pieceId);
+            return true;
+        }
+
         case TurnCommand::Marry:
             if (!ForwardModel::applyMarriage(snapshot, activeKingdom)) {
                 if (errorMessage) {

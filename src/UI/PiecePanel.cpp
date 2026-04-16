@@ -27,6 +27,10 @@ static std::string moveCostText(PieceType type, const GameConfig& config) {
         + (moveCost == 1 ? " point" : " points");
 }
 
+static std::string upkeepText(PieceType type, const GameConfig& config) {
+    return "Upkeep: " + std::to_string(config.getPieceUpkeepCost(type)) + " gold/turn";
+}
+
 void PiecePanel::init(const tgui::Panel::Ptr& parent) {
     m_panel = tgui::Panel::create({"&.width", "&.height"});
     HUDLayout::styleEmbeddedPanel(m_panel);
@@ -73,8 +77,14 @@ void PiecePanel::init(const tgui::Panel::Ptr& parent) {
     HUDLayout::styleSidebarBody(m_moveCostLabel);
     m_panel->add(m_moveCostLabel);
 
+    m_upkeepLabel = tgui::Label::create("Upkeep: 0 gold/turn");
+    m_upkeepLabel->setPosition({10, 230});
+    m_upkeepLabel->setSize({316, 22});
+    HUDLayout::styleSidebarBody(m_upkeepLabel);
+    m_panel->add(m_upkeepLabel);
+
     m_primaryUpgradeBtn = tgui::Button::create("Upgrade");
-    m_primaryUpgradeBtn->setPosition({10, 250});
+    m_primaryUpgradeBtn->setPosition({10, 274});
     m_primaryUpgradeBtn->setSize({316, 36});
     m_primaryUpgradeBtn->onPress([this]() {
         if (m_onUpgrade && m_currentPieceId >= 0) {
@@ -84,7 +94,7 @@ void PiecePanel::init(const tgui::Panel::Ptr& parent) {
     m_panel->add(m_primaryUpgradeBtn);
 
     m_secondaryUpgradeBtn = tgui::Button::create("Upgrade");
-    m_secondaryUpgradeBtn->setPosition({10, 294});
+    m_secondaryUpgradeBtn->setPosition({10, 318});
     m_secondaryUpgradeBtn->setSize({316, 36});
     m_secondaryUpgradeBtn->onPress([this]() {
         if (m_onUpgrade && m_currentPieceId >= 0) {
@@ -93,13 +103,25 @@ void PiecePanel::init(const tgui::Panel::Ptr& parent) {
     });
     m_panel->add(m_secondaryUpgradeBtn);
 
+    m_disbandButton = tgui::Button::create("Tuer la piece");
+    m_disbandButton->setPosition({10, 362});
+    m_disbandButton->setSize({316, 36});
+    m_disbandButton->onPress([this]() {
+        if (m_onDisband && m_currentPieceId >= 0) {
+            m_onDisband(m_currentPieceId);
+        }
+    });
+    m_panel->add(m_disbandButton);
+
     m_panel->setVisible(false);
 }
 
 void PiecePanel::show(const Piece& piece,
                       const GameConfig& config,
                       bool allowUpgrade,
-                      const TurnCommand* pendingUpgrade) {
+                      bool allowDisband,
+                      const TurnCommand* pendingUpgrade,
+                      const TurnCommand* pendingDisband) {
     if (!m_panel) return;
     m_panel->moveToFront();
     m_currentPieceId = piece.id;
@@ -110,6 +132,7 @@ void PiecePanel::show(const Piece& piece,
     m_xpLabel->setText("XP: " + std::to_string(piece.xp));
     m_levelLabel->setText("Level: " + std::to_string(piece.getLevel()));
     m_moveCostLabel->setText(moveCostText(piece.type, config));
+    m_upkeepLabel->setText(upkeepText(piece.type, config));
 
     std::vector<PieceType> upgradeTargets;
     if (piece.type == PieceType::Pawn) {
@@ -152,9 +175,19 @@ void PiecePanel::show(const Piece& piece,
         m_secondaryUpgradeTarget = static_cast<int>(upgradeTargets[1]);
     }
 
+    const bool canShowDisband = piece.type != PieceType::King;
+    m_disbandButton->setVisible(canShowDisband);
+    if (canShowDisband) {
+        ActionButtonStyle::applySelectableState(m_disbandButton,
+                                                "Tuer la piece",
+                                                pendingDisband != nullptr,
+                                                allowDisband);
+    }
+
     m_panel->setVisible(true);
 }
 
 void PiecePanel::hide() { if (m_panel) m_panel->setVisible(false); }
 
 void PiecePanel::setOnUpgrade(std::function<void(int, int)> callback) { m_onUpgrade = std::move(callback); }
+void PiecePanel::setOnDisband(std::function<void(int)> callback) { m_onDisband = std::move(callback); }

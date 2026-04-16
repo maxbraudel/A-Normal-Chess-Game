@@ -46,6 +46,40 @@ void applyMultiplayerStatusTone(const tgui::Label::Ptr& label, MultiplayerStatus
     }
 }
 
+void applyAlertTone(const tgui::Label::Ptr& label, InGameAlertTone tone) {
+    if (!label) {
+        return;
+    }
+
+    auto renderer = label->getRenderer();
+    switch (tone) {
+        case InGameAlertTone::Success:
+            renderer->setTextColor(tgui::Color(214, 255, 214));
+            renderer->setBackgroundColor(tgui::Color(18, 92, 44, 225));
+            renderer->setBorderColor(tgui::Color(94, 194, 126));
+            break;
+
+        case InGameAlertTone::Danger:
+            renderer->setTextColor(tgui::Color(255, 214, 214));
+            renderer->setBackgroundColor(tgui::Color(118, 24, 24, 228));
+            renderer->setBorderColor(tgui::Color(220, 92, 92));
+            break;
+
+        case InGameAlertTone::Warning:
+            renderer->setTextColor(tgui::Color(255, 237, 196));
+            renderer->setBackgroundColor(tgui::Color(110, 74, 10, 224));
+            renderer->setBorderColor(tgui::Color(224, 180, 82));
+            break;
+
+        case InGameAlertTone::Neutral:
+        default:
+            renderer->setTextColor(tgui::Color(220, 235, 255));
+            renderer->setBackgroundColor(tgui::Color(18, 38, 72, 215));
+            renderer->setBorderColor(tgui::Color(110, 148, 210));
+            break;
+    }
+}
+
 } // namespace
 
 void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
@@ -72,6 +106,14 @@ void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
     m_statusPanel->setPosition(HUDLayout::anchorPosition(HUDAnchor::TopCenter, 1, HUDLayout::kStatusWidth));
     HUDLayout::makeTransparentPanel(m_statusPanel);
     gui.add(m_statusPanel, "HUDStatusPanel");
+
+    m_alertPanel = tgui::Panel::create({HUDLayout::kAlertWidth, 0});
+    m_alertPanel->setPosition(HUDLayout::anchorPositionForSize(
+        HUDAnchor::BottomCenter,
+        HUDLayout::kAlertWidth,
+        0));
+    HUDLayout::makeTransparentPanel(m_alertPanel);
+    gui.add(m_alertPanel, "HUDAlertPanel");
 
     m_actionPanel = tgui::Panel::create(HUDLayout::stackSize(3, HUDLayout::kActionWidth));
     m_actionPanel->setPosition(HUDLayout::anchorPosition(HUDAnchor::TopRight, 3, HUDLayout::kActionWidth));
@@ -114,7 +156,7 @@ void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
         m_pointPanel->add(m_pointLabels[index]);
     }
 
-    m_statusLabel = tgui::Label::create("Turn 1 | White Kingdom : Idle");
+    m_statusLabel = tgui::Label::create("T1 | White Kingdom");
     HUDLayout::styleStatusIndicator(m_statusLabel);
     HUDLayout::placeStackChild(m_statusLabel, 0, HUDLayout::kStatusWidth);
     m_statusPanel->add(m_statusLabel);
@@ -163,6 +205,7 @@ void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
     m_metricsPanel->setVisible(false);
     m_pointPanel->setVisible(false);
     m_statusPanel->setVisible(false);
+    m_alertPanel->setVisible(false);
     m_actionPanel->setVisible(false);
     m_networkPanel->setVisible(false);
 }
@@ -172,6 +215,7 @@ void HUD::show() {
     if (m_metricsPanel) m_metricsPanel->setVisible(true);
     if (m_pointPanel) m_pointPanel->setVisible(true);
     if (m_statusPanel) m_statusPanel->setVisible(true);
+    if (m_alertPanel && !m_alertLabels.empty()) m_alertPanel->setVisible(true);
     if (m_actionPanel) m_actionPanel->setVisible(true);
     if (m_networkPanel && m_networkStatusLabel && !m_networkStatusLabel->getText().empty()) {
         m_networkPanel->setVisible(true);
@@ -183,6 +227,7 @@ void HUD::hide() {
     if (m_metricsPanel) m_metricsPanel->setVisible(false);
     if (m_pointPanel) m_pointPanel->setVisible(false);
     if (m_statusPanel) m_statusPanel->setVisible(false);
+    if (m_alertPanel) m_alertPanel->setVisible(false);
     if (m_actionPanel) m_actionPanel->setVisible(false);
     if (m_networkPanel) m_networkPanel->setVisible(false);
 }
@@ -209,11 +254,44 @@ void HUD::update(const InGameViewModel& model) {
 
     if (m_statusLabel) {
         m_statusLabel->setText("T" + std::to_string(model.turnNumber) + " | "
-                               + model.activeTurnLabel + " : " + model.statusLabel);
-        m_statusLabel->getRenderer()->setTextColor(
-            model.statusTone == InGameStatusTone::Danger
-                ? tgui::Color(255, 120, 120)
-                : tgui::Color::White);
+                               + model.activeTurnLabel);
+        m_statusLabel->getRenderer()->setTextColor(tgui::Color::White);
+    }
+
+    if (m_alertPanel) {
+        m_alertPanel->removeAllWidgets();
+        m_alertLabels.clear();
+
+        if (!model.alerts.empty()) {
+            const float alertHeight = HUDLayout::kTopComponentHeight;
+            const float panelHeight = model.alerts.size() * alertHeight
+                + (model.alerts.size() - 1) * HUDLayout::kComponentGap;
+            m_alertPanel->setSize({HUDLayout::kAlertWidth, panelHeight});
+            m_alertPanel->setPosition(HUDLayout::anchorPositionForSize(
+                HUDAnchor::BottomCenter,
+                HUDLayout::kAlertWidth,
+                panelHeight));
+
+            for (std::size_t index = 0; index < model.alerts.size(); ++index) {
+                const InGameAlert& alert = model.alerts[index];
+                auto label = tgui::Label::create(alert.text);
+                HUDLayout::styleHudIndicator(label,
+                                             tgui::Color::White,
+                                             HUDLayout::kAlertWidth,
+                                             HUDLayout::kTopComponentHeight,
+                                             14);
+                const float y = panelHeight - ((index + 1) * HUDLayout::kTopComponentHeight)
+                    - (index * HUDLayout::kComponentGap);
+                label->setPosition({0, y});
+                applyAlertTone(label, alert.tone);
+                m_alertPanel->add(label);
+                m_alertLabels.push_back(label);
+            }
+
+            m_alertPanel->setVisible(m_visible);
+        } else {
+            m_alertPanel->setVisible(false);
+        }
     }
     if (m_endTurnButton) m_endTurnButton->setEnabled(model.canEndTurn);
     if (m_resetTurnButton) m_resetTurnButton->setEnabled(model.allowCommands);

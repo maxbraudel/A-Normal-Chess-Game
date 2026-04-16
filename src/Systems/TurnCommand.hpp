@@ -4,7 +4,7 @@
 #include "Buildings/BuildingType.hpp"
 
 struct TurnCommand {
-    enum Type { Move, Build, Produce, Upgrade, Marry, FormGroup, BreakGroup };
+    enum Type { Move, Build, Produce, Upgrade, Marry, FormGroup, BreakGroup, Disband };
     Type type;
 
     // Move

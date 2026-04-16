@@ -213,6 +213,13 @@ TurnCommand makeBuildCommand(BuildingType type,
     return command;
 }
 
+TurnCommand makeDisbandCommand(int pieceId) {
+    TurnCommand command;
+    command.type = TurnCommand::Disband;
+    command.pieceId = pieceId;
+    return command;
+}
+
 unsigned short startLoopbackServerOnFreePort(MultiplayerServer& server,
                                             const MultiplayerConfig& config,
                                             const std::string& saveName,
@@ -1136,6 +1143,7 @@ void testLayeredSelectionStackTreatsUnderConstructionBuildingAsNormalBuilding() 
          inputs.multiplayerSessionReady = true;
          inputs.isLocalPlayerTurn = true;
          inputs.activeKingInCheck = true;
+         inputs.projectedKingInCheck = true;
          inputs.hasAnyLegalResponse = true;
 
          const InteractionPermissions permissions = computeInteractionPermissions(inputs);
@@ -1145,6 +1153,22 @@ void testLayeredSelectionStackTreatsUnderConstructionBuildingAsNormalBuilding() 
              "Non-move actions must stay blocked while the active king is in check.");
          expect(permissions.canOpenBuildPanel,
              "The build panel should remain openable while in check so the UI can show disabled actions.");
+        }
+
+        void testInteractionPermissionsUnlockNonMoveActionsAfterQueuedCheckResponse() {
+         InteractionPermissionInputs inputs;
+         inputs.gameState = GameState::Playing;
+         inputs.multiplayerSessionReady = true;
+         inputs.isLocalPlayerTurn = true;
+         inputs.activeKingInCheck = true;
+         inputs.projectedKingInCheck = false;
+         inputs.hasAnyLegalResponse = true;
+
+         const InteractionPermissions permissions = computeInteractionPermissions(inputs);
+         expect(permissions.canIssueCommands,
+             "The active kingdom should still be actionable while it is assembling a legal response to check.");
+         expect(permissions.canQueueNonMoveActions,
+             "Non-move actions should reopen once the queued move sequence has already resolved the check in projection.");
         }
 
         void testInteractionPermissionsKeepNavigationAvailableDuringGameOver() {
@@ -1205,7 +1229,7 @@ void testLayeredSelectionStackTreatsUnderConstructionBuildingAsNormalBuilding() 
              "Move history entries should include the moved piece type.");
         }
 
-    void testInGameViewModelShowsDangerToneWhenActiveKingIsInCheck() {
+    void testInGameViewModelShowsCheckAlertWhenActiveKingIsInCheck() {
         GameConfig config;
         GameEngine engine;
         engine.board().init(8);
@@ -1217,8 +1241,12 @@ void testLayeredSelectionStackTreatsUnderConstructionBuildingAsNormalBuilding() 
         addPieceToBoard(engine.kingdom(KingdomId::Black), engine.board(), 240, PieceType::Rook, KingdomId::Black, {8, 4});
 
         const InGameViewModel model = buildInGameViewModel(engine, config, GameState::Playing, true);
-        expect(model.statusTone == InGameStatusTone::Danger,
-               "The top HUD status indicator should expose the danger tone when the active king is in check.");
+         expect(model.alerts.size() == 1,
+             "The dashboard model should expose a single alert when the active king is in check.");
+         expect(model.alerts.front().text == "Check",
+             "The dashboard model should expose a Check alert when the active king is in check.");
+         expect(model.alerts.front().tone == InGameAlertTone::Danger,
+             "The Check alert should use the danger tone.");
     }
 
     void testOverlayPolicyCanHideIndicatorsUntilSelected() {
@@ -1723,8 +1751,10 @@ void testSaveManagerRoundTrip() {
             command.upgradeTarget = PieceType::Rook;
             command.formationId = 9;
 
+            const TurnCommand disbandCommand = makeDisbandCommand(77);
+
             sf::Packet packet = createPacket(MultiplayerMessageType::TurnSubmission);
-            expect(writePacket(packet, MultiplayerTurnSubmission{{command}}),
+            expect(writePacket(packet, MultiplayerTurnSubmission{{command, disbandCommand}}),
                 "Protocol should serialize turn submission packets.");
 
             MultiplayerMessageType type = MultiplayerMessageType::ServerInfoRequest;
@@ -1734,13 +1764,15 @@ void testSaveManagerRoundTrip() {
 
             MultiplayerTurnSubmission submission;
             expect(readPacket(packet, submission), "Protocol should deserialize turn submission packets.");
-            expect(submission.commands.size() == 1, "Turn submission packets should preserve command counts.");
+            expect(submission.commands.size() == 2, "Turn submission packets should preserve command counts.");
             expect(submission.commands[0].buildOrigin == command.buildOrigin,
                 "Turn submission packets should preserve command payloads.");
             expect(submission.commands[0].buildRotationQuarterTurns == command.buildRotationQuarterTurns,
                 "Turn submission packets should preserve build rotation payloads.");
             expect(submission.commands[0].upgradeTarget == command.upgradeTarget,
                 "Turn submission packets should preserve enum payloads.");
+            expect(submission.commands[1].type == TurnCommand::Disband && submission.commands[1].pieceId == 77,
+                "Turn submission packets should preserve sacrifice commands.");
         }
 
         void testMultiplayerTurnRejectedPacketRoundTrip() {
@@ -2170,8 +2202,9 @@ void testTurnSystemSkipsUnaffordableProduction() {
         expect(white.buildings.front().getCellHP(0, 0) == 0,
             "Repairs must resolve before income, so post-income gold cannot repair a cell in the same commit.");
         expect(white.gold == config.getRepairCostPerCell(BuildingType::Barracks) - 1
-                    + config.getMineIncomePerCellPerTurn(),
-            "Income should still be collected after an unaffordable repair attempt is skipped.");
+                    + config.getMineIncomePerCellPerTurn()
+                    - (2 * config.getPieceUpkeepCost(PieceType::Pawn)),
+            "Income should still be collected after an unaffordable repair attempt is skipped, net of upkeep.");
     }
 
     void testStoneWallDestroysWhenEnemyStaysOnBreachedCellUntilNextCommit() {
@@ -2978,6 +3011,99 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             "Under-construction resource buildings should not generate passive income before validation.");
     }
 
+        void testBankruptcyValidationRejectsNegativeEndingGold() {
+         GameConfig config;
+         Board board;
+         board.init(10);
+
+         Kingdom white(KingdomId::White);
+         Kingdom black(KingdomId::Black);
+         addPieceToBoard(white, board, 810, PieceType::King, KingdomId::White, {8, 8});
+         addPieceToBoard(white, board, 811, PieceType::Queen, KingdomId::White, {7, 8});
+         addPieceToBoard(black, board, 910, PieceType::King, KingdomId::Black, {2, 2});
+
+         const CheckTurnValidation validation = CheckResponseRules::validatePendingTurn(
+             white, black, board, {}, 1, {}, config);
+         expect(!validation.valid,
+             "End-turn validation should reject turns that would finish with negative gold after upkeep.");
+         expect(validation.bankrupt,
+             "End-turn validation should flag bankruptcy when upkeep would drive gold below zero.");
+         expect(validation.projectedEndingGold == -config.getPieceUpkeepCost(PieceType::Queen),
+             "Projected ending gold should include upkeep for non-king pieces.");
+        }
+
+        void testQueuedDisbandResolvesBankruptcyAndCommitsRemoval() {
+         GameConfig config;
+         Board board;
+         board.init(10);
+
+         Kingdom white(KingdomId::White);
+         Kingdom black(KingdomId::Black);
+         addPieceToBoard(white, board, 820, PieceType::King, KingdomId::White, {8, 8});
+         Piece& rook = addPieceToBoard(white, board, 821, PieceType::Rook, KingdomId::White, {7, 8});
+         addPieceToBoard(black, board, 920, PieceType::King, KingdomId::Black, {2, 2});
+
+         TurnSystem turnSystem;
+         turnSystem.setActiveKingdom(KingdomId::White);
+         expect(turnSystem.queueCommand(makeDisbandCommand(rook.id),
+                            board,
+                            white,
+                            black,
+                            {},
+                            config),
+             "The turn system should accept a queued sacrifice for a non-king piece.");
+
+         const CheckTurnValidation validation = CheckResponseRules::validatePendingTurn(
+             white, black, board, {}, 1, turnSystem.getPendingCommands(), config);
+         expect(validation.valid,
+             "Sacrificing the upkeep-bearing piece should resolve bankruptcy before end-turn validation.");
+         expect(!validation.bankrupt,
+             "A queued sacrifice that removes upkeep should clear the bankruptcy flag.");
+
+         EventLog eventLog;
+         PieceFactory pieceFactory;
+         BuildingFactory buildingFactory;
+         std::vector<Building> publicBuildings;
+         turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+         expect(white.getPieceById(rook.id) == nullptr,
+             "Committing a queued sacrifice should remove the targeted piece from the kingdom.");
+         expect(board.getCell(7, 8).piece == nullptr,
+             "Committing a queued sacrifice should clear the piece from the board.");
+        }
+
+        void testInGameViewModelIncludesQueuedDisbandAction() {
+         GameConfig config;
+         GameEngine engine;
+         engine.board().init(10);
+         engine.kingdom(KingdomId::White) = Kingdom(KingdomId::White);
+         engine.kingdom(KingdomId::Black) = Kingdom(KingdomId::Black);
+         engine.turnSystem().setActiveKingdom(KingdomId::White);
+         engine.turnSystem().setTurnNumber(1);
+
+         addPieceToBoard(engine.kingdom(KingdomId::White), engine.board(), 830, PieceType::King, KingdomId::White, {8, 8});
+         Piece& whiteRook = addPieceToBoard(engine.kingdom(KingdomId::White), engine.board(), 831, PieceType::Rook, KingdomId::White, {7, 8});
+         addPieceToBoard(engine.kingdom(KingdomId::Black), engine.board(), 930, PieceType::King, KingdomId::Black, {2, 2});
+
+         expect(engine.turnSystem().queueCommand(makeDisbandCommand(whiteRook.id),
+                                  engine.board(),
+                                  engine.kingdom(KingdomId::White),
+                                  engine.kingdom(KingdomId::Black),
+                                  engine.publicBuildings(),
+                                  config),
+             "The test setup should be able to queue a sacrifice before building the dashboard model.");
+
+         const InGameViewModel model = buildInGameViewModel(engine, config, GameState::Playing, true);
+         const auto queuedDisband = std::find_if(model.plannedActionRows.begin(),
+                                  model.plannedActionRows.end(),
+                                  [](const InGamePlannedActionRow& row) {
+                                   return row.kindLabel == "Queued"
+                                    && row.actionLabel == "Tuer la piece"
+                                    && row.detailLabel == "Rook";
+                                  });
+         expect(queuedDisband != model.plannedActionRows.end(),
+             "The dashboard model should list queued sacrifices in the planned actions section.");
+        }
+
     void testInGameViewModelIncludesPlannedActionsAndAutomaticCoronation() {
         GameConfig config;
         GameEngine engine;
@@ -3163,6 +3289,12 @@ void testGameConfigClampsNegativeEconomyValues() {
             << "    \"knight_recruit_cost\": -30,\n"
             << "    \"bishop_recruit_cost\": -30,\n"
             << "    \"rook_recruit_cost\": -60,\n"
+            << "    \"pawn_upkeep_cost\": -1,\n"
+            << "    \"knight_upkeep_cost\": -2,\n"
+            << "    \"bishop_upkeep_cost\": -2,\n"
+            << "    \"rook_upkeep_cost\": -4,\n"
+            << "    \"queen_upkeep_cost\": -7,\n"
+            << "    \"king_upkeep_cost\": -1,\n"
             << "    \"upgrade_pawn_to_knight_cost\": -20,\n"
             << "    \"upgrade_pawn_to_bishop_cost\": -20,\n"
             << "    \"upgrade_to_rook_cost\": -50\n"
@@ -3191,6 +3323,12 @@ void testGameConfigClampsNegativeEconomyValues() {
     expect(config.getRecruitCost(PieceType::Knight) == 0, "Negative recruit costs should be clamped to zero.");
     expect(config.getRecruitCost(PieceType::Bishop) == 0, "Negative recruit costs should be clamped to zero.");
     expect(config.getRecruitCost(PieceType::Rook) == 0, "Negative recruit costs should be clamped to zero.");
+    expect(config.getPieceUpkeepCost(PieceType::Pawn) == 0, "Negative upkeep costs should be clamped to zero.");
+    expect(config.getPieceUpkeepCost(PieceType::Knight) == 0, "Negative upkeep costs should be clamped to zero.");
+    expect(config.getPieceUpkeepCost(PieceType::Bishop) == 0, "Negative upkeep costs should be clamped to zero.");
+    expect(config.getPieceUpkeepCost(PieceType::Rook) == 0, "Negative upkeep costs should be clamped to zero.");
+    expect(config.getPieceUpkeepCost(PieceType::Queen) == 0, "Negative upkeep costs should be clamped to zero.");
+    expect(config.getPieceUpkeepCost(PieceType::King) == 0, "Negative upkeep costs should be clamped to zero.");
     expect(config.getUpgradeCost(PieceType::Pawn, PieceType::Knight) == 0,
            "Negative upgrade costs should be clamped to zero.");
     expect(config.getUpgradeCost(PieceType::Pawn, PieceType::Bishop) == 0,
@@ -3370,9 +3508,10 @@ int main() {
         {"check response true edge checkmate", testCheckResponseDetectsTrueEdgeCheckmate},
         {"interaction permissions read-only outside turn", testInteractionPermissionsAllowReadOnlyInspectionOutsideTurn},
         {"interaction permissions check build panel", testInteractionPermissionsKeepBuildPanelReadOnlyDuringCheck},
+        {"interaction permissions unlock after queued response", testInteractionPermissionsUnlockNonMoveActionsAfterQueuedCheckResponse},
         {"interaction permissions game over navigation", testInteractionPermissionsKeepNavigationAvailableDuringGameOver},
         {"turn system move log piece type", testTurnSystemMoveLogIncludesPieceType},
-        {"in-game view model check tone", testInGameViewModelShowsDangerToneWhenActiveKingIsInCheck},
+        {"in-game view model check alert", testInGameViewModelShowsCheckAlertWhenActiveKingIsInCheck},
         {"overlay policy when selected visibility", testOverlayPolicyCanHideIndicatorsUntilSelected},
         {"overlay policy always visible", testOverlayPolicyAlwaysKeepsCurrentIndicatorsVisible},
         {"save manager roundtrip", testSaveManagerRoundTrip},
@@ -3411,6 +3550,9 @@ int main() {
         {"pending turn projection rejects under construction produce", testPendingTurnProjectionRejectsProductionFromUnderConstructionBarracks},
         {"forward model completes under construction barracks", testForwardModelCompletesUnderConstructionBarracksOnTurnAdvance},
         {"under construction resources grant no income", testUnderConstructionResourceBuildingsDoNotGrantIncome},
+        {"bankruptcy validation rejects negative ending gold", testBankruptcyValidationRejectsNegativeEndingGold},
+        {"queued disband resolves bankruptcy", testQueuedDisbandResolvesBankruptcyAndCommitsRemoval},
+        {"in-game planned disband action", testInGameViewModelIncludesQueuedDisbandAction},
         {"ai special planning preserves gold", testAIStrategySpecialDoesNotMutateRuntimeGold},
         {"save validator negative gold", testGameStateValidatorRejectsNegativeSaveGold},
         {"runtime validator negative gold", testGameStateValidatorRejectsNegativeRuntimeGold},

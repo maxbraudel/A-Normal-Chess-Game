@@ -215,6 +215,7 @@ const char* turnCommandName(TurnCommand::Type type) {
         case TurnCommand::Marry: return "Marry";
         case TurnCommand::FormGroup: return "FormGroup";
         case TurnCommand::BreakGroup: return "BreakGroup";
+        case TurnCommand::Disband: return "Disband";
     }
     return "Unknown";
 }
@@ -398,10 +399,12 @@ InteractionPermissions Game::currentInteractionPermissions(const CheckTurnValida
         && inputs.isLocalPlayerTurn;
     if (validation) {
         inputs.activeKingInCheck = validation->activeKingInCheck;
+        inputs.projectedKingInCheck = validation->projectedKingInCheck;
         inputs.hasAnyLegalResponse = validation->hasAnyLegalResponse;
     } else if (shouldEvaluateTurnValidation) {
         const CheckTurnValidation liveValidation = validateActivePendingTurn();
         inputs.activeKingInCheck = liveValidation.activeKingInCheck;
+        inputs.projectedKingInCheck = liveValidation.projectedKingInCheck;
         inputs.hasAnyLegalResponse = liveValidation.hasAnyLegalResponse;
     }
 
@@ -1866,6 +1869,33 @@ void Game::setupUICallbacks() {
         }
     });
 
+    m_uiManager.piecePanel().setOnDisband([this](int pieceId) {
+        if (!currentInteractionPermissions().canQueueNonMoveActions) return;
+        Piece* piece = activeKingdom().getPieceById(pieceId);
+        if (!piece || piece->type == PieceType::King) return;
+
+        if (turnSystem().getPendingDisbandCommand(pieceId)) {
+            turnSystem().cancelDisbandCommand(pieceId,
+                                              board(),
+                                              activeKingdom(),
+                                              enemyKingdom(),
+                                              publicBuildings(),
+                                              m_config);
+            return;
+        }
+
+        TurnCommand cmd;
+        cmd.type = TurnCommand::Disband;
+        cmd.pieceId = pieceId;
+        turnSystem().queueCommand(cmd,
+                                  board(),
+                                  activeKingdom(),
+                                  enemyKingdom(),
+                                  publicBuildings(),
+                                  m_config,
+                                  &buildingFactory());
+    });
+
     // Barracks panel produce
     m_uiManager.barracksPanel().setOnProduce([this](int barracksId, int pieceType) {
         if (!currentInteractionPermissions().canQueueNonMoveActions) return;
@@ -1924,7 +1954,7 @@ void Game::updateUIState() {
 
         viewModel.activeGold = displayedActiveKingdom.gold;
         viewModel.activeOccupiedCells = countDisplayedOccupiedBuildingCells(displayedActiveKingdom);
-        viewModel.activeIncome = EconomySystem::calculateProjectedIncome(
+        viewModel.activeIncome = EconomySystem::calculateProjectedNetIncome(
             displayedActiveKingdom,
             displayedBoard(),
             displayedPublicBuildings(),
@@ -1933,23 +1963,48 @@ void Game::updateUIState() {
         viewModel.balanceMetrics[0].blackValue = displayedBlackKingdom.gold;
         viewModel.balanceMetrics[1].whiteValue = countDisplayedOccupiedBuildingCells(displayedWhiteKingdom);
         viewModel.balanceMetrics[1].blackValue = countDisplayedOccupiedBuildingCells(displayedBlackKingdom);
-        viewModel.balanceMetrics[3].whiteValue = EconomySystem::calculateProjectedIncome(
+        viewModel.balanceMetrics[3].whiteValue = EconomySystem::calculateProjectedNetIncome(
             displayedWhiteKingdom,
             displayedBoard(),
             displayedPublicBuildings(),
             m_config);
-        viewModel.balanceMetrics[3].blackValue = EconomySystem::calculateProjectedIncome(
+        viewModel.balanceMetrics[3].blackValue = EconomySystem::calculateProjectedNetIncome(
             displayedBlackKingdom,
             displayedBoard(),
             displayedPublicBuildings(),
             m_config);
     }
-    viewModel.statusTone = validation.activeKingInCheck ? InGameStatusTone::Danger : InGameStatusTone::Neutral;
-    if (m_state != GameState::GameOver) {
-        viewModel.statusLabel = validation.activeKingInCheck
-            ? (validation.hasAnyLegalResponse ? "Check" : "Checkmate")
-            : "Idle";
+
+    viewModel.alerts.clear();
+    if (m_state == GameState::GameOver && validation.activeKingInCheck && !validation.hasAnyLegalResponse) {
+        const KingdomId winner = opponent(activeKingdom().id);
+        const bool localHotseat = m_localPlayerContext.mode == LocalSessionMode::LocalOnly
+            && m_localPlayerContext.localControl[kingdomIndex(KingdomId::White)]
+            && m_localPlayerContext.localControl[kingdomIndex(KingdomId::Black)];
+        if (localHotseat) {
+            viewModel.alerts.push_back({
+                "Checkmate - " + std::string(kingdomName(winner)) + " wins",
+                InGameAlertTone::Danger
+            });
+        } else {
+            const bool localWon = localPerspectiveKingdom() == winner;
+            viewModel.alerts.push_back({
+                localWon ? "Checkmate - You Win" : "Checkmate - You Lose",
+                localWon ? InGameAlertTone::Success : InGameAlertTone::Danger
+            });
+        }
+    } else {
+        if (validation.activeKingInCheck) {
+            viewModel.alerts.push_back({"Check", InGameAlertTone::Danger});
+        }
+        if (validation.bankrupt) {
+            viewModel.alerts.push_back({
+                "Bankruptcy: end turn would reach " + std::to_string(validation.projectedEndingGold) + " gold.",
+                InGameAlertTone::Warning
+            });
+        }
     }
+
     viewModel.canEndTurn = permissions.canIssueCommands && validation.valid;
     m_uiManager.updateDashboard(viewModel);
     updateMultiplayerPresentation();
@@ -1969,14 +2024,25 @@ void Game::updateUIState() {
         case ToolState::Select:
         default:
             if (m_input.getSelectedPiece()) {
+                const Piece& selectedPiece = *m_input.getSelectedPiece();
+                const bool ownsSelectedPiece = selectedPiece.kingdom == viewedKingdomId;
+                const TurnCommand* pendingUpgrade = turnSystem().getPendingUpgradeCommand(selectedPiece.id);
+                const TurnCommand* pendingDisband = turnSystem().getPendingDisbandCommand(selectedPiece.id);
                 const bool allowUpgrade = permissions.canQueueNonMoveActions
-                    && (m_input.getSelectedPiece()->kingdom == viewedKingdomId);
-                const TurnCommand* pendingUpgrade = turnSystem().getPendingUpgradeCommand(
-                    m_input.getSelectedPiece()->id);
+                    && ownsSelectedPiece
+                    && pendingDisband == nullptr;
+                const bool allowDisband = permissions.canQueueNonMoveActions
+                    && ownsSelectedPiece
+                    && selectedPiece.type != PieceType::King
+                    && (pendingDisband != nullptr
+                        || (!turnSystem().hasPendingMoveForPiece(selectedPiece.id)
+                            && pendingUpgrade == nullptr));
                 m_uiManager.showPiecePanel(*m_input.getSelectedPiece(),
                                            m_config,
                                            allowUpgrade,
-                                           pendingUpgrade);
+                                           allowDisband,
+                                           pendingUpgrade,
+                                           pendingDisband);
             } else if (m_input.getSelectedBuilding()) {
                 Building* building = m_input.getSelectedBuilding();
                 const bool allowCancelConstruction = permissions.canQueueNonMoveActions
@@ -2189,26 +2255,74 @@ void Game::pollAITurn() {
     CheckTurnValidation aiValidation = validateActivePendingTurn();
     if (!aiValidation.valid && aiValidation.hasAnyLegalResponse) {
         turnSystem().resetPendingCommands();
-        for (Piece& piece : activeKingdom().pieces) {
-            const std::vector<sf::Vector2i> legalMoves = CheckResponseRules::filterLegalMovesForPiece(
-                piece, board(), m_config);
-            if (legalMoves.empty()) {
-                continue;
+
+        if (aiValidation.activeKingInCheck) {
+            for (Piece& piece : activeKingdom().pieces) {
+                const std::vector<sf::Vector2i> legalMoves = CheckResponseRules::filterLegalMovesForPiece(
+                    piece, board(), m_config);
+                if (legalMoves.empty()) {
+                    continue;
+                }
+
+                TurnCommand fallbackMove;
+                fallbackMove.type = TurnCommand::Move;
+                fallbackMove.pieceId = piece.id;
+                fallbackMove.origin = piece.position;
+                fallbackMove.destination = legalMoves.front();
+                turnSystem().queueCommand(fallbackMove,
+                                          board(),
+                                          activeKingdom(),
+                                          enemyKingdom(),
+                                          publicBuildings(),
+                                          m_config,
+                                          &buildingFactory());
+                break;
+            }
+        }
+
+        aiValidation = validateActivePendingTurn();
+        if (aiValidation.bankrupt) {
+            std::vector<int> disbandCandidates;
+            disbandCandidates.reserve(activeKingdom().pieces.size());
+            for (const Piece& piece : activeKingdom().pieces) {
+                if (piece.type == PieceType::King) {
+                    continue;
+                }
+
+                disbandCandidates.push_back(piece.id);
             }
 
-            TurnCommand fallbackMove;
-            fallbackMove.type = TurnCommand::Move;
-            fallbackMove.pieceId = piece.id;
-            fallbackMove.origin = piece.position;
-            fallbackMove.destination = legalMoves.front();
-            turnSystem().queueCommand(fallbackMove,
-                                      board(),
-                                      activeKingdom(),
-                                      enemyKingdom(),
-                                      publicBuildings(),
-                                      m_config,
-                                      &buildingFactory());
-            break;
+            std::sort(disbandCandidates.begin(), disbandCandidates.end(), [this](int lhsId, int rhsId) {
+                const Piece* lhs = activeKingdom().getPieceById(lhsId);
+                const Piece* rhs = activeKingdom().getPieceById(rhsId);
+                const int lhsUpkeep = lhs ? m_config.getPieceUpkeepCost(lhs->type) : 0;
+                const int rhsUpkeep = rhs ? m_config.getPieceUpkeepCost(rhs->type) : 0;
+                if (lhsUpkeep != rhsUpkeep) {
+                    return lhsUpkeep > rhsUpkeep;
+                }
+
+                return lhsId < rhsId;
+            });
+
+            for (const int pieceId : disbandCandidates) {
+                TurnCommand disbandCommand;
+                disbandCommand.type = TurnCommand::Disband;
+                disbandCommand.pieceId = pieceId;
+                if (!turnSystem().queueCommand(disbandCommand,
+                                               board(),
+                                               activeKingdom(),
+                                               enemyKingdom(),
+                                               publicBuildings(),
+                                               m_config,
+                                               &buildingFactory())) {
+                    continue;
+                }
+
+                aiValidation = validateActivePendingTurn();
+                if (aiValidation.valid) {
+                    break;
+                }
+            }
         }
     }
 

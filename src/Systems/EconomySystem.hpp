@@ -9,6 +9,7 @@ class Board;
 class Building;
 class GameConfig;
 class EventLog;
+struct GameSnapshot;
 
 struct ResourceIncomeBreakdown {
     bool isResourceBuilding = false;
@@ -27,6 +28,18 @@ struct ResourceIncomeBreakdown {
     }
 };
 
+struct TurnEconomyBreakdown {
+    int currentGold = 0;
+    int grossIncome = 0;
+    int upkeepCost = 0;
+    int netIncome = 0;
+    int endingGold = 0;
+
+    bool wouldBeBankrupt() const {
+        return endingGold < 0;
+    }
+};
+
 class EconomySystem {
 public:
     static ResourceIncomeBreakdown calculateResourceIncomeFromOccupation(int whiteOccupiedCells,
@@ -35,9 +48,22 @@ public:
     static ResourceIncomeBreakdown calculateResourceIncomeBreakdown(const Building& building,
                                                                     const Board& board,
                                                                     const GameConfig& config);
+    static int calculateProjectedGrossIncome(const Kingdom& kingdom, const Board& board,
+                                             const std::vector<Building>& publicBuildings,
+                                             const GameConfig& config);
     static int calculateProjectedIncome(const Kingdom& kingdom, const Board& board,
                                         const std::vector<Building>& publicBuildings,
                                         const GameConfig& config);
+    static int calculateProjectedUpkeep(const Kingdom& kingdom, const GameConfig& config);
+    static int calculateProjectedNetIncome(const Kingdom& kingdom, const Board& board,
+                                          const std::vector<Building>& publicBuildings,
+                                          const GameConfig& config);
+    static TurnEconomyBreakdown calculateTurnEconomy(const Kingdom& kingdom, const Board& board,
+                                                     const std::vector<Building>& publicBuildings,
+                                                     const GameConfig& config);
+    static TurnEconomyBreakdown calculateTurnEconomy(const GameSnapshot& snapshot,
+                                                     KingdomId kingdom,
+                                                     const GameConfig& config);
     static void collectIncome(Kingdom& kingdom, const Board& board,
                                const std::vector<Building>& publicBuildings,
                                const GameConfig& config, EventLog& log, int turnNumber);

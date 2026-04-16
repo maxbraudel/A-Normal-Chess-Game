@@ -12,7 +12,7 @@ inline const std::array<std::string, kInGameMetricCount>& inGameMetricLabels() {
         "Gold",
         "Occupied Cells",
         "Troops",
-        "Income"
+        "Net Income"
     };
 
     return labels;
@@ -37,16 +37,21 @@ struct InGamePlannedActionRow {
     bool predicted = false;
 };
 
-enum class InGameStatusTone {
+enum class InGameAlertTone {
     Neutral,
-    Danger
+    Warning,
+    Danger,
+    Success
+};
+
+struct InGameAlert {
+    std::string text;
+    InGameAlertTone tone = InGameAlertTone::Neutral;
 };
 
 struct InGameViewModel {
     int turnNumber = 1;
     std::string activeTurnLabel;
-    std::string statusLabel = "Idle";
-    InGameStatusTone statusTone = InGameStatusTone::Neutral;
     int activeGold = 0;
     int activeOccupiedCells = 0;
     int activeTroops = 0;
@@ -57,6 +62,7 @@ struct InGameViewModel {
     int activeBuildPointsTotal = 0;
     bool allowCommands = false;
     bool canEndTurn = false;
+    std::vector<InGameAlert> alerts;
     std::vector<InGameEventRow> eventRows;
     std::vector<InGamePlannedActionRow> plannedActionRows;
     std::array<KingdomBalanceMetric, kInGameMetricCount> balanceMetrics{};

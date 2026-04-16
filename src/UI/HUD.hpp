@@ -4,6 +4,7 @@
 #include <array>
 #include <functional>
 #include <string>
+#include <vector>
 
 #include "UI/InGameViewModel.hpp"
 
@@ -35,11 +36,13 @@ private:
     tgui::Panel::Ptr m_metricsPanel;
     tgui::Panel::Ptr m_pointPanel;
     tgui::Panel::Ptr m_statusPanel;
+    tgui::Panel::Ptr m_alertPanel;
     tgui::Panel::Ptr m_actionPanel;
     tgui::Panel::Ptr m_networkPanel;
     std::array<tgui::Label::Ptr, 4> m_metricLabels{};
     std::array<tgui::Label::Ptr, 2> m_pointLabels{};
     tgui::Label::Ptr m_statusLabel;
+    std::vector<tgui::Label::Ptr> m_alertLabels;
     tgui::Label::Ptr m_networkStatusLabel;
     tgui::Button::Ptr m_menuButton;
     tgui::Button::Ptr m_endTurnButton;

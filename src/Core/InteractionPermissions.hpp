@@ -17,6 +17,7 @@ struct InteractionPermissionInputs {
     bool multiplayerSessionReady = true;
     bool isLocalPlayerTurn = false;
     bool activeKingInCheck = false;
+    bool projectedKingInCheck = false;
     bool hasAnyLegalResponse = true;
 };
 

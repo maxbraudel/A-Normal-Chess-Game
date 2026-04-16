@@ -15,20 +15,6 @@
 
 namespace {
 
-std::string turnStatusLabel(const GameEngine& engine,
-                            const GameConfig& config,
-                            GameState state) {
-    if (state == GameState::GameOver) {
-        return "Checkmate";
-    }
-
-    if (CheckSystem::isInCheck(engine.activeKingdom().id, engine.board(), config)) {
-        return "Check";
-    }
-
-    return "Idle";
-}
-
 std::string actorLabelForEvent(const GameEngine& engine, KingdomId kingdomId) {
     return engine.participantName(kingdomId) + " - " + kingdomLabel(kingdomId);
 }
@@ -95,6 +81,12 @@ void appendPlannedActionRows(InGameViewModel& model,
                 row.detailLabel = currentType + " -> " + pieceTypeName(command.upgradeTarget);
                 break;
             }
+            case TurnCommand::Disband: {
+                const Piece* piece = activeKingdom.getPieceById(command.pieceId);
+                row.actionLabel = "Tuer la piece";
+                row.detailLabel = piece ? pieceTypeName(piece->type) : std::string("Piece");
+                break;
+            }
             case TurnCommand::Marry:
                 row.actionLabel = "Church coronation";
                 row.detailLabel = "Manual command";
@@ -157,17 +149,18 @@ InGameViewModel buildInGameViewModel(const GameEngine& engine,
 
     model.turnNumber = engine.turnSystem().getTurnNumber();
     model.activeTurnLabel = engine.activeTurnLabel();
-    model.statusLabel = turnStatusLabel(engine, config, state);
-    model.statusTone = CheckSystem::isInCheck(engine.activeKingdom().id, engine.board(), config)
-        ? InGameStatusTone::Danger
-        : InGameStatusTone::Neutral;
+    if (state == GameState::GameOver) {
+        model.alerts.push_back({"Checkmate", InGameAlertTone::Danger});
+    } else if (CheckSystem::isInCheck(engine.activeKingdom().id, engine.board(), config)) {
+        model.alerts.push_back({"Check", InGameAlertTone::Danger});
+    }
     model.activeGold = activeKingdom.gold;
     model.activeOccupiedCells = countOccupiedBuildingCells(activeKingdom);
     model.activeTroops = activeKingdom.pieceCount();
-    model.activeIncome = EconomySystem::calculateProjectedIncome(activeKingdom,
-                                                                 engine.board(),
-                                                                 engine.publicBuildings(),
-                                                                 config);
+    model.activeIncome = EconomySystem::calculateProjectedNetIncome(activeKingdom,
+                                                                    engine.board(),
+                                                                    engine.publicBuildings(),
+                                                                    config);
     model.activeMovementPointsAvailable = engine.turnSystem().getMovementPointsRemaining();
     model.activeMovementPointsTotal = engine.turnSystem().getMovementPointsMax();
     model.activeBuildPointsAvailable = engine.turnSystem().getBuildPointsRemaining();
@@ -189,11 +182,11 @@ InGameViewModel buildInGameViewModel(const GameEngine& engine,
 
     model.balanceMetrics = {{
         {inGameMetricLabels()[0], whiteKingdom.gold, blackKingdom.gold},
-        {inGameMetricLabels()[3],
-         EconomySystem::calculateProjectedIncome(whiteKingdom, engine.board(), engine.publicBuildings(), config),
-         EconomySystem::calculateProjectedIncome(blackKingdom, engine.board(), engine.publicBuildings(), config)},
+        {inGameMetricLabels()[1], countOccupiedBuildingCells(whiteKingdom), countOccupiedBuildingCells(blackKingdom)},
         {inGameMetricLabels()[2], whiteKingdom.pieceCount(), blackKingdom.pieceCount()},
-        {inGameMetricLabels()[1], countOccupiedBuildingCells(whiteKingdom), countOccupiedBuildingCells(blackKingdom)}
+        {inGameMetricLabels()[3],
+         EconomySystem::calculateProjectedNetIncome(whiteKingdom, engine.board(), engine.publicBuildings(), config),
+         EconomySystem::calculateProjectedNetIncome(blackKingdom, engine.board(), engine.publicBuildings(), config)}
     }};
 
     return model;

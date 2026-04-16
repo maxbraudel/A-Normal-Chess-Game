@@ -5,6 +5,7 @@
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingType.hpp"
 #include "Config/GameConfig.hpp"
+#include "AI/GameSnapshot.hpp"
 #include "Systems/EventLog.hpp"
 
 #include <algorithm>
@@ -20,6 +21,26 @@ int incomePerCellForResource(BuildingType type, const GameConfig& config) {
         default:
             return 0;
     }
+}
+
+template <typename PieceRange>
+int calculateUpkeepForPieces(const PieceRange& pieces, const GameConfig& config) {
+    int totalUpkeep = 0;
+    for (const auto& piece : pieces) {
+        totalUpkeep += config.getPieceUpkeepCost(piece.type);
+    }
+
+    return totalUpkeep;
+}
+
+TurnEconomyBreakdown buildTurnEconomyBreakdown(int currentGold, int grossIncome, int upkeepCost) {
+    TurnEconomyBreakdown breakdown;
+    breakdown.currentGold = currentGold;
+    breakdown.grossIncome = grossIncome;
+    breakdown.upkeepCost = upkeepCost;
+    breakdown.netIncome = grossIncome - upkeepCost;
+    breakdown.endingGold = currentGold + breakdown.netIncome;
+    return breakdown;
 }
 
 } // namespace
@@ -69,9 +90,9 @@ ResourceIncomeBreakdown EconomySystem::calculateResourceIncomeBreakdown(const Bu
         incomePerCellForResource(building.type, config));
 }
 
-int EconomySystem::calculateProjectedIncome(const Kingdom& kingdom, const Board& board,
-                                            const std::vector<Building>& publicBuildings,
-                                            const GameConfig& config) {
+int EconomySystem::calculateProjectedGrossIncome(const Kingdom& kingdom, const Board& board,
+                                                 const std::vector<Building>& publicBuildings,
+                                                 const GameConfig& config) {
     int totalIncome = 0;
 
     for (const auto& building : publicBuildings) {
@@ -86,13 +107,91 @@ int EconomySystem::calculateProjectedIncome(const Kingdom& kingdom, const Board&
     return totalIncome;
 }
 
+int EconomySystem::calculateProjectedIncome(const Kingdom& kingdom, const Board& board,
+                                            const std::vector<Building>& publicBuildings,
+                                            const GameConfig& config) {
+    return calculateProjectedGrossIncome(kingdom, board, publicBuildings, config);
+}
+
+int EconomySystem::calculateProjectedUpkeep(const Kingdom& kingdom, const GameConfig& config) {
+    return calculateUpkeepForPieces(kingdom.pieces, config);
+}
+
+int EconomySystem::calculateProjectedNetIncome(const Kingdom& kingdom, const Board& board,
+                                               const std::vector<Building>& publicBuildings,
+                                               const GameConfig& config) {
+    return calculateProjectedGrossIncome(kingdom, board, publicBuildings, config)
+        - calculateProjectedUpkeep(kingdom, config);
+}
+
+TurnEconomyBreakdown EconomySystem::calculateTurnEconomy(const Kingdom& kingdom,
+                                                         const Board& board,
+                                                         const std::vector<Building>& publicBuildings,
+                                                         const GameConfig& config) {
+    return buildTurnEconomyBreakdown(
+        kingdom.gold,
+        calculateProjectedGrossIncome(kingdom, board, publicBuildings, config),
+        calculateProjectedUpkeep(kingdom, config));
+}
+
+TurnEconomyBreakdown EconomySystem::calculateTurnEconomy(const GameSnapshot& snapshot,
+                                                         KingdomId kingdomId,
+                                                         const GameConfig& config) {
+    const SnapKingdom& kingdom = snapshot.kingdom(kingdomId);
+    int grossIncome = 0;
+
+    for (const auto& building : snapshot.publicBuildings) {
+        if (!building.hasActiveGameplayEffects()) {
+            continue;
+        }
+
+        const int incomePerCell = incomePerCellForResource(building.type, config);
+        if (incomePerCell <= 0) {
+            continue;
+        }
+
+        int whiteOccupiedCells = 0;
+        int blackOccupiedCells = 0;
+        for (const sf::Vector2i& pos : building.getOccupiedCells()) {
+            if (const SnapPiece* piece = snapshot.pieceAt(pos)) {
+                if (piece->kingdom == KingdomId::White) {
+                    ++whiteOccupiedCells;
+                } else {
+                    ++blackOccupiedCells;
+                }
+            }
+        }
+
+        const ResourceIncomeBreakdown breakdown = calculateResourceIncomeFromOccupation(
+            whiteOccupiedCells,
+            blackOccupiedCells,
+            incomePerCell);
+        grossIncome += breakdown.incomeFor(kingdomId);
+    }
+
+    return buildTurnEconomyBreakdown(
+        kingdom.gold,
+        grossIncome,
+        calculateUpkeepForPieces(kingdom.pieces, config));
+}
+
 void EconomySystem::collectIncome(Kingdom& kingdom, const Board& board,
                                     const std::vector<Building>& publicBuildings,
                                     const GameConfig& config, EventLog& log, int turnNumber) {
-    const int totalIncome = calculateProjectedIncome(kingdom, board, publicBuildings, config);
+    const TurnEconomyBreakdown breakdown = calculateTurnEconomy(
+        kingdom,
+        board,
+        publicBuildings,
+        config);
 
-    if (totalIncome > 0) {
-        kingdom.gold += totalIncome;
-        log.log(turnNumber, kingdom.id, "Income: +" + std::to_string(totalIncome) + " gold");
+    if (breakdown.grossIncome > 0) {
+        log.log(turnNumber, kingdom.id,
+                "Income: +" + std::to_string(breakdown.grossIncome) + " gold");
     }
+    if (breakdown.upkeepCost > 0) {
+        log.log(turnNumber, kingdom.id,
+                "Upkeep: -" + std::to_string(breakdown.upkeepCost) + " gold");
+    }
+
+    kingdom.gold = std::max(0, breakdown.endingGold);
 }

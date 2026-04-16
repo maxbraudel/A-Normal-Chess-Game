@@ -278,6 +278,13 @@ bool TurnSystem::queueCommand(const TurnCommand& cmd,
     TurnCommand queuedCommand = cmd;
 
     switch (queuedCommand.type) {
+        case TurnCommand::Move:
+            if (queuedCommand.pieceId >= 0
+                && getPendingDisbandCommand(queuedCommand.pieceId) != nullptr) {
+                return false;
+            }
+            break;
+
         case TurnCommand::Produce:
             if (queuedCommand.barracksId >= 0
                 && m_producedBarracks.count(queuedCommand.barracksId)) {
@@ -287,7 +294,17 @@ bool TurnSystem::queueCommand(const TurnCommand& cmd,
 
         case TurnCommand::Upgrade:
             if (queuedCommand.upgradePieceId >= 0
-                && getPendingUpgradeCommand(queuedCommand.upgradePieceId) != nullptr) {
+                && (getPendingUpgradeCommand(queuedCommand.upgradePieceId) != nullptr
+                    || getPendingDisbandCommand(queuedCommand.upgradePieceId) != nullptr)) {
+                return false;
+            }
+            break;
+
+        case TurnCommand::Disband:
+            if (queuedCommand.pieceId < 0
+                || getPendingDisbandCommand(queuedCommand.pieceId) != nullptr
+                || getPendingMoveCommand(queuedCommand.pieceId) != nullptr
+                || getPendingUpgradeCommand(queuedCommand.pieceId) != nullptr) {
                 return false;
             }
             break;
@@ -387,6 +404,9 @@ bool TurnSystem::replaceMoveCommand(const TurnCommand& moveCommand,
     if (moveCommand.type != TurnCommand::Move) {
         return false;
     }
+    if (getPendingDisbandCommand(moveCommand.pieceId) != nullptr) {
+        return false;
+    }
 
     syncPointBudget(config);
 
@@ -463,6 +483,28 @@ bool TurnSystem::cancelUpgradeCommand(int pieceId,
     return true;
 }
 
+bool TurnSystem::cancelDisbandCommand(int pieceId,
+                                      const Board& board,
+                                      const Kingdom& activeKingdom,
+                                      const Kingdom& enemyKingdom,
+                                      const std::vector<Building>& publicBuildings,
+                                      const GameConfig& config) {
+    const auto originalSize = m_pendingCommands.size();
+    auto it = std::remove_if(m_pendingCommands.begin(), m_pendingCommands.end(),
+        [pieceId](const TurnCommand& c) {
+            return c.type == TurnCommand::Disband && c.pieceId == pieceId;
+        });
+    m_pendingCommands.erase(it, m_pendingCommands.end());
+    if (m_pendingCommands.size() == originalSize) {
+        return false;
+    }
+
+    rebuildQueuedSpecialState();
+    refreshProjectedBudgetState(board, activeKingdom, enemyKingdom, publicBuildings, config);
+    markPendingStateChanged();
+    return true;
+}
+
 const std::vector<TurnCommand>& TurnSystem::getPendingCommands() const {
     return m_pendingCommands;
 }
@@ -506,6 +548,16 @@ const TurnCommand* TurnSystem::getPendingUpgradeCommand(int pieceId) const {
     return nullptr;
 }
 
+const TurnCommand* TurnSystem::getPendingDisbandCommand(int pieceId) const {
+    for (const auto& cmd : m_pendingCommands) {
+        if (cmd.type == TurnCommand::Disband && cmd.pieceId == pieceId) {
+            return &cmd;
+        }
+    }
+
+    return nullptr;
+}
+
 bool TurnSystem::hasPendingMove() const {
     return std::any_of(m_pendingCommands.begin(), m_pendingCommands.end(),
         [](const TurnCommand& command) { return command.type == TurnCommand::Move; });
@@ -524,6 +576,9 @@ bool TurnSystem::hasPendingProduceForBarracks(int barracksId) const {
 }
 bool TurnSystem::hasPendingUpgradeForPiece(int pieceId) const {
     return getPendingUpgradeCommand(pieceId) != nullptr;
+}
+bool TurnSystem::hasPendingDisbandForPiece(int pieceId) const {
+    return getPendingDisbandCommand(pieceId) != nullptr;
 }
 
 int TurnSystem::getMovementPointsMax() const { return m_movementPointsMax; }
@@ -629,6 +684,27 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                     XPSystem::upgrade(*piece, cmd.upgradeTarget);
                     log.log(m_turnNumber, m_activeKingdom, "Upgraded a piece");
                 }
+                break;
+            }
+            case TurnCommand::Disband: {
+                Piece* piece = activeKingdom.getPieceById(cmd.pieceId);
+                if (!piece || piece->type == PieceType::King) {
+                    break;
+                }
+
+                const sf::Vector2i piecePosition = piece->position;
+                if (board.isInBounds(piecePosition.x, piecePosition.y)) {
+                    Cell& pieceCell = board.getCell(piecePosition.x, piecePosition.y);
+                    if (pieceCell.piece == piece) {
+                        pieceCell.piece = nullptr;
+                    }
+                }
+
+                const PieceType removedType = piece->type;
+                activeKingdom.removePiece(piece->id);
+                log.log(m_turnNumber,
+                        m_activeKingdom,
+                        "Sacrificed " + std::string(pieceTypeDisplayName(removedType)));
                 break;
             }
             case TurnCommand::Marry: {

@@ -10,6 +10,7 @@
 #include "Systems/MarriageSystem.hpp"
 #include "Systems/PendingTurnProjection.hpp"
 #include "Systems/CheckSystem.hpp"
+#include "Systems/EconomySystem.hpp"
 #include "Units/MovementRules.hpp"
 #include "Units/Piece.hpp"
 
@@ -74,6 +75,19 @@ bool automaticCoronationResolvesCheck(const GameSnapshot& snapshot,
     }
 
     return !ForwardModel::isInCheck(simulatedSnapshot, activeKingdom, globalMaxRange);
+}
+
+GameSnapshot simulateEndOfTurn(const GameSnapshot& snapshot,
+                               KingdomId activeKingdom,
+                               const GameConfig& config) {
+    GameSnapshot simulatedSnapshot = snapshot.clone();
+    ForwardModel::advanceTurn(simulatedSnapshot,
+                              activeKingdom,
+                              config.getMineIncomePerCellPerTurn(),
+                              config.getFarmIncomePerCellPerTurn(),
+                              config.getArenaXPPerTurn(),
+                              config);
+    return simulatedSnapshot;
 }
 
 } // namespace
@@ -174,6 +188,7 @@ CheckTurnValidation CheckResponseRules::validatePendingTurn(const Kingdom& activ
 
     validation.activeKingInCheck = ForwardModel::isInCheck(
         currentSnapshot, activeKingdom.id, config.getGlobalMaxRange());
+    validation.projectedKingInCheck = validation.activeKingInCheck;
     validation.hasAnyLegalResponse = hasAnySnapshotLegalResponse(
         currentSnapshot, activeKingdom.id, config.getGlobalMaxRange())
         || automaticCoronationResolvesCheck(
@@ -186,49 +201,58 @@ CheckTurnValidation CheckResponseRules::validatePendingTurn(const Kingdom& activ
         return validation;
     }
 
-    if (pendingCommands.empty()) {
-        if (validation.activeKingInCheck) {
-            if (!automaticCoronationResolvesCheck(
-                    currentSnapshot, activeKingdom.id, config.getGlobalMaxRange())) {
-                validation.valid = false;
-                validation.errorMessage = "A kingdom in check cannot pass its turn and must resolve the check before ending the turn.";
-            }
-        }
-        return validation;
-    }
-
     bool projectedKingInCheck = validation.activeKingInCheck;
     std::vector<TurnCommand> prefixCommands;
     prefixCommands.reserve(pendingCommands.size());
     PendingTurnProjectionResult finalProjection;
-    for (const TurnCommand& command : pendingCommands) {
-        if (projectedKingInCheck && command.type != TurnCommand::Move) {
-            validation.valid = false;
-            validation.errorMessage = "Non-move actions stay locked until the queued move sequence has resolved the check.";
-            return validation;
+    const GameSnapshot* finalSnapshot = &currentSnapshot;
+    if (!pendingCommands.empty()) {
+        for (const TurnCommand& command : pendingCommands) {
+            if (projectedKingInCheck && command.type != TurnCommand::Move) {
+                validation.valid = false;
+                validation.errorMessage = "Non-move actions stay locked until the queued move sequence has resolved the check.";
+                return validation;
+            }
+
+            prefixCommands.push_back(command);
+            finalProjection = PendingTurnProjection::project(
+                board, activeKingdom, enemyKingdom, publicBuildings,
+                turnNumber, prefixCommands, config);
+            if (!finalProjection.valid) {
+                validation.valid = false;
+                validation.errorMessage = finalProjection.errorMessage;
+                return validation;
+            }
+
+            projectedKingInCheck = ForwardModel::isInCheck(
+                finalProjection.snapshot, activeKingdom.id, config.getGlobalMaxRange());
         }
 
-        prefixCommands.push_back(command);
-        finalProjection = PendingTurnProjection::project(
-            board, activeKingdom, enemyKingdom, publicBuildings,
-            turnNumber, prefixCommands, config);
-        if (!finalProjection.valid) {
-            validation.valid = false;
-            validation.errorMessage = finalProjection.errorMessage;
-            return validation;
-        }
-
-        projectedKingInCheck = ForwardModel::isInCheck(
-            finalProjection.snapshot, activeKingdom.id, config.getGlobalMaxRange());
+        finalSnapshot = &finalProjection.snapshot;
     }
+
+    validation.projectedKingInCheck = projectedKingInCheck;
 
     if (projectedKingInCheck
         && !automaticCoronationResolvesCheck(
-            finalProjection.snapshot, activeKingdom.id, config.getGlobalMaxRange())) {
+            *finalSnapshot, activeKingdom.id, config.getGlobalMaxRange())) {
         validation.valid = false;
         validation.errorMessage = validation.activeKingInCheck
             ? "The queued turn still leaves the king in check."
             : "The queued turn would leave the king in check.";
+        return validation;
+    }
+
+    const GameSnapshot endOfTurnSnapshot = simulateEndOfTurn(
+        *finalSnapshot,
+        activeKingdom.id,
+        config);
+    validation.projectedEndingGold = endOfTurnSnapshot.kingdom(activeKingdom.id).gold;
+    validation.bankrupt = validation.projectedEndingGold < 0;
+    if (validation.bankrupt) {
+        validation.valid = false;
+        validation.errorMessage = "Bankruptcy: the kingdom would end the turn at "
+            + std::to_string(validation.projectedEndingGold) + " gold.";
         return validation;
     }
 

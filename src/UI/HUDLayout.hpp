@@ -24,6 +24,7 @@ inline constexpr float kMetricWidth = 108.f;
 inline constexpr float kWideMetricWidth = 156.f;
 inline constexpr float kActionWidth = 118.f;
 inline constexpr float kStatusWidth = 360.f;
+inline constexpr float kAlertWidth = 420.f;
 inline constexpr float kTopComponentHeight = 40.f;
 inline constexpr float kPointIndicatorWidth = 240.f;
 inline constexpr float kPointIndicatorHeight = 34.f;

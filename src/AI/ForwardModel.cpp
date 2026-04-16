@@ -552,6 +552,9 @@ sf::Vector2i ForwardModel::findSpawnCell(const GameSnapshot& s,
 void ForwardModel::advanceTurn(GameSnapshot& s, KingdomId k,
                                int mineIncomePerCell, int farmIncomePerCell,
                                int arenaXP, const GameConfig& config) {
+    (void)mineIncomePerCell;
+    (void)farmIncomePerCell;
+
     SnapKingdom& myK = s.kingdom(k);
 
     processEnemyStructureOccupancy(s, k, config);
@@ -588,25 +591,10 @@ void ForwardModel::advanceTurn(GameSnapshot& s, KingdomId k,
     removeDestroyedStructures(myK);
     completeUnderConstructionBuildings(myK);
 
-    // 2. Collect income from net occupation advantage on public resources.
+    const TurnEconomyBreakdown economyBreakdown = EconomySystem::calculateTurnEconomy(s, k, config);
+    myK.gold = economyBreakdown.endingGold;
+
     SnapKingdom& enemyK = s.enemyKingdom(k);
-    for (auto& b : s.publicBuildings) {
-        if (b.type != BuildingType::Mine && b.type != BuildingType::Farm) continue;
-        auto cells = b.getOccupiedCells();
-
-        int myOccupiedCells = 0;
-        int enemyOccupiedCells = 0;
-        for (auto& c : cells) {
-            if (myK.getPieceAt(c)) ++myOccupiedCells;
-            if (enemyK.getPieceAt(c)) ++enemyOccupiedCells;
-        }
-
-        const int incomePerCell = (b.type == BuildingType::Mine) ? mineIncomePerCell : farmIncomePerCell;
-        const ResourceIncomeBreakdown breakdown = (k == KingdomId::White)
-            ? EconomySystem::calculateResourceIncomeFromOccupation(myOccupiedCells, enemyOccupiedCells, incomePerCell)
-            : EconomySystem::calculateResourceIncomeFromOccupation(enemyOccupiedCells, myOccupiedCells, incomePerCell);
-        myK.gold += breakdown.incomeFor(k);
-    }
 
     // 3. Arena XP
     for (auto& b : s.publicBuildings) {

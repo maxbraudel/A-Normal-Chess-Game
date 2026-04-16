@@ -89,6 +89,12 @@ void GameConfig::setDefaults() {
     m_knightRecruitCost = 30;
     m_bishopRecruitCost = 30;
     m_rookRecruitCost = 60;
+    m_pawnUpkeepCost = 1;
+    m_knightUpkeepCost = 2;
+    m_bishopUpkeepCost = 2;
+    m_rookUpkeepCost = 4;
+    m_queenUpkeepCost = 7;
+    m_kingUpkeepCost = 0;
     m_upgradePawnToKnightCost = 20;
     m_upgradePawnToBishopCost = 20;
     m_upgradeToRookCost = 50;
@@ -214,6 +220,12 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
         m_knightRecruitCost = extractInt(econSec, "knight_recruit_cost", m_knightRecruitCost);
         m_bishopRecruitCost = extractInt(econSec, "bishop_recruit_cost", m_bishopRecruitCost);
         m_rookRecruitCost = extractInt(econSec, "rook_recruit_cost", m_rookRecruitCost);
+        m_pawnUpkeepCost = extractInt(econSec, "pawn_upkeep_cost", m_pawnUpkeepCost);
+        m_knightUpkeepCost = extractInt(econSec, "knight_upkeep_cost", m_knightUpkeepCost);
+        m_bishopUpkeepCost = extractInt(econSec, "bishop_upkeep_cost", m_bishopUpkeepCost);
+        m_rookUpkeepCost = extractInt(econSec, "rook_upkeep_cost", m_rookUpkeepCost);
+        m_queenUpkeepCost = extractInt(econSec, "queen_upkeep_cost", m_queenUpkeepCost);
+        m_kingUpkeepCost = extractInt(econSec, "king_upkeep_cost", m_kingUpkeepCost);
         m_upgradePawnToKnightCost = extractInt(econSec, "upgrade_pawn_to_knight_cost", m_upgradePawnToKnightCost);
         m_upgradePawnToBishopCost = extractInt(econSec, "upgrade_pawn_to_bishop_cost", m_upgradePawnToBishopCost);
         m_upgradeToRookCost = extractInt(econSec, "upgrade_to_rook_cost", m_upgradeToRookCost);
@@ -238,6 +250,12 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
     m_knightRecruitCost = clampNonNegativeConfigValue("economy.knight_recruit_cost", m_knightRecruitCost);
     m_bishopRecruitCost = clampNonNegativeConfigValue("economy.bishop_recruit_cost", m_bishopRecruitCost);
     m_rookRecruitCost = clampNonNegativeConfigValue("economy.rook_recruit_cost", m_rookRecruitCost);
+    m_pawnUpkeepCost = clampNonNegativeConfigValue("economy.pawn_upkeep_cost", m_pawnUpkeepCost);
+    m_knightUpkeepCost = clampNonNegativeConfigValue("economy.knight_upkeep_cost", m_knightUpkeepCost);
+    m_bishopUpkeepCost = clampNonNegativeConfigValue("economy.bishop_upkeep_cost", m_bishopUpkeepCost);
+    m_rookUpkeepCost = clampNonNegativeConfigValue("economy.rook_upkeep_cost", m_rookUpkeepCost);
+    m_queenUpkeepCost = clampNonNegativeConfigValue("economy.queen_upkeep_cost", m_queenUpkeepCost);
+    m_kingUpkeepCost = clampNonNegativeConfigValue("economy.king_upkeep_cost", m_kingUpkeepCost);
     m_upgradePawnToKnightCost = clampNonNegativeConfigValue(
         "economy.upgrade_pawn_to_knight_cost", m_upgradePawnToKnightCost);
     m_upgradePawnToBishopCost = clampNonNegativeConfigValue(
@@ -417,6 +435,18 @@ int GameConfig::getMoveAllowancePerTurn(PieceType type) const {
         case PieceType::Rook: return m_rookMoveAllowancePerTurn;
         case PieceType::Queen: return m_queenMoveAllowancePerTurn;
         case PieceType::King: return m_kingMoveAllowancePerTurn;
+        default: return 0;
+    }
+}
+
+int GameConfig::getPieceUpkeepCost(PieceType type) const {
+    switch (type) {
+        case PieceType::Pawn: return m_pawnUpkeepCost;
+        case PieceType::Knight: return m_knightUpkeepCost;
+        case PieceType::Bishop: return m_bishopUpkeepCost;
+        case PieceType::Rook: return m_rookUpkeepCost;
+        case PieceType::Queen: return m_queenUpkeepCost;
+        case PieceType::King: return m_kingUpkeepCost;
         default: return 0;
     }
 }

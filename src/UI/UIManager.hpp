@@ -43,7 +43,9 @@ public:
     void showPiecePanel(const Piece& piece,
                         const GameConfig& config,
                         bool allowUpgrade,
-                        const TurnCommand* pendingUpgrade = nullptr);
+                        bool allowDisband,
+                        const TurnCommand* pendingUpgrade = nullptr,
+                        const TurnCommand* pendingDisband = nullptr);
     void showBuildingPanel(const Building& building,
                            bool allowCancelConstruction,
                            const std::optional<ResourceIncomeBreakdown>& resourceIncome = std::nullopt,

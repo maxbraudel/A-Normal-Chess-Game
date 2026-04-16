@@ -44,6 +44,7 @@ public:
     int getMovePointCost(PieceType type) const;
     int getBuildPointCost(BuildingType type) const;
     int getMoveAllowancePerTurn(PieceType type) const;
+    int getPieceUpkeepCost(PieceType type) const;
     int getRecruitCost(PieceType type) const;
     int getUpgradeCost(PieceType from, PieceType to) const;
 
@@ -121,6 +122,12 @@ private:
     int m_knightRecruitCost;
     int m_bishopRecruitCost;
     int m_rookRecruitCost;
+    int m_pawnUpkeepCost;
+    int m_knightUpkeepCost;
+    int m_bishopUpkeepCost;
+    int m_rookUpkeepCost;
+    int m_queenUpkeepCost;
+    int m_kingUpkeepCost;
     int m_upgradePawnToKnightCost;
     int m_upgradePawnToBishopCost;
     int m_upgradeToRookCost;

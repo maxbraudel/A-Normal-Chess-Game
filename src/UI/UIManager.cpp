@@ -214,9 +214,11 @@ void UIManager::updateDashboard(const InGameViewModel& model) {
 void UIManager::showPiecePanel(const Piece& piece,
                                const GameConfig& config,
                                bool allowUpgrade,
-                               const TurnCommand* pendingUpgrade) {
+                               bool allowDisband,
+                               const TurnCommand* pendingUpgrade,
+                               const TurnCommand* pendingDisband) {
     activateLeftContext(LeftContextView::Piece);
-    m_piecePanel.show(piece, config, allowUpgrade, pendingUpgrade);
+    m_piecePanel.show(piece, config, allowUpgrade, allowDisband, pendingUpgrade, pendingDisband);
 }
 
 void UIManager::showBuildingPanel(const Building& building,

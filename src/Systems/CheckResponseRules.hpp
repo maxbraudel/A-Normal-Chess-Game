@@ -16,8 +16,11 @@ class Piece;
 struct CheckTurnValidation {
     bool valid = true;
     bool activeKingInCheck = false;
+    bool projectedKingInCheck = false;
     bool hasAnyLegalResponse = false;
     bool hasQueuedMove = false;
+    bool bankrupt = false;
+    int projectedEndingGold = 0;
     std::string errorMessage;
 };
 
