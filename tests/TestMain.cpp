@@ -16,6 +16,7 @@
 #include "AI/AIStrategySpecial.hpp"
 #include "Board/Board.hpp"
 #include "Board/BoardGenerator.hpp"
+#include "Board/CellTraversal.hpp"
 #include "Board/CellType.hpp"
 #include "Buildings/BuildingFactory.hpp"
 #include "Buildings/StructureChunkRegistry.hpp"
@@ -41,6 +42,7 @@
 #include "Systems/EventLog.hpp"
 #include "Systems/ProductionSpawnRules.hpp"
 #include "Systems/ProductionSystem.hpp"
+#include "Systems/PublicBuildingOccupation.hpp"
 #include "Systems/SelectionMoveRules.hpp"
 #include "Systems/TurnCommand.hpp"
 #include "Systems/TurnSystem.hpp"
@@ -128,6 +130,16 @@ int ringDistanceFromBuilding(const Building& building, const sf::Vector2i& posit
         ? (top - position.y)
         : (position.y > bottom ? position.y - bottom : 0);
     return std::max(dx, dy);
+}
+
+float buildingCenterDistance(const Building& lhs, const Building& rhs) {
+    const float lhsCenterX = static_cast<float>(lhs.origin.x) + (static_cast<float>(lhs.getFootprintWidth()) * 0.5f);
+    const float lhsCenterY = static_cast<float>(lhs.origin.y) + (static_cast<float>(lhs.getFootprintHeight()) * 0.5f);
+    const float rhsCenterX = static_cast<float>(rhs.origin.x) + (static_cast<float>(rhs.getFootprintWidth()) * 0.5f);
+    const float rhsCenterY = static_cast<float>(rhs.origin.y) + (static_cast<float>(rhs.getFootprintHeight()) * 0.5f);
+    const float dx = lhsCenterX - rhsCenterX;
+    const float dy = lhsCenterY - rhsCenterY;
+    return std::sqrt((dx * dx) + (dy * dy));
 }
 
 template <typename Predicate>
@@ -467,6 +479,16 @@ void testLayeredSelectionStackSupportsPreviewPieceOverride() {
         board.getCell(1, 1).piece = &white.pieces.back();
         expect(resolvePublicBuildingOccupationState(mine, board) == PublicBuildingOccupationState::Contested,
             "Mixed kingdom presence should resolve to the contested occupation state.");
+    }
+
+    void testCellTraversalTreatsWaterAsNotTraversable() {
+        Cell waterCell;
+        waterCell.type = CellType::Water;
+        waterCell.isInCircle = true;
+        waterCell.position = {2, 2};
+
+        expect(!isCellTerrainTraversable(waterCell),
+            "Water cells inside the map radius should still be reported as non-traversable.");
     }
 
     void testSelectedStructureOverlayPrivateBuildingsUseOwnerShield() {
@@ -1391,6 +1413,73 @@ void testGameEngineRestoresBishopSpawnMemory() {
             board.getRadius() - (church->getFootprintHeight() / 2)};
         expect(church->origin == expectedOrigin,
             "The church should be centered on the map footprint.");
+    }
+
+    void testBoardGeneratorDispersesPublicResourcesAcrossTypes() {
+        GameConfig config;
+        const std::vector<std::uint32_t> seeds{1337u, 7331u, 424242u, 987654u};
+
+        for (const std::uint32_t seed : seeds) {
+            Board board;
+            board.init(25);
+            std::vector<Building> publicBuildings;
+            BoardGenerator::generate(board, config, publicBuildings, seed);
+
+            std::vector<const Building*> mines;
+            std::vector<const Building*> farms;
+            std::vector<const Building*> resources;
+            for (const Building& building : publicBuildings) {
+                if (building.type == BuildingType::Mine) {
+                    mines.push_back(&building);
+                    resources.push_back(&building);
+                } else if (building.type == BuildingType::Farm) {
+                    farms.push_back(&building);
+                    resources.push_back(&building);
+                }
+            }
+
+            expect(mines.size() == static_cast<std::size_t>(config.getNumMines()),
+                "Generated worlds should still contain the configured number of mines.");
+            expect(farms.size() == static_cast<std::size_t>(config.getNumFarms()),
+                "Generated worlds should still contain the configured number of farms.");
+
+            const float minePairDistance = buildingCenterDistance(*mines[0], *mines[1]);
+            float minMineToFarmDistance = std::numeric_limits<float>::max();
+            for (const Building* mine : mines) {
+                for (const Building* farm : farms) {
+                    minMineToFarmDistance = std::min(
+                        minMineToFarmDistance,
+                        buildingCenterDistance(*mine, *farm));
+                }
+            }
+
+            expect(minePairDistance >= minMineToFarmDistance,
+                "Representative seeds should not cluster both mines more tightly than the nearest mine-to-farm pairing.");
+
+            int crossTypeNearestCount = 0;
+            for (const Building* resource : resources) {
+                const Building* nearest = nullptr;
+                float nearestDistance = std::numeric_limits<float>::max();
+                for (const Building* other : resources) {
+                    if (resource == other) {
+                        continue;
+                    }
+
+                    const float distance = buildingCenterDistance(*resource, *other);
+                    if (distance < nearestDistance) {
+                        nearestDistance = distance;
+                        nearest = other;
+                    }
+                }
+
+                if (nearest && nearest->type != resource->type) {
+                    ++crossTypeNearestCount;
+                }
+            }
+
+            expect(crossTypeNearestCount >= 2,
+                "Representative seeds should mix mines and farms instead of producing only same-type local clusters.");
+        }
     }
 
 void testSaveManagerRoundTrip() {
@@ -2601,10 +2690,12 @@ int main() {
         {"board generator deterministic seed", testBoardGeneratorUsesDeterministicSeed},
         {"board generator terrain balance", testBoardGeneratorProducesGrassDominantTerrain},
         {"board generator centered church", testBoardGeneratorCentersChurchWithoutRotation},
+        {"board generator resource dispersion", testBoardGeneratorDispersesPublicResourcesAcrossTypes},
         {"layered selection priority", testLayeredSelectionStackResolvesPriority},
         {"layered selection building cycle", testLayeredSelectionStackSupportsBuildingTerrainCycle},
         {"layered selection preview override", testLayeredSelectionStackSupportsPreviewPieceOverride},
         {"public building occupation state", testPublicBuildingOccupationStateResolvesAllOutcomes},
+        {"cell traversal water blocked", testCellTraversalTreatsWaterAsNotTraversable},
         {"private building overlay owner shield", testSelectedStructureOverlayPrivateBuildingsUseOwnerShield},
         {"public building overlay occupation", testSelectedStructureOverlayPublicBuildingsUseOccupationIndicator},
         {"barracks overlay production row", testSelectedStructureOverlayProducingBarracksAddsProgressRow},

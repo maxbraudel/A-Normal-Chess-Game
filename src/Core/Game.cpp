@@ -5,6 +5,7 @@
 #include "Buildings/BuildingType.hpp"
 #include "Systems/BuildSystem.hpp"
 #include "Systems/PendingTurnProjection.hpp"
+#include "Systems/PublicBuildingOccupation.hpp"
 #include "Input/InputContext.hpp"
 #include "UI/InGameViewModelBuilder.hpp"
 #include "Multiplayer/PasswordUtils.hpp"
@@ -1656,10 +1657,14 @@ void Game::updateUIState() {
                     m_uiManager.showBarracksPanel(*building, kingdom(building->owner), m_config, allowProduce);
                 } else {
                     std::optional<ResourceIncomeBreakdown> resourceIncome;
+                    std::optional<PublicBuildingOccupationState> publicOccupation;
                     if (building->type == BuildingType::Mine || building->type == BuildingType::Farm) {
                         resourceIncome = EconomySystem::calculateResourceIncomeBreakdown(*building, board(), m_config);
                     }
-                    m_uiManager.showBuildingPanel(*building, resourceIncome);
+                    if (building->isPublic()) {
+                        publicOccupation = resolvePublicBuildingOccupationState(*building, board());
+                    }
+                    m_uiManager.showBuildingPanel(*building, resourceIncome, publicOccupation);
                 }
             } else if (m_input.hasSelectedCell()) {
                 const sf::Vector2i cellPos = m_input.getSelectedCell();

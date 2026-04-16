@@ -1,6 +1,7 @@
 #include "UI/CellPanel.hpp"
 
 #include "Board/Cell.hpp"
+#include "Board/CellTraversal.hpp"
 #include "Board/CellType.hpp"
 #include "UI/HUDLayout.hpp"
 
@@ -41,7 +42,7 @@ void CellPanel::init(const tgui::Panel::Ptr& parent) {
     HUDLayout::styleSidebarBody(m_terrainLabel);
     m_panel->add(m_terrainLabel);
 
-    m_zoneLabel = tgui::Label::create("Playable Zone: Yes");
+    m_zoneLabel = tgui::Label::create("Traversable: Yes");
     m_zoneLabel->setPosition({10, 114});
     m_zoneLabel->setSize({316, 22});
     HUDLayout::styleSidebarBody(m_zoneLabel);
@@ -74,7 +75,7 @@ void CellPanel::show(const Cell& cell) {
 
     m_positionLabel->setText("Cell: " + std::to_string(cell.position.x) + ", " + std::to_string(cell.position.y));
     m_terrainLabel->setText("Terrain: " + cellTypeLabel(cell.type));
-    m_zoneLabel->setText(std::string("Playable Zone: ") + (cell.isInCircle ? "Yes" : "No"));
+    m_zoneLabel->setText(std::string("Traversable: ") + (isCellTerrainTraversable(cell) ? "Yes" : "No"));
     m_statusLabel->setText("Status: " + status);
     m_panel->setVisible(true);
 }

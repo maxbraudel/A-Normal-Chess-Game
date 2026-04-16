@@ -10,6 +10,20 @@ std::string formatIncomeLabel(const std::string& prefix, int income) {
     return prefix + ": +" + std::to_string(income) + " gold/turn";
 }
 
+std::string publicOccupationOwnerLabel(PublicBuildingOccupationState state) {
+    switch (state) {
+        case PublicBuildingOccupationState::WhiteOccupied:
+            return kingdomLabel(KingdomId::White);
+        case PublicBuildingOccupationState::BlackOccupied:
+            return kingdomLabel(KingdomId::Black);
+        case PublicBuildingOccupationState::Contested:
+            return "Disputed";
+        case PublicBuildingOccupationState::Unoccupied:
+        default:
+            return "Neutral";
+    }
+}
+
 } // namespace
 
 static std::string buildingTypeName(BuildingType type) {
@@ -60,25 +74,19 @@ void BuildingPanel::init(const tgui::Panel::Ptr& parent) {
     HUDLayout::styleSidebarBody(m_hpLabel);
     m_panel->add(m_hpLabel);
 
-    m_statusLabel = tgui::Label::create("Status: ");
-    m_statusLabel->setPosition({10, 170});
-    m_statusLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_statusLabel);
-    m_panel->add(m_statusLabel);
-
     m_resourceSectionLabel = tgui::Label::create("Resource Income");
-    m_resourceSectionLabel->setPosition({10, 212});
+    m_resourceSectionLabel->setPosition({10, 180});
     HUDLayout::styleSidebarTitle(m_resourceSectionLabel);
     m_panel->add(m_resourceSectionLabel);
 
     m_whiteIncomeLabel = tgui::Label::create("White: +0 gold/turn");
-    m_whiteIncomeLabel->setPosition({10, 244});
+    m_whiteIncomeLabel->setPosition({10, 212});
     m_whiteIncomeLabel->setSize({316, 22});
     HUDLayout::styleSidebarBody(m_whiteIncomeLabel);
     m_panel->add(m_whiteIncomeLabel);
 
     m_blackIncomeLabel = tgui::Label::create("Black: +0 gold/turn");
-    m_blackIncomeLabel->setPosition({10, 274});
+    m_blackIncomeLabel->setPosition({10, 242});
     m_blackIncomeLabel->setSize({316, 22});
     HUDLayout::styleSidebarBody(m_blackIncomeLabel);
     m_panel->add(m_blackIncomeLabel);
@@ -90,11 +98,16 @@ void BuildingPanel::init(const tgui::Panel::Ptr& parent) {
     m_panel->setVisible(false);
 }
 
-void BuildingPanel::show(const Building& building, const std::optional<ResourceIncomeBreakdown>& resourceIncome) {
+void BuildingPanel::show(const Building& building,
+                         const std::optional<ResourceIncomeBreakdown>& resourceIncome,
+                         const std::optional<PublicBuildingOccupationState>& publicOccupation) {
     if (!m_panel) return;
     m_panel->moveToFront();
     m_typeLabel->setText("Type: " + buildingTypeName(building.type));
-    m_ownerLabel->setText("Owner: " + (building.isNeutral ? std::string("Neutral") : kingdomLabel(building.owner)));
+    const std::string ownerLabel = building.isPublic()
+        ? publicOccupationOwnerLabel(publicOccupation.value_or(PublicBuildingOccupationState::Unoccupied))
+        : (building.isNeutral ? std::string("Neutral") : kingdomLabel(building.owner));
+    m_ownerLabel->setText("Owner: " + ownerLabel);
     m_cellsLabel->setText("Occupied Cells: " + std::to_string(building.width * building.height));
 
     // Calculate total HP
@@ -105,8 +118,6 @@ void BuildingPanel::show(const Building& building, const std::optional<ResourceI
         maxHP += (building.type == BuildingType::StoneWall ? 3 : 1);
     }
     m_hpLabel->setText("HP: " + std::to_string(totalHP) + "/" + std::to_string(maxHP));
-    m_statusLabel->setText(building.isDestroyed() ? "Status: Destroyed" :
-                           building.isNeutral ? "Status: Neutral" : "Status: Active");
 
     const bool showResourceIncome = resourceIncome.has_value() && resourceIncome->isResourceBuilding;
     m_resourceSectionLabel->setVisible(showResourceIncome);

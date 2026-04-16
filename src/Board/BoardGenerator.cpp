@@ -26,6 +26,16 @@ struct TerrainComponent {
     float averageScore = 0.f;
 };
 
+struct PublicBuildingPlacementRequest {
+    BuildingType type = BuildingType::Mine;
+    int width = 0;
+    int height = 0;
+    int rotationQuarterTurns = 0;
+    int flipMask = 0;
+    int footprintWidth = 0;
+    int footprintHeight = 0;
+};
+
 int clampInt(int value, int minValue, int maxValue) {
     return std::max(minValue, std::min(value, maxValue));
 }
@@ -117,6 +127,158 @@ float computeRadialDistance(int x, int y, int radius) {
 
 sf::Vector2i centeredFootprintOrigin(const Board& board, int width, int height) {
     return {board.getRadius() - (width / 2), board.getRadius() - (height / 2)};
+}
+
+sf::Vector2f footprintCenter(sf::Vector2i origin, int width, int height) {
+    return {
+        static_cast<float>(origin.x) + (static_cast<float>(width) * 0.5f),
+        static_cast<float>(origin.y) + (static_cast<float>(height) * 0.5f)};
+}
+
+float centerDistance(sf::Vector2i origin,
+                     int width,
+                     int height,
+                     const Building& building) {
+    const sf::Vector2f candidateCenter = footprintCenter(origin, width, height);
+    const sf::Vector2f buildingCenter = footprintCenter(
+        building.origin,
+        building.getFootprintWidth(),
+        building.getFootprintHeight());
+    const float dx = candidateCenter.x - buildingCenter.x;
+    const float dy = candidateCenter.y - buildingCenter.y;
+    return std::sqrt((dx * dx) + (dy * dy));
+}
+
+float scorePublicBuildingCandidate(const std::vector<Building>& existing,
+                                   BuildingType buildingType,
+                                   sf::Vector2i origin,
+                                   int width,
+                                   int height) {
+    if (existing.empty()) {
+        return 0.f;
+    }
+
+    float nearestAnyDistance = std::numeric_limits<float>::max();
+    float nearestSameTypeDistance = std::numeric_limits<float>::max();
+    float totalDistance = 0.f;
+
+    for (const Building& building : existing) {
+        const float distance = centerDistance(origin, width, height, building);
+        nearestAnyDistance = std::min(nearestAnyDistance, distance);
+        totalDistance += distance;
+        if (building.type == buildingType) {
+            nearestSameTypeDistance = std::min(nearestSameTypeDistance, distance);
+        }
+    }
+
+    if (nearestSameTypeDistance == std::numeric_limits<float>::max()) {
+        nearestSameTypeDistance = nearestAnyDistance;
+    }
+
+    const float averageDistance = totalDistance / static_cast<float>(existing.size());
+    return (nearestAnyDistance * 3.5f)
+        + (nearestSameTypeDistance * 2.0f)
+        + (averageDistance * 0.35f);
+}
+
+sf::Vector2i selectDispersedCandidate(const std::vector<sf::Vector2i>& candidates,
+                                      const std::vector<Building>& existing,
+                                      int width,
+                                      int height,
+                                      BuildingType buildingType,
+                                      std::mt19937& random) {
+    if (candidates.empty()) {
+        return {-1, -1};
+    }
+
+    if (existing.empty()) {
+        std::uniform_int_distribution<std::size_t> dist(0, candidates.size() - 1);
+        return candidates[dist(random)];
+    }
+
+    struct CandidateScore {
+        sf::Vector2i pos;
+        float score = 0.f;
+    };
+
+    std::vector<CandidateScore> scoredCandidates;
+    scoredCandidates.reserve(candidates.size());
+    for (const sf::Vector2i& candidate : candidates) {
+        scoredCandidates.push_back({
+            candidate,
+            scorePublicBuildingCandidate(existing, buildingType, candidate, width, height)});
+    }
+
+    std::sort(scoredCandidates.begin(), scoredCandidates.end(),
+        [](const CandidateScore& lhs, const CandidateScore& rhs) {
+            return lhs.score > rhs.score;
+        });
+
+    const std::size_t topCount = std::min(
+        scoredCandidates.size(),
+        std::max<std::size_t>(3, (scoredCandidates.size() + 5) / 6));
+    std::uniform_int_distribution<std::size_t> dist(0, topCount - 1);
+    return scoredCandidates[dist(random)].pos;
+}
+
+std::vector<PublicBuildingPlacementRequest> buildPublicResourcePlacementRequests(const GameConfig& config,
+                                                                                 std::mt19937& random,
+                                                                                 std::uniform_int_distribution<int>& rotationDist,
+                                                                                 std::uniform_int_distribution<int>& flipMaskDist) {
+    std::vector<PublicBuildingPlacementRequest> placements;
+    placements.reserve(static_cast<std::size_t>(config.getNumMines() + config.getNumFarms()));
+
+    auto addPlacements = [&](BuildingType type, int count) {
+        const int width = config.getBuildingWidth(type);
+        const int height = config.getBuildingHeight(type);
+        for (int i = 0; i < count; ++i) {
+            PublicBuildingPlacementRequest placement;
+            placement.type = type;
+            placement.width = width;
+            placement.height = height;
+            placement.rotationQuarterTurns = rotationDist(random);
+            placement.flipMask = flipMaskDist(random);
+            placement.footprintWidth = Building::getFootprintWidthFor(
+                width, height, placement.rotationQuarterTurns);
+            placement.footprintHeight = Building::getFootprintHeightFor(
+                width, height, placement.rotationQuarterTurns);
+            placements.push_back(placement);
+        }
+    };
+
+    addPlacements(BuildingType::Mine, config.getNumMines());
+    addPlacements(BuildingType::Farm, config.getNumFarms());
+    std::shuffle(placements.begin(), placements.end(), random);
+    return placements;
+}
+
+void linkPublicBuilding(Board& board, Building& building) {
+    for (const auto& occupiedCell : building.getOccupiedCells()) {
+        board.getCell(occupiedCell.x, occupiedCell.y).building = &building;
+    }
+}
+
+Building makeNeutralPublicBuilding(int id,
+                                   BuildingType type,
+                                   sf::Vector2i origin,
+                                   int width,
+                                   int height,
+                                   int rotationQuarterTurns,
+                                   int flipMask) {
+    Building building;
+    building.id = id;
+    building.type = type;
+    building.owner = KingdomId::White;
+    building.origin = origin;
+    building.width = width;
+    building.height = height;
+    building.rotationQuarterTurns = rotationQuarterTurns;
+    building.flipMask = flipMask;
+    building.isNeutral = true;
+    building.cellHP.assign(width * height, 999);
+    building.isProducing = false;
+    building.turnsRemaining = 0;
+    return building;
 }
 
 void prepareCenteredPublicFootprint(Board& board,
@@ -527,85 +689,34 @@ GenerationResult BoardGenerator::generate(Board& board, const GameConfig& config
     const int churchFootprintH = Building::getFootprintHeightFor(churchW, churchH, churchRotation);
     const sf::Vector2i churchPos = centeredFootprintOrigin(board, churchFootprintW, churchFootprintH);
     prepareCenteredPublicFootprint(board, churchPos, churchFootprintW, churchFootprintH, worldSeed);
-    {
-        Building church;
-        church.id = 0;
-        church.type = BuildingType::Church;
-        church.owner = KingdomId::White;
-        church.origin = churchPos;
-        church.width = churchW;
-        church.height = churchH;
-        church.rotationQuarterTurns = churchRotation;
-        church.flipMask = churchFlipMask;
-        church.isNeutral = true;
-        church.cellHP.assign(churchW * churchH, 999);
-        church.isProducing = false;
-        church.turnsRemaining = 0;
-        publicBuildings.push_back(church);
-
-        for (const auto& occupiedCell : publicBuildings.back().getOccupiedCells()) {
-            board.getCell(occupiedCell.x, occupiedCell.y).building = &publicBuildings.back();
-        }
-    }
+    publicBuildings.push_back(makeNeutralPublicBuilding(
+        0, BuildingType::Church, churchPos, churchW, churchH, churchRotation, churchFlipMask));
+    linkPublicBuilding(board, publicBuildings.back());
 
     const int minDist = config.getMinPublicBuildingDistance();
 
-    for (int i = 0; i < config.getNumMines(); ++i) {
-        const int mineW = config.getBuildingWidth(BuildingType::Mine);
-        const int mineH = config.getBuildingHeight(BuildingType::Mine);
-        const int mineRotation = rotationDist(random);
-        const int mineFlipMask = flipMaskDist(random);
-        const int mineFootprintW = Building::getFootprintWidthFor(mineW, mineH, mineRotation);
-        const int mineFootprintH = Building::getFootprintHeightFor(mineW, mineH, mineRotation);
-        const sf::Vector2i pos = findValidBuildingPos(board, publicBuildings, mineFootprintW, mineFootprintH,
-                                                      minDist, spawnLeftMax, spawnRightMin, random);
-        Building mine;
-        mine.id = static_cast<int>(publicBuildings.size());
-        mine.type = BuildingType::Mine;
-        mine.owner = KingdomId::White;
-        mine.origin = pos;
-        mine.width = mineW;
-        mine.height = mineH;
-        mine.rotationQuarterTurns = mineRotation;
-        mine.flipMask = mineFlipMask;
-        mine.isNeutral = true;
-        mine.cellHP.assign(mineW * mineH, 999);
-        mine.isProducing = false;
-        mine.turnsRemaining = 0;
-        publicBuildings.push_back(mine);
-
-        for (const auto& occupiedCell : publicBuildings.back().getOccupiedCells()) {
-            board.getCell(occupiedCell.x, occupiedCell.y).building = &publicBuildings.back();
-        }
-    }
-
-    for (int i = 0; i < config.getNumFarms(); ++i) {
-        const int farmW = config.getBuildingWidth(BuildingType::Farm);
-        const int farmH = config.getBuildingHeight(BuildingType::Farm);
-        const int farmRotation = rotationDist(random);
-        const int farmFlipMask = flipMaskDist(random);
-        const int farmFootprintW = Building::getFootprintWidthFor(farmW, farmH, farmRotation);
-        const int farmFootprintH = Building::getFootprintHeightFor(farmW, farmH, farmRotation);
-        const sf::Vector2i pos = findValidBuildingPos(board, publicBuildings, farmFootprintW, farmFootprintH,
-                                                      minDist, spawnLeftMax, spawnRightMin, random);
-        Building farm;
-        farm.id = static_cast<int>(publicBuildings.size());
-        farm.type = BuildingType::Farm;
-        farm.owner = KingdomId::White;
-        farm.origin = pos;
-        farm.width = farmW;
-        farm.height = farmH;
-        farm.rotationQuarterTurns = farmRotation;
-        farm.flipMask = farmFlipMask;
-        farm.isNeutral = true;
-        farm.cellHP.assign(farmW * farmH, 999);
-        farm.isProducing = false;
-        farm.turnsRemaining = 0;
-        publicBuildings.push_back(farm);
-
-        for (const auto& occupiedCell : publicBuildings.back().getOccupiedCells()) {
-            board.getCell(occupiedCell.x, occupiedCell.y).building = &publicBuildings.back();
-        }
+    const std::vector<PublicBuildingPlacementRequest> resourcePlacements = buildPublicResourcePlacementRequests(
+        config, random, rotationDist, flipMaskDist);
+    for (const PublicBuildingPlacementRequest& placement : resourcePlacements) {
+        const sf::Vector2i pos = findValidBuildingPos(
+            board,
+            publicBuildings,
+            placement.footprintWidth,
+            placement.footprintHeight,
+            minDist,
+            spawnLeftMax,
+            spawnRightMin,
+            placement.type,
+            random);
+        publicBuildings.push_back(makeNeutralPublicBuilding(
+            static_cast<int>(publicBuildings.size()),
+            placement.type,
+            pos,
+            placement.width,
+            placement.height,
+            placement.rotationQuarterTurns,
+            placement.flipMask));
+        linkPublicBuilding(board, publicBuildings.back());
     }
 
     result.playerSpawn = findSpawnCell(board, 1, spawnLeftMax, random);
@@ -674,52 +785,52 @@ sf::Vector2i BoardGenerator::findValidBuildingPos(const Board& board,
                                                   const std::vector<Building>& existing,
                                                   int width, int height, int minDist,
                                                   int avoidLeftX, int avoidRightX,
+                                                  BuildingType buildingType,
                                                   std::mt19937& random) {
     const int diameter = board.getDiameter();
     const int radius = board.getRadius();
-    std::vector<sf::Vector2i> candidates;
-
-    for (int y = 1; y + height < diameter; ++y) {
-        for (int x = std::max(1, avoidLeftX); x + width <= std::min(avoidRightX, diameter - 1); ++x) {
-            if (!canPlaceBuilding(board, {x, y}, width, height)) {
-                continue;
-            }
-
-            bool tooClose = false;
-            for (const auto& building : existing) {
-                const float bx = static_cast<float>(building.origin.x + (building.getFootprintWidth() / 2));
-                const float by = static_cast<float>(building.origin.y + (building.getFootprintHeight() / 2));
-                const float px = static_cast<float>(x + (width / 2));
-                const float py = static_cast<float>(y + (height / 2));
-                const float distance = std::sqrt(((bx - px) * (bx - px)) + ((by - py) * (by - py)));
-                if (distance < static_cast<float>(minDist)) {
-                    tooClose = true;
-                    break;
+    auto collectCandidates = [&](bool enforceMinDistance) {
+        std::vector<sf::Vector2i> candidates;
+        for (int y = 1; y + height < diameter; ++y) {
+            for (int x = std::max(1, avoidLeftX); x + width <= std::min(avoidRightX, diameter - 1); ++x) {
+                if (!canPlaceBuilding(board, {x, y}, width, height)) {
+                    continue;
                 }
-            }
 
-            if (!tooClose) {
+                if (enforceMinDistance) {
+                    bool tooClose = false;
+                    for (const Building& building : existing) {
+                        if (centerDistance({x, y}, width, height, building) < static_cast<float>(minDist)) {
+                            tooClose = true;
+                            break;
+                        }
+                    }
+                    if (tooClose) {
+                        continue;
+                    }
+                }
+
                 candidates.push_back({x, y});
             }
         }
+        return candidates;
+    };
+
+    const std::vector<sf::Vector2i> spacedCandidates = collectCandidates(true);
+    if (!spacedCandidates.empty()) {
+        return selectDispersedCandidate(
+            spacedCandidates, existing, width, height, buildingType, random);
     }
 
-    if (!candidates.empty()) {
-        std::uniform_int_distribution<std::size_t> dist(0, candidates.size() - 1);
-        return candidates[dist(random)];
+    const std::vector<sf::Vector2i> relaxedCandidates = collectCandidates(false);
+    if (!relaxedCandidates.empty()) {
+        return selectDispersedCandidate(
+            relaxedCandidates, existing, width, height, buildingType, random);
     }
 
     sf::Vector2i fallback{radius - (width / 2), radius - (height / 2)};
     if (canPlaceBuilding(board, fallback, width, height)) {
         return fallback;
-    }
-
-    for (int y = 1; y + height < diameter; ++y) {
-        for (int x = 1; x + width < diameter; ++x) {
-            if (canPlaceBuilding(board, {x, y}, width, height)) {
-                return {x, y};
-            }
-        }
     }
 
     return fallback;

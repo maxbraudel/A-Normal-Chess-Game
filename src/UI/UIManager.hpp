@@ -9,6 +9,7 @@
 #include "UI/CellPanel.hpp"
 #include "UI/EventLogPanel.hpp"
 #include "UI/KingdomBalancePanel.hpp"
+#include "Systems/PublicBuildingOccupation.hpp"
 #include "UI/InGameViewModel.hpp"
 #include "UI/ToolBar.hpp"
 
@@ -40,7 +41,8 @@ public:
     void updateDashboard(const InGameViewModel& model);
     void showPiecePanel(const Piece& piece, const GameConfig& config, bool allowUpgrade);
     void showBuildingPanel(const Building& building,
-                           const std::optional<ResourceIncomeBreakdown>& resourceIncome = std::nullopt);
+                           const std::optional<ResourceIncomeBreakdown>& resourceIncome = std::nullopt,
+                           const std::optional<PublicBuildingOccupationState>& publicOccupation = std::nullopt);
     void showBarracksPanel(const Building& barracks, const Kingdom& kingdom, const GameConfig& config,
                            bool allowProduce);
     void showBuildToolPanel(const Kingdom& kingdom, const GameConfig& config, bool allowBuild);

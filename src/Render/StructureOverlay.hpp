@@ -4,18 +4,12 @@
 #include <vector>
 
 #include "Kingdom/KingdomId.hpp"
+#include "Systems/PublicBuildingOccupation.hpp"
 #include "Units/PieceType.hpp"
 
 class Board;
 class Building;
 class GameConfig;
-
-enum class PublicBuildingOccupationState {
-    Unoccupied,
-    WhiteOccupied,
-    BlackOccupied,
-    Contested
-};
 
 enum class StructureOverlayIconSource {
     UITexture,

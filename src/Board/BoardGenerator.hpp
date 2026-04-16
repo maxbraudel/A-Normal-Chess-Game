@@ -6,6 +6,7 @@
 class Board;
 class GameConfig;
 class Building;
+#include "Buildings/BuildingType.hpp"
 #include <vector>
 
 struct GenerationResult {
@@ -26,6 +27,7 @@ private:
                                               const std::vector<Building>& existing,
                                               int width, int height, int minDist,
                                               int avoidLeftX, int avoidRightX,
+                                              BuildingType buildingType,
                                               std::mt19937& random);
     static sf::Vector2i findSpawnCell(const Board& board,
                                        int minX, int maxX,
