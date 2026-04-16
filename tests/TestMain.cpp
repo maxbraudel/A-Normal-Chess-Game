@@ -36,6 +36,7 @@
 #include "Multiplayer/Protocol.hpp"
 #include "Multiplayer/MultiplayerServer.hpp"
 #include "Save/SaveManager.hpp"
+#include "Systems/BuildOverlayRules.hpp"
 #include "Systems/BuildSystem.hpp"
 #include "Systems/CheckResponseRules.hpp"
 #include "Systems/CheckSystem.hpp"
@@ -191,6 +192,18 @@ bool snapshotHasAnyLegalResponse(const Board& board,
 bool containsCell(const std::vector<sf::Vector2i>& cells,
                   const sf::Vector2i& target) {
     return std::find(cells.begin(), cells.end(), target) != cells.end();
+}
+
+bool sameCellSet(std::vector<sf::Vector2i> lhs,
+                 std::vector<sf::Vector2i> rhs) {
+    auto order = [](const sf::Vector2i& a, const sf::Vector2i& b) {
+        return a.x < b.x || (a.x == b.x && a.y < b.y);
+    };
+    std::sort(lhs.begin(), lhs.end(), order);
+    lhs.erase(std::unique(lhs.begin(), lhs.end()), lhs.end());
+    std::sort(rhs.begin(), rhs.end(), order);
+    rhs.erase(std::unique(rhs.begin(), rhs.end()), rhs.end());
+    return lhs == rhs;
 }
 
 TurnCommand makeMoveCommand(int pieceId,
@@ -2995,6 +3008,191 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             "A pending build should remain queued when another builder still covers it in the final projected state.");
     }
 
+    void testBuildOverlayRulesExposeOccupiedCellsForMultiCellStructure() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        white.gold = config.getBarracksCost() + 10;
+        addPieceToBoard(white, board, 6113, PieceType::King, KingdomId::White, {10, 10});
+        addPieceToBoard(black, board, 7113, PieceType::King, KingdomId::Black, {18, 18});
+
+        const std::vector<sf::Vector2i> buildableOrigins = BuildOverlayRules::collectBuildableOrigins(
+            board,
+            white,
+            black,
+            {},
+            1,
+            {},
+            BuildingType::Barracks,
+            0,
+            config);
+        const std::vector<sf::Vector2i> coverageCells = BuildOverlayRules::collectBuildableCoverageCells(
+            board,
+            white,
+            black,
+            {},
+            1,
+            {},
+            BuildingType::Barracks,
+            0,
+            config);
+
+        expect(!buildableOrigins.empty(),
+            "The barracks coverage regression test needs at least one valid anchor.");
+        expect(coverageCells.size() > buildableOrigins.size(),
+            "A multi-cell build overlay should cover more cells than the set of valid anchors.");
+
+        bool foundOccupiedNonAnchorCell = false;
+        for (const sf::Vector2i& anchor : buildableOrigins) {
+            for (int localY = 0; localY < config.getBuildingHeight(BuildingType::Barracks); ++localY) {
+                for (int localX = 0; localX < config.getBuildingWidth(BuildingType::Barracks); ++localX) {
+                    const sf::Vector2i occupiedCell(anchor.x + localX, anchor.y + localY);
+                    if (!containsCell(buildableOrigins, occupiedCell) && containsCell(coverageCells, occupiedCell)) {
+                        foundOccupiedNonAnchorCell = true;
+                        break;
+                    }
+                }
+
+                if (foundOccupiedNonAnchorCell) {
+                    break;
+                }
+            }
+
+            if (foundOccupiedNonAnchorCell) {
+                break;
+            }
+        }
+
+        expect(foundOccupiedNonAnchorCell,
+            "The build coverage map should include occupied footprint cells that are not themselves clickable anchors.");
+    }
+
+    void testBuildOverlayRulesCoverageFollowsQueuedMoveProjectedState() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        white.gold = config.getBarracksCost() + 10;
+        Piece& whiteKing = addPieceToBoard(white, board, 6114, PieceType::King, KingdomId::White, {10, 10});
+        addPieceToBoard(black, board, 7114, PieceType::King, KingdomId::Black, {18, 18});
+
+        const std::vector<TurnCommand> pendingCommands{
+            makeMoveCommand(whiteKing.id, {10, 10}, {11, 10})
+        };
+        const std::vector<sf::Vector2i> coverageBeforeMove = BuildOverlayRules::collectBuildableCoverageCells(
+            board,
+            white,
+            black,
+            {},
+            1,
+            {},
+            BuildingType::Barracks,
+            0,
+            config);
+        const std::vector<sf::Vector2i> buildableOrigins = BuildOverlayRules::collectBuildableOrigins(
+            board,
+            white,
+            black,
+            {},
+            1,
+            pendingCommands,
+            BuildingType::Barracks,
+            0,
+            config);
+        const std::vector<sf::Vector2i> coverageCells = BuildOverlayRules::collectBuildableCoverageCells(
+            board,
+            white,
+            black,
+            {},
+            1,
+            pendingCommands,
+            BuildingType::Barracks,
+            0,
+            config);
+
+        expect(containsCell(buildableOrigins, {12, 10}),
+            "The projected barracks anchors should move with the queued builder move.");
+        expect(containsCell(coverageCells, {15, 12}),
+            "The build coverage map should include the far edge of a valid projected barracks footprint.");
+
+        bool foundDroppedCell = false;
+        for (const sf::Vector2i& cell : coverageBeforeMove) {
+            if (!containsCell(coverageCells, cell)) {
+                foundDroppedCell = true;
+                break;
+            }
+        }
+
+        bool foundGainedCell = false;
+        for (const sf::Vector2i& cell : coverageCells) {
+            if (!containsCell(coverageBeforeMove, cell)) {
+                foundGainedCell = true;
+                break;
+            }
+        }
+
+        expect(foundDroppedCell,
+            "The build coverage map should drop at least one cell when the projected builder position changes.");
+        expect(foundGainedCell,
+            "The build coverage map should gain at least one new cell when the projected builder position changes.");
+    }
+
+    void testBuildOverlayRulesOriginsMatchBruteForceProjection() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        white.gold = config.getBarracksCost() * 2;
+        Piece& whiteKing = addPieceToBoard(white, board, 6115, PieceType::King, KingdomId::White, {10, 10});
+        addPieceToBoard(white, board, 6116, PieceType::Pawn, KingdomId::White, {13, 11});
+        addPieceToBoard(black, board, 7115, PieceType::King, KingdomId::Black, {18, 18});
+
+        Building blocker = makeTestStoneWall(8115, KingdomId::White, {8, 8}, config);
+        white.addBuilding(blocker);
+        linkBuildingOnBoard(white.buildings.back(), board);
+
+        const std::vector<TurnCommand> pendingCommands{
+            makeMoveCommand(whiteKing.id, {10, 10}, {11, 10})
+        };
+
+        const std::vector<sf::Vector2i> optimizedOrigins = BuildOverlayRules::collectBuildableOrigins(
+            board,
+            white,
+            black,
+            {},
+            1,
+            pendingCommands,
+            BuildingType::Barracks,
+            0,
+            config);
+
+        std::vector<sf::Vector2i> bruteForceOrigins;
+        for (const sf::Vector2i& origin : board.getAllValidCells()) {
+            TurnCommand candidate = makeBuildCommand(BuildingType::Barracks, origin);
+            if (PendingTurnProjection::canAppendCommand(
+                    board,
+                    white,
+                    black,
+                    {},
+                    1,
+                    pendingCommands,
+                    candidate,
+                    config)) {
+                bruteForceOrigins.push_back(origin);
+            }
+        }
+
+        expect(sameCellSet(optimizedOrigins, bruteForceOrigins),
+            "Optimized build overlay origins must match brute-force projected build legality exactly.");
+    }
+
     void testTurnSystemCancelMoveKeepsBuildWhenAnotherBuilderStillSupportsIt() {
         GameConfig config;
         Board board;
@@ -3891,6 +4089,9 @@ int main() {
         {"turn system replace move drops orphan build", testTurnSystemReplaceMoveDropsOrphanedPendingBuilds},
         {"turn system queue move drops final unsupported build", testTurnSystemQueueMoveDropsPendingBuildUnsupportedInFinalState},
         {"turn system queue move keeps final supported build", testTurnSystemQueueMoveKeepsPendingBuildWhenAnotherFinalBuilderSupportsIt},
+        {"build overlay exposes occupied structure cells", testBuildOverlayRulesExposeOccupiedCellsForMultiCellStructure},
+        {"build overlay coverage follows queued move state", testBuildOverlayRulesCoverageFollowsQueuedMoveProjectedState},
+        {"build overlay origins match brute force", testBuildOverlayRulesOriginsMatchBruteForceProjection},
         {"turn system keep build with other builder", testTurnSystemCancelMoveKeepsBuildWhenAnotherBuilderStillSupportsIt},
         {"turn system stable pending build ids", testTurnSystemAssignsStablePendingBuildIds},
         {"turn system commit preserves reserved build id", testTurnSystemCommitPreservesReservedBuildId},

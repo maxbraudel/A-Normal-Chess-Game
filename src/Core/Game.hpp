@@ -42,6 +42,8 @@
 #include "Save/SaveManager.hpp"
 #include "Systems/CheckResponseRules.hpp"
 
+#include <cstdint>
+
 #ifdef _WIN32
 LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
 #endif
@@ -121,6 +123,7 @@ private:
     Building* findBuildingById(int buildingId);
     Building* findBuildingForBookmark(const InputSelectionBookmark& bookmark);
     void activateSelectTool();
+    void refreshBuildableCellsOverlay(const InteractionPermissions& permissions);
     Board& displayedBoard();
     const Board& displayedBoard() const;
     std::array<Kingdom, kNumKingdoms>& displayedKingdoms();
@@ -227,6 +230,14 @@ private:
     bool m_lanHostRemoteSessionEstablished = false;
     bool m_waitingForRemoteTurnResult = false;
     std::string m_multiplayerHostJoinHint;
+    std::vector<sf::Vector2i> m_buildableOriginsOverlay;
+    std::vector<sf::Vector2i> m_buildableCellsOverlay;
+    std::uint64_t m_buildableCellsOverlayRevision = 0;
+    int m_buildableCellsOverlayTurnNumber = -1;
+    KingdomId m_buildableCellsOverlayActiveKingdom = KingdomId::White;
+    BuildingType m_buildableCellsOverlayType = BuildingType::Barracks;
+    int m_buildableCellsOverlayRotationQuarterTurns = 0;
+    bool m_buildableCellsOverlayCacheValid = false;
 
 #ifdef _WIN32
     WNDPROC m_originalWndProc = nullptr;

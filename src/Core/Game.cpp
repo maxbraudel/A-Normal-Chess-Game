@@ -3,6 +3,7 @@
 #include "Render/StructureOverlay.hpp"
 #include "Save/SaveData.hpp"
 #include "Buildings/BuildingType.hpp"
+#include "Systems/BuildOverlayRules.hpp"
 #include "Systems/BuildSystem.hpp"
 #include "Systems/PendingTurnProjection.hpp"
 #include "Systems/PublicBuildingOccupation.hpp"
@@ -325,6 +326,55 @@ bool Game::isActiveKingInCheckForRules() const {
 
 bool Game::canQueueNonMoveActions() const {
     return currentInteractionPermissions().canQueueNonMoveActions;
+}
+
+void Game::refreshBuildableCellsOverlay(const InteractionPermissions& permissions) {
+    if (m_input.getCurrentTool() != ToolState::Build || !permissions.canShowBuildPreview) {
+        m_buildableOriginsOverlay.clear();
+        m_buildableCellsOverlay.clear();
+        m_buildableCellsOverlayCacheValid = false;
+        return;
+    }
+
+    const std::uint64_t revision = turnSystem().getPendingStateRevision();
+    const int turnNumber = turnSystem().getTurnNumber();
+    const KingdomId activeKingdomId = activeKingdom().id;
+    const BuildingType buildType = m_input.getBuildPreviewType();
+    const int rotationQuarterTurns = m_input.getBuildPreviewRotationQuarterTurns();
+
+    if (m_buildableCellsOverlayCacheValid
+        && m_buildableCellsOverlayRevision == revision
+        && m_buildableCellsOverlayTurnNumber == turnNumber
+        && m_buildableCellsOverlayActiveKingdom == activeKingdomId
+        && m_buildableCellsOverlayType == buildType
+        && m_buildableCellsOverlayRotationQuarterTurns == rotationQuarterTurns) {
+        return;
+    }
+
+    if (!permissions.canQueueNonMoveActions) {
+        m_buildableOriginsOverlay.clear();
+        m_buildableCellsOverlay.clear();
+    } else {
+        const BuildOverlayRules::BuildOverlayMap buildOverlayMap = BuildOverlayRules::collectBuildOverlayMap(
+            board(),
+            activeKingdom(),
+            enemyKingdom(),
+            publicBuildings(),
+            turnNumber,
+            turnSystem().getPendingCommands(),
+            buildType,
+            rotationQuarterTurns,
+            m_config);
+            m_buildableOriginsOverlay = std::move(buildOverlayMap.validOrigins);
+            m_buildableCellsOverlay = std::move(buildOverlayMap.coverageCells);
+    }
+
+    m_buildableCellsOverlayRevision = revision;
+    m_buildableCellsOverlayTurnNumber = turnNumber;
+    m_buildableCellsOverlayActiveKingdom = activeKingdomId;
+    m_buildableCellsOverlayType = buildType;
+    m_buildableCellsOverlayRotationQuarterTurns = rotationQuarterTurns;
+    m_buildableCellsOverlayCacheValid = true;
 }
 
 bool Game::shouldUseTurnDraft() const {
@@ -972,6 +1022,8 @@ void Game::render() {
                 m_window, displayedBoard(), m_config.getCellSizePx());
         }
 
+        refreshBuildableCellsOverlay(renderPermissions);
+
         if (canShowSelectedPieceActions && m_input.getCurrentTool() == ToolState::Select) {
             const TurnCommand* pendingMove = turnSystem().getPendingMoveCommand(selectedPiece->id);
             const sf::Vector2i highlightedOrigin = pendingMove
@@ -991,6 +1043,12 @@ void Game::render() {
                 m_renderer.getOverlay().drawDangerCells(m_window, m_camera,
                     m_input.getDangerMoves(), m_config.getCellSizePx());
             }
+        } else if (m_input.getCurrentTool() == ToolState::Build && !m_buildableCellsOverlay.empty()) {
+            m_renderer.getOverlay().drawReachableCells(
+                m_window,
+                m_camera,
+                m_buildableCellsOverlay,
+                m_config.getCellSizePx());
         }
 
         m_renderer.drawPiecesLayer(m_window, m_camera, displayedKingdoms());
@@ -1019,16 +1077,10 @@ void Game::render() {
             const int previewRotationQuarterTurns = m_input.getBuildPreviewRotationQuarterTurns();
             const int bw = m_config.getBuildingWidth(bt);
             const int bh = m_config.getBuildingHeight(bt);
-            TurnCommand previewBuild;
-            previewBuild.type = TurnCommand::Build;
-            previewBuild.buildingType = bt;
-            previewBuild.buildOrigin = m_input.getBuildPreviewOrigin();
-            previewBuild.buildRotationQuarterTurns = previewRotationQuarterTurns;
             const bool valid = renderPermissions.canQueueNonMoveActions
-                && PendingTurnProjection::canAppendCommand(
-                    board(), activeKingdom(), enemyKingdom(), publicBuildings(),
-                    turnSystem().getTurnNumber(), turnSystem().getPendingCommands(),
-                    previewBuild, m_config);
+                && std::find(m_buildableOriginsOverlay.begin(),
+                             m_buildableOriginsOverlay.end(),
+                             m_input.getBuildPreviewOrigin()) != m_buildableOriginsOverlay.end();
             m_renderer.getOverlay().drawBuildPreview(m_window, m_camera,
                 m_hudView, m_windowSize,
                 m_input.getBuildPreviewOrigin(), bt, bw, bh, previewRotationQuarterTurns,
