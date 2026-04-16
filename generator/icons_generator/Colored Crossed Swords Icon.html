@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Colored Crossed Swords Icon Generator</title>
+<link rel="stylesheet" href="./icon-generator.css">
+<script src="./icon-generator-core.js"></script>
+</head>
+<body>
+<div class="icon-generator-app">
+  <aside class="control-rail">
+    <section class="brand-block">
+      <p class="eyebrow">Pixel Icon Generator</p>
+      <h1 id="iconTitle"></h1>
+      <p class="subtitle" id="iconSubtitle"></p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Icon Config</h2>
+          <p>This version keeps the same spirit as the structure generator, but for a single transparent 16x16 icon.</p>
+        </div>
+      </div>
+      <div class="meta-grid">
+        <div class="meta-card"><span>Canvas</span><strong id="iconDimensions"></strong></div>
+        <div class="meta-card"><span>Export</span><strong id="exportName"></strong></div>
+        <div class="meta-card"><span>Background</span><strong id="backgroundType"></strong></div>
+        <div class="meta-card"><span>Format</span><strong id="exportFormat"></strong></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Workflow Notes</h2>
+          <p>The icon stays transparent by default and exports directly as a PNG instead of chunked ZIP output.</p>
+        </div>
+      </div>
+      <ul class="notes-list" id="notesList"></ul>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Export</h2>
+          <p>The generated icon is exported immediately as a single PNG file.</p>
+        </div>
+      </div>
+      <div class="button-row">
+        <button class="primary-button" id="downloadButton" type="button">Download PNG Icon</button>
+        <div class="status-pill" id="downloadStatus"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Palette</h2>
+          <p>Bright steel blades, warm gold guards, leather grips and colored pommel gems give the crossed swords their detail.</p>
+        </div>
+      </div>
+      <div class="palette-list" id="paletteList"></div>
+    </section>
+  </aside>
+
+  <main class="workspace">
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Icon Preview</h2>
+          <p>A close-up pixel preview with optional grid lines so the 16x16 composition is easy to inspect.</p>
+        </div>
+        <label class="toggle"><input id="pixelGridToggle" type="checkbox" checked> Show pixel grid</label>
+      </div>
+      <div class="canvas-frame canvas-frame-centered">
+        <canvas id="masterCanvas"></canvas>
+      </div>
+    </section>
+
+    <section class="preview-grid">
+      <article class="mini-preview-card">
+        <h3>UI Preview</h3>
+        <p>A compact zoom level that is closer to how the icon will read in a menu or HUD.</p>
+        <div class="canvas-frame canvas-frame-centered">
+          <canvas id="previewCanvas"></canvas>
+        </div>
+      </article>
+
+      <article class="mini-preview-card">
+        <h3>Actual Export Size</h3>
+        <p>The raw exported dimensions, kept at true 16x16 scale.</p>
+        <div class="canvas-frame canvas-frame-centered actual-preview-shell">
+          <canvas id="actualCanvas"></canvas>
+        </div>
+      </article>
+    </section>
+  </main>
+</div>
+
+<script>
+const coloredCrossedSwordsIconConfig = {
+  title: "Colored Crossed Swords Icon Generator",
+  subtitle: "A detailed 16x16 crossed swords icon with bright steel blades, gold guards, leather grips and two colored pommel gems.",
+  iconName: "colored_crossed_swords",
+  widthPixels: 16,
+  heightPixels: 16,
+  previewScale: 24,
+  secondaryScale: 11,
+  defaultTile: "transparent",
+  defaultBackgroundLabel: "Transparent",
+  notes: [
+    "The canvas starts fully transparent and only the icon silhouette is painted.",
+    "Two swords cross through the center with mirrored blade highlights so the icon stays readable at tiny scale.",
+    "The black outer contour is generated after the colored artwork is painted, which keeps the silhouette crisp.",
+    "PNG export is immediate: one button, one file, no ZIP packaging."
+  ],
+  paletteOrder: [
+    "transparent",
+    "outline",
+    "steelLight",
+    "steelMid",
+    "steelDark",
+    "goldLight",
+    "goldDark",
+    "leather",
+    "leatherDark",
+    "ruby",
+    "sapphire"
+  ],
+  paletteLabels: {
+    transparent: "Transparent",
+    outline: "Black Contour",
+    steelLight: "Blade Highlight",
+    steelMid: "Bright Steel",
+    steelDark: "Steel Shadow",
+    goldLight: "Bright Gold",
+    goldDark: "Old Gold",
+    leather: "Leather Grip",
+    leatherDark: "Dark Leather",
+    ruby: "Ruby Gem",
+    sapphire: "Sapphire Gem"
+  },
+  palette: {
+    transparent: null,
+    outline: "#0f0f12",
+    steelLight: "#eef4ff",
+    steelMid: "#bcc8da",
+    steelDark: "#697588",
+    goldLight: "#f0cf76",
+    goldDark: "#996722",
+    leather: "#8f5930",
+    leatherDark: "#5f3519",
+    ruby: "#c03044",
+    sapphire: "#3c6fd5"
+  },
+  draw(icon) {
+    function paint(points, tile) {
+      for (let index = 0; index < points.length; index += 1) {
+        icon.set(points[index][0], points[index][1], tile);
+      }
+    }
+
+    function applyExteriorOutline(outlineTile) {
+      const marks = [];
+      const directions = [
+        [-1, -1], [0, -1], [1, -1],
+        [-1, 0],            [1, 0],
+        [-1, 1],  [0, 1],  [1, 1]
+      ];
+
+      for (let y = 0; y < icon.heightPixels; y += 1) {
+        for (let x = 0; x < icon.widthPixels; x += 1) {
+          if (icon.get(x, y) === "transparent") {
+            continue;
+          }
+
+          for (let index = 0; index < directions.length; index += 1) {
+            const nx = x + directions[index][0];
+            const ny = y + directions[index][1];
+            if (!icon.inBounds(nx, ny)) {
+              continue;
+            }
+            if (icon.get(nx, ny) === "transparent") {
+              marks.push([nx, ny]);
+            }
+          }
+        }
+      }
+
+      for (let index = 0; index < marks.length; index += 1) {
+        const mark = marks[index];
+        if (icon.get(mark[0], mark[1]) === "transparent") {
+          icon.set(mark[0], mark[1], outlineTile);
+        }
+      }
+    }
+
+    paint([
+      [3, 2], [4, 3], [4, 4], [5, 5], [6, 6], [7, 7], [8, 8], [9, 9]
+    ], "steelLight");
+    paint([
+      [3, 3], [5, 4], [6, 5], [7, 6], [8, 7], [9, 8], [10, 9]
+    ], "steelMid");
+    paint([
+      [4, 5], [5, 6], [6, 7], [7, 8], [8, 9], [9, 10]
+    ], "steelDark");
+
+    paint([
+      [12, 2], [11, 3], [11, 4], [10, 5], [9, 6], [8, 7], [7, 8], [6, 9]
+    ], "steelLight");
+    paint([
+      [12, 3], [10, 4], [9, 5], [8, 6], [7, 7], [6, 8], [5, 9]
+    ], "steelMid");
+    paint([
+      [11, 5], [10, 6], [9, 7], [8, 8], [7, 9], [6, 10]
+    ], "steelDark");
+
+    paint([
+      [7, 7], [8, 7], [7, 8], [8, 8]
+    ], "steelLight");
+
+    paint([
+      [8, 10], [9, 10], [10, 10], [11, 10],
+      [9, 11], [10, 11]
+    ], "goldLight");
+    paint([
+      [8, 11], [11, 11], [10, 12]
+    ], "goldDark");
+
+    paint([
+      [4, 10], [5, 10], [6, 10], [7, 10],
+      [5, 11], [6, 11]
+    ], "goldLight");
+    paint([
+      [4, 11], [7, 11], [5, 12]
+    ], "goldDark");
+
+    paint([
+      [9, 11], [10, 12], [11, 13], [12, 14],
+      [10, 11], [11, 12], [12, 13]
+    ], "leather");
+    paint([
+      [10, 12], [11, 13], [12, 14]
+    ], "leatherDark");
+
+    paint([
+      [5, 11], [4, 12], [3, 13], [2, 14],
+      [6, 11], [5, 12], [4, 13]
+    ], "leather");
+    paint([
+      [4, 12], [3, 13], [2, 14]
+    ], "leatherDark");
+
+    paint([
+      [13, 15], [12, 15]
+    ], "goldLight");
+    paint([
+      [13, 14]
+    ], "ruby");
+
+    paint([
+      [2, 15], [3, 15]
+    ], "goldLight");
+    paint([
+      [2, 14]
+    ], "sapphire");
+
+    paint([
+      [6, 10], [7, 9], [8, 9], [9, 10]
+    ], "goldLight");
+    paint([
+      [7, 10], [8, 10]
+    ], "ruby");
+
+    applyExteriorOutline("outline");
+  }
+};
+
+createIconGenerator(coloredCrossedSwordsIconConfig);
+</script>
+</body>
+</html>

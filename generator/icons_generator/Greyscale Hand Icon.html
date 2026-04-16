@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Greyscale Hand Icon Generator</title>
+<link rel="stylesheet" href="./icon-generator.css">
+<script src="./icon-generator-core.js"></script>
+</head>
+<body>
+<div class="icon-generator-app">
+  <aside class="control-rail">
+    <section class="brand-block">
+      <p class="eyebrow">Pixel Icon Generator</p>
+      <h1 id="iconTitle"></h1>
+      <p class="subtitle" id="iconSubtitle"></p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Icon Config</h2>
+          <p>This version keeps the same spirit as the structure generator, but for a single transparent 16x16 icon.</p>
+        </div>
+      </div>
+      <div class="meta-grid">
+        <div class="meta-card"><span>Canvas</span><strong id="iconDimensions"></strong></div>
+        <div class="meta-card"><span>Export</span><strong id="exportName"></strong></div>
+        <div class="meta-card"><span>Background</span><strong id="backgroundType"></strong></div>
+        <div class="meta-card"><span>Format</span><strong id="exportFormat"></strong></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Workflow Notes</h2>
+          <p>The icon stays transparent by default and exports directly as a PNG instead of chunked ZIP output.</p>
+        </div>
+      </div>
+      <ul class="notes-list" id="notesList"></ul>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Export</h2>
+          <p>The generated icon is exported immediately as a single PNG file.</p>
+        </div>
+      </div>
+      <div class="button-row">
+        <button class="primary-button" id="downloadButton" type="button">Download PNG Icon</button>
+        <div class="status-pill" id="downloadStatus"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Palette</h2>
+          <p>A simple neutral greyscale palette with a crisp black contour keeps the hand readable at very small size.</p>
+        </div>
+      </div>
+      <div class="palette-list" id="paletteList"></div>
+    </section>
+  </aside>
+
+  <main class="workspace">
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Icon Preview</h2>
+          <p>A close-up pixel preview with optional grid lines so the 16x16 composition is easy to inspect.</p>
+        </div>
+        <label class="toggle"><input id="pixelGridToggle" type="checkbox" checked> Show pixel grid</label>
+      </div>
+      <div class="canvas-frame canvas-frame-centered">
+        <canvas id="masterCanvas"></canvas>
+      </div>
+    </section>
+
+    <section class="preview-grid">
+      <article class="mini-preview-card">
+        <h3>UI Preview</h3>
+        <p>A compact zoom level that is closer to how the icon will read in a menu or HUD.</p>
+        <div class="canvas-frame canvas-frame-centered">
+          <canvas id="previewCanvas"></canvas>
+        </div>
+      </article>
+
+      <article class="mini-preview-card">
+        <h3>Actual Export Size</h3>
+        <p>The raw exported dimensions, kept at true 16x16 scale.</p>
+        <div class="canvas-frame canvas-frame-centered actual-preview-shell">
+          <canvas id="actualCanvas"></canvas>
+        </div>
+      </article>
+    </section>
+  </main>
+</div>
+
+<script>
+const greyscaleHandIconConfig = {
+  title: "Greyscale Hand Icon Generator",
+  subtitle: "A simple 16x16 greyscale hand icon with a black border, designed to stay readable without any visible arm segment.",
+  iconName: "greyscale_hand",
+  widthPixels: 16,
+  heightPixels: 16,
+  previewScale: 24,
+  secondaryScale: 11,
+  defaultTile: "transparent",
+  defaultBackgroundLabel: "Transparent",
+  notes: [
+    "The canvas starts fully transparent and only the icon silhouette is painted.",
+    "This hand is intentionally simple: palm, fingers and thumb only, with no arm extension.",
+    "The black outer contour is generated after the greyscale body is painted, which keeps the icon crisp.",
+    "PNG export is immediate: one button, one file, no ZIP packaging."
+  ],
+  paletteOrder: [
+    "transparent",
+    "outline",
+    "lightGrey",
+    "midGrey",
+    "darkGrey",
+    "deepGrey"
+  ],
+  paletteLabels: {
+    transparent: "Transparent",
+    outline: "Black Border",
+    lightGrey: "Light Highlight",
+    midGrey: "Main Grey",
+    darkGrey: "Dark Shade",
+    deepGrey: "Deep Shadow"
+  },
+  palette: {
+    transparent: null,
+    outline: "#0d0d0d",
+    lightGrey: "#dedede",
+    midGrey: "#b7b7b7",
+    darkGrey: "#8e8e8e",
+    deepGrey: "#636363"
+  },
+  draw(icon) {
+    function applyExteriorOutline(outlineTile) {
+      const marks = [];
+      const directions = [
+        [-1, -1], [0, -1], [1, -1],
+        [-1, 0],            [1, 0],
+        [-1, 1],  [0, 1],  [1, 1]
+      ];
+
+      for (let y = 0; y < icon.heightPixels; y += 1) {
+        for (let x = 0; x < icon.widthPixels; x += 1) {
+          if (icon.get(x, y) === "transparent") {
+            continue;
+          }
+
+          for (let index = 0; index < directions.length; index += 1) {
+            const nx = x + directions[index][0];
+            const ny = y + directions[index][1];
+            if (!icon.inBounds(nx, ny)) {
+              continue;
+            }
+            if (icon.get(nx, ny) === "transparent") {
+              marks.push([nx, ny]);
+            }
+          }
+        }
+      }
+
+      for (let index = 0; index < marks.length; index += 1) {
+        const mark = marks[index];
+        if (icon.get(mark[0], mark[1]) === "transparent") {
+          icon.set(mark[0], mark[1], outlineTile);
+        }
+      }
+    }
+
+    icon.fillRect(5, 3, 2, 4, "midGrey");
+    icon.fillRect(8, 2, 2, 5, "midGrey");
+    icon.fillRect(11, 3, 2, 4, "midGrey");
+    icon.fillRect(5, 6, 8, 5, "midGrey");
+    icon.fillRect(3, 7, 2, 3, "midGrey");
+    icon.fillRect(4, 6, 2, 1, "midGrey");
+    icon.fillRect(6, 11, 6, 2, "midGrey");
+    icon.fillRect(7, 13, 4, 1, "midGrey");
+
+    icon.fillRect(5, 3, 1, 7, "lightGrey");
+    icon.fillRect(8, 2, 1, 7, "lightGrey");
+    icon.points([
+      [4, 7], [4, 8],
+      [6, 11], [7, 11],
+      [7, 13], [8, 13]
+    ], "lightGrey");
+
+    icon.fillRect(12, 3, 1, 7, "darkGrey");
+    icon.fillRect(10, 3, 1, 9, "darkGrey");
+    icon.points([
+      [10, 12], [11, 12],
+      [9, 13], [10, 13]
+    ], "darkGrey");
+
+    icon.points([
+      [11, 10], [12, 10],
+      [9, 11], [10, 11], [11, 11],
+      [9, 12], [10, 12],
+      [9, 13], [10, 13]
+    ], "deepGrey");
+
+    applyExteriorOutline("outline");
+  }
+};
+
+createIconGenerator(greyscaleHandIconConfig);
+</script>
+</body>
+</html>

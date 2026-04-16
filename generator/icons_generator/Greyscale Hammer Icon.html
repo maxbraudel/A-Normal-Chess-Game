@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Greyscale Hammer Icon Generator</title>
+<link rel="stylesheet" href="./icon-generator.css">
+<script src="./icon-generator-core.js"></script>
+</head>
+<body>
+<div class="icon-generator-app">
+  <aside class="control-rail">
+    <section class="brand-block">
+      <p class="eyebrow">Pixel Icon Generator</p>
+      <h1 id="iconTitle"></h1>
+      <p class="subtitle" id="iconSubtitle"></p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Icon Config</h2>
+          <p>This version keeps the same spirit as the structure generator, but for a single transparent 16x16 icon.</p>
+        </div>
+      </div>
+      <div class="meta-grid">
+        <div class="meta-card"><span>Canvas</span><strong id="iconDimensions"></strong></div>
+        <div class="meta-card"><span>Export</span><strong id="exportName"></strong></div>
+        <div class="meta-card"><span>Background</span><strong id="backgroundType"></strong></div>
+        <div class="meta-card"><span>Format</span><strong id="exportFormat"></strong></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Workflow Notes</h2>
+          <p>The icon stays transparent by default and exports directly as a PNG instead of chunked ZIP output.</p>
+        </div>
+      </div>
+      <ul class="notes-list" id="notesList"></ul>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Export</h2>
+          <p>The generated icon is exported immediately as a single PNG file.</p>
+        </div>
+      </div>
+      <div class="button-row">
+        <button class="primary-button" id="downloadButton" type="button">Download PNG Icon</button>
+        <div class="status-pill" id="downloadStatus"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Palette</h2>
+          <p>A restrained steel-and-graphite greyscale palette keeps the hammer clean, simple and readable.</p>
+        </div>
+      </div>
+      <div class="palette-list" id="paletteList"></div>
+    </section>
+  </aside>
+
+  <main class="workspace">
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Icon Preview</h2>
+          <p>A close-up pixel preview with optional grid lines so the 16x16 composition is easy to inspect.</p>
+        </div>
+        <label class="toggle"><input id="pixelGridToggle" type="checkbox" checked> Show pixel grid</label>
+      </div>
+      <div class="canvas-frame canvas-frame-centered">
+        <canvas id="masterCanvas"></canvas>
+      </div>
+    </section>
+
+    <section class="preview-grid">
+      <article class="mini-preview-card">
+        <h3>UI Preview</h3>
+        <p>A compact zoom level that is closer to how the icon will read in a menu or HUD.</p>
+        <div class="canvas-frame canvas-frame-centered">
+          <canvas id="previewCanvas"></canvas>
+        </div>
+      </article>
+
+      <article class="mini-preview-card">
+        <h3>Actual Export Size</h3>
+        <p>The raw exported dimensions, kept at true 16x16 scale.</p>
+        <div class="canvas-frame canvas-frame-centered actual-preview-shell">
+          <canvas id="actualCanvas"></canvas>
+        </div>
+      </article>
+    </section>
+  </main>
+</div>
+
+<script>
+const greyscaleHammerIconConfig = {
+  title: "Greyscale Hammer Icon Generator",
+  subtitle: "A simple 16x16 greyscale hammer icon with a clean black contour and readable steel shading.",
+  iconName: "greyscale_hammer",
+  widthPixels: 16,
+  heightPixels: 16,
+  previewScale: 24,
+  secondaryScale: 11,
+  defaultTile: "transparent",
+  defaultBackgroundLabel: "Transparent",
+  notes: [
+    "The canvas starts fully transparent and only the icon silhouette is painted.",
+    "The head and handle are both greyscale so the icon stays neutral and utilitarian.",
+    "The black outer contour is generated after the hammer body is painted, which keeps the icon crisp.",
+    "PNG export is immediate: one button, one file, no ZIP packaging."
+  ],
+  paletteOrder: [
+    "transparent",
+    "outline",
+    "lightGrey",
+    "midGrey",
+    "darkGrey",
+    "deepGrey"
+  ],
+  paletteLabels: {
+    transparent: "Transparent",
+    outline: "Black Border",
+    lightGrey: "Steel Highlight",
+    midGrey: "Steel Midtone",
+    darkGrey: "Graphite Shade",
+    deepGrey: "Deep Graphite"
+  },
+  palette: {
+    transparent: null,
+    outline: "#0d0d0d",
+    lightGrey: "#dfdfdf",
+    midGrey: "#b8b8b8",
+    darkGrey: "#8a8a8a",
+    deepGrey: "#5d5d5d"
+  },
+  draw(icon) {
+    function applyExteriorOutline(outlineTile) {
+      const marks = [];
+      const directions = [
+        [-1, -1], [0, -1], [1, -1],
+        [-1, 0],            [1, 0],
+        [-1, 1],  [0, 1],  [1, 1]
+      ];
+
+      for (let y = 0; y < icon.heightPixels; y += 1) {
+        for (let x = 0; x < icon.widthPixels; x += 1) {
+          if (icon.get(x, y) === "transparent") {
+            continue;
+          }
+
+          for (let index = 0; index < directions.length; index += 1) {
+            const nx = x + directions[index][0];
+            const ny = y + directions[index][1];
+            if (!icon.inBounds(nx, ny)) {
+              continue;
+            }
+            if (icon.get(nx, ny) === "transparent") {
+              marks.push([nx, ny]);
+            }
+          }
+        }
+      }
+
+      for (let index = 0; index < marks.length; index += 1) {
+        const mark = marks[index];
+        if (icon.get(mark[0], mark[1]) === "transparent") {
+          icon.set(mark[0], mark[1], outlineTile);
+        }
+      }
+    }
+
+    icon.fillRect(4, 3, 7, 3, "midGrey");
+    icon.fillRect(11, 2, 2, 5, "midGrey");
+    icon.fillRect(3, 4, 1, 2, "midGrey");
+    icon.fillRect(7, 6, 2, 6, "darkGrey");
+    icon.fillRect(6, 12, 4, 2, "darkGrey");
+
+    icon.fillRect(4, 3, 4, 1, "lightGrey");
+    icon.fillRect(11, 2, 1, 4, "lightGrey");
+    icon.points([
+      [7, 6], [7, 7], [7, 8],
+      [6, 12], [7, 12],
+      [7, 13]
+    ], "lightGrey");
+
+    icon.fillRect(9, 3, 2, 3, "darkGrey");
+    icon.fillRect(8, 6, 1, 8, "deepGrey");
+    icon.points([
+      [9, 12], [9, 13],
+      [10, 6], [10, 5],
+      [12, 6]
+    ], "deepGrey");
+
+    icon.points([
+      [8, 4], [9, 4], [10, 4],
+      [8, 5], [9, 5],
+      [7, 10], [8, 10],
+      [7, 11], [8, 11]
+    ], "midGrey");
+
+    applyExteriorOutline("outline");
+  }
+};
+
+createIconGenerator(greyscaleHammerIconConfig);
+</script>
+</body>
+</html>

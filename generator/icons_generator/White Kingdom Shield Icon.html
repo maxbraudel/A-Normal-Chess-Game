@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>White Kingdom Shield Icon Generator</title>
+<link rel="stylesheet" href="./icon-generator.css">
+<script src="./icon-generator-core.js"></script>
+</head>
+<body>
+<div class="icon-generator-app">
+  <aside class="control-rail">
+    <section class="brand-block">
+      <p class="eyebrow">Pixel Icon Generator</p>
+      <h1 id="iconTitle"></h1>
+      <p class="subtitle" id="iconSubtitle"></p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Icon Config</h2>
+          <p>This version keeps the same spirit as the structure generator, but for a single transparent 16x16 icon.</p>
+        </div>
+      </div>
+      <div class="meta-grid">
+        <div class="meta-card"><span>Canvas</span><strong id="iconDimensions"></strong></div>
+        <div class="meta-card"><span>Export</span><strong id="exportName"></strong></div>
+        <div class="meta-card"><span>Background</span><strong id="backgroundType"></strong></div>
+        <div class="meta-card"><span>Format</span><strong id="exportFormat"></strong></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Workflow Notes</h2>
+          <p>The icon stays transparent by default and exports directly as a PNG instead of chunked ZIP output.</p>
+        </div>
+      </div>
+      <ul class="notes-list" id="notesList"></ul>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Export</h2>
+          <p>The generated icon is exported immediately as a single PNG file.</p>
+        </div>
+      </div>
+      <div class="button-row">
+        <button class="primary-button" id="downloadButton" type="button">Download PNG Icon</button>
+        <div class="status-pill" id="downloadStatus"></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Palette</h2>
+          <p>Gold trim, bright enamel, cool shadows and royal blue accents shape the white kingdom shield.</p>
+        </div>
+      </div>
+      <div class="palette-list" id="paletteList"></div>
+    </section>
+  </aside>
+
+  <main class="workspace">
+    <section class="panel">
+      <div class="panel-header">
+        <div>
+          <h2>Icon Preview</h2>
+          <p>A close-up pixel preview with optional grid lines so the 16x16 composition is easy to inspect.</p>
+        </div>
+        <label class="toggle"><input id="pixelGridToggle" type="checkbox" checked> Show pixel grid</label>
+      </div>
+      <div class="canvas-frame canvas-frame-centered">
+        <canvas id="masterCanvas"></canvas>
+      </div>
+    </section>
+
+    <section class="preview-grid">
+      <article class="mini-preview-card">
+        <h3>UI Preview</h3>
+        <p>A compact zoom level that is closer to how the icon will read in a menu or HUD.</p>
+        <div class="canvas-frame canvas-frame-centered">
+          <canvas id="previewCanvas"></canvas>
+        </div>
+      </article>
+
+      <article class="mini-preview-card">
+        <h3>Actual Export Size</h3>
+        <p>The raw exported dimensions, kept at true 16x16 scale.</p>
+        <div class="canvas-frame canvas-frame-centered actual-preview-shell">
+          <canvas id="actualCanvas"></canvas>
+        </div>
+      </article>
+    </section>
+  </main>
+</div>
+
+<script>
+const whiteKingdomShieldConfig = {
+  title: "White Kingdom Shield Icon Generator",
+  subtitle: "A compact 16x16 heraldic shield icon with bright white enamel, layered gold trim and small royal-blue gemstone accents for the white kingdom.",
+  iconName: "white_kingdom_shield",
+  widthPixels: 16,
+  heightPixels: 16,
+  previewScale: 24,
+  secondaryScale: 11,
+  defaultTile: "transparent",
+  defaultBackgroundLabel: "Transparent",
+  notes: [
+    "The canvas starts fully transparent and only the shield silhouette is painted.",
+    "The generator keeps the same code-driven pixel-art workflow as the structure system, but without chunk slicing.",
+    "PNG export is immediate: one button, one file, no ZIP packaging.",
+    "This first icon focuses on a polished white-kingdom shield with readable contrast even at tiny size."
+  ],
+  paletteOrder: [
+    "transparent",
+    "rimDark",
+    "rimLight",
+    "white",
+    "whiteHighlight",
+    "silverShadow",
+    "deepShadow",
+    "royalBlue",
+    "royalBlueDark"
+  ],
+  paletteLabels: {
+    transparent: "Transparent",
+    rimDark: "Old Gold Shadow",
+    rimLight: "Bright Gold Trim",
+    white: "White Enamel",
+    whiteHighlight: "White Highlight",
+    silverShadow: "Cool Silver Shade",
+    deepShadow: "Deep Steel Shadow",
+    royalBlue: "Royal Sapphire",
+    royalBlueDark: "Midnight Sapphire"
+  },
+  palette: {
+    transparent: null,
+    rimDark: "#7d5d1d",
+    rimLight: "#efcf78",
+    white: "#f5f3ef",
+    whiteHighlight: "#ffffff",
+    silverShadow: "#ced6e4",
+    deepShadow: "#8a94a8",
+    royalBlue: "#6487dd",
+    royalBlueDark: "#2f4d99"
+  },
+  draw(icon) {
+    const outerShield = [
+      null,
+      [7, 8],
+      [6, 9],
+      [5, 10],
+      [4, 11],
+      [4, 11],
+      [3, 12],
+      [3, 12],
+      [3, 12],
+      [4, 11],
+      [4, 11],
+      [5, 10],
+      [5, 10],
+      [6, 9],
+      [6, 9],
+      [7, 8]
+    ];
+
+    const innerTrim = [
+      null,
+      null,
+      [6, 9],
+      [5, 10],
+      [5, 10],
+      [5, 10],
+      [4, 11],
+      [4, 11],
+      [4, 11],
+      [5, 10],
+      [5, 10],
+      [6, 9],
+      [6, 9],
+      [7, 8],
+      [7, 8],
+      null
+    ];
+
+    const body = [
+      null,
+      null,
+      null,
+      [6, 9],
+      [5, 10],
+      [5, 10],
+      [5, 10],
+      [5, 10],
+      [5, 10],
+      [5, 10],
+      [6, 9],
+      [6, 9],
+      [6, 9],
+      [7, 8],
+      null,
+      null
+    ];
+
+    function drawRows(rows, tile) {
+      for (let y = 0; y < rows.length; y += 1) {
+        const row = rows[y];
+        if (!row) {
+          continue;
+        }
+        icon.lineH(y, row[0], row[1], tile);
+      }
+    }
+
+    drawRows(outerShield, "rimDark");
+    drawRows(innerTrim, "rimLight");
+    drawRows(body, "white");
+
+    icon.points([
+      [7, 0], [8, 0],
+      [6, 1], [9, 1],
+      [7, 1], [8, 1]
+    ], "rimDark");
+    icon.points([
+      [7, 0], [8, 0],
+      [7, 1], [8, 1]
+    ], "royalBlue");
+    icon.points([
+      [7, 0],
+      [8, 1]
+    ], "whiteHighlight");
+
+    icon.points([
+      [6, 4], [7, 4],
+      [5, 5], [6, 5],
+      [5, 6], [6, 6],
+      [5, 7], [6, 7],
+      [6, 8]
+    ], "whiteHighlight");
+
+    icon.points([
+      [10, 5],
+      [10, 6], [9, 6],
+      [10, 7], [9, 7],
+      [10, 8], [9, 8],
+      [9, 9],
+      [8, 10], [9, 10],
+      [8, 11]
+    ], "silverShadow");
+
+    icon.points([
+      [9, 11],
+      [8, 12],
+      [7, 13], [8, 13]
+    ], "deepShadow");
+
+    icon.fillRect(6, 5, 4, 1, "rimLight");
+    icon.fillRect(7, 4, 2, 8, "rimLight");
+    icon.fillRect(5, 7, 6, 2, "rimLight");
+    icon.fillRect(7, 5, 2, 6, "royalBlue");
+    icon.fillRect(6, 7, 4, 2, "royalBlue");
+    icon.fillRect(7, 7, 2, 2, "royalBlueDark");
+
+    icon.points([
+      [7, 5], [8, 5],
+      [6, 7],
+      [7, 6],
+      [7, 7]
+    ], "whiteHighlight");
+
+    icon.points([
+      [6, 5], [9, 5],
+      [7, 4], [8, 4],
+      [5, 7], [5, 8],
+      [10, 7], [10, 8],
+      [7, 11], [8, 11]
+    ], "rimDark");
+
+    icon.points([
+      [7, 12], [8, 12],
+      [7, 13], [8, 13]
+    ], "royalBlueDark");
+    icon.points([
+      [7, 12],
+      [8, 13]
+    ], "whiteHighlight");
+  }
+};
+
+createIconGenerator(whiteKingdomShieldConfig);
+</script>
+</body>
+</html>
