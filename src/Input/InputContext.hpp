@@ -13,12 +13,14 @@ class UIManager;
 class GameConfig;
 class Kingdom;
 class Building;
+class BuildingFactory;
 
 struct InputContext {
     sf::RenderWindow& window;
     Camera& camera;
     Board& board;
     TurnSystem& turnSystem;
+    BuildingFactory& buildingFactory;
     Kingdom& controlledKingdom;
     Kingdom& opposingKingdom;
     const std::vector<Building>& publicBuildings;

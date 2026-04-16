@@ -557,7 +557,8 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
                                                       context.authoritativeControlledKingdom,
                                                       context.authoritativeOpposingKingdom,
                                                       context.authoritativePublicBuildings,
-                                                      context.config);
+                                                      context.config,
+                                                      &context.buildingFactory);
                 if (!moveQueued) {
                     syncQueuedMovePreviewState(context);
                     refreshPieceMoves(restoredPiece, context);
@@ -636,7 +637,8 @@ void InputHandler::handleBuildTool(const sf::Event& event, const InputContext& c
                                                context.authoritativeControlledKingdom,
                                                context.authoritativeOpposingKingdom,
                                                context.authoritativePublicBuildings,
-                                               context.config)) {
+                                               context.config,
+                                               &context.buildingFactory)) {
             syncQueuedMovePreviewState(context);
         }
     }

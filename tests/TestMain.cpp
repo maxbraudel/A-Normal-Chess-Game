@@ -2043,17 +2043,17 @@ void testTurnSystemSkipsUnaffordableBuild() {
     std::vector<Building> publicBuildings;
     TurnSystem turnSystem;
     turnSystem.setActiveKingdom(KingdomId::White);
+    BuildingFactory buildingFactory;
 
     TurnCommand buildCommand;
     buildCommand.type = TurnCommand::Build;
     buildCommand.buildingType = BuildingType::Barracks;
     buildCommand.buildOrigin = {2, 2};
-            expect(!turnSystem.queueCommand(buildCommand, board, white, black, publicBuildings, config),
-                "Unaffordable build commands should be rejected during planning.");
+    expect(!turnSystem.queueCommand(buildCommand, board, white, black, publicBuildings, config, &buildingFactory),
+        "Unaffordable build commands should be rejected during planning.");
 
     EventLog eventLog;
     PieceFactory pieceFactory;
-    BuildingFactory buildingFactory;
     turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
 
     expect(white.gold == 0, "Unaffordable commands must not change gold.");
@@ -2589,13 +2589,14 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
         std::vector<Building> publicBuildings;
         TurnSystem turnSystem;
         turnSystem.setActiveKingdom(KingdomId::White);
+        BuildingFactory buildingFactory;
 
         const TurnCommand moveCommand = makeMoveCommand(whiteKing.id, {10, 10}, {11, 10});
         const TurnCommand buildCommand = makeBuildCommand(BuildingType::WoodWall, {12, 10});
 
         expect(turnSystem.queueCommand(moveCommand, board, white, black, publicBuildings, config),
             "The builder move should queue successfully for the reselection regression test.");
-        expect(turnSystem.queueCommand(buildCommand, board, white, black, publicBuildings, config),
+        expect(turnSystem.queueCommand(buildCommand, board, white, black, publicBuildings, config, &buildingFactory),
             "The dependent build should queue successfully after the builder move.");
 
         whiteKing.position = moveCommand.destination;
@@ -2628,6 +2629,7 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
         std::vector<Building> publicBuildings;
         TurnSystem turnSystem;
         turnSystem.setActiveKingdom(KingdomId::White);
+        BuildingFactory buildingFactory;
 
         expect(turnSystem.queueCommand(makeMoveCommand(whiteKing.id, {10, 10}, {11, 10}),
                                        board,
@@ -2641,7 +2643,8 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
                                        white,
                                        black,
                                        publicBuildings,
-                                       config),
+                                       config,
+                                       &buildingFactory),
             "The dependent build should queue successfully before replacing the move.");
 
         const int queuedBuildId = turnSystem.getPendingCommands().back().buildId;
@@ -2676,6 +2679,7 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
         std::vector<Building> publicBuildings;
         TurnSystem turnSystem;
         turnSystem.setActiveKingdom(KingdomId::White);
+        BuildingFactory buildingFactory;
 
         expect(turnSystem.queueCommand(makeMoveCommand(whiteKing.id, {10, 10}, {11, 10}),
                                        board,
@@ -2689,7 +2693,8 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
                                        white,
                                        black,
                                        publicBuildings,
-                                       config),
+                                       config,
+                                       &buildingFactory),
             "The build should queue successfully while multiple builders can support it.");
 
         const int queuedBuildId = turnSystem.getPendingCommands().back().buildId;
@@ -2716,20 +2721,23 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
         std::vector<Building> publicBuildings;
         TurnSystem turnSystem;
         turnSystem.setActiveKingdom(KingdomId::White);
+        BuildingFactory buildingFactory;
 
         expect(turnSystem.queueCommand(makeBuildCommand(BuildingType::WoodWall, {6, 5}),
                                        board,
                                        white,
                                        black,
                                        publicBuildings,
-                                       config),
+                                       config,
+                                       &buildingFactory),
             "The first pending build should queue successfully.");
         expect(turnSystem.queueCommand(makeBuildCommand(BuildingType::WoodWall, {5, 6}),
                                        board,
                                        white,
                                        black,
                                        publicBuildings,
-                                       config),
+                                       config,
+                                       &buildingFactory),
             "The second pending build should queue successfully.");
 
         expect(turnSystem.getPendingCommands().size() == 2,
@@ -2737,20 +2745,57 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
 
         const int firstBuildId = turnSystem.getPendingCommands()[0].buildId;
         const int secondBuildId = turnSystem.getPendingCommands()[1].buildId;
-        expect(firstBuildId < 0,
-            "Queued builds should receive a temporary negative id for local draft tracking.");
-        expect(secondBuildId < 0,
-            "Each queued build should receive a temporary negative id.");
+        expect(firstBuildId >= 100,
+            "Queued builds should now reserve stable positive ids from the building factory.");
+        expect(secondBuildId > firstBuildId,
+            "Later queued builds should reserve later stable ids from the same allocator.");
         expect(firstBuildId != secondBuildId,
-            "Queued builds should receive distinct temporary ids.");
+            "Queued builds should receive distinct stable ids.");
         expect(turnSystem.getPendingBuildCommand(firstBuildId) != nullptr,
-            "Queued builds should be queryable by temporary build id.");
+            "Queued builds should be queryable by their stable reserved build id.");
         expect(turnSystem.cancelBuildCommand(firstBuildId, board, white, black, publicBuildings, config),
-            "Queued builds should be cancellable by their temporary build id.");
+            "Queued builds should be cancellable by their stable build id.");
         expect(turnSystem.getPendingBuildCommand(firstBuildId) == nullptr,
             "Cancelling a queued build by id should remove that build.");
         expect(turnSystem.getPendingBuildCommand(secondBuildId) != nullptr,
             "Cancelling one queued build should leave the others intact.");
+    }
+
+    void testTurnSystemCommitPreservesReservedBuildId() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        white.gold = config.getWoodWallCost() + 10;
+        addPieceToBoard(white, board, 615, PieceType::King, KingdomId::White, {5, 5});
+        addPieceToBoard(black, board, 715, PieceType::King, KingdomId::Black, {9, 9});
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+        EventLog eventLog;
+        PieceFactory pieceFactory;
+        BuildingFactory buildingFactory;
+
+        expect(turnSystem.queueCommand(makeBuildCommand(BuildingType::WoodWall, {6, 5}),
+                                       board,
+                                       white,
+                                       black,
+                                       publicBuildings,
+                                       config,
+                                       &buildingFactory),
+            "The queued build should reserve a stable build id before commit.");
+
+        const int reservedBuildId = turnSystem.getPendingCommands().front().buildId;
+        turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+
+        Building* committedBuilding = findBuildingById(white, reservedBuildId);
+        expect(committedBuilding != nullptr,
+            "Committing a queued build should materialize the authoritative building with the reserved id.");
+        expect(!committedBuilding->isUnderConstruction(),
+            "The committed authoritative building should be completed immediately after turn validation.");
     }
 
     void testTurnDraftMaterializesQueuedBuildingAsUnderConstruction() {
@@ -2765,7 +2810,7 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
         engine.kingdom(KingdomId::White).gold = config.getBarracksCost() + 10;
 
         TurnCommand buildCommand = makeBuildCommand(BuildingType::Barracks, {3, 3});
-        buildCommand.buildId = -77;
+        buildCommand.buildId = 177;
 
         TurnDraft draft;
         expect(draft.rebuild(engine, config, {buildCommand}),
@@ -2805,7 +2850,7 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
         addPieceToBoard(black, board, 3, PieceType::King, KingdomId::Black, {6, 6});
 
         TurnCommand buildCommand = makeBuildCommand(BuildingType::Barracks, {3, 3});
-        buildCommand.buildId = -41;
+        buildCommand.buildId = 141;
         const std::vector<Building> publicBuildings;
         const std::vector<TurnCommand> commands{buildCommand};
 
@@ -2837,7 +2882,7 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
         addPieceToBoard(black, board, 3, PieceType::King, KingdomId::Black, {6, 6});
 
         TurnCommand buildCommand = makeBuildCommand(BuildingType::Barracks, {3, 3});
-        buildCommand.buildId = -42;
+        buildCommand.buildId = 142;
 
         TurnCommand produceCommand;
         produceCommand.type = TurnCommand::Produce;
@@ -3360,6 +3405,7 @@ int main() {
         {"turn system replace move drops orphan build", testTurnSystemReplaceMoveDropsOrphanedPendingBuilds},
         {"turn system keep build with other builder", testTurnSystemCancelMoveKeepsBuildWhenAnotherBuilderStillSupportsIt},
         {"turn system stable pending build ids", testTurnSystemAssignsStablePendingBuildIds},
+        {"turn system commit preserves reserved build id", testTurnSystemCommitPreservesReservedBuildId},
         {"turn draft materializes under construction build", testTurnDraftMaterializesQueuedBuildingAsUnderConstruction},
         {"pending turn projection stable build id", testPendingTurnProjectionMaterializesQueuedBuildWithStableId},
         {"pending turn projection rejects under construction produce", testPendingTurnProjectionRejectsProductionFromUnderConstructionBarracks},

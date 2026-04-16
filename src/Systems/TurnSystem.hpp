@@ -36,7 +36,8 @@ public:
                       const Kingdom& activeKingdom,
                       const Kingdom& enemyKingdom,
                       const std::vector<Building>& publicBuildings,
-                      const GameConfig& config);
+                      const GameConfig& config,
+                      BuildingFactory* buildingFactory = nullptr);
     void resetPendingCommands();
     bool cancelMoveCommand(int pieceId,
                            const Board& board,
@@ -109,7 +110,6 @@ private:
     bool m_hasProduced;           // true if at least 1 production queued
     std::set<int> m_producedBarracks;  // barracks IDs that have a produce queued
     bool m_hasMarried;
-    int m_nextPendingBuildId;
     std::uint64_t m_pendingStateRevision;
 
     void rebuildQueuedSpecialState();

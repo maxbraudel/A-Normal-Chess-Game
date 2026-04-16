@@ -4,10 +4,20 @@
 
 BuildingFactory::BuildingFactory() : m_nextId(100) {}
 
+int BuildingFactory::reserveId() {
+    return m_nextId++;
+}
+
 Building BuildingFactory::createBuilding(BuildingType type, KingdomId owner, sf::Vector2i origin,
-                                          const GameConfig& config, int rotationQuarterTurns) {
+                                          const GameConfig& config, int rotationQuarterTurns,
+                                          int reservedId) {
     Building b;
-    b.id = m_nextId++;
+    if (reservedId >= 0) {
+        b.id = reservedId;
+        observeExisting(reservedId);
+    } else {
+        b.id = reserveId();
+    }
     b.type = type;
     b.owner = owner;
     b.isNeutral = false;

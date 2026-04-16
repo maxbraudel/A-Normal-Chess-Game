@@ -14,7 +14,28 @@
 #include "Systems/EventLog.hpp"
 #include "Config/GameConfig.hpp"
 #include "Buildings/Building.hpp"
+#include "Buildings/BuildingFactory.hpp"
 #include <iostream>
+
+namespace {
+
+BuildingFactory makePlanningBuildingFactory(const Kingdom& self,
+                                           const Kingdom& enemy,
+                                           const std::vector<Building>& publicBuildings) {
+    BuildingFactory factory;
+    for (const Building& building : self.buildings) {
+        factory.observeExisting(building.id);
+    }
+    for (const Building& building : enemy.buildings) {
+        factory.observeExisting(building.id);
+    }
+    for (const Building& building : publicBuildings) {
+        factory.observeExisting(building.id);
+    }
+    return factory;
+}
+
+} // namespace
 
 AIController::AIController() = default;
 
@@ -89,6 +110,7 @@ AITurnPlan AIController::computeTurnPlan(Board& board, Kingdom& self, Kingdom& e
 
     TurnSystem planningTurnSystem;
     planningTurnSystem.setActiveKingdom(self.id);
+    BuildingFactory planningBuildingFactory = makePlanningBuildingFactory(self, enemy, publicBuildings);
 
     auto queuePlanned = [&](const TurnCommand& cmd) {
         if (planningTurnSystem.queueCommand(cmd,
@@ -96,7 +118,8 @@ AITurnPlan AIController::computeTurnPlan(Board& board, Kingdom& self, Kingdom& e
                                             self,
                                             enemy,
                                             publicBuildings,
-                                            config)) {
+                                            config,
+                                            &planningBuildingFactory)) {
             plan.commands.push_back(cmd);
             return true;
         }
@@ -270,7 +293,8 @@ void AIController::applyTurnPlanMetadata(const AITurnPlan& plan) {
 
 void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
                               const std::vector<Building>& publicBuildings,
-                              TurnSystem& turnSystem, const GameConfig& config, EventLog& log) {
+                                                            TurnSystem& turnSystem, const GameConfig& config, EventLog& log,
+                                                            BuildingFactory& buildingFactory) {
     AITurnPlan plan = computeTurnPlan(board, self, enemy, publicBuildings,
                                       turnSystem.getTurnNumber(), config);
     applyTurnPlanMetadata(plan);
@@ -281,7 +305,8 @@ void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
                                 self,
                                 enemy,
                                 publicBuildings,
-                                config);
+                                                                config,
+                                                                &buildingFactory);
     }
     log.log(turnSystem.getTurnNumber(), self.id, "AI completed turn planning.");
 }

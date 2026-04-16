@@ -182,7 +182,7 @@ TurnSystem::TurnSystem()
       m_movementPointsMax(0), m_movementPointsRemaining(0),
       m_buildPointsMax(0), m_buildPointsRemaining(0),
       m_hasProduced(false), m_hasMarried(false),
-      m_nextPendingBuildId(-1), m_pendingStateRevision(1) {}
+    m_pendingStateRevision(1) {}
 
 void TurnSystem::setActiveKingdom(KingdomId id) {
     if (m_activeKingdom != id) {
@@ -271,13 +271,11 @@ bool TurnSystem::queueCommand(const TurnCommand& cmd,
                               const Kingdom& activeKingdom,
                               const Kingdom& enemyKingdom,
                               const std::vector<Building>& publicBuildings,
-                              const GameConfig& config) {
+                              const GameConfig& config,
+                              BuildingFactory* buildingFactory) {
     syncPointBudget(config);
 
     TurnCommand queuedCommand = cmd;
-    if (queuedCommand.type == TurnCommand::Build && queuedCommand.buildId < 0) {
-        queuedCommand.buildId = m_nextPendingBuildId--;
-    }
 
     switch (queuedCommand.type) {
         case TurnCommand::Produce:
@@ -306,6 +304,18 @@ bool TurnSystem::queueCommand(const TurnCommand& cmd,
             board, activeKingdom, enemyKingdom, publicBuildings,
             m_turnNumber, m_pendingCommands, queuedCommand, config, &errorMessage)) {
         return false;
+    }
+
+    if (queuedCommand.type == TurnCommand::Build) {
+        if (!buildingFactory && queuedCommand.buildId < 0) {
+            return false;
+        }
+
+        if (queuedCommand.buildId < 0) {
+            queuedCommand.buildId = buildingFactory->reserveId();
+        } else if (buildingFactory) {
+            buildingFactory->observeExisting(queuedCommand.buildId);
+        }
     }
 
     m_pendingCommands.push_back(queuedCommand);
@@ -583,7 +593,7 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
 
                 Building building = buildingFactory.createBuilding(
                     cmd.buildingType, m_activeKingdom, cmd.buildOrigin, config,
-                    cmd.buildRotationQuarterTurns);
+                    cmd.buildRotationQuarterTurns, cmd.buildId);
 
                 activeKingdom.gold -= cost;
                 activeKingdom.addBuilding(building);

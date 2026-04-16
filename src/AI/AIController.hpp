@@ -14,6 +14,7 @@ class TurnSystem;
 class GameConfig;
 class EventLog;
 class Building;
+class BuildingFactory;
 
 struct AITurnPlan {
     std::vector<TurnCommand> commands;
@@ -34,7 +35,8 @@ public:
 
     void playTurn(Board& board, Kingdom& self, Kingdom& enemy,
                   const std::vector<Building>& publicBuildings,
-                  TurnSystem& turnSystem, const GameConfig& config, EventLog& log);
+                  TurnSystem& turnSystem, const GameConfig& config, EventLog& log,
+                  BuildingFactory& buildingFactory);
 
     const AIBrain& getBrain() const;
 

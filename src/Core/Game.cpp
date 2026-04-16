@@ -431,6 +431,7 @@ InputContext Game::buildInputContext(const InteractionPermissions& permissions) 
         m_camera,
         currentBoard,
         turnSystem(),
+        buildingFactory(),
         selectableKingdom,
         opposingKingdom,
         displayedPublicBuildings(),
@@ -1376,13 +1377,20 @@ bool Game::applyRemoteTurnSubmission(const std::vector<TurnCommand>& commands, s
     }
 
     turnSystem().resetPendingCommands();
-    for (const auto& command : commands) {
+    for (const auto& submittedCommand : commands) {
+        TurnCommand command = submittedCommand;
+        if (command.type == TurnCommand::Build) {
+            // Host-side builds must reserve authoritative ids locally.
+            command.buildId = -1;
+        }
+
         if (!turnSystem().queueCommand(command,
                                        board(),
                                        activeKingdom(),
                                        enemyKingdom(),
                                        publicBuildings(),
-                                       m_config)) {
+                                       m_config,
+                                       &buildingFactory())) {
             turnSystem().resetPendingCommands();
             if (errorMessage) {
                 *errorMessage = "The remote player submitted an invalid or conflicting turn command.";
@@ -1846,7 +1854,8 @@ void Game::setupUICallbacks() {
                                        activeKingdom(),
                                        enemyKingdom(),
                                        publicBuildings(),
-                                       m_config)
+                                           m_config,
+                                           &buildingFactory())
             && hadQueuedUpgrade) {
             turnSystem().queueCommand(previousUpgrade,
                                       board(),
@@ -1889,7 +1898,8 @@ void Game::setupUICallbacks() {
                                        activeKingdom(),
                                        enemyKingdom(),
                                        publicBuildings(),
-                                       m_config)
+                                       m_config,
+                                       &buildingFactory())
             && hadQueuedProduction) {
             turnSystem().queueCommand(previousProduction,
                                       board(),
@@ -2137,7 +2147,8 @@ void Game::pollAITurn() {
                                       activeKingdom(),
                                       enemyKingdom(),
                                       publicBuildings(),
-                                      m_config);
+                                      m_config,
+                                      &buildingFactory());
         }
     } else {
         m_ai.applyTurnPlanMetadata(plan);
@@ -2169,7 +2180,8 @@ void Game::pollAITurn() {
                                       activeKingdom(),
                                       enemyKingdom(),
                                       publicBuildings(),
-                                      m_config);
+                                      m_config,
+                                      &buildingFactory());
         }
     }
     eventLog().log(task->turnNumber, task->activeKingdom, "AI completed turn planning.");
@@ -2194,7 +2206,8 @@ void Game::pollAITurn() {
                                       activeKingdom(),
                                       enemyKingdom(),
                                       publicBuildings(),
-                                      m_config);
+                                      m_config,
+                                      &buildingFactory());
             break;
         }
     }
