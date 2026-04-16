@@ -802,10 +802,24 @@ void Game::centerCameraOnKingdom(KingdomId kingdom) {
 
 void Game::init() {
     // Load config
-    m_config.loadFromFile("assets/config/game_params.json");
-    m_aiConfig.loadFromFile("assets/config/ai_params.json");
-    m_ai.loadConfig("assets/config/ai_params.json");
-    m_aiDirector.loadConfig("assets/config/ai_params.json");
+    const bool hasUnifiedGameConfig = m_config.loadFromFile("assets/config/master_config.json");
+    if (!hasUnifiedGameConfig) {
+        m_config.loadFromFile("assets/config/game_params.json");
+    }
+
+    const bool hasUnifiedAIConfig = m_aiConfig.loadFromFile("assets/config/master_config.json");
+    if (!hasUnifiedAIConfig) {
+        m_aiConfig.loadFromFile("assets/config/ai_params.json");
+    }
+
+    if (!m_ai.loadConfig("assets/config/master_config.json")) {
+        m_ai.loadConfig("assets/config/ai_params.json");
+    }
+
+    if (!m_aiDirector.loadConfig("assets/config/master_config.json")) {
+        m_aiDirector.loadConfig("assets/config/ai_params.json");
+    }
+
     m_useNewAI = m_aiConfig.useNewAI;
 
     // Create window

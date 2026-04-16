@@ -182,7 +182,10 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
         return false;
     }
 
-    std::string mapSec = extractSection(json, "map");
+    const std::string wrappedGameSection = extractSection(json, "game");
+    const std::string root = wrappedGameSection.empty() ? json : wrappedGameSection;
+
+    std::string mapSec = extractSection(root, "map");
     if (!mapSec.empty()) {
         m_mapRadius = extractInt(mapSec, "radius", m_mapRadius);
         m_cellSizePx = extractInt(mapSec, "cell_size_px", m_cellSizePx);
@@ -203,7 +206,7 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
         m_lakeMaxRadius = extractInt(mapSec, "lake_max_radius", m_lakeMaxRadius);
     }
 
-    std::string econSec = extractSection(json, "economy");
+    std::string econSec = extractSection(root, "economy");
     if (!econSec.empty()) {
         m_startingGold = extractInt(econSec, "starting_gold", m_startingGold);
         m_mineIncomePerCellPerTurn = extractInt(econSec, "mine_income_per_cell_per_turn", m_mineIncomePerCellPerTurn);
@@ -264,7 +267,7 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
         "economy.upgrade_pawn_to_bishop_cost", m_upgradePawnToBishopCost);
     m_upgradeToRookCost = clampNonNegativeConfigValue("economy.upgrade_to_rook_cost", m_upgradeToRookCost);
 
-    std::string turnPointSec = extractSection(json, "turn_points");
+    std::string turnPointSec = extractSection(root, "turn_points");
     if (!turnPointSec.empty()) {
         m_movementPointsPerTurn = extractInt(turnPointSec, "movement_points_per_turn", m_movementPointsPerTurn);
         m_buildPointsPerTurn = extractInt(turnPointSec, "build_points_per_turn", m_buildPointsPerTurn);
@@ -326,7 +329,7 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
     m_kingMoveAllowancePerTurn = clampNonNegativeConfigValue(
         "turn_points.king_move_allowance_per_turn", m_kingMoveAllowancePerTurn);
 
-    std::string prodSec = extractSection(json, "production");
+    std::string prodSec = extractSection(root, "production");
     if (!prodSec.empty()) {
         m_pawnTurns = extractInt(prodSec, "pawn_turns", m_pawnTurns);
         m_knightTurns = extractInt(prodSec, "knight_turns", m_knightTurns);
@@ -334,7 +337,7 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
         m_rookTurns = extractInt(prodSec, "rook_turns", m_rookTurns);
     }
 
-    std::string xpSec = extractSection(json, "xp");
+    std::string xpSec = extractSection(root, "xp");
     if (!xpSec.empty()) {
         m_killPawn = extractInt(xpSec, "kill_pawn", m_killPawn);
         m_killKnight = extractInt(xpSec, "kill_knight", m_killKnight);
@@ -347,7 +350,7 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
         m_thresholdToRook = extractInt(xpSec, "threshold_to_rook", m_thresholdToRook);
     }
 
-    std::string combatSec = extractSection(json, "combat");
+    std::string combatSec = extractSection(root, "combat");
     if (!combatSec.empty()) {
         m_woodWallHP = extractInt(combatSec, "wood_wall_hp", m_woodWallHP);
         m_stoneWallHP = extractInt(combatSec, "stone_wall_hp", m_stoneWallHP);
@@ -355,7 +358,7 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
         m_globalMaxRange = extractInt(combatSec, "global_max_range", m_globalMaxRange);
     }
 
-    std::string buildSec = extractSection(json, "buildings");
+    std::string buildSec = extractSection(root, "buildings");
     if (!buildSec.empty()) {
         m_barracksWidth = extractInt(buildSec, "barracks_width", m_barracksWidth);
         m_barracksHeight = extractInt(buildSec, "barracks_height", m_barracksHeight);

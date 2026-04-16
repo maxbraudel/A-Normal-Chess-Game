@@ -23,6 +23,8 @@ struct EvalWeights {
 
 class AIEvaluator {
 public:
+    static void setConfig(const AIConfig* config);
+
     // ---- NEW: evaluate a snapshot (main API for MCTS / forward model) ----
     static float evaluate(const GameSnapshot& s, KingdomId perspective,
                           int globalMaxRange, const EvalWeights& weights);

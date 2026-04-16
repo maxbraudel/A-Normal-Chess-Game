@@ -12,15 +12,38 @@
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingType.hpp"
 #include "Config/GameConfig.hpp"
+#include "Config/AIConfig.hpp"
 #include "Systems/EconomySystem.hpp"
 #include <cmath>
 #include <algorithm>
+
+namespace {
+
+const AIConfig* g_aiConfig = nullptr;
+
+}
+
+void AIEvaluator::setConfig(const AIConfig* config) {
+    g_aiConfig = config;
+}
 
 // =========================================================================
 //  Piece value table (centipawn-style, used by both legacy and new API)
 // =========================================================================
 
 float AIEvaluator::pieceValue(PieceType type) {
+    if (g_aiConfig) {
+        switch (type) {
+            case PieceType::Pawn: return g_aiConfig->pieceValues.pawn;
+            case PieceType::Knight: return g_aiConfig->pieceValues.knight;
+            case PieceType::Bishop: return g_aiConfig->pieceValues.bishop;
+            case PieceType::Rook: return g_aiConfig->pieceValues.rook;
+            case PieceType::Queen: return g_aiConfig->pieceValues.queen;
+            case PieceType::King: return g_aiConfig->pieceValues.king;
+            default: return 0.0f;
+        }
+    }
+
     switch (type) {
         case PieceType::Pawn:   return 100.0f;
         case PieceType::Knight: return 320.0f;
@@ -50,6 +73,29 @@ static float legacyPieceValue(PieceType type) {
 // =========================================================================
 
 EvalWeights AIEvaluator::weightsForPhase(AIPhase phase) {
+    if (g_aiConfig) {
+        auto convert = [](const AIConfig::PhaseEvalWeights& src) {
+            EvalWeights out;
+            out.material = src.material;
+            out.economy = src.economy;
+            out.mapControl = src.mapControl;
+            out.kingSafety = src.kingSafety;
+            out.development = src.development;
+            out.threat = src.threat;
+            out.checkmate = src.checkmate;
+            return out;
+        };
+
+        switch (phase) {
+            case AIPhase::EARLY_GAME: return convert(g_aiConfig->earlyGameWeights);
+            case AIPhase::BUILD_UP: return convert(g_aiConfig->buildUpWeights);
+            case AIPhase::MID_GAME: return convert(g_aiConfig->midGameWeights);
+            case AIPhase::AGGRESSION: return convert(g_aiConfig->aggressionWeights);
+            case AIPhase::ENDGAME: return convert(g_aiConfig->endgameWeights);
+            case AIPhase::CRISIS: return convert(g_aiConfig->crisisWeights);
+        }
+    }
+
     EvalWeights w;
     switch (phase) {
         case AIPhase::EARLY_GAME:
@@ -140,11 +186,15 @@ static int countBarracks(const GameSnapshot& s, KingdomId k) {
 
 float AIEvaluator::scoreEconomy(const GameSnapshot& s, KingdomId k,
                                   int mineIncome, int farmIncome) {
-    float goldScore     = s.kingdom(k).gold * 0.5f;
-    float myIncome      = countIncomePerTurn(s, k, mineIncome, farmIncome) * 5.0f;
+    const float goldF     = g_aiConfig ? g_aiConfig->evaluator.goldFactor     : 0.5f;
+    const float incomeF   = g_aiConfig ? g_aiConfig->evaluator.incomeFactor   : 5.0f;
+    const float barracksF = g_aiConfig ? g_aiConfig->evaluator.barracksFactor : 30.0f;
+
+    float goldScore     = s.kingdom(k).gold * goldF;
+    float myIncome      = countIncomePerTurn(s, k, mineIncome, farmIncome) * incomeF;
     float enemyIncome   = countIncomePerTurn(s, s.enemyKingdom(k).id,
-                                                mineIncome, farmIncome) * 5.0f;
-    float barracksScore = countBarracks(s, k) * 30.0f;
+                                                mineIncome, farmIncome) * incomeF;
+    float barracksScore = countBarracks(s, k) * barracksF;
     return goldScore + myIncome - enemyIncome + barracksScore;
 }
 
@@ -209,13 +259,18 @@ static int countArenaControl(const GameSnapshot& s, KingdomId k) {
 }
 
 float AIEvaluator::scoreMapControl(const GameSnapshot& s, KingdomId k) {
+    const float resCellBonus    = g_aiConfig ? g_aiConfig->evaluator.resourceCellBonus    : 15.0f;
+    const float contestedPenalty= g_aiConfig ? g_aiConfig->evaluator.contestedCellPenalty : 5.0f;
+    const float churchBns       = g_aiConfig ? g_aiConfig->evaluator.churchBonus          : 50.0f;
+    const float arenaBns        = g_aiConfig ? g_aiConfig->evaluator.arenaBonus           : 20.0f;
+
     int myRes     = countOccupiedResourceCells(s, k);
     int enemyRes  = countOccupiedResourceCells(s, s.enemyKingdom(k).id);
     int contested = countContestedResourceCells(s);
-    float church  = hasChurchControl(s, k) ? 50.0f : 0.0f;
-    float arena   = countArenaControl(s, k) * 20.0f;
-    return (myRes - enemyRes) * 15.0f
-           - contested * 5.0f
+    float church  = hasChurchControl(s, k) ? churchBns : 0.0f;
+    float arena   = countArenaControl(s, k) * arenaBns;
+    return (myRes - enemyRes) * resCellBonus
+           - contested * contestedPenalty
            + church
            + arena;
 }
@@ -257,6 +312,12 @@ static int countPiecesInRadius(const GameSnapshot& s, KingdomId k,
 
 float AIEvaluator::scoreKingSafety(const GameSnapshot& s, KingdomId k,
                                      int globalMaxRange) {
+    const float inCheckPen    = g_aiConfig ? g_aiConfig->evaluator.inCheckPenalty    : 500.0f;
+    const float safeEscapeBns = g_aiConfig ? g_aiConfig->evaluator.safeEscapeBonus   : 30.0f;
+    const float defenderBns   = g_aiConfig ? g_aiConfig->evaluator.defenderBonus     : 40.0f;
+    const float enemyCheckBns = g_aiConfig ? g_aiConfig->evaluator.enemyInCheckBonus : 400.0f;
+    const float enemyEscPen   = g_aiConfig ? g_aiConfig->evaluator.enemyEscapePenalty: 25.0f;
+
     float score = 0.0f;
     auto* myKing = s.kingdom(k).getKing();
     if (!myKing) return -10000.0f;
@@ -264,26 +325,26 @@ float AIEvaluator::scoreKingSafety(const GameSnapshot& s, KingdomId k,
     sf::Vector2i kPos = myKing->position;
 
     // In check = very bad
-    if (ForwardModel::isInCheck(s, k, globalMaxRange)) score -= 500.0f;
+    if (ForwardModel::isInCheck(s, k, globalMaxRange)) score -= inCheckPen;
 
     // Escape squares
     int escapes = countSafeAdjacentSquares(s, kPos, k, globalMaxRange);
-    score += escapes * 30.0f;
+    score += escapes * safeEscapeBns;
 
     // Defenders near king (Manhattan ≤ 3)
     int defenders = countPiecesInRadius(s, k, kPos, 3);
-    score += defenders * 40.0f;
+    score += defenders * defenderBns;
 
     // Enemy king in check = good for us
     auto* eKing = s.enemyKingdom(k).getKing();
     if (eKing && ForwardModel::isInCheck(s, s.enemyKingdom(k).id, globalMaxRange))
-        score += 400.0f;
+        score += enemyCheckBns;
 
     // Enemy escape squares (fewer = better)
     if (eKing) {
         int enemyEscapes = countSafeAdjacentSquares(s, eKing->position,
                                                       s.enemyKingdom(k).id, globalMaxRange);
-        score -= enemyEscapes * 25.0f;
+        score -= enemyEscapes * enemyEscPen;
     }
 
     return score;
@@ -294,17 +355,21 @@ float AIEvaluator::scoreKingSafety(const GameSnapshot& s, KingdomId k,
 // =========================================================================
 
 float AIEvaluator::scoreDevelopment(const GameSnapshot& s, KingdomId k) {
+    const float prodF   = g_aiConfig ? g_aiConfig->evaluator.productionFactor : 0.3f;
+    const float xpF     = g_aiConfig ? g_aiConfig->evaluator.xpFactor         : 0.1f;
+    const float queenBn = g_aiConfig ? g_aiConfig->evaluator.queenBonus       : 200.0f;
+
     float score = 0.0f;
     // Production in progress = future value
     for (auto& b : s.kingdom(k).buildings) {
         if (b.isProducing && !b.isDestroyed())
-            score += pieceValue(b.producingType) * 0.3f;
+            score += pieceValue(b.producingType) * prodF;
     }
     // Cumulative XP
     for (auto& p : s.kingdom(k).pieces)
-        score += p.xp * 0.1f;
+        score += p.xp * xpF;
     // Having a queen = big bonus
-    if (s.kingdom(k).hasQueen()) score += 200.0f;
+    if (s.kingdom(k).hasQueen()) score += queenBn;
     return score;
 }
 
@@ -314,6 +379,9 @@ float AIEvaluator::scoreDevelopment(const GameSnapshot& s, KingdomId k) {
 
 float AIEvaluator::scoreThreat(const GameSnapshot& s, KingdomId k,
                                  int globalMaxRange) {
+    const float gainF = g_aiConfig ? g_aiConfig->evaluator.threatGainFactor : 0.3f;
+    const float lossF = g_aiConfig ? g_aiConfig->evaluator.threatLossFactor : 0.4f;
+
     float score = 0.0f;
     ThreatMap myThreats    = ForwardModel::buildThreatMap(s, k, globalMaxRange);
     ThreatMap enemyThreats = ForwardModel::buildThreatMap(s, s.enemyKingdom(k).id,
@@ -321,12 +389,12 @@ float AIEvaluator::scoreThreat(const GameSnapshot& s, KingdomId k,
     // Enemy pieces under our threat = good
     for (auto& ep : s.enemyKingdom(k).pieces)
         if (myThreats.isSet(ep.position.x, ep.position.y))
-            score += pieceValue(ep.type) * 0.3f;
+            score += pieceValue(ep.type) * gainF;
 
     // Our pieces under enemy threat = bad
     for (auto& mp : s.kingdom(k).pieces)
         if (enemyThreats.isSet(mp.position.x, mp.position.y))
-            score -= pieceValue(mp.type) * 0.4f;
+            score -= pieceValue(mp.type) * lossF;
 
     return score;
 }
@@ -337,29 +405,36 @@ float AIEvaluator::scoreThreat(const GameSnapshot& s, KingdomId k,
 
 float AIEvaluator::scoreCheckmateProximity(const GameSnapshot& s, KingdomId k,
                                              int globalMaxRange) {
+    const float inCheckBns  = g_aiConfig ? g_aiConfig->evaluator.checkmateProximityInCheckBonus : 300.0f;
+    const float mateBns     = g_aiConfig ? g_aiConfig->evaluator.checkmateProximityMateBonus    : 100000.0f;
+    const float blockedBns  = g_aiConfig ? g_aiConfig->evaluator.blockedEscapesBonus            : 40.0f;
+    const float distBase    = g_aiConfig ? g_aiConfig->evaluator.avgDistBase                    : 100.0f;
+    const float distScale   = g_aiConfig ? g_aiConfig->evaluator.avgDistScale                   : 3.0f;
+    const float assaultBns  = g_aiConfig ? g_aiConfig->evaluator.assaultPiecesBonus             : 50.0f;
+
     float score = 0.0f;
     auto* eKing = s.enemyKingdom(k).getKing();
-    if (!eKing) return 100000.0f;  // enemy king gone = we won
+    if (!eKing) return mateBns;  // enemy king gone = we won
 
     sf::Vector2i eKingPos = eKing->position;
 
     // Enemy in check
     if (ForwardModel::isInCheck(s, s.enemyKingdom(k).id, globalMaxRange))
-        score += 300.0f;
+        score += inCheckBns;
 
     // Enemy in checkmate
     if (ForwardModel::isCheckmate(s, s.enemyKingdom(k).id, globalMaxRange))
-        score += 100000.0f;
+        score += mateBns;
 
     // We are checkmated
     if (ForwardModel::isCheckmate(s, k, globalMaxRange))
-        score -= 100000.0f;
+        score -= mateBns;
 
     // Blocked escape squares of enemy king
     int blockedEscapes = 8 - countSafeAdjacentSquares(s, eKingPos,
                                                         s.enemyKingdom(k).id,
                                                         globalMaxRange);
-    score += blockedEscapes * 40.0f;
+    score += blockedEscapes * blockedBns;
 
     // Average Manhattan distance of our pieces to enemy king
     float totalDist = 0.0f;
@@ -372,12 +447,12 @@ float AIEvaluator::scoreCheckmateProximity(const GameSnapshot& s, KingdomId k,
     }
     if (pieceCount > 0) {
         float avgDist = totalDist / static_cast<float>(pieceCount);
-        score += std::max(0.0f, 100.0f - avgDist * 3.0f);
+        score += std::max(0.0f, distBase - avgDist * distScale);
     }
 
     // Pieces in assault ring (Manhattan ≤ 3 of enemy king)
     int assaultPieces = countPiecesInRadius(s, k, eKingPos, 3);
-    score += assaultPieces * 50.0f;
+    score += assaultPieces * assaultBns;
 
     return score;
 }

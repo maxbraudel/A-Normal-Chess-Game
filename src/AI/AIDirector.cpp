@@ -17,7 +17,9 @@
 AIDirector::AIDirector() = default;
 
 bool AIDirector::loadConfig(const std::string& filepath) {
-    return m_config.loadFromFile(filepath);
+    const bool loaded = m_config.loadFromFile(filepath);
+    AIEvaluator::setConfig(&m_config);
+    return loaded;
 }
 
 void AIDirector::applyPlanMetadata(const AIDirectorPlan& plan) {
@@ -257,13 +259,15 @@ static AssaultEval evaluateAssaultPosition(const GameSnapshot& snapshot,
                                           sf::Vector2i enemyKingPos,
                                           const std::vector<AssaultSlot>& slots,
                                           const std::array<int, 8>& sectorLoads,
-                                          const ThreatMap& currentThreats) {
+                                          const ThreatMap& currentThreats,
+                                          const AIConfig& aiConfig) {
     (void)snapshot;
     (void)aiKingdom;
     AssaultEval best;
 
     const int currentSector = octantIndex(enemyKingPos, piece.position);
-    const bool subtractCurrentSector = (manhattanDistance(piece.position, enemyKingPos) <= 6);
+    const bool subtractCurrentSector =
+        (manhattanDistance(piece.position, enemyKingPos) <= aiConfig.pressure.sectorLoadDistance);
     const int moveSector = octantIndex(enemyKingPos, pos);
 
     for (const auto& slot : slots) {
@@ -281,11 +285,19 @@ static AssaultEval evaluateAssaultPosition(const GameSnapshot& snapshot,
         const int uncoveredEscapePressure = (slot.isEscape && !currentThreats.isSet(slot.pos)) ? 1 : 0;
 
         float value = 0.0f;
-        value += uncoveredEscapePressure ? 80.0f : (slot.isEscape ? 26.0f : 14.0f);
-        value += exactSlot ? (slot.isEscape ? 24.0f : 10.0f) : 0.0f;
-        value -= static_cast<float>(slotDistance) * 8.0f;
-        value -= static_cast<float>(slotSectorLoad) * 20.0f;
-        value -= static_cast<float>(moveSectorLoad) * 12.0f;
+        value += uncoveredEscapePressure
+            ? aiConfig.pressure.assaultUncoveredEscapeWeight
+            : (slot.isEscape
+                ? aiConfig.pressure.assaultEscapeWeight
+                : aiConfig.pressure.assaultNonEscapeWeight);
+        value += exactSlot
+            ? (slot.isEscape
+                ? aiConfig.pressure.assaultExactEscapeBonus
+                : aiConfig.pressure.assaultExactNonEscapeBonus)
+            : 0.0f;
+        value -= static_cast<float>(slotDistance) * aiConfig.pressure.assaultSlotDistancePenalty;
+        value -= static_cast<float>(slotSectorLoad) * aiConfig.pressure.assaultSlotSectorLoadPenalty;
+        value -= static_cast<float>(moveSectorLoad) * aiConfig.pressure.assaultMoveSectorLoadPenalty;
 
         if (value > best.value) {
             best.value = value;
@@ -338,7 +350,7 @@ static bool moveTowardTarget(AIDirectorPlan& plan,
 AIDirectorPlan AIDirector::computeTurn(Board& board, Kingdom& self, Kingdom& enemy,
                                          const std::vector<Building>& publicBuildings,
                                          int turnNumber, const GameConfig& config) {
-    TimeBudget timer(300); // 300ms hard budget
+    TimeBudget timer(m_config.maxTurnTimeMs);
 
     AIDirectorPlan plan;
     KingdomId aiKingdom = self.id;
@@ -367,7 +379,7 @@ AIDirectorPlan AIDirector::computeTurn(Board& board, Kingdom& self, Kingdom& ene
     plan.enemyKingStaticTurns = m_enemyKingStaticTurns;
 
     // --- 3. Detect immediate mate-in-1 ---
-    if (timer.hasAtLeast(50)) {
+    if (timer.hasAtLeast(m_config.mateInOneMinBudgetMs)) {
         auto mate = m_checkmateSolver.findMateIn1(snapshot, aiKingdom, globalMaxRange, config);
         if (mate.has_value()) {
             // Found checkmate! Queue the move.
@@ -389,10 +401,11 @@ AIDirectorPlan AIDirector::computeTurn(Board& board, Kingdom& self, Kingdom& ene
     }
 
     // --- 4. Deeper mate search if time permits ---
-    if (timer.hasAtLeast(100)) {
-        auto deepMate = m_checkmateSolver.findMateInN(snapshot, aiKingdom, 4,
+    if (timer.hasAtLeast(m_config.deepMateMinBudgetMs)) {
+        auto deepMate = m_checkmateSolver.findMateInN(snapshot, aiKingdom, m_config.deepMateDepth,
                                 globalMaxRange,
-                                std::min(60, timer.remainingMs() / 3),
+                                std::min(m_config.deepMateMaxBudgetMs,
+                                         static_cast<int>(timer.remainingMs() * m_config.checkmateSolverBudgetFraction)),
                                 config);
         if (deepMate.has_value() && deepMate->pieceId >= 0) {
             auto* piece = snapshot.kingdom(aiKingdom).getPieceById(deepMate->pieceId);
@@ -419,7 +432,9 @@ AIDirectorPlan AIDirector::computeTurn(Board& board, Kingdom& self, Kingdom& ene
     const int nearbyPressurePieces = countPiecesNearEnemyKing(snapshot, aiKingdom, 8);
     const bool forcePressure = hasSufficientMatingMaterial(snapshot, aiKingdom)
         && ((enemyCombatPieces == 0 && myCombatPieces >= 3)
-            || (enemyCombatPieces <= 1 && m_enemyKingStaticTurns >= 4 && myCombatPieces >= 4));
+            || (enemyCombatPieces <= 1
+                && m_enemyKingStaticTurns >= m_config.enemyKingStaticTurnsThreshold
+                && myCombatPieces >= 4));
     const bool shouldContinuePressureProduction = !forcePressure
         || nearbyPressurePieces < 5
         || strongPieces < 3
@@ -436,21 +451,21 @@ AIDirectorPlan AIDirector::computeTurn(Board& board, Kingdom& self, Kingdom& ene
 
     // Determine AIPhase for eval weights
     AIPhase phase = AIPhase::MID_GAME;
-    if (turnNumber <= 8) phase = AIPhase::EARLY_GAME;
-    else if (turnNumber <= 15) phase = AIPhase::BUILD_UP;
+    if (turnNumber <= m_config.earlyGameMaxTurn) phase = AIPhase::EARLY_GAME;
+    else if (turnNumber <= m_config.buildUpMaxTurn) phase = AIPhase::BUILD_UP;
     else if (stratPlan.primaryObjective == StrategicObjective::DEFEND_KING)
         phase = AIPhase::CRISIS;
     else if (stratPlan.primaryObjective == StrategicObjective::CHECKMATE_PRESS ||
              stratPlan.primaryObjective == StrategicObjective::RUSH_ATTACK)
         phase = AIPhase::AGGRESSION;
-    else if (static_cast<int>(snapshot.kingdom(aiKingdom).pieces.size()) <= 3 &&
-             static_cast<int>(snapshot.enemyKingdom(aiKingdom).pieces.size()) <= 3)
+    else if (static_cast<int>(snapshot.kingdom(aiKingdom).pieces.size()) <= m_config.endgamePieceThreshold &&
+             static_cast<int>(snapshot.enemyKingdom(aiKingdom).pieces.size()) <= m_config.endgamePieceThreshold)
         phase = AIPhase::ENDGAME;
 
     EvalWeights weights = AIEvaluator::weightsForPhase(phase);
 
     // --- 6. Tactical layer: MCTS for best move ---
-    int mctsBudget = std::max(30, static_cast<int>(timer.remainingMs() * 0.6f));
+    int mctsBudget = std::max(30, static_cast<int>(timer.remainingMs() * m_config.mctsBudgetFraction));
     executeMove(plan, snapshot, ctx, aiKingdom, stratPlan,
                 globalMaxRange, weights, mctsBudget, config, forcePressure);
 
@@ -558,10 +573,10 @@ bool AIDirector::executePressureMove(AIDirectorPlan& plan, const GameSnapshot& s
     for (const auto& piece : snapshot.kingdom(aiKingdom).pieces) {
         if (piece.type == PieceType::King) continue;
         ++nonKingCount;
-        if (manhattanDistance(piece.position, enemyKing->position) > 4) {
+        if (manhattanDistance(piece.position, enemyKing->position) > m_config.pressure.nonKingNearDistance) {
             allNonKingsNear = false;
         }
-        if (manhattanDistance(piece.position, enemyKing->position) <= 6) {
+        if (manhattanDistance(piece.position, enemyKing->position) <= m_config.pressure.sectorLoadDistance) {
             ++sectorLoads[octantIndex(enemyKing->position, piece.position)];
         }
     }
@@ -580,8 +595,8 @@ bool AIDirector::executePressureMove(AIDirectorPlan& plan, const GameSnapshot& s
         const int crowdAtOrigin = countFriendlyNeighbors(snapshot, aiKingdom, piece.position, 2);
         const AssaultEval currentAssault = evaluateAssaultPosition(
             snapshot, aiKingdom, piece, piece.position, enemyKing->position,
-            assaultSlots, sectorLoads, currentThreats);
-        const bool pieceInPosition = (currentDist <= 4);
+            assaultSlots, sectorLoads, currentThreats, m_config);
+        const bool pieceInPosition = (currentDist <= m_config.pressure.pieceInPositionDistance);
 
         for (const auto& dest : moves) {
             const int nextDist = manhattanDistance(dest, enemyKing->position);
@@ -605,57 +620,57 @@ bool AIDirector::executePressureMove(AIDirectorPlan& plan, const GameSnapshot& s
 
             const AssaultEval moveAssault = evaluateAssaultPosition(
                 snapshot, aiKingdom, piece, dest, enemyKing->position,
-                assaultSlots, sectorLoads, simThreats);
+                assaultSlots, sectorLoads, simThreats, m_config);
 
             float score = 0.0f;
-            score += static_cast<float>(currentDist - nextDist) * 20.0f;
-            score += static_cast<float>(crowdAtOrigin - crowdAtDest) * 14.0f;
-            score += static_cast<float>(newCoverage) * 90.0f;
-            score += static_cast<float>(coveredEscapes - currentCoveredEscapes) * 50.0f;
-            score += static_cast<float>(currentSafeEscapes - safeEscapesAfter) * 140.0f;
-            score -= static_cast<float>(safeEscapesAfter) * 35.0f;
-            score += (moveAssault.value - currentAssault.value) * 1.5f;
-            if (givesCheck) score += 180.0f;
-            if (isMate) score += 100000.0f;
+            score += static_cast<float>(currentDist - nextDist) * m_config.pressure.approachDistanceWeight;
+            score += static_cast<float>(crowdAtOrigin - crowdAtDest) * m_config.pressure.crowdReductionWeight;
+            score += static_cast<float>(newCoverage) * m_config.pressure.newCoverageWeight;
+            score += static_cast<float>(coveredEscapes - currentCoveredEscapes) * m_config.pressure.coverageDeltaWeight;
+            score += static_cast<float>(currentSafeEscapes - safeEscapesAfter) * m_config.pressure.safeEscapeReductionWeight;
+            score -= static_cast<float>(safeEscapesAfter) * m_config.pressure.safeEscapePenaltyWeight;
+            score += (moveAssault.value - currentAssault.value) * m_config.pressure.assaultDeltaMultiplier;
+            if (givesCheck) score += m_config.pressure.givesCheckBonus;
+            if (isMate) score += m_config.pressure.mateBonus;
 
             switch (piece.type) {
-                case PieceType::Rook: score += 40.0f; break;
-                case PieceType::Bishop: score += 28.0f; break;
-                case PieceType::Knight: score += 22.0f; break;
-                case PieceType::Pawn: score += 12.0f; break;
-                case PieceType::Queen: score += 50.0f; break;
-                case PieceType::King: score -= 140.0f; break;
+                case PieceType::Rook: score += m_config.pressure.pieceTypeBonusRook; break;
+                case PieceType::Bishop: score += m_config.pressure.pieceTypeBonusBishop; break;
+                case PieceType::Knight: score += m_config.pressure.pieceTypeBonusKnight; break;
+                case PieceType::Pawn: score += m_config.pressure.pieceTypeBonusPawn; break;
+                case PieceType::Queen: score += m_config.pressure.pieceTypeBonusQueen; break;
+                case PieceType::King: score -= m_config.pressure.kingMovePenalty; break;
             }
 
             if (piece.id == m_lastMovedPieceId) {
-                score -= 40.0f;
+                score -= m_config.pressure.lastMovedPiecePenalty;
             }
 
             auto* victim = snapshot.enemyKingdom(aiKingdom).getPieceAt(dest);
             if (victim) {
-                score += AIEvaluator::pieceValue(victim->type) * 0.5f;
+                score += AIEvaluator::pieceValue(victim->type) * m_config.pressure.captureValueMultiplier;
             }
 
             if (pieceInPosition && !allNonKingsNear) {
                 const bool improvesNet = givesCheck || newCoverage > 0 ||
                     safeEscapesAfter < currentSafeEscapes ||
-                    moveAssault.value > currentAssault.value + 18.0f ||
+                    moveAssault.value > currentAssault.value + m_config.pressure.inPositionAssaultImproveThreshold ||
                     moveAssault.slotDistance + 1 < currentAssault.slotDistance;
                 if (!improvesNet) {
-                    score -= 180.0f;
+                    score -= m_config.pressure.noNetImprovePenalty;
                 } else {
-                    score += 30.0f;
+                    score += m_config.pressure.netImproveBonus;
                 }
             }
 
             if (nextDist <= 2 && !isKing) {
-                score += 20.0f;
+                score += m_config.pressure.closeDistanceBonus;
             }
             if (currentDist <= 3 && nextDist >= currentDist && !isKing && newCoverage == 0 && !givesCheck) {
-                score -= 120.0f;
+                score -= m_config.pressure.driftPenalty;
             }
             if (piece.type == PieceType::Pawn && myCombatPieces >= 8 && !givesCheck && newCoverage == 0) {
-                score -= 40.0f;
+                score -= m_config.pressure.pawnOvercrowdPenalty;
             }
 
             if (score > bestScore) {
@@ -710,21 +725,21 @@ void AIDirector::heuristicMove(AIDirectorPlan& plan, const GameSnapshot& snapsho
 
                 if (objective == StrategicObjective::CHECKMATE_PRESS ||
                     objective == StrategicObjective::RUSH_ATTACK) {
-                    score += static_cast<float>(currentDistToEK - distToEK) * 35.0f;
-                    score += std::max(0.0f, 30.0f - static_cast<float>(distToEK));
-                    if (piece.type != PieceType::King) score += 10.0f;
+                    score += static_cast<float>(currentDistToEK - distToEK) * m_config.heuristic.checkmateApproachWeight;
+                    score += std::max(0.0f, m_config.heuristic.checkmateProximityBase - static_cast<float>(distToEK));
+                    if (piece.type != PieceType::King) score += m_config.heuristic.checkmatePieceBonus;
                 }
 
                 if (objective == StrategicObjective::BUILD_ARMY) {
-                    score += static_cast<float>(currentDistToEK - distToEK) * 18.0f;
-                    if (piece.type != PieceType::King) score += 12.0f;
+                    score += static_cast<float>(currentDistToEK - distToEK) * m_config.heuristic.buildArmyApproachWeight;
+                    if (piece.type != PieceType::King) score += m_config.heuristic.buildArmyPieceBonus;
                 }
             }
 
             if (objective == StrategicObjective::ECONOMY_EXPAND) {
                 auto* bld = snapshot.buildingAt(dest);
                 if (bld && (bld->type == BuildingType::Mine || bld->type == BuildingType::Farm))
-                    score += 200.0f;
+                    score += m_config.heuristic.economyResourceBonus;
 
                 int bestResourceDist = 999;
                 for (const auto& cell : ctx.freeResourceCells) {
@@ -732,7 +747,8 @@ void AIDirector::heuristicMove(AIDirectorPlan& plan, const GameSnapshot& snapsho
                     if (dist < bestResourceDist) bestResourceDist = dist;
                 }
                 if (bestResourceDist < 999) {
-                    score += std::max(0.0f, 120.0f - static_cast<float>(bestResourceDist) * 8.0f);
+                    score += std::max(0.0f, m_config.heuristic.economyResourceDistBase
+                                         - static_cast<float>(bestResourceDist) * m_config.heuristic.economyResourceDistScale);
                 }
             }
 
@@ -743,8 +759,9 @@ void AIDirector::heuristicMove(AIDirectorPlan& plan, const GameSnapshot& snapsho
                                             + std::abs(piece.position.y - myKing->position.y);
                     int distToMyKing = std::abs(dest.x - myKing->position.x)
                                      + std::abs(dest.y - myKing->position.y);
-                    score += static_cast<float>(currentDistToMyKing - distToMyKing) * 18.0f;
-                    score += std::max(0.0f, 30.0f - static_cast<float>(distToMyKing) * 2.0f);
+                    score += static_cast<float>(currentDistToMyKing - distToMyKing) * m_config.heuristic.defendKingApproachWeight;
+                    score += std::max(0.0f, m_config.heuristic.defendKingProximityBase
+                                         - static_cast<float>(distToMyKing) * m_config.heuristic.defendKingProximityScale);
                 }
             }
 
