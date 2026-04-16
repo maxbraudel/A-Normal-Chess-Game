@@ -1,7 +1,8 @@
 #pragma once
+#include <set>
+#include <cstdint>
 #include <map>
 #include <vector>
-#include <set>
 #include "Systems/TurnCommand.hpp"
 #include "Kingdom/KingdomId.hpp"
 
@@ -43,6 +44,18 @@ public:
                            const Kingdom& enemyKingdom,
                            const std::vector<Building>& publicBuildings,
                            const GameConfig& config);
+    bool cancelBuildCommand(int buildId,
+                            const Board& board,
+                            const Kingdom& activeKingdom,
+                            const Kingdom& enemyKingdom,
+                            const std::vector<Building>& publicBuildings,
+                            const GameConfig& config);
+    bool replaceMoveCommand(const TurnCommand& moveCommand,
+                            const Board& board,
+                            const Kingdom& activeKingdom,
+                            const Kingdom& enemyKingdom,
+                            const std::vector<Building>& publicBuildings,
+                            const GameConfig& config);
     bool cancelBuildCommand(BuildingType type,
                             sf::Vector2i origin,
                             int rotationQuarterTurns,
@@ -51,20 +64,41 @@ public:
                             const Kingdom& enemyKingdom,
                             const std::vector<Building>& publicBuildings,
                             const GameConfig& config);
+    bool cancelProduceCommand(int barracksId,
+                              const Board& board,
+                              const Kingdom& activeKingdom,
+                              const Kingdom& enemyKingdom,
+                              const std::vector<Building>& publicBuildings,
+                              const GameConfig& config);
+    bool cancelUpgradeCommand(int pieceId,
+                              const Board& board,
+                              const Kingdom& activeKingdom,
+                              const Kingdom& enemyKingdom,
+                              const std::vector<Building>& publicBuildings,
+                              const GameConfig& config);
     const std::vector<TurnCommand>& getPendingCommands() const;
     const TurnCommand* getPendingMoveCommand(int pieceId) const;
+    const TurnCommand* getPendingBuildCommand(int buildId) const;
+    const TurnCommand* getPendingBuildCommand(BuildingType type,
+                                              sf::Vector2i origin,
+                                              int rotationQuarterTurns) const;
+    const TurnCommand* getPendingProduceCommand(int barracksId) const;
+    const TurnCommand* getPendingUpgradeCommand(int pieceId) const;
 
     bool hasPendingMove() const;
     bool hasPendingBuild() const;
     bool hasPendingProduce() const;
     bool hasPendingMarriage() const;
     bool hasPendingMoveForPiece(int pieceId) const;
+    bool hasPendingProduceForBarracks(int barracksId) const;
+    bool hasPendingUpgradeForPiece(int pieceId) const;
 
     int getMovementPointsMax() const;
     int getMovementPointsRemaining() const;
     int getBuildPointsMax() const;
     int getBuildPointsRemaining() const;
     int getMoveCountForPiece(int pieceId) const;
+    std::uint64_t getPendingStateRevision() const;
 
     void commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemyKingdom,
                     std::vector<Building>& publicBuildings,
@@ -86,6 +120,8 @@ private:
     bool m_hasProduced;           // true if at least 1 production queued
     std::set<int> m_producedBarracks;  // barracks IDs that have a produce queued
     bool m_hasMarried;
+    int m_nextPendingBuildId;
+    std::uint64_t m_pendingStateRevision;
 
     void rebuildQueuedSpecialState();
     void refreshProjectedBudgetState(const Board& board,
@@ -93,4 +129,5 @@ private:
                                      const Kingdom& enemyKingdom,
                                      const std::vector<Building>& publicBuildings,
                                      const GameConfig& config);
+    void markPendingStateChanged();
 };

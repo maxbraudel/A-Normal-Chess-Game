@@ -2,9 +2,43 @@
 #include "Buildings/Building.hpp"
 #include "Core/GameSessionConfig.hpp"
 #include "Kingdom/Kingdom.hpp"
+#include "Systems/TurnCommand.hpp"
 #include "Units/PieceType.hpp"
 #include "Config/GameConfig.hpp"
+#include "UI/ActionButtonStyle.hpp"
 #include "UI/HUDLayout.hpp"
+
+namespace {
+
+std::string pieceTypeName(PieceType type) {
+    switch (type) {
+        case PieceType::Pawn: return "Pawn";
+        case PieceType::Knight: return "Knight";
+        case PieceType::Bishop: return "Bishop";
+        case PieceType::Rook: return "Rook";
+        case PieceType::Queen: return "Queen";
+        case PieceType::King: return "King";
+    }
+
+    return "Piece";
+}
+
+void updateProduceButton(const tgui::Button::Ptr& button,
+                         PieceType type,
+                         int cost,
+                         bool allowProduce,
+                         int availableGold,
+                         const TurnCommand* pendingProduce) {
+    const bool selected = pendingProduce && pendingProduce->produceType == type;
+    const bool enabled = allowProduce && (availableGold >= cost || selected);
+    ActionButtonStyle::applySelectableState(
+        button,
+        pieceTypeName(type) + " (" + std::to_string(cost) + "g)",
+        selected,
+        enabled);
+}
+
+} // namespace
 
 void BarracksPanel::init(const tgui::Panel::Ptr& parent) {
     m_panel = tgui::Panel::create({"&.width", "&.height"});
@@ -78,11 +112,27 @@ void BarracksPanel::init(const tgui::Panel::Ptr& parent) {
     });
     m_panel->add(m_produceRookBtn);
 
+    m_cancelConstructionBtn = tgui::Button::create("Cancel Construction");
+    m_cancelConstructionBtn->setPosition({10, 390});
+    m_cancelConstructionBtn->setSize({316, 34});
+    m_cancelConstructionBtn->onPress([this]() {
+        if (m_onCancelConstruction) {
+            m_onCancelConstruction(m_currentBarracksId);
+        }
+    });
+    m_panel->add(m_cancelConstructionBtn);
+
+    m_cancelConstructionBtn->setVisible(false);
+
     m_panel->setVisible(false);
 }
 
-void BarracksPanel::show(const Building& barracks, const Kingdom& kingdom, const GameConfig& config,
-                         bool allowProduce) {
+void BarracksPanel::show(const Building& barracks,
+                         const Kingdom& kingdom,
+                         const GameConfig& config,
+                         bool allowProduce,
+                         bool allowCancelConstruction,
+                         const TurnCommand* pendingProduce) {
     if (!m_panel) return;
     m_panel->moveToFront();
     m_currentBarracksId = barracks.id;
@@ -97,7 +147,23 @@ void BarracksPanel::show(const Building& barracks, const Kingdom& kingdom, const
     m_cellsLabel->setText("Occupied Cells: " + std::to_string(barracks.width * barracks.height));
     m_hpLabel->setText("HP: " + std::to_string(totalHP) + "/" + std::to_string(maxHP));
 
-    if (barracks.isProducing) {
+    const bool canCancelConstruction = barracks.isUnderConstruction() && allowCancelConstruction;
+    m_cancelConstructionBtn->setVisible(barracks.isUnderConstruction());
+    ActionButtonStyle::applySelectableState(
+        m_cancelConstructionBtn,
+        "Cancel Construction",
+        false,
+        canCancelConstruction,
+        false);
+
+    if (barracks.isUnderConstruction()) {
+        m_statusLabel->setText("Status: Under construction");
+        m_turnsLabel->setText("Will complete when the turn is validated");
+        m_producePawnBtn->setEnabled(false);
+        m_produceKnightBtn->setEnabled(false);
+        m_produceBishopBtn->setEnabled(false);
+        m_produceRookBtn->setEnabled(false);
+    } else if (barracks.isProducing) {
         m_statusLabel->setText("Status: Producing...");
         m_turnsLabel->setText("Turns left: " + std::to_string(barracks.turnsRemaining));
         m_producePawnBtn->setEnabled(false);
@@ -105,20 +171,42 @@ void BarracksPanel::show(const Building& barracks, const Kingdom& kingdom, const
         m_produceBishopBtn->setEnabled(false);
         m_produceRookBtn->setEnabled(false);
     } else {
-        m_statusLabel->setText("Status: Idle");
-        m_turnsLabel->setText("");
+        if (pendingProduce) {
+            m_statusLabel->setText("Status: Production queued");
+            m_turnsLabel->setText("Planned: " + pieceTypeName(pendingProduce->produceType));
+        } else {
+            m_statusLabel->setText("Status: Idle");
+            m_turnsLabel->setText("");
+        }
+
         int pawnCost = config.getRecruitCost(PieceType::Pawn);
         int knightCost = config.getRecruitCost(PieceType::Knight);
         int bishopCost = config.getRecruitCost(PieceType::Bishop);
         int rookCost = config.getRecruitCost(PieceType::Rook);
-        m_producePawnBtn->setEnabled(allowProduce && kingdom.gold >= pawnCost);
-        m_produceKnightBtn->setEnabled(allowProduce && kingdom.gold >= knightCost);
-        m_produceBishopBtn->setEnabled(allowProduce && kingdom.gold >= bishopCost);
-        m_produceRookBtn->setEnabled(allowProduce && kingdom.gold >= rookCost);
-        m_producePawnBtn->setText("Pawn (" + std::to_string(pawnCost) + "g)");
-        m_produceKnightBtn->setText("Knight (" + std::to_string(knightCost) + "g)");
-        m_produceBishopBtn->setText("Bishop (" + std::to_string(bishopCost) + "g)");
-        m_produceRookBtn->setText("Rook (" + std::to_string(rookCost) + "g)");
+        updateProduceButton(m_producePawnBtn,
+                            PieceType::Pawn,
+                            pawnCost,
+                            allowProduce,
+                            kingdom.gold,
+                            pendingProduce);
+        updateProduceButton(m_produceKnightBtn,
+                            PieceType::Knight,
+                            knightCost,
+                            allowProduce,
+                            kingdom.gold,
+                            pendingProduce);
+        updateProduceButton(m_produceBishopBtn,
+                            PieceType::Bishop,
+                            bishopCost,
+                            allowProduce,
+                            kingdom.gold,
+                            pendingProduce);
+        updateProduceButton(m_produceRookBtn,
+                            PieceType::Rook,
+                            rookCost,
+                            allowProduce,
+                            kingdom.gold,
+                            pendingProduce);
     }
     m_panel->setVisible(true);
 }
@@ -126,3 +214,7 @@ void BarracksPanel::show(const Building& barracks, const Kingdom& kingdom, const
 void BarracksPanel::hide() { if (m_panel) m_panel->setVisible(false); }
 
 void BarracksPanel::setOnProduce(std::function<void(int, int)> callback) { m_onProduce = std::move(callback); }
+
+void BarracksPanel::setOnCancelConstruction(std::function<void(int barracksId)> callback) {
+    m_onCancelConstruction = std::move(callback);
+}

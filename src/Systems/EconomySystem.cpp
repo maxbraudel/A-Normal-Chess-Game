@@ -44,6 +44,10 @@ ResourceIncomeBreakdown EconomySystem::calculateResourceIncomeBreakdown(const Bu
         return {};
     }
 
+    if (!building.hasActiveGameplayEffects()) {
+        return {};
+    }
+
     int whiteOccupiedCells = 0;
     int blackOccupiedCells = 0;
     for (const sf::Vector2i& pos : building.getOccupiedCells()) {

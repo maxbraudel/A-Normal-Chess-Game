@@ -3,13 +3,18 @@
 #include <TGUI/AllWidgets.hpp>
 #include <functional>
 
+struct TurnCommand;
+
 class Piece;
 class GameConfig;
 
 class PiecePanel {
 public:
     void init(const tgui::Panel::Ptr& parent);
-    void show(const Piece& piece, const GameConfig& config, bool allowUpgrade);
+    void show(const Piece& piece,
+              const GameConfig& config,
+              bool allowUpgrade,
+              const TurnCommand* pendingUpgrade = nullptr);
     void hide();
 
     void setOnUpgrade(std::function<void(int pieceId, int targetType)> callback);

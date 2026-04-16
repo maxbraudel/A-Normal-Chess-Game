@@ -22,7 +22,13 @@ struct InputContext {
     Kingdom& controlledKingdom;
     Kingdom& opposingKingdom;
     const std::vector<Building>& publicBuildings;
+    Board& authoritativeBoard;
+    Kingdom& authoritativeControlledKingdom;
+    Kingdom& authoritativeOpposingKingdom;
+    const std::vector<Building>& authoritativePublicBuildings;
     UIManager& uiManager;
     const GameConfig& config;
     InteractionPermissions permissions;
+    bool materializePendingStateLocally = false;
+    bool useConcretePendingState = false;
 };

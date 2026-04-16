@@ -30,6 +30,13 @@ struct KingdomBalanceMetric {
     int blackValue = 0;
 };
 
+struct InGamePlannedActionRow {
+    std::string kindLabel;
+    std::string actionLabel;
+    std::string detailLabel;
+    bool predicted = false;
+};
+
 enum class InGameStatusTone {
     Neutral,
     Danger
@@ -51,5 +58,6 @@ struct InGameViewModel {
     bool allowCommands = false;
     bool canEndTurn = false;
     std::vector<InGameEventRow> eventRows;
+    std::vector<InGamePlannedActionRow> plannedActionRows;
     std::array<KingdomBalanceMetric, kInGameMetricCount> balanceMetrics{};
 };

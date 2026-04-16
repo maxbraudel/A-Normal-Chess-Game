@@ -6,8 +6,10 @@
 #include "UI/BuildingPanel.hpp"
 #include "UI/BarracksPanel.hpp"
 #include "UI/BuildToolPanel.hpp"
+#include "UI/PendingConstructionPanel.hpp"
 #include "UI/CellPanel.hpp"
 #include "UI/EventLogPanel.hpp"
+#include "UI/PlannedActionsPanel.hpp"
 #include "UI/KingdomBalancePanel.hpp"
 #include "Systems/PublicBuildingOccupation.hpp"
 #include "UI/InGameViewModel.hpp"
@@ -39,13 +41,22 @@ public:
     void hideGameMenu();
     bool isGameMenuVisible() const;
     void updateDashboard(const InGameViewModel& model);
-    void showPiecePanel(const Piece& piece, const GameConfig& config, bool allowUpgrade);
+    void showPiecePanel(const Piece& piece,
+                        const GameConfig& config,
+                        bool allowUpgrade,
+                        const TurnCommand* pendingUpgrade = nullptr);
     void showBuildingPanel(const Building& building,
+                           bool allowCancelConstruction,
                            const std::optional<ResourceIncomeBreakdown>& resourceIncome = std::nullopt,
                            const std::optional<PublicBuildingOccupationState>& publicOccupation = std::nullopt);
     void showBarracksPanel(const Building& barracks, const Kingdom& kingdom, const GameConfig& config,
-                           bool allowProduce);
+                           bool allowProduce,
+                           bool allowCancelConstruction,
+                           const TurnCommand* pendingProduce = nullptr);
     void showBuildToolPanel(const Kingdom& kingdom, const GameConfig& config, bool allowBuild);
+    void showPendingConstructionPanel(const PendingBuildSelection& selection,
+                                      const GameConfig& config,
+                                      bool allowRemove);
     void showCellPanel(const Cell& cell);
     void showSelectionEmptyState();
     void hideAllPanels();
@@ -77,8 +88,10 @@ public:
     BuildingPanel&  buildingPanel()   { return m_buildingPanel; }
     BarracksPanel&  barracksPanel()   { return m_barracksPanel; }
     BuildToolPanel& buildToolPanel()  { return m_buildToolPanel; }
+    PendingConstructionPanel& pendingConstructionPanel() { return m_pendingConstructionPanel; }
     CellPanel&      cellPanel()       { return m_cellPanel; }
     EventLogPanel&  eventLogPanel()   { return m_eventLogPanel; }
+    PlannedActionsPanel& plannedActionsPanel() { return m_plannedActionsPanel; }
     ToolBar&        toolBar()         { return m_toolBar; }
 
 private:
@@ -88,6 +101,7 @@ private:
         Building,
         Barracks,
         BuildTool,
+        PendingConstruction,
         Cell
     };
 
@@ -102,8 +116,10 @@ private:
     BuildingPanel   m_buildingPanel;
     BarracksPanel   m_barracksPanel;
     BuildToolPanel  m_buildToolPanel;
+    PendingConstructionPanel m_pendingConstructionPanel;
     CellPanel       m_cellPanel;
     EventLogPanel   m_eventLogPanel;
+    PlannedActionsPanel m_plannedActionsPanel;
     KingdomBalancePanel m_kingdomBalancePanel;
     ToolBar         m_toolBar;
     tgui::Panel::Ptr m_leftSidebar;
@@ -112,6 +128,7 @@ private:
     tgui::Label::Ptr m_leftContextHint;
     tgui::Panel::Ptr m_rightSidebar;
     tgui::Panel::Ptr m_rightHistorySection;
+    tgui::Panel::Ptr m_rightPlannedActionsSection;
     tgui::Panel::Ptr m_rightBalanceSection;
     tgui::Panel::Ptr m_multiplayerWaitingOverlay;
     tgui::Label::Ptr m_multiplayerWaitingTitle;

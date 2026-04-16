@@ -6,6 +6,11 @@
 
 class Board;
 
+enum class BuildingState {
+    Completed,
+    UnderConstruction
+};
+
 class Building {
 public:
     int id;
@@ -17,6 +22,7 @@ public:
     int height;
     int rotationQuarterTurns;
     int flipMask;
+    BuildingState state;
     std::vector<int> cellHP;
     std::vector<int> cellBreachState;
 
@@ -28,6 +34,10 @@ public:
 
     bool isPublic() const;
     bool isDestroyed() const;
+    bool isUnderConstruction() const;
+    bool isUsable() const;
+    bool hasActiveGameplayEffects() const;
+    void setConstructionState(BuildingState newState);
     int getFootprintWidth() const;
     int getFootprintHeight() const;
     bool hasHorizontalFlip() const;

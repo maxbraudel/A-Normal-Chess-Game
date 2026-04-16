@@ -53,13 +53,18 @@ void UIManager::init(tgui::Gui& gui, const AssetManager& assets) {
     HUDLayout::styleSidebarFrame(m_rightSidebar);
     gui.add(m_rightSidebar, "InGameRightSidebar");
 
-    m_rightHistorySection = tgui::Panel::create({"&.width - 24", "(&.height - 36) / 2"});
+    m_rightHistorySection = tgui::Panel::create({"&.width - 24", "(&.height - 48) / 3"});
     m_rightHistorySection->setPosition({12, 12});
     HUDLayout::styleSidebarSection(m_rightHistorySection);
     m_rightSidebar->add(m_rightHistorySection);
 
-    m_rightBalanceSection = tgui::Panel::create({"&.width - 24", "(&.height - 36) / 2"});
-    m_rightBalanceSection->setPosition({"12", "24 + ((&.height - 36) / 2)"});
+    m_rightPlannedActionsSection = tgui::Panel::create({"&.width - 24", "(&.height - 48) / 3"});
+    m_rightPlannedActionsSection->setPosition({"12", "24 + ((&.height - 48) / 3)"});
+    HUDLayout::styleSidebarSection(m_rightPlannedActionsSection);
+    m_rightSidebar->add(m_rightPlannedActionsSection);
+
+    m_rightBalanceSection = tgui::Panel::create({"&.width - 24", "(&.height - 48) / 3"});
+    m_rightBalanceSection->setPosition({"12", "36 + (((&.height - 48) / 3) * 2)"});
     HUDLayout::styleSidebarSection(m_rightBalanceSection);
     m_rightSidebar->add(m_rightBalanceSection);
 
@@ -67,8 +72,10 @@ void UIManager::init(tgui::Gui& gui, const AssetManager& assets) {
     m_buildingPanel.init(m_leftSidebar);
     m_barracksPanel.init(m_leftSidebar);
     m_buildToolPanel.init(m_leftSidebar);
+    m_pendingConstructionPanel.init(m_leftSidebar);
     m_cellPanel.init(m_leftSidebar);
     m_eventLogPanel.init(m_rightHistorySection);
+    m_plannedActionsPanel.init(m_rightPlannedActionsSection);
     m_kingdomBalancePanel.init(m_rightBalanceSection);
     m_toolBar.init(gui);
     m_gameMenu.init(gui);
@@ -182,6 +189,7 @@ void UIManager::showHUD() {
     if (m_leftSidebar) m_leftSidebar->setVisible(false);
     if (m_rightSidebar) m_rightSidebar->setVisible(true);
     m_eventLogPanel.show();
+    m_plannedActionsPanel.show();
     m_kingdomBalancePanel.show();
 }
 
@@ -200,30 +208,44 @@ bool UIManager::isGameMenuVisible() const {
 void UIManager::updateDashboard(const InGameViewModel& model) {
     m_hud.update(model);
     m_eventLogPanel.update(model.eventRows);
+    m_plannedActionsPanel.update(model.plannedActionRows);
     m_kingdomBalancePanel.update(model.balanceMetrics);
 }
 
-void UIManager::showPiecePanel(const Piece& piece, const GameConfig& config, bool allowUpgrade) {
+void UIManager::showPiecePanel(const Piece& piece,
+                               const GameConfig& config,
+                               bool allowUpgrade,
+                               const TurnCommand* pendingUpgrade) {
     activateLeftContext(LeftContextView::Piece);
-    m_piecePanel.show(piece, config, allowUpgrade);
+    m_piecePanel.show(piece, config, allowUpgrade, pendingUpgrade);
 }
 
 void UIManager::showBuildingPanel(const Building& building,
+                                  bool allowCancelConstruction,
                                   const std::optional<ResourceIncomeBreakdown>& resourceIncome,
                                   const std::optional<PublicBuildingOccupationState>& publicOccupation) {
     activateLeftContext(LeftContextView::Building);
-    m_buildingPanel.show(building, resourceIncome, publicOccupation);
+    m_buildingPanel.show(building, allowCancelConstruction, resourceIncome, publicOccupation);
 }
 
 void UIManager::showBarracksPanel(const Building& barracks, const Kingdom& kingdom, const GameConfig& config,
-                                  bool allowProduce) {
+                                  bool allowProduce,
+                                  bool allowCancelConstruction,
+                                  const TurnCommand* pendingProduce) {
     activateLeftContext(LeftContextView::Barracks);
-    m_barracksPanel.show(barracks, kingdom, config, allowProduce);
+    m_barracksPanel.show(barracks, kingdom, config, allowProduce, allowCancelConstruction, pendingProduce);
 }
 
 void UIManager::showBuildToolPanel(const Kingdom& kingdom, const GameConfig& config, bool allowBuild) {
     activateLeftContext(LeftContextView::BuildTool);
     m_buildToolPanel.show(kingdom, config, allowBuild);
+}
+
+void UIManager::showPendingConstructionPanel(const PendingBuildSelection& selection,
+                                             const GameConfig& config,
+                                             bool allowRemove) {
+    activateLeftContext(LeftContextView::PendingConstruction);
+    m_pendingConstructionPanel.show(selection, config, allowRemove);
 }
 
 void UIManager::showCellPanel(const Cell& cell) {
@@ -250,6 +272,7 @@ void UIManager::hideAllPanels() {
     hideLeftContextPanels();
     if (m_leftEmptyState) m_leftEmptyState->setVisible(false);
     m_eventLogPanel.hide();
+    m_plannedActionsPanel.hide();
     m_kingdomBalancePanel.hide();
     m_toolBar.hide();
     if (m_leftSidebar) m_leftSidebar->setVisible(false);
@@ -442,6 +465,7 @@ void UIManager::hideLeftContextPanels() {
     m_buildingPanel.hide();
     m_barracksPanel.hide();
     m_buildToolPanel.hide();
+    m_pendingConstructionPanel.hide();
     m_cellPanel.hide();
 }
 

@@ -1,8 +1,10 @@
 #include "UI/PiecePanel.hpp"
 #include "Core/GameSessionConfig.hpp"
+#include "Systems/TurnCommand.hpp"
 #include "Units/Piece.hpp"
 #include "Units/PieceType.hpp"
 #include "Config/GameConfig.hpp"
+#include "UI/ActionButtonStyle.hpp"
 #include "UI/HUDLayout.hpp"
 
 #include <vector>
@@ -94,7 +96,10 @@ void PiecePanel::init(const tgui::Panel::Ptr& parent) {
     m_panel->setVisible(false);
 }
 
-void PiecePanel::show(const Piece& piece, const GameConfig& config, bool allowUpgrade) {
+void PiecePanel::show(const Piece& piece,
+                      const GameConfig& config,
+                      bool allowUpgrade,
+                      const TurnCommand* pendingUpgrade) {
     if (!m_panel) return;
     m_panel->moveToFront();
     m_currentPieceId = piece.id;
@@ -124,16 +129,26 @@ void PiecePanel::show(const Piece& piece, const GameConfig& config, bool allowUp
     const bool hasSecondaryUpgrade = upgradeTargets.size() > 1;
 
     m_primaryUpgradeBtn->setVisible(hasPrimaryUpgrade);
-    m_primaryUpgradeBtn->setEnabled(hasPrimaryUpgrade && allowUpgrade);
     if (hasPrimaryUpgrade) {
-        m_primaryUpgradeBtn->setText("Upgrade to " + pieceTypeName(upgradeTargets[0]));
+        const std::string label = "Upgrade to " + pieceTypeName(upgradeTargets[0]);
+        const bool selected = pendingUpgrade
+            && pendingUpgrade->upgradeTarget == upgradeTargets[0];
+        ActionButtonStyle::applySelectableState(m_primaryUpgradeBtn,
+                                                label,
+                                                selected,
+                                                allowUpgrade);
         m_primaryUpgradeTarget = static_cast<int>(upgradeTargets[0]);
     }
 
     m_secondaryUpgradeBtn->setVisible(hasSecondaryUpgrade);
-    m_secondaryUpgradeBtn->setEnabled(hasSecondaryUpgrade && allowUpgrade);
     if (hasSecondaryUpgrade) {
-        m_secondaryUpgradeBtn->setText("Upgrade to " + pieceTypeName(upgradeTargets[1]));
+        const std::string label = "Upgrade to " + pieceTypeName(upgradeTargets[1]);
+        const bool selected = pendingUpgrade
+            && pendingUpgrade->upgradeTarget == upgradeTargets[1];
+        ActionButtonStyle::applySelectableState(m_secondaryUpgradeBtn,
+                                                label,
+                                                selected,
+                                                allowUpgrade);
         m_secondaryUpgradeTarget = static_cast<int>(upgradeTargets[1]);
     }
 

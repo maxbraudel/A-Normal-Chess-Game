@@ -44,6 +44,19 @@ void drawStructureOverlaysForBuildings(sf::RenderWindow& window,
     }
 }
 
+int countDisplayedOccupiedBuildingCells(const Kingdom& kingdom) {
+    int occupiedCells = 0;
+    for (const Building& building : kingdom.buildings) {
+        if (building.isDestroyed()) {
+            continue;
+        }
+
+        occupiedCells += static_cast<int>(building.getOccupiedCells().size());
+    }
+
+    return occupiedCells;
+}
+
 bool isBlockedGameplayShortcutKey(sf::Keyboard::Key key) {
     return key == sf::Keyboard::Escape
         || key == sf::Keyboard::P
@@ -305,6 +318,49 @@ bool Game::canQueueNonMoveActions() const {
     return currentInteractionPermissions().canQueueNonMoveActions;
 }
 
+bool Game::shouldUseTurnDraft() const {
+    return (m_state == GameState::Playing || m_state == GameState::Paused || m_state == GameState::GameOver)
+        && isLocalPlayerTurn()
+        && !m_waitingForRemoteTurnResult
+        && !turnSystem().getPendingCommands().empty();
+}
+
+void Game::invalidateTurnDraft() {
+    m_turnDraft.clear();
+    m_lastTurnDraftRevision = 0;
+}
+
+void Game::ensureTurnDraftUpToDate() {
+    const std::uint64_t revision = turnSystem().getPendingStateRevision();
+    if (!shouldUseTurnDraft()) {
+        if (m_turnDraft.isValid()) {
+            const InputSelectionBookmark selectionBookmark = captureSelectionBookmark();
+            m_turnDraft.clear();
+            m_lastTurnDraftRevision = revision;
+            reconcileSelectionBookmark(selectionBookmark);
+        } else {
+            m_lastTurnDraftRevision = revision;
+        }
+        return;
+    }
+
+    if (m_turnDraft.isValid() && m_lastTurnDraftRevision == revision) {
+        return;
+    }
+
+    const InputSelectionBookmark selectionBookmark = captureSelectionBookmark();
+    std::string errorMessage;
+    if (!m_turnDraft.rebuild(m_engine, m_config, turnSystem().getPendingCommands(), &errorMessage)) {
+        m_turnDraft.clear();
+        m_lastTurnDraftRevision = revision;
+        reconcileSelectionBookmark(selectionBookmark);
+        return;
+    }
+
+    m_lastTurnDraftRevision = revision;
+    reconcileSelectionBookmark(selectionBookmark);
+}
+
 KingdomId Game::localPerspectiveKingdom() const {
     if (isLocalPlayerTurn()) {
         return turnSystem().getActiveKingdom();
@@ -353,27 +409,40 @@ InteractionPermissions Game::currentInteractionPermissions(const CheckTurnValida
 }
 
 InputContext Game::buildInputContext(const InteractionPermissions& permissions) {
+    Board& currentBoard = displayedBoard();
     const KingdomId perspectiveKingdom = permissions.canIssueCommands
         ? turnSystem().getActiveKingdom()
         : localPerspectiveKingdom();
     Kingdom& selectableKingdom = permissions.canIssueCommands
-        ? activeKingdom()
-        : kingdom(perspectiveKingdom);
+        ? displayedKingdom(turnSystem().getActiveKingdom())
+        : displayedKingdom(perspectiveKingdom);
     Kingdom& opposingKingdom = permissions.canIssueCommands
-        ? enemyKingdom()
-        : kingdom(opponent(perspectiveKingdom));
+        ? displayedKingdom(opponent(turnSystem().getActiveKingdom()))
+        : displayedKingdom(opponent(perspectiveKingdom));
+    const bool materializePendingStateLocally = (m_state == GameState::Playing
+            || m_state == GameState::Paused
+            || m_state == GameState::GameOver)
+        && isLocalPlayerTurn()
+        && !m_waitingForRemoteTurnResult;
+    const bool useConcretePendingState = shouldUseTurnDraft() && m_turnDraft.isValid();
 
     return {
         m_window,
         m_camera,
-        board(),
+        currentBoard,
         turnSystem(),
         selectableKingdom,
         opposingKingdom,
+        displayedPublicBuildings(),
+        board(),
+        activeKingdom(),
+        enemyKingdom(),
         publicBuildings(),
         m_uiManager,
         m_config,
-        permissions
+        permissions,
+        materializePendingStateLocally,
+        useConcretePendingState
     };
 }
 
@@ -386,28 +455,24 @@ Piece* Game::findPieceById(int pieceId) {
         return nullptr;
     }
 
-    if (Piece* piece = kingdom(KingdomId::White).getPieceById(pieceId)) {
+    if (Piece* piece = displayedKingdom(KingdomId::White).getPieceById(pieceId)) {
         return piece;
     }
-    return kingdom(KingdomId::Black).getPieceById(pieceId);
+    return displayedKingdom(KingdomId::Black).getPieceById(pieceId);
 }
 
 Building* Game::findBuildingById(int buildingId) {
-    if (buildingId < 0) {
-        return nullptr;
-    }
-
-    for (Building& building : publicBuildings()) {
+    for (Building& building : displayedPublicBuildings()) {
         if (building.id == buildingId) {
             return &building;
         }
     }
-    for (Building& building : kingdom(KingdomId::White).buildings) {
+    for (Building& building : displayedKingdom(KingdomId::White).buildings) {
         if (building.id == buildingId) {
             return &building;
         }
     }
-    for (Building& building : kingdom(KingdomId::Black).buildings) {
+    for (Building& building : displayedKingdom(KingdomId::Black).buildings) {
         if (building.id == buildingId) {
             return &building;
         }
@@ -423,6 +488,38 @@ void Game::reconcileSelectionBookmark(const InputSelectionBookmark& bookmark) {
                                findPieceById(bookmark.pieceId),
                                findBuildingById(bookmark.buildingId),
                                inputContext);
+}
+
+Board& Game::displayedBoard() {
+    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.board() : board();
+}
+
+const Board& Game::displayedBoard() const {
+    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.board() : board();
+}
+
+std::array<Kingdom, kNumKingdoms>& Game::displayedKingdoms() {
+    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.kingdoms() : kingdoms();
+}
+
+const std::array<Kingdom, kNumKingdoms>& Game::displayedKingdoms() const {
+    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.kingdoms() : kingdoms();
+}
+
+std::vector<Building>& Game::displayedPublicBuildings() {
+    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.publicBuildings() : publicBuildings();
+}
+
+const std::vector<Building>& Game::displayedPublicBuildings() const {
+    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.publicBuildings() : publicBuildings();
+}
+
+Kingdom& Game::displayedKingdom(KingdomId id) {
+    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.kingdom(id) : kingdom(id);
+}
+
+const Kingdom& Game::displayedKingdom(KingdomId id) const {
+    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.kingdom(id) : kingdom(id);
 }
 
 GameMenuPresentation Game::buildGameMenuPresentation() const {
@@ -537,6 +634,7 @@ void Game::returnToMainMenu() {
     m_input.clearMovePreview();
     m_input.setTool(ToolState::Select);
     turnSystem().resetPendingCommands();
+    invalidateTurnDraft();
     m_state = GameState::MainMenu;
     m_uiManager.hideGameMenu();
     m_uiManager.showMainMenu();
@@ -722,6 +820,7 @@ void Game::handleInput() {
 
         const InteractionPermissions permissions = currentInteractionPermissions();
         if (permissions.canInspectWorld) {
+            ensureTurnDraftUpToDate();
             InputContext inputContext = buildInputContext(permissions);
             m_input.handleEvent(event, inputContext);
         }
@@ -729,6 +828,8 @@ void Game::handleInput() {
 }
 
 void Game::update() {
+    ensureTurnDraftUpToDate();
+
     if (currentInteractionPermissions().canMoveCamera) {
         m_input.updateCameraMovement(m_clock.getDeltaTime(), m_camera);
     }
@@ -762,10 +863,13 @@ void Game::render() {
     m_window.clear(sf::Color(30, 30, 30));
 
     if (m_state == GameState::Playing || m_state == GameState::Paused || m_state == GameState::GameOver) {
+        ensureTurnDraftUpToDate();
+
         m_camera.applyTo(m_window);
         m_renderer.setSkipPieceIds(m_input.getCapturePreviewPieceIds());
-        m_renderer.drawWorldBase(m_window, m_camera, board(), kingdoms(),
-            publicBuildings());
+        m_renderer.drawWorldBase(m_window, m_camera, displayedBoard(), displayedKingdoms(),
+            displayedPublicBuildings());
+        const bool usingConcretePendingState = shouldUseTurnDraft() && m_turnDraft.isValid();
 
         const bool showActionOverlays = currentInteractionPermissions().canShowActionOverlays;
         const Piece* selectedPiece = m_input.getSelectedPiece();
@@ -775,7 +879,7 @@ void Game::render() {
 
         if (m_input.getCurrentTool() == ToolState::Select && selectedPiece) {
             m_renderer.getOverlay().drawOrientationCheckerboard(
-                m_window, board(), m_config.getCellSizePx());
+                m_window, displayedBoard(), m_config.getCellSizePx());
         }
 
         if (canShowSelectedPieceActions && m_input.getCurrentTool() == ToolState::Select) {
@@ -799,7 +903,7 @@ void Game::render() {
             }
         }
 
-        m_renderer.drawPiecesLayer(m_window, m_camera, kingdoms());
+        m_renderer.drawPiecesLayer(m_window, m_camera, displayedKingdoms());
 
         // Draw overlays based on input state
         if (m_input.getCurrentTool() == ToolState::Select) {
@@ -813,6 +917,12 @@ void Game::render() {
                 m_renderer.getOverlay().drawSelectionFrame(m_window, m_camera,
                     m_hudView, m_windowSize, selectedBuilding->origin,
                     selectedBuilding->getFootprintWidth(), selectedBuilding->getFootprintHeight(),
+                    m_config.getCellSizePx());
+            } else if (m_input.hasSelectedPendingBuild()) {
+                const PendingBuildSelection& pendingBuild = m_input.getSelectedPendingBuild();
+                m_renderer.getOverlay().drawSelectionFrame(m_window, m_camera,
+                    m_hudView, m_windowSize, pendingBuild.origin,
+                    pendingBuild.footprintWidth, pendingBuild.footprintHeight,
                     m_config.getCellSizePx());
             } else if (m_input.hasSelectedCell()) {
                 m_renderer.getOverlay().drawSelectionFrame(m_window, m_camera,
@@ -838,7 +948,7 @@ void Game::render() {
                 m_input.getBuildPreviewOrigin(), bt, bw, bh, previewRotationQuarterTurns,
                 0, m_config.getCellSizePx(), valid, m_assets);
         }
-        if (showActionOverlays) {
+        if (showActionOverlays && !usingConcretePendingState) {
             for (const TurnCommand& pendingCommand : turnSystem().getPendingCommands()) {
                 if (pendingCommand.type != TurnCommand::Build) {
                     continue;
@@ -850,17 +960,82 @@ void Game::render() {
                     pendingCommand.buildOrigin, pendingCommand.buildingType, bw, bh,
                     pendingCommand.buildRotationQuarterTurns, 0,
                     m_config.getCellSizePx(), true, m_assets);
+                m_renderer.getOverlay().drawActionMarker(m_window,
+                    m_camera,
+                    m_hudView,
+                    m_windowSize,
+                    pendingCommand.buildOrigin,
+                    Building::getFootprintWidthFor(bw, bh, pendingCommand.buildRotationQuarterTurns),
+                    Building::getFootprintHeightFor(bw, bh, pendingCommand.buildRotationQuarterTurns),
+                    "build_ongoing",
+                    m_config.getCellSizePx(),
+                    m_assets);
+            }
+        }
+
+        if (showActionOverlays) {
+            for (const TurnCommand& pendingCommand : turnSystem().getPendingCommands()) {
+                if (pendingCommand.type != TurnCommand::Move) {
+                    continue;
+                }
+
+                m_renderer.getOverlay().drawActionMarker(m_window,
+                    m_camera,
+                    m_hudView,
+                    m_windowSize,
+                    pendingCommand.destination,
+                    1,
+                    1,
+                    "move_ongoing",
+                    m_config.getCellSizePx(),
+                    m_assets);
             }
         }
         const StructureOverlayPolicy overlayPolicy = makeWorldStructureOverlayPolicy();
         const Building* selectedBuilding = m_input.getSelectedBuilding();
         drawStructureOverlaysForBuildings(
             m_window, m_renderer, m_camera, m_hudView, m_windowSize,
-            publicBuildings(), board(), m_config, m_assets, overlayPolicy, selectedBuilding);
-        for (const Kingdom& kingdomState : kingdoms()) {
+            displayedPublicBuildings(), displayedBoard(), m_config, m_assets, overlayPolicy, selectedBuilding);
+        for (const Kingdom& kingdomState : displayedKingdoms()) {
             drawStructureOverlaysForBuildings(
                 m_window, m_renderer, m_camera, m_hudView, m_windowSize,
-                kingdomState.buildings, board(), m_config, m_assets, overlayPolicy, selectedBuilding);
+                kingdomState.buildings, displayedBoard(), m_config, m_assets, overlayPolicy, selectedBuilding);
+        }
+        for (const Building& building : displayedPublicBuildings()) {
+            if (!building.isUnderConstruction()) {
+                continue;
+            }
+
+            m_renderer.getOverlay().drawActionMarker(
+                m_window,
+                m_camera,
+                m_hudView,
+                m_windowSize,
+                building.origin,
+                building.getFootprintWidth(),
+                building.getFootprintHeight(),
+                "build_ongoing",
+                m_config.getCellSizePx(),
+                m_assets);
+        }
+        for (const Kingdom& kingdomState : displayedKingdoms()) {
+            for (const Building& building : kingdomState.buildings) {
+                if (!building.isUnderConstruction()) {
+                    continue;
+                }
+
+                m_renderer.getOverlay().drawActionMarker(
+                    m_window,
+                    m_camera,
+                    m_hudView,
+                    m_windowSize,
+                    building.origin,
+                    building.getFootprintWidth(),
+                    building.getFootprintHeight(),
+                    "build_ongoing",
+                    m_config.getCellSizePx(),
+                    m_assets);
+            }
         }
     }
 
@@ -884,6 +1059,7 @@ bool Game::startNewGame(const GameSessionConfig& session, std::string* errorMess
     m_input.clearMovePreview();
     m_input.setTool(ToolState::Select);
     m_engine.resetPendingTurn();
+    invalidateTurnDraft();
 
     if (!m_engine.startNewSession(session, m_config, errorMessage)) {
         return false;
@@ -920,6 +1096,7 @@ bool Game::loadGame(const std::string& saveName) {
     m_input.clearMovePreview();
     m_input.setTool(ToolState::Select);
     m_engine.resetPendingTurn();
+    invalidateTurnDraft();
 
     SaveData data;
     std::string path = "saves/" + saveName + ".json";
@@ -1027,6 +1204,7 @@ void Game::commitAuthoritativeTurn() {
     m_input.clearMovePreview();
     m_waitingForRemoteTurnResult = false;
     refreshTurnPhase();
+    ensureTurnDraftUpToDate();
     reconcileSelectionBookmark(selectionBookmark);
 
     const CheckTurnValidation enemyValidation = validateActivePendingTurn();
@@ -1055,6 +1233,7 @@ void Game::resetPlayerTurn() {
     const InputSelectionBookmark selectionBookmark = captureSelectionBookmark();
     m_input.cancelLiveMove(activeKingdom(), turnSystem());  // restore piece positions for queued move previews
     turnSystem().resetPendingCommands();
+    ensureTurnDraftUpToDate();
     reconcileSelectionBookmark(selectionBookmark);
 }
 
@@ -1093,6 +1272,7 @@ void Game::prepareForClientConnectionAttempt(bool preserveLanClientContext) {
     m_input.clearSelection();
     m_input.setTool(ToolState::Select);
     m_engine.resetPendingTurn();
+    invalidateTurnDraft();
     m_uiManager.hideGameMenu();
     m_uiManager.hideMultiplayerAlert();
     m_uiManager.hideMultiplayerWaitingOverlay();
@@ -1161,6 +1341,7 @@ bool Game::submitClientTurn(std::string* errorMessage) {
     m_waitingForRemoteTurnResult = true;
     m_input.clearMovePreview();
     turnSystem().resetPendingCommands();
+    ensureTurnDraftUpToDate();
     reconcileSelectionBookmark(selectionBookmark);
     return true;
 }
@@ -1436,6 +1617,7 @@ void Game::processMultiplayerClientEvent(const MultiplayerClient::Event& event) 
             m_input.clearSelection();
             m_input.setTool(ToolState::Select);
             m_engine.resetPendingTurn();
+            invalidateTurnDraft();
             showLanClientDisconnectAlert(
                 event.type == MultiplayerClient::Event::Type::Disconnected ? "Host Disconnected" : "Network Error",
                 message);
@@ -1568,7 +1750,8 @@ void Game::setupUICallbacks() {
         const KingdomId viewedKingdomId = permissions.canIssueCommands
             ? activeKingdom().id
             : localPerspectiveKingdom();
-        m_uiManager.showBuildToolPanel(kingdom(viewedKingdomId),
+        ensureTurnDraftUpToDate();
+        m_uiManager.showBuildToolPanel(displayedKingdom(viewedKingdomId),
                                        m_config,
                                        permissions.canQueueNonMoveActions);
     });
@@ -1581,47 +1764,179 @@ void Game::setupUICallbacks() {
         m_uiManager.buildToolPanel().setSelectedBuildType(buildingType);
     });
 
+    m_uiManager.pendingConstructionPanel().setOnRemove([this](BuildingType type,
+                                                              sf::Vector2i origin,
+                                                              int rotationQuarterTurns) {
+        if (!currentInteractionPermissions().canQueueNonMoveActions) return;
+        if (turnSystem().cancelBuildCommand(type,
+                                            origin,
+                                            rotationQuarterTurns,
+                                            board(),
+                                            activeKingdom(),
+                                            enemyKingdom(),
+                                            publicBuildings(),
+                                            m_config)) {
+            m_input.clearSelection();
+        }
+    });
+
+    m_uiManager.buildingPanel().setOnCancelConstruction([this](int buildingId) {
+        if (!currentInteractionPermissions().canQueueNonMoveActions) return;
+        if (turnSystem().cancelBuildCommand(buildingId,
+                                            board(),
+                                            activeKingdom(),
+                                            enemyKingdom(),
+                                            publicBuildings(),
+                                            m_config)) {
+            m_input.clearSelection();
+        }
+    });
+
+    m_uiManager.barracksPanel().setOnCancelConstruction([this](int buildingId) {
+        if (!currentInteractionPermissions().canQueueNonMoveActions) return;
+        if (turnSystem().cancelBuildCommand(buildingId,
+                                            board(),
+                                            activeKingdom(),
+                                            enemyKingdom(),
+                                            publicBuildings(),
+                                            m_config)) {
+            m_input.clearSelection();
+        }
+    });
+
     // Piece panel upgrade
     m_uiManager.piecePanel().setOnUpgrade([this](int pieceId, int targetType) {
         if (!currentInteractionPermissions().canQueueNonMoveActions) return;
         Piece* piece = activeKingdom().getPieceById(pieceId);
         if (!piece) return;
+        const TurnCommand* queuedUpgrade = turnSystem().getPendingUpgradeCommand(pieceId);
+        const PieceType requestedTarget = static_cast<PieceType>(targetType);
+        TurnCommand previousUpgrade;
+        const bool hadQueuedUpgrade = (queuedUpgrade != nullptr);
+        const bool cancelOnly = hadQueuedUpgrade && queuedUpgrade->upgradeTarget == requestedTarget;
+        if (hadQueuedUpgrade) {
+            previousUpgrade = *queuedUpgrade;
+            if (!turnSystem().cancelUpgradeCommand(pieceId,
+                                                   board(),
+                                                   activeKingdom(),
+                                                   enemyKingdom(),
+                                                   publicBuildings(),
+                                                   m_config)) {
+                return;
+            }
+            if (cancelOnly) {
+                return;
+            }
+        }
+
         TurnCommand cmd;
         cmd.type = TurnCommand::Upgrade;
         cmd.upgradePieceId = piece->id;
-        cmd.upgradeTarget = static_cast<PieceType>(targetType);
+        cmd.upgradeTarget = requestedTarget;
         if (!piece->canUpgradeTo(cmd.upgradeTarget, m_config)) {
+            if (hadQueuedUpgrade) {
+                turnSystem().queueCommand(previousUpgrade,
+                                          board(),
+                                          activeKingdom(),
+                                          enemyKingdom(),
+                                          publicBuildings(),
+                                          m_config);
+            }
             return;
         }
-        turnSystem().queueCommand(cmd,
-                                  board(),
-                                  activeKingdom(),
-                                  enemyKingdom(),
-                                  publicBuildings(),
-                                  m_config);
+        if (!turnSystem().queueCommand(cmd,
+                                       board(),
+                                       activeKingdom(),
+                                       enemyKingdom(),
+                                       publicBuildings(),
+                                       m_config)
+            && hadQueuedUpgrade) {
+            turnSystem().queueCommand(previousUpgrade,
+                                      board(),
+                                      activeKingdom(),
+                                      enemyKingdom(),
+                                      publicBuildings(),
+                                      m_config);
+        }
     });
 
     // Barracks panel produce
     m_uiManager.barracksPanel().setOnProduce([this](int barracksId, int pieceType) {
         if (!currentInteractionPermissions().canQueueNonMoveActions) return;
+        const TurnCommand* queuedProduction = turnSystem().getPendingProduceCommand(barracksId);
+        const PieceType requestedType = static_cast<PieceType>(pieceType);
+        TurnCommand previousProduction;
+        const bool hadQueuedProduction = (queuedProduction != nullptr);
+        const bool cancelOnly = hadQueuedProduction && queuedProduction->produceType == requestedType;
+        if (hadQueuedProduction) {
+            previousProduction = *queuedProduction;
+            if (!turnSystem().cancelProduceCommand(barracksId,
+                                                   board(),
+                                                   activeKingdom(),
+                                                   enemyKingdom(),
+                                                   publicBuildings(),
+                                                   m_config)) {
+                return;
+            }
+            if (cancelOnly) {
+                return;
+            }
+        }
+
         TurnCommand cmd;
         cmd.type = TurnCommand::Produce;
         cmd.barracksId = barracksId;
-        cmd.produceType = static_cast<PieceType>(pieceType);
-        turnSystem().queueCommand(cmd,
-                                  board(),
-                                  activeKingdom(),
-                                  enemyKingdom(),
-                                  publicBuildings(),
-                                  m_config);
+        cmd.produceType = requestedType;
+        if (!turnSystem().queueCommand(cmd,
+                                       board(),
+                                       activeKingdom(),
+                                       enemyKingdom(),
+                                       publicBuildings(),
+                                       m_config)
+            && hadQueuedProduction) {
+            turnSystem().queueCommand(previousProduction,
+                                      board(),
+                                      activeKingdom(),
+                                      enemyKingdom(),
+                                      publicBuildings(),
+                                      m_config);
+        }
     });
 }
 
 void Game::updateUIState() {
+    ensureTurnDraftUpToDate();
     turnSystem().syncPointBudget(m_config);
     const CheckTurnValidation validation = validateActivePendingTurn();
     const InteractionPermissions permissions = currentInteractionPermissions(&validation);
     InGameViewModel viewModel = buildInGameViewModel(m_engine, m_config, m_state, permissions.canIssueCommands);
+    if (shouldUseTurnDraft() && m_turnDraft.isValid()) {
+        const Kingdom& displayedActiveKingdom = displayedKingdom(turnSystem().getActiveKingdom());
+        const Kingdom& displayedWhiteKingdom = displayedKingdom(KingdomId::White);
+        const Kingdom& displayedBlackKingdom = displayedKingdom(KingdomId::Black);
+
+        viewModel.activeGold = displayedActiveKingdom.gold;
+        viewModel.activeOccupiedCells = countDisplayedOccupiedBuildingCells(displayedActiveKingdom);
+        viewModel.activeIncome = EconomySystem::calculateProjectedIncome(
+            displayedActiveKingdom,
+            displayedBoard(),
+            displayedPublicBuildings(),
+            m_config);
+        viewModel.balanceMetrics[0].whiteValue = displayedWhiteKingdom.gold;
+        viewModel.balanceMetrics[0].blackValue = displayedBlackKingdom.gold;
+        viewModel.balanceMetrics[1].whiteValue = countDisplayedOccupiedBuildingCells(displayedWhiteKingdom);
+        viewModel.balanceMetrics[1].blackValue = countDisplayedOccupiedBuildingCells(displayedBlackKingdom);
+        viewModel.balanceMetrics[3].whiteValue = EconomySystem::calculateProjectedIncome(
+            displayedWhiteKingdom,
+            displayedBoard(),
+            displayedPublicBuildings(),
+            m_config);
+        viewModel.balanceMetrics[3].blackValue = EconomySystem::calculateProjectedIncome(
+            displayedBlackKingdom,
+            displayedBoard(),
+            displayedPublicBuildings(),
+            m_config);
+    }
     viewModel.statusTone = validation.activeKingInCheck ? InGameStatusTone::Danger : InGameStatusTone::Neutral;
     if (m_state != GameState::GameOver) {
         viewModel.statusLabel = validation.activeKingInCheck
@@ -1636,7 +1951,7 @@ void Game::updateUIState() {
     switch (m_input.getCurrentTool()) {
         case ToolState::Build:
             if (permissions.canOpenBuildPanel) {
-                m_uiManager.showBuildToolPanel(kingdom(viewedKingdomId),
+                m_uiManager.showBuildToolPanel(displayedKingdom(viewedKingdomId),
                                                m_config,
                                                permissions.canQueueNonMoveActions);
             } else {
@@ -1649,26 +1964,53 @@ void Game::updateUIState() {
             if (m_input.getSelectedPiece()) {
                 const bool allowUpgrade = permissions.canQueueNonMoveActions
                     && (m_input.getSelectedPiece()->kingdom == viewedKingdomId);
-                m_uiManager.showPiecePanel(*m_input.getSelectedPiece(), m_config, allowUpgrade);
+                const TurnCommand* pendingUpgrade = turnSystem().getPendingUpgradeCommand(
+                    m_input.getSelectedPiece()->id);
+                m_uiManager.showPiecePanel(*m_input.getSelectedPiece(),
+                                           m_config,
+                                           allowUpgrade,
+                                           pendingUpgrade);
+            } else if (m_input.hasSelectedPendingBuild()) {
+                m_uiManager.showPendingConstructionPanel(m_input.getSelectedPendingBuild(),
+                                                         m_config,
+                                                         permissions.canQueueNonMoveActions);
             } else if (m_input.getSelectedBuilding()) {
                 Building* building = m_input.getSelectedBuilding();
+                const bool allowCancelConstruction = permissions.canQueueNonMoveActions
+                    && building->isUnderConstruction()
+                    && building->owner == turnSystem().getActiveKingdom();
                 if (building->type == BuildingType::Barracks) {
-                    const bool allowProduce = permissions.canQueueNonMoveActions && (building->owner == viewedKingdomId);
-                    m_uiManager.showBarracksPanel(*building, kingdom(building->owner), m_config, allowProduce);
+                    const bool allowProduce = permissions.canQueueNonMoveActions
+                        && !building->isUnderConstruction()
+                        && (building->owner == viewedKingdomId);
+                    const TurnCommand* pendingProduce = turnSystem().getPendingProduceCommand(building->id);
+                    m_uiManager.showBarracksPanel(*building,
+                                                  displayedKingdom(building->owner),
+                                                  m_config,
+                                                  allowProduce,
+                                                  allowCancelConstruction,
+                                                  pendingProduce);
                 } else {
                     std::optional<ResourceIncomeBreakdown> resourceIncome;
                     std::optional<PublicBuildingOccupationState> publicOccupation;
-                    if (building->type == BuildingType::Mine || building->type == BuildingType::Farm) {
-                        resourceIncome = EconomySystem::calculateResourceIncomeBreakdown(*building, board(), m_config);
+                    if (building->hasActiveGameplayEffects()
+                        && (building->type == BuildingType::Mine || building->type == BuildingType::Farm)) {
+                        resourceIncome = EconomySystem::calculateResourceIncomeBreakdown(
+                            *building,
+                            displayedBoard(),
+                            m_config);
                     }
                     if (building->isPublic()) {
-                        publicOccupation = resolvePublicBuildingOccupationState(*building, board());
+                        publicOccupation = resolvePublicBuildingOccupationState(*building, displayedBoard());
                     }
-                    m_uiManager.showBuildingPanel(*building, resourceIncome, publicOccupation);
+                    m_uiManager.showBuildingPanel(*building,
+                                                  allowCancelConstruction,
+                                                  resourceIncome,
+                                                  publicOccupation);
                 }
             } else if (m_input.hasSelectedCell()) {
                 const sf::Vector2i cellPos = m_input.getSelectedCell();
-                m_uiManager.showCellPanel(board().getCell(cellPos.x, cellPos.y));
+                m_uiManager.showCellPanel(displayedBoard().getCell(cellPos.x, cellPos.y));
             } else {
                 m_uiManager.showSelectionEmptyState();
             }

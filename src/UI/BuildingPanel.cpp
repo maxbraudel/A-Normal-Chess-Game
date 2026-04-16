@@ -1,4 +1,5 @@
 #include "UI/BuildingPanel.hpp"
+#include "UI/ActionButtonStyle.hpp"
 #include "Core/GameSessionConfig.hpp"
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingType.hpp"
@@ -74,23 +75,40 @@ void BuildingPanel::init(const tgui::Panel::Ptr& parent) {
     HUDLayout::styleSidebarBody(m_hpLabel);
     m_panel->add(m_hpLabel);
 
+    m_statusLabel = tgui::Label::create("Status: Completed");
+    m_statusLabel->setPosition({10, 170});
+    m_statusLabel->setSize({316, 22});
+    HUDLayout::styleSidebarBody(m_statusLabel);
+    m_panel->add(m_statusLabel);
+
+    m_cancelConstructionBtn = tgui::Button::create("Cancel Construction");
+    m_cancelConstructionBtn->setPosition({10, 202});
+    m_cancelConstructionBtn->setSize({316, 34});
+    m_cancelConstructionBtn->onPress([this]() {
+        if (m_onCancelConstruction) {
+            m_onCancelConstruction(m_currentBuildingId);
+        }
+    });
+    m_panel->add(m_cancelConstructionBtn);
+
     m_resourceSectionLabel = tgui::Label::create("Resource Income");
-    m_resourceSectionLabel->setPosition({10, 180});
+    m_resourceSectionLabel->setPosition({10, 252});
     HUDLayout::styleSidebarTitle(m_resourceSectionLabel);
     m_panel->add(m_resourceSectionLabel);
 
     m_whiteIncomeLabel = tgui::Label::create("White: +0 gold/turn");
-    m_whiteIncomeLabel->setPosition({10, 212});
+    m_whiteIncomeLabel->setPosition({10, 284});
     m_whiteIncomeLabel->setSize({316, 22});
     HUDLayout::styleSidebarBody(m_whiteIncomeLabel);
     m_panel->add(m_whiteIncomeLabel);
 
     m_blackIncomeLabel = tgui::Label::create("Black: +0 gold/turn");
-    m_blackIncomeLabel->setPosition({10, 242});
+    m_blackIncomeLabel->setPosition({10, 314});
     m_blackIncomeLabel->setSize({316, 22});
     HUDLayout::styleSidebarBody(m_blackIncomeLabel);
     m_panel->add(m_blackIncomeLabel);
 
+    m_cancelConstructionBtn->setVisible(false);
     m_resourceSectionLabel->setVisible(false);
     m_whiteIncomeLabel->setVisible(false);
     m_blackIncomeLabel->setVisible(false);
@@ -99,10 +117,12 @@ void BuildingPanel::init(const tgui::Panel::Ptr& parent) {
 }
 
 void BuildingPanel::show(const Building& building,
+                         bool allowCancelConstruction,
                          const std::optional<ResourceIncomeBreakdown>& resourceIncome,
                          const std::optional<PublicBuildingOccupationState>& publicOccupation) {
     if (!m_panel) return;
     m_panel->moveToFront();
+    m_currentBuildingId = building.id;
     m_typeLabel->setText("Type: " + buildingTypeName(building.type));
     const std::string ownerLabel = building.isPublic()
         ? publicOccupationOwnerLabel(publicOccupation.value_or(PublicBuildingOccupationState::Unoccupied))
@@ -119,7 +139,26 @@ void BuildingPanel::show(const Building& building,
     }
     m_hpLabel->setText("HP: " + std::to_string(totalHP) + "/" + std::to_string(maxHP));
 
-    const bool showResourceIncome = resourceIncome.has_value() && resourceIncome->isResourceBuilding;
+    if (building.isUnderConstruction()) {
+        m_statusLabel->setText("Status: Under construction");
+    } else if (building.isDestroyed()) {
+        m_statusLabel->setText("Status: Destroyed");
+    } else {
+        m_statusLabel->setText("Status: Completed");
+    }
+
+    const bool canCancelConstruction = building.isUnderConstruction() && allowCancelConstruction;
+    m_cancelConstructionBtn->setVisible(building.isUnderConstruction());
+    ActionButtonStyle::applySelectableState(
+        m_cancelConstructionBtn,
+        "Cancel Construction",
+        false,
+        canCancelConstruction,
+        false);
+
+    const bool showResourceIncome = building.hasActiveGameplayEffects()
+        && resourceIncome.has_value()
+        && resourceIncome->isResourceBuilding;
     m_resourceSectionLabel->setVisible(showResourceIncome);
     m_whiteIncomeLabel->setVisible(showResourceIncome);
     m_blackIncomeLabel->setVisible(showResourceIncome);
@@ -132,3 +171,7 @@ void BuildingPanel::show(const Building& building,
 }
 
 void BuildingPanel::hide() { if (m_panel) m_panel->setVisible(false); }
+
+void BuildingPanel::setOnCancelConstruction(std::function<void(int buildingId)> callback) {
+    m_onCancelConstruction = std::move(callback);
+}

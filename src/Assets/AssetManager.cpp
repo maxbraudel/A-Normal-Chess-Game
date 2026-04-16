@@ -67,6 +67,8 @@ void AssetManager::loadAll(const std::string& assetsDir) {
     loadTexture("ui_crossed_swords", assetsDir + "/textures/ui/crossed_swords.png");
     loadTexture("ui_shield_white", assetsDir + "/textures/ui/shield_white.png");
     loadTexture("ui_shield_black", assetsDir + "/textures/ui/shield_black.png");
+    loadTexture("ui_build_ongoing", assetsDir + "/textures/ui/build_ongoing.png");
+    loadTexture("ui_move_ongoing", assetsDir + "/textures/ui/move_ongoing.png");
 
     // Font
     if (m_font.loadFromFile(assetsDir + "/fonts/default.ttf")) {

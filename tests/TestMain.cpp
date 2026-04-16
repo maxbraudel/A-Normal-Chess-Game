@@ -28,6 +28,7 @@
 #include "Core/LocalPlayerContext.hpp"
 #include "Core/GameState.hpp"
 #include "Core/GameStateValidator.hpp"
+#include "Core/TurnDraft.hpp"
 #include "Input/LayeredSelection.hpp"
 #include "Render/StructureOverlay.hpp"
 #include "Multiplayer/MultiplayerClient.hpp"
@@ -111,6 +112,16 @@ Piece& addPieceToBoard(Kingdom& kingdom,
     return piece;
 }
 
+Building* findBuildingById(Kingdom& kingdom, int buildingId) {
+    for (Building& building : kingdom.buildings) {
+        if (building.id == buildingId) {
+            return &building;
+        }
+    }
+
+    return nullptr;
+}
+
 void linkBuildingOnBoard(Building& building, Board& board) {
     for (const sf::Vector2i& pos : building.getOccupiedCells()) {
         board.getCell(pos.x, pos.y).building = &building;
@@ -176,6 +187,28 @@ bool snapshotHasAnyLegalResponse(const Board& board,
 bool containsCell(const std::vector<sf::Vector2i>& cells,
                   const sf::Vector2i& target) {
     return std::find(cells.begin(), cells.end(), target) != cells.end();
+}
+
+TurnCommand makeMoveCommand(int pieceId,
+                            const sf::Vector2i& origin,
+                            const sf::Vector2i& destination) {
+    TurnCommand command;
+    command.type = TurnCommand::Move;
+    command.pieceId = pieceId;
+    command.origin = origin;
+    command.destination = destination;
+    return command;
+}
+
+TurnCommand makeBuildCommand(BuildingType type,
+                             const sf::Vector2i& origin,
+                             int rotationQuarterTurns = 0) {
+    TurnCommand command;
+    command.type = TurnCommand::Build;
+    command.buildingType = type;
+    command.buildOrigin = origin;
+    command.buildRotationQuarterTurns = rotationQuarterTurns;
+    return command;
 }
 
 unsigned short startLoopbackServerOnFreePort(MultiplayerServer& server,
@@ -452,6 +485,28 @@ void testLayeredSelectionStackSupportsPreviewPieceOverride() {
         "Preview resolution should let the visually moved piece override the cell piece pointer.");
     expect(stack.top() == SelectionLayer::Piece && stack.count == 3,
         "Preview overrides should still preserve the standard piece > building > terrain stack.");
+}
+
+void testLayeredSelectionStackSupportsPendingBuildLayer() {
+    Cell cell;
+    cell.type = CellType::Grass;
+    cell.isInCircle = true;
+
+    PendingBuildSelection pendingBuild;
+    pendingBuild.type = BuildingType::Barracks;
+    pendingBuild.origin = {3, 3};
+    pendingBuild.footprintWidth = 2;
+    pendingBuild.footprintHeight = 2;
+
+    const LayeredSelectionStack stack = resolveCellSelectionStack(cell, {3, 3}, nullptr, false, pendingBuild);
+    expect(stack.count == 2,
+        "Pending construction cells without piece or building should expose pending build plus terrain.");
+    expect(stack.top() == SelectionLayer::PendingBuild,
+        "Pending construction should be the top selection layer when present on an otherwise empty cell.");
+    expect(stack.nextBelow(SelectionLayer::PendingBuild) == SelectionLayer::Terrain,
+        "Cycling below a pending construction should expose terrain next.");
+    expect(stack.pendingBuild.has_value() && stack.pendingBuild->origin == pendingBuild.origin,
+        "The layered selection stack should preserve the pending construction metadata.");
 }
 
     void testPublicBuildingOccupationStateResolvesAllOutcomes() {
@@ -2425,6 +2480,365 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
            "Unaffordable upgrades must not change the piece type.");
 }
 
+    void testTurnSystemCancelsQueuedProductionPerBarracks() {
+        GameConfig config;
+        Board board;
+        board.init(6);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        white.gold = config.getRecruitCost(PieceType::Knight) + 5;
+        white.addBuilding(makeTestBarracks(17, KingdomId::White, {1, 1}, config));
+        linkBuildingOnBoard(white.buildings.back(), board);
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+
+        TurnCommand produceCommand;
+        produceCommand.type = TurnCommand::Produce;
+        produceCommand.barracksId = 17;
+        produceCommand.produceType = PieceType::Knight;
+
+        expect(turnSystem.queueCommand(produceCommand, board, white, black, publicBuildings, config),
+            "Queued production should be accepted for a ready barracks with enough gold.");
+        expect(turnSystem.getPendingProduceCommand(17) != nullptr,
+            "The queued production should be queryable by barracks id.");
+        expect(turnSystem.cancelProduceCommand(17, board, white, black, publicBuildings, config),
+            "Queued production should be cancellable per barracks.");
+        expect(turnSystem.getPendingProduceCommand(17) == nullptr,
+            "Cancelling a queued production should remove it from the pending command list.");
+    }
+
+    void testTurnSystemCancelsQueuedUpgradePerPiece() {
+        GameConfig config;
+        Board board;
+        board.init(6);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        Piece& pawn = addPieceToBoard(white, board, 18, PieceType::Pawn, KingdomId::White, {2, 2});
+        pawn.xp = config.getXPThresholdPawnToKnightOrBishop();
+        white.gold = config.getUpgradeCost(PieceType::Pawn, PieceType::Knight) + 5;
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+
+        TurnCommand upgradeCommand;
+        upgradeCommand.type = TurnCommand::Upgrade;
+        upgradeCommand.upgradePieceId = pawn.id;
+        upgradeCommand.upgradeTarget = PieceType::Knight;
+
+        expect(turnSystem.queueCommand(upgradeCommand, board, white, black, publicBuildings, config),
+            "Queued upgrades should be accepted for eligible pieces.");
+        expect(turnSystem.getPendingUpgradeCommand(pawn.id) != nullptr,
+            "Queued upgrades should be queryable by piece id.");
+        expect(turnSystem.cancelUpgradeCommand(pawn.id, board, white, black, publicBuildings, config),
+            "Queued upgrades should be cancellable per piece.");
+        expect(turnSystem.getPendingUpgradeCommand(pawn.id) == nullptr,
+            "Cancelling a queued upgrade should remove it from the pending command list.");
+    }
+
+    void testSelectionMoveRulesKeepMovesWhenPendingBuildDependsOnCurrentMove() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        white.gold = config.getWoodWallCost() + 10;
+        Piece& whiteKing = addPieceToBoard(white, board, 610, PieceType::King, KingdomId::White, {10, 10});
+        addPieceToBoard(black, board, 710, PieceType::King, KingdomId::Black, {18, 18});
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+
+        const TurnCommand moveCommand = makeMoveCommand(whiteKing.id, {10, 10}, {11, 10});
+        const TurnCommand buildCommand = makeBuildCommand(BuildingType::WoodWall, {12, 10});
+
+        expect(turnSystem.queueCommand(moveCommand, board, white, black, publicBuildings, config),
+            "The builder move should queue successfully for the reselection regression test.");
+        expect(turnSystem.queueCommand(buildCommand, board, white, black, publicBuildings, config),
+            "The dependent build should queue successfully after the builder move.");
+
+        whiteKing.position = moveCommand.destination;
+
+        const SelectionMoveOptions moveOptions = SelectionMoveRules::classifyPieceMoves(
+            board,
+            white,
+            black,
+            publicBuildings,
+            1,
+            turnSystem.getPendingCommands(),
+            whiteKing.id,
+            config);
+
+        expect(containsCell(moveOptions.safeMoves, {9, 10}),
+            "Reselecting a moved builder should still expose normal move options even if a pending build currently depends on that move.");
+    }
+
+    void testTurnSystemReplaceMoveDropsOrphanedPendingBuilds() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        white.gold = config.getWoodWallCost() + 10;
+        Piece& whiteKing = addPieceToBoard(white, board, 611, PieceType::King, KingdomId::White, {10, 10});
+        addPieceToBoard(black, board, 711, PieceType::King, KingdomId::Black, {18, 18});
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+
+        expect(turnSystem.queueCommand(makeMoveCommand(whiteKing.id, {10, 10}, {11, 10}),
+                                       board,
+                                       white,
+                                       black,
+                                       publicBuildings,
+                                       config),
+            "The initial builder move should queue successfully.");
+        expect(turnSystem.queueCommand(makeBuildCommand(BuildingType::WoodWall, {12, 10}),
+                                       board,
+                                       white,
+                                       black,
+                                       publicBuildings,
+                                       config),
+            "The dependent build should queue successfully before replacing the move.");
+
+        expect(turnSystem.replaceMoveCommand(makeMoveCommand(whiteKing.id, {10, 10}, {9, 10}),
+                                             board,
+                                             white,
+                                             black,
+                                             publicBuildings,
+                                             config),
+            "Replacing a queued move should succeed when the replacement is legal.");
+
+        const TurnCommand* updatedMove = turnSystem.getPendingMoveCommand(whiteKing.id);
+        expect(updatedMove != nullptr && updatedMove->destination == sf::Vector2i(9, 10),
+            "Replacing the queued move should keep the new destination in the pending command list.");
+        expect(turnSystem.getPendingBuildCommand(BuildingType::WoodWall, {12, 10}, 0) == nullptr,
+            "Moving the only supporting builder away should automatically remove the orphaned pending build.");
+    }
+
+    void testTurnSystemCancelMoveKeepsBuildWhenAnotherBuilderStillSupportsIt() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        white.gold = config.getWoodWallCost() + 10;
+        Piece& whiteKing = addPieceToBoard(white, board, 612, PieceType::King, KingdomId::White, {10, 10});
+        addPieceToBoard(white, board, 613, PieceType::Pawn, KingdomId::White, {12, 11});
+        addPieceToBoard(black, board, 712, PieceType::King, KingdomId::Black, {18, 18});
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+
+        expect(turnSystem.queueCommand(makeMoveCommand(whiteKing.id, {10, 10}, {11, 10}),
+                                       board,
+                                       white,
+                                       black,
+                                       publicBuildings,
+                                       config),
+            "The initial move should queue successfully for the shared-builder regression test.");
+        expect(turnSystem.queueCommand(makeBuildCommand(BuildingType::WoodWall, {12, 10}),
+                                       board,
+                                       white,
+                                       black,
+                                       publicBuildings,
+                                       config),
+            "The build should queue successfully while multiple builders can support it.");
+
+        expect(turnSystem.cancelMoveCommand(whiteKing.id, board, white, black, publicBuildings, config),
+            "Cancelling the queued move should succeed.");
+        expect(turnSystem.getPendingMoveCommand(whiteKing.id) == nullptr,
+            "Cancelling the queued move should remove the move command itself.");
+        expect(turnSystem.getPendingBuildCommand(BuildingType::WoodWall, {12, 10}, 0) != nullptr,
+            "A pending build should remain queued when another adjacent builder still supports it after move cancellation.");
+    }
+
+    void testTurnSystemAssignsStablePendingBuildIds() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        white.gold = (config.getWoodWallCost() * 2) + 10;
+        addPieceToBoard(white, board, 614, PieceType::King, KingdomId::White, {5, 5});
+        addPieceToBoard(black, board, 714, PieceType::King, KingdomId::Black, {9, 9});
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+
+        expect(turnSystem.queueCommand(makeBuildCommand(BuildingType::WoodWall, {6, 5}),
+                                       board,
+                                       white,
+                                       black,
+                                       publicBuildings,
+                                       config),
+            "The first pending build should queue successfully.");
+        expect(turnSystem.queueCommand(makeBuildCommand(BuildingType::WoodWall, {5, 6}),
+                                       board,
+                                       white,
+                                       black,
+                                       publicBuildings,
+                                       config),
+            "The second pending build should queue successfully.");
+
+        expect(turnSystem.getPendingCommands().size() == 2,
+            "Two queued builds should remain in the pending command list.");
+
+        const int firstBuildId = turnSystem.getPendingCommands()[0].buildId;
+        const int secondBuildId = turnSystem.getPendingCommands()[1].buildId;
+        expect(firstBuildId < 0,
+            "Queued builds should receive a temporary negative id for local draft tracking.");
+        expect(secondBuildId < 0,
+            "Each queued build should receive a temporary negative id.");
+        expect(firstBuildId != secondBuildId,
+            "Queued builds should receive distinct temporary ids.");
+        expect(turnSystem.getPendingBuildCommand(firstBuildId) != nullptr,
+            "Queued builds should be queryable by temporary build id.");
+        expect(turnSystem.cancelBuildCommand(firstBuildId, board, white, black, publicBuildings, config),
+            "Queued builds should be cancellable by their temporary build id.");
+        expect(turnSystem.getPendingBuildCommand(firstBuildId) == nullptr,
+            "Cancelling a queued build by id should remove that build.");
+        expect(turnSystem.getPendingBuildCommand(secondBuildId) != nullptr,
+            "Cancelling one queued build should leave the others intact.");
+    }
+
+    void testTurnDraftMaterializesQueuedBuildingAsUnderConstruction() {
+        GameConfig config;
+        GameEngine engine;
+        engine.board().init(12);
+        engine.kingdom(KingdomId::White) = Kingdom(KingdomId::White);
+        engine.kingdom(KingdomId::Black) = Kingdom(KingdomId::Black);
+        engine.publicBuildings().clear();
+        engine.turnSystem().setActiveKingdom(KingdomId::White);
+        engine.turnSystem().setTurnNumber(1);
+        engine.kingdom(KingdomId::White).gold = config.getBarracksCost() + 10;
+
+        TurnCommand buildCommand = makeBuildCommand(BuildingType::Barracks, {3, 3});
+        buildCommand.buildId = -77;
+
+        TurnDraft draft;
+        expect(draft.rebuild(engine, config, {buildCommand}),
+            "Rebuilding the local turn draft should replay queued build commands.");
+
+        Building* draftedBuilding = findBuildingById(draft.kingdom(KingdomId::White), buildCommand.buildId);
+        expect(draftedBuilding != nullptr,
+            "Queued build commands should materialize as concrete buildings inside the turn draft.");
+        expect(draftedBuilding->isUnderConstruction(),
+            "Queued buildings in the turn draft should be flagged as under construction.");
+        expect(!draftedBuilding->isUsable(),
+            "Under-construction buildings should not be usable before turn validation.");
+        expect(!draftedBuilding->hasActiveGameplayEffects(),
+            "Under-construction buildings should not activate passive gameplay effects before validation.");
+        expect(!ProductionSystem::canStartProduction(*draftedBuilding,
+                                                     PieceType::Pawn,
+                                                     draft.kingdom(KingdomId::White),
+                                                     config),
+            "Under-construction barracks should reject production even if they are already materialized in the local draft.");
+        expect(draft.board().getCell(buildCommand.buildOrigin.x, buildCommand.buildOrigin.y).building == draftedBuilding,
+            "A materialized draft building should immediately occupy its board cells.");
+        expect(draft.kingdom(KingdomId::White).gold == engine.kingdom(KingdomId::White).gold - config.getBarracksCost(),
+            "Replaying a queued build into the turn draft should reserve the building cost from the displayed gold.");
+    }
+
+    void testUnderConstructionResourceBuildingsDoNotGrantIncome() {
+        GameConfig config;
+        Board board;
+        board.init(8);
+
+        Kingdom white(KingdomId::White);
+        Building mine;
+        mine.id = 88;
+        mine.type = BuildingType::Mine;
+        mine.owner = KingdomId::White;
+        mine.isNeutral = false;
+        mine.origin = {2, 2};
+        mine.width = config.getBuildingWidth(BuildingType::Mine);
+        mine.height = config.getBuildingHeight(BuildingType::Mine);
+        mine.cellHP.assign(mine.width * mine.height, 1);
+        mine.cellBreachState.assign(mine.width * mine.height, 0);
+        mine.setConstructionState(BuildingState::UnderConstruction);
+        linkBuildingOnBoard(mine, board);
+
+        addPieceToBoard(white, board, 615, PieceType::Pawn, KingdomId::White, mine.origin);
+
+        const ResourceIncomeBreakdown breakdown = EconomySystem::calculateResourceIncomeBreakdown(
+            mine,
+            board,
+            config);
+        expect(!breakdown.isResourceBuilding,
+            "Under-construction resource buildings should not expose active income breakdowns.");
+        expect(breakdown.whiteIncome == 0 && breakdown.blackIncome == 0,
+            "Under-construction resource buildings should not generate passive income before validation.");
+    }
+
+    void testInGameViewModelIncludesPlannedActionsAndAutomaticCoronation() {
+        GameConfig config;
+        GameEngine engine;
+        engine.board().init(12);
+        engine.kingdom(KingdomId::White) = Kingdom(KingdomId::White);
+        engine.kingdom(KingdomId::Black) = Kingdom(KingdomId::Black);
+        engine.publicBuildings().clear();
+        engine.turnSystem().setActiveKingdom(KingdomId::White);
+        engine.turnSystem().setTurnNumber(1);
+
+        engine.publicBuildings().push_back(makeTestPublicBuilding(BuildingType::Church, {10, 10}, 4, 3));
+        linkBuildingOnBoard(engine.publicBuildings().back(), engine.board());
+
+        Kingdom& white = engine.kingdom(KingdomId::White);
+        Kingdom& black = engine.kingdom(KingdomId::Black);
+        addPieceToBoard(white, engine.board(), 600, PieceType::King, KingdomId::White, {10, 10});
+        addPieceToBoard(white, engine.board(), 601, PieceType::Bishop, KingdomId::White, {11, 10});
+        addPieceToBoard(white, engine.board(), 602, PieceType::Rook, KingdomId::White, {12, 10});
+        Piece& pawn = addPieceToBoard(white, engine.board(), 603, PieceType::Pawn, KingdomId::White, {8, 8});
+        addPieceToBoard(black, engine.board(), 700, PieceType::King, KingdomId::Black, {4, 4});
+        pawn.xp = config.getXPThresholdPawnToKnightOrBishop();
+        white.gold = config.getUpgradeCost(PieceType::Pawn, PieceType::Knight) + 10;
+
+        TurnCommand upgradeCommand;
+        upgradeCommand.type = TurnCommand::Upgrade;
+        upgradeCommand.upgradePieceId = pawn.id;
+        upgradeCommand.upgradeTarget = PieceType::Knight;
+        expect(engine.turnSystem().queueCommand(upgradeCommand,
+                              engine.board(),
+                              white,
+                              black,
+                              engine.publicBuildings(),
+                              config),
+            "The test setup should be able to queue an upgrade before building the dashboard model.");
+
+        const InGameViewModel model = buildInGameViewModel(engine, config, GameState::Playing, true);
+        const auto queuedUpgrade = std::find_if(model.plannedActionRows.begin(),
+                              model.plannedActionRows.end(),
+                              [](const InGamePlannedActionRow& row) {
+                                  return row.kindLabel == "Queued"
+                                   && row.actionLabel == "Upgrade Pawn"
+                                   && row.detailLabel == "Pawn -> Knight";
+                              });
+        expect(queuedUpgrade != model.plannedActionRows.end(),
+            "The dashboard model should list queued upgrades in the planned actions section.");
+
+        const auto automaticCoronation = std::find_if(model.plannedActionRows.begin(),
+                                 model.plannedActionRows.end(),
+                                 [](const InGamePlannedActionRow& row) {
+                                     return row.kindLabel == "Auto"
+                                      && row.actionLabel == "Church coronation";
+                                 });
+        expect(automaticCoronation != model.plannedActionRows.end(),
+            "The dashboard model should expose automatic church coronation when it will trigger at validation.");
+    }
+
 void testAIStrategySpecialDoesNotMutateRuntimeGold() {
     GameConfig config;
     AIConfig aiConfig;
@@ -2694,6 +3108,7 @@ int main() {
         {"layered selection priority", testLayeredSelectionStackResolvesPriority},
         {"layered selection building cycle", testLayeredSelectionStackSupportsBuildingTerrainCycle},
         {"layered selection preview override", testLayeredSelectionStackSupportsPreviewPieceOverride},
+        {"layered selection pending build", testLayeredSelectionStackSupportsPendingBuildLayer},
         {"public building occupation state", testPublicBuildingOccupationStateResolvesAllOutcomes},
         {"cell traversal water blocked", testCellTraversalTreatsWaterAsNotTraversable},
         {"private building overlay owner shield", testSelectedStructureOverlayPrivateBuildingsUseOwnerShield},
@@ -2735,6 +3150,7 @@ int main() {
         {"multiplayer reconnect same client", testMultiplayerReconnectReusesSameClientInstance},
         {"turn system affordability", testTurnSystemSkipsUnaffordableBuild},
         {"turn system unaffordable production", testTurnSystemSkipsUnaffordableProduction},
+        {"turn system cancel production", testTurnSystemCancelsQueuedProductionPerBarracks},
         {"build system pawn adjacency", testBuildSystemAllowsPawnAdjacency},
         {"turn system repair with pawn occupancy", testTurnSystemRepairsDestroyedOwnedCellWithPawnOccupancy},
         {"turn system repairs before income", testTurnSystemRepairsBeforeIncome},
@@ -2748,6 +3164,13 @@ int main() {
         {"simultaneous bishop spawns alternate", testSimultaneousBishopSpawnsAlternateWithinSameTurn},
         {"forward model bishop spawn consistency", testForwardModelMatchesRuntimeBishopSpawnRule},
         {"turn system unaffordable upgrade", testTurnSystemSkipsUnaffordableUpgrade},
+        {"turn system cancel upgrade", testTurnSystemCancelsQueuedUpgradePerPiece},
+        {"selection move rules pending build reselection", testSelectionMoveRulesKeepMovesWhenPendingBuildDependsOnCurrentMove},
+        {"turn system replace move drops orphan build", testTurnSystemReplaceMoveDropsOrphanedPendingBuilds},
+        {"turn system keep build with other builder", testTurnSystemCancelMoveKeepsBuildWhenAnotherBuilderStillSupportsIt},
+        {"turn system stable pending build ids", testTurnSystemAssignsStablePendingBuildIds},
+        {"turn draft materializes under construction build", testTurnDraftMaterializesQueuedBuildingAsUnderConstruction},
+        {"under construction resources grant no income", testUnderConstructionResourceBuildingsDoNotGrantIncome},
         {"ai special planning preserves gold", testAIStrategySpecialDoesNotMutateRuntimeGold},
         {"save validator negative gold", testGameStateValidatorRejectsNegativeSaveGold},
         {"runtime validator negative gold", testGameStateValidatorRejectsNegativeRuntimeGold},
@@ -2757,6 +3180,7 @@ int main() {
         {"structure chunk registry", testStructureChunkRegistry},
         {"chunked structure dimensions", testGameConfigAlignsChunkedStructureDimensions},
         {"in-game view model builder", testInGameViewModelBuilder},
+        {"in-game planned actions", testInGameViewModelIncludesPlannedActionsAndAutomaticCoronation},
     };
 
     for (const auto& [name, test] : tests) {

@@ -27,6 +27,11 @@ public:
                            int rotationQuarterTurns, int flipMask,
                            int cellSize, bool valid,
                            const AssetManager& assets);
+    void drawActionMarker(sf::RenderWindow& window, const Camera& camera,
+                          const sf::View& hudView, sf::Vector2u windowSize,
+                          sf::Vector2i origin, int width, int height,
+                          const std::string& iconName,
+                          int cellSize, const AssetManager& assets);
     void drawStructureOverlay(sf::RenderWindow& window, const Camera& camera,
                                const sf::View& hudView, sf::Vector2u windowSize,
                                const Building& building, const StructureOverlayStack& overlay,

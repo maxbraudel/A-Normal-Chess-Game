@@ -20,6 +20,7 @@ void XPSystem::grantArenaXP(Kingdom& kingdom, const Board& board,
     for (const auto& b : buildings) {
         if (b.type != BuildingType::Arena) continue;
         if (b.owner != kingdom.id) continue;
+        if (!b.isUsable()) continue;
 
         for (auto& pos : b.getOccupiedCells()) {
             const Cell& cell = board.getCell(pos.x, pos.y);

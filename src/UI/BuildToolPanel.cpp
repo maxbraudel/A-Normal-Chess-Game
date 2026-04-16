@@ -1,6 +1,7 @@
 #include "UI/BuildToolPanel.hpp"
 #include "Kingdom/Kingdom.hpp"
 #include "Config/GameConfig.hpp"
+#include "UI/ActionButtonStyle.hpp"
 #include "UI/HUDLayout.hpp"
 
 namespace {
@@ -23,16 +24,6 @@ int buildingCost(BuildingType type, const GameConfig& config) {
         case BuildingType::Arena: return config.getArenaCost();
         default: return 0;
     }
-}
-
-void applyButtonBaseStyle(const tgui::Button::Ptr& button,
-                          const tgui::Color& backgroundColor,
-                          const tgui::Color& textColor) {
-    auto renderer = button->getRenderer();
-    renderer->setBackgroundColor(backgroundColor);
-    renderer->setTextColor(textColor);
-    renderer->setBackgroundColorHover(backgroundColor);
-    renderer->setTextColorHover(textColor);
 }
 
 } // namespace
@@ -94,22 +85,11 @@ void BuildToolPanel::show(const Kingdom& kingdom, const GameConfig& config, bool
         if (kingdom.gold < cost) {
             label += " (need gold)";
         }
-        if (option.type == m_selectedType) {
-            label = "> " + label;
-        }
 
-        option.button->setText(label);
-        option.button->setEnabled(allowBuild);
-
-        if (option.type == m_selectedType) {
-            applyButtonBaseStyle(option.button,
-                                 tgui::Color(124, 96, 28),
-                                 tgui::Color::White);
-        } else {
-            applyButtonBaseStyle(option.button,
-                                 tgui::Color(255, 255, 255),
-                                 tgui::Color::Black);
-        }
+        ActionButtonStyle::applySelectableState(option.button,
+                                                label,
+                                                option.type == m_selectedType,
+                                                allowBuild);
     }
 
     m_panel->setVisible(true);

@@ -48,6 +48,8 @@ PendingTurnProjectionResult projectSelectionState(const Board& board,
                                                   const std::vector<TurnCommand>& pendingCommands,
                                                   int pieceId,
                                                   const GameConfig& config) {
+    PendingTurnProjectionResult result;
+
     Kingdom restoredActiveKingdom = activeKingdom;
     if (const TurnCommand* pendingMove = findPendingMoveCommand(pendingCommands, pieceId)) {
         if (Piece* restoredPiece = restoredActiveKingdom.getPieceById(pieceId)) {
@@ -55,14 +57,19 @@ PendingTurnProjectionResult projectSelectionState(const Board& board,
         }
     }
 
-    return PendingTurnProjection::project(
+    const PendingTurnNormalizationResult normalization = PendingTurnProjection::normalize(
         board,
         restoredActiveKingdom,
         enemyKingdom,
         publicBuildings,
         turnNumber,
         pendingCommandsWithoutPieceMove(pendingCommands, pieceId),
-        config);
+        config,
+        PendingTurnInvalidCommandPolicy::DropInvalidBuilds);
+    result.snapshot = normalization.snapshot;
+    result.valid = normalization.valid;
+    result.errorMessage = normalization.errorMessage;
+    return result;
 }
 
 } // namespace

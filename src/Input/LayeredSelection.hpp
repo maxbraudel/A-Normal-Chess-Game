@@ -1,8 +1,11 @@
 #pragma once
 
 #include <array>
+#include <optional>
 
 #include <SFML/System/Vector2.hpp>
+
+#include "Input/PendingBuildSelection.hpp"
 
 class Piece;
 class Building;
@@ -12,6 +15,7 @@ enum class SelectionLayer {
     None,
     Piece,
     Building,
+    PendingBuild,
     Terrain
 };
 
@@ -19,11 +23,13 @@ struct LayeredSelectionStack {
     sf::Vector2i cellPos{0, 0};
     Piece* piece = nullptr;
     Building* building = nullptr;
+    std::optional<PendingBuildSelection> pendingBuild;
     bool hasTerrain = false;
-    std::array<SelectionLayer, 3> layers{
+    std::array<SelectionLayer, 4> layers{
         SelectionLayer::None,
         SelectionLayer::None,
         SelectionLayer::None
+        ,SelectionLayer::None
     };
     int count = 0;
 
@@ -36,4 +42,5 @@ struct LayeredSelectionStack {
 
 LayeredSelectionStack resolveCellSelectionStack(const Cell& cell, sf::Vector2i cellPos,
                                                 Piece* pieceOverride = nullptr,
-                                                bool suppressCellPiece = false);
+                                                bool suppressCellPiece = false,
+                                                const std::optional<PendingBuildSelection>& pendingBuild = std::nullopt);

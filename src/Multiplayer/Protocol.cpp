@@ -23,6 +23,7 @@ bool writeTurnCommand(sf::Packet& packet, const TurnCommand& command) {
            << command.origin.y
            << command.destination.x
            << command.destination.y
+           << command.buildId
            << static_cast<sf::Int32>(command.buildingType)
            << command.buildOrigin.x
            << command.buildOrigin.y
@@ -48,6 +49,7 @@ bool readTurnCommand(sf::Packet& packet, TurnCommand& command) {
           >> command.origin.y
           >> command.destination.x
           >> command.destination.y
+            >> command.buildId
           >> buildingType
           >> command.buildOrigin.x
           >> command.buildOrigin.y

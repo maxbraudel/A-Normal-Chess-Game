@@ -1,6 +1,7 @@
 #include "Systems/PendingTurnProjection.hpp"
 
 #include <algorithm>
+#include <utility>
 
 #include "AI/ForwardModel.hpp"
 #include "Board/Board.hpp"
@@ -176,6 +177,23 @@ bool applyProjectedCommand(GameSnapshot& snapshot,
     }
 }
 
+GameSnapshot createProjectionBaseSnapshot(const Board& board,
+                                          const Kingdom& activeKingdom,
+                                          const Kingdom& enemyKingdom,
+                                          const std::vector<Building>& publicBuildings,
+                                          int turnNumber,
+                                          const std::vector<TurnCommand>& commands,
+                                          const GameConfig& config) {
+    Kingdom restoredActiveKingdom = activeKingdom;
+    Kingdom restoredEnemyKingdom = enemyKingdom;
+    restorePendingMoveOrigins(restoredActiveKingdom, commands);
+
+    GameSnapshot snapshot = ForwardModel::createSnapshot(
+        board, restoredActiveKingdom, restoredEnemyKingdom, publicBuildings, turnNumber);
+    PendingTurnProjection::initializeBudgets(snapshot, activeKingdom.id, config);
+    return snapshot;
+}
+
 } // namespace
 
 void PendingTurnProjection::initializeBudgets(GameSnapshot& snapshot,
@@ -193,22 +211,49 @@ PendingTurnProjectionResult PendingTurnProjection::project(
     int turnNumber,
     const std::vector<TurnCommand>& commands,
     const GameConfig& config) {
+    const PendingTurnNormalizationResult normalization = normalize(
+        board, activeKingdom, enemyKingdom, publicBuildings,
+        turnNumber, commands, config, PendingTurnInvalidCommandPolicy::FailFast);
+
     PendingTurnProjectionResult result;
+    result.snapshot = normalization.snapshot;
+    result.valid = normalization.valid;
+    result.errorMessage = normalization.errorMessage;
+    return result;
+}
 
-    Kingdom restoredActiveKingdom = activeKingdom;
-    Kingdom restoredEnemyKingdom = enemyKingdom;
-    restorePendingMoveOrigins(restoredActiveKingdom, commands);
+PendingTurnNormalizationResult PendingTurnProjection::normalize(
+    const Board& board,
+    const Kingdom& activeKingdom,
+    const Kingdom& enemyKingdom,
+    const std::vector<Building>& publicBuildings,
+    int turnNumber,
+    const std::vector<TurnCommand>& commands,
+    const GameConfig& config,
+    PendingTurnInvalidCommandPolicy invalidCommandPolicy) {
+    PendingTurnNormalizationResult result;
+    result.snapshot = createProjectionBaseSnapshot(
+        board, activeKingdom, enemyKingdom, publicBuildings, turnNumber, commands, config);
+    result.normalizedCommands.reserve(commands.size());
 
-    result.snapshot = ForwardModel::createSnapshot(
-        board, restoredActiveKingdom, restoredEnemyKingdom, publicBuildings, turnNumber);
-    initializeBudgets(result.snapshot, activeKingdom.id, config);
-
-    for (const TurnCommand& command : commands) {
-        if (!applyProjectedCommand(result.snapshot, activeKingdom.id, command, config,
-                                   &result.errorMessage)) {
-            result.valid = false;
-            return result;
+    for (std::size_t index = 0; index < commands.size(); ++index) {
+        const TurnCommand& command = commands[index];
+        std::string commandError;
+        if (applyProjectedCommand(result.snapshot, activeKingdom.id, command, config, &commandError)) {
+            result.normalizedCommands.push_back(command);
+            continue;
         }
+
+        const bool canDropCommand = invalidCommandPolicy == PendingTurnInvalidCommandPolicy::DropInvalidBuilds
+            && command.type == TurnCommand::Build;
+        if (canDropCommand) {
+            result.droppedCommands.push_back(PendingTurnDroppedCommand{index, command, commandError});
+            continue;
+        }
+
+        result.valid = false;
+        result.errorMessage = std::move(commandError);
+        return result;
     }
 
     return result;

@@ -10,8 +10,8 @@
 bool ProductionSystem::canStartProduction(const Building& barracks, PieceType type,
                                            const Kingdom& kingdom, const GameConfig& config) {
     if (barracks.type != BuildingType::Barracks) return false;
+    if (!barracks.isUsable()) return false;
     if (barracks.isProducing) return false;
-    if (barracks.isDestroyed()) return false;
     int cost = config.getRecruitCost(type);
     return kingdom.gold >= cost;
 }

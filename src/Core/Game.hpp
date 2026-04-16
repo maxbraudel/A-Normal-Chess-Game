@@ -23,6 +23,7 @@
 #include "Core/TurnPhase.hpp"
 #include "Core/GameClock.hpp"
 #include "Core/GameEngine.hpp"
+#include "Core/TurnDraft.hpp"
 #include "Config/GameConfig.hpp"
 #include "Config/AIConfig.hpp"
 #include "Debug/GameStateDebugRecorder.hpp"
@@ -110,10 +111,21 @@ private:
     bool canQueueNonMoveActions() const;
     InteractionPermissions currentInteractionPermissions(const CheckTurnValidation* validation = nullptr) const;
     InputContext buildInputContext(const InteractionPermissions& permissions);
+    bool shouldUseTurnDraft() const;
+    void invalidateTurnDraft();
+    void ensureTurnDraftUpToDate();
     InputSelectionBookmark captureSelectionBookmark() const;
     void reconcileSelectionBookmark(const InputSelectionBookmark& bookmark);
     Piece* findPieceById(int pieceId);
     Building* findBuildingById(int buildingId);
+    Board& displayedBoard();
+    const Board& displayedBoard() const;
+    std::array<Kingdom, kNumKingdoms>& displayedKingdoms();
+    const std::array<Kingdom, kNumKingdoms>& displayedKingdoms() const;
+    std::vector<Building>& displayedPublicBuildings();
+    const std::vector<Building>& displayedPublicBuildings() const;
+    Kingdom& displayedKingdom(KingdomId id);
+    const Kingdom& displayedKingdom(KingdomId id) const;
 
 #ifdef _WIN32
     friend LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);
@@ -181,6 +193,8 @@ private:
     AIConfig m_aiConfig;
 
     GameEngine m_engine;
+    TurnDraft m_turnDraft;
+    std::uint64_t m_lastTurnDraftRevision = 0;
     GameStateDebugRecorder m_debugRecorder;
 
     // AI

@@ -18,6 +18,7 @@ const sf::Color kOverlayText(248, 248, 248, 240);
 constexpr int kFlipHorizontalMask = 1;
 constexpr int kFlipVerticalMask = 2;
 constexpr float kOverlayIconSize = 28.f;
+constexpr float kActionMarkerSize = 24.f;
 constexpr float kOverlayProgressWidth = 96.f;
 constexpr float kOverlayProgressHeight = 18.f;
 constexpr float kOverlayItemGap = 6.f;
@@ -403,7 +404,7 @@ void OverlayRenderer::drawBuildPreview(sf::RenderWindow& window, const Camera& c
     }
 
     sf::Sprite sprite;
-    sprite.setColor(sf::Color(255, 255, 255, 128));
+    sprite.setColor(sf::Color(255, 255, 255, 255));
     for (int dy = 0; dy < footprintHeight; ++dy) {
         for (int dx = 0; dx < footprintWidth; ++dx) {
             const sf::Vector2i sourceLocal = Building::mapFootprintToSourceLocalFor(
@@ -420,6 +421,42 @@ void OverlayRenderer::drawBuildPreview(sf::RenderWindow& window, const Camera& c
             window.draw(sprite);
         }
     }
+}
+
+void OverlayRenderer::drawActionMarker(sf::RenderWindow& window, const Camera& camera,
+                                       const sf::View& hudView, sf::Vector2u windowSize,
+                                       sf::Vector2i origin, int width, int height,
+                                       const std::string& iconName,
+                                       int cellSize, const AssetManager& assets) {
+    const sf::Vector2f worldTopLeft(
+        static_cast<float>(origin.x * cellSize),
+        static_cast<float>(origin.y * cellSize));
+    const sf::Vector2f worldBottomRight(
+        static_cast<float>((origin.x + width) * cellSize),
+        static_cast<float>((origin.y + height) * cellSize));
+
+    const sf::Vector2f screenTopLeft = camera.worldToScreen(worldTopLeft, windowSize);
+    const sf::Vector2f screenBottomRight = camera.worldToScreen(worldBottomRight, windowSize);
+    const float leftEdge = std::min(screenTopLeft.x, screenBottomRight.x);
+    const float topEdge = std::min(screenTopLeft.y, screenBottomRight.y);
+    const float rightEdge = std::max(screenTopLeft.x, screenBottomRight.x);
+    const float centerX = (leftEdge + rightEdge) * 0.5f;
+
+    sf::Sprite sprite(assets.getUITexture(iconName));
+    const sf::Texture* texture = sprite.getTexture();
+    if (!texture || texture->getSize().x == 0 || texture->getSize().y == 0) {
+        return;
+    }
+
+    sprite.setScale(kActionMarkerSize / static_cast<float>(texture->getSize().x),
+                    kActionMarkerSize / static_cast<float>(texture->getSize().y));
+    sprite.setPosition(centerX - (kActionMarkerSize * 0.5f),
+                       topEdge - kActionMarkerSize - 4.f);
+
+    const sf::View savedView = window.getView();
+    window.setView(hudView);
+    window.draw(sprite);
+    window.setView(savedView);
 }
 
 void OverlayRenderer::drawStructureOverlay(sf::RenderWindow& window, const Camera& camera,

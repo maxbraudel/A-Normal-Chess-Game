@@ -13,6 +13,7 @@ struct TurnCommand {
     sf::Vector2i destination{0, 0};
 
     // Build
+    int buildId = -1;
     BuildingType buildingType = BuildingType::Barracks;
     sf::Vector2i buildOrigin{0, 0};
     int buildRotationQuarterTurns = 0;

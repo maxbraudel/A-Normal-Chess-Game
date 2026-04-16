@@ -43,7 +43,8 @@ int getCellIndex(const Building& building, int localX, int localY) {
 
 Building::Building()
     : id(-1), type(BuildingType::Barracks), owner(KingdomId::White), isNeutral(false),
-      origin(0, 0), width(0), height(0), rotationQuarterTurns(0), flipMask(0),
+    origin(0, 0), width(0), height(0), rotationQuarterTurns(0), flipMask(0),
+    state(BuildingState::Completed),
       isProducing(false), producingType(0), turnsRemaining(0) {}
 
 bool Building::isPublic() const {
@@ -56,6 +57,22 @@ bool Building::isDestroyed() const {
         if (hp > 0) return false;
     }
     return true;
+}
+
+bool Building::isUnderConstruction() const {
+    return state == BuildingState::UnderConstruction;
+}
+
+bool Building::isUsable() const {
+    return !isUnderConstruction() && !isDestroyed();
+}
+
+bool Building::hasActiveGameplayEffects() const {
+    return !isUnderConstruction() && !isDestroyed();
+}
+
+void Building::setConstructionState(BuildingState newState) {
+    state = newState;
 }
 
 int Building::getFootprintWidth() const {
