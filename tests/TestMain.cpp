@@ -220,6 +220,17 @@ TurnCommand makeDisbandCommand(int pieceId) {
     return command;
 }
 
+InGameHudPresentation makeHudPresentation(
+    KingdomId statsKingdom,
+    bool showTurnPointIndicators = true,
+    InGameTurnIndicatorTone turnIndicatorTone = InGameTurnIndicatorTone::Neutral) {
+    InGameHudPresentation presentation;
+    presentation.statsKingdom = statsKingdom;
+    presentation.showTurnPointIndicators = showTurnPointIndicators;
+    presentation.turnIndicatorTone = turnIndicatorTone;
+    return presentation;
+}
+
 unsigned short startLoopbackServerOnFreePort(MultiplayerServer& server,
                                             const MultiplayerConfig& config,
                                             const std::string& saveName,
@@ -1240,13 +1251,58 @@ void testLayeredSelectionStackTreatsUnderConstructionBuildingAsNormalBuilding() 
         addPieceToBoard(engine.kingdom(KingdomId::White), engine.board(), 140, PieceType::King, KingdomId::White, {8, 8});
         addPieceToBoard(engine.kingdom(KingdomId::Black), engine.board(), 240, PieceType::Rook, KingdomId::Black, {8, 4});
 
-        const InGameViewModel model = buildInGameViewModel(engine, config, GameState::Playing, true);
+        const InGameViewModel model = buildInGameViewModel(
+            engine,
+            config,
+            GameState::Playing,
+            true,
+            makeHudPresentation(KingdomId::White));
          expect(model.alerts.size() == 1,
              "The dashboard model should expose a single alert when the active king is in check.");
          expect(model.alerts.front().text == "Check",
              "The dashboard model should expose a Check alert when the active king is in check.");
          expect(model.alerts.front().tone == InGameAlertTone::Danger,
              "The Check alert should use the danger tone.");
+    }
+
+    void testInGameViewModelUsesPresentedHudKingdom() {
+        GameConfig config;
+        GameEngine engine;
+        engine.board().init(10);
+        engine.kingdom(KingdomId::White) = Kingdom(KingdomId::White);
+        engine.kingdom(KingdomId::Black) = Kingdom(KingdomId::Black);
+        engine.turnSystem().setActiveKingdom(KingdomId::White);
+        engine.turnSystem().setTurnNumber(3);
+
+        Kingdom& white = engine.kingdom(KingdomId::White);
+        Kingdom& black = engine.kingdom(KingdomId::Black);
+        white.gold = 12;
+        black.gold = 73;
+
+        addPieceToBoard(white, engine.board(), 150, PieceType::King, KingdomId::White, {8, 8});
+        addPieceToBoard(black, engine.board(), 250, PieceType::King, KingdomId::Black, {2, 2});
+        addPieceToBoard(black, engine.board(), 251, PieceType::Rook, KingdomId::Black, {3, 2});
+        black.buildings.push_back(makeTestBarracks(44, KingdomId::Black, {4, 4}, config));
+        linkBuildingOnBoard(black.buildings.back(), engine.board());
+
+        const InGameViewModel model = buildInGameViewModel(
+            engine,
+            config,
+            GameState::Playing,
+            false,
+            makeHudPresentation(KingdomId::Black,
+                               false,
+                               InGameTurnIndicatorTone::LocalTurn));
+        expect(model.activeGold == 73,
+            "The dashboard model should expose the gold of the kingdom selected for HUD stats.");
+        expect(model.activeTroops == black.pieceCount(),
+            "The dashboard model should expose troop counts from the kingdom selected for HUD stats.");
+        expect(model.activeOccupiedCells == countOccupiedBuildingCells(black),
+            "The dashboard model should expose occupied cells from the kingdom selected for HUD stats.");
+        expect(!model.showTurnPointIndicators,
+            "The dashboard model should carry whether turn-point indicators must be hidden.");
+        expect(model.turnIndicatorTone == InGameTurnIndicatorTone::LocalTurn,
+            "The dashboard model should carry the requested turn-indicator tone.");
     }
 
     void testOverlayPolicyCanHideIndicatorsUntilSelected() {
@@ -1369,6 +1425,31 @@ void testSessionValidatorRejectsInvalidOrdering() {
         expect(!clientContext.isLocallyControlled(KingdomId::White)
          && clientContext.isLocallyControlled(KingdomId::Black),
             "LAN client sessions should only expose the Black kingdom as local.");
+    }
+
+    void testSingleLocalHudModes() {
+        GameSessionConfig hotseat = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, "hud_hotseat_session");
+        expect(!hasSingleLocallyControlledKingdom(makeLocalPlayerContextForSession(hotseat)),
+            "Hotseat sessions should keep alternating HUD stats because both kingdoms are local.");
+
+        GameSessionConfig humanVsAI = makeDefaultGameSessionConfig(GameMode::HumanVsAI, "hud_hvai_session");
+        expect(hasSingleLocallyControlledKingdom(makeLocalPlayerContextForSession(humanVsAI)),
+            "Human vs AI sessions should pin HUD stats to the single local human kingdom.");
+
+        GameSessionConfig aiVsAI = makeDefaultGameSessionConfig(GameMode::AIvsAI, "hud_aivai_session");
+        expect(!hasSingleLocallyControlledKingdom(makeLocalPlayerContextForSession(aiVsAI)),
+            "AI vs AI sessions should keep alternating HUD stats because there is no local human kingdom.");
+
+        GameSessionConfig host = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, "hud_host_session");
+        host.multiplayer.enabled = true;
+        host.multiplayer.port = 42000;
+        host.multiplayer.passwordHash = "hash";
+        host.multiplayer.passwordSalt = "salt";
+        expect(hasSingleLocallyControlledKingdom(makeLocalPlayerContextForSession(host)),
+            "LAN host sessions should use the single-local HUD rules.");
+
+        expect(hasSingleLocallyControlledKingdom(makeLanClientLocalPlayerContext()),
+            "LAN client sessions should use the single-local HUD rules.");
     }
 
 void testGameEngineRestoresFactoryIds() {
@@ -3092,7 +3173,12 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
                                   config),
              "The test setup should be able to queue a sacrifice before building the dashboard model.");
 
-         const InGameViewModel model = buildInGameViewModel(engine, config, GameState::Playing, true);
+         const InGameViewModel model = buildInGameViewModel(
+             engine,
+             config,
+             GameState::Playing,
+             true,
+             makeHudPresentation(KingdomId::White));
          const auto queuedDisband = std::find_if(model.plannedActionRows.begin(),
                                   model.plannedActionRows.end(),
                                   [](const InGamePlannedActionRow& row) {
@@ -3139,7 +3225,12 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
                               config),
             "The test setup should be able to queue an upgrade before building the dashboard model.");
 
-        const InGameViewModel model = buildInGameViewModel(engine, config, GameState::Playing, true);
+        const InGameViewModel model = buildInGameViewModel(
+            engine,
+            config,
+            GameState::Playing,
+            true,
+            makeHudPresentation(KingdomId::White));
         const auto queuedUpgrade = std::find_if(model.plannedActionRows.begin(),
                               model.plannedActionRows.end(),
                               [](const InGamePlannedActionRow& row) {
@@ -3451,7 +3542,12 @@ void testInGameViewModelBuilder() {
     expect(engine.startNewSession(session, config, &error), error);
     engine.eventLog().log(1, KingdomId::White, "Opened with a pawn move.");
 
-    const InGameViewModel model = buildInGameViewModel(engine, config, GameState::Playing, true);
+    const InGameViewModel model = buildInGameViewModel(
+        engine,
+        config,
+        GameState::Playing,
+        true,
+        makeHudPresentation(engine.turnSystem().getActiveKingdom()));
     expect(model.turnNumber == 1, "Dashboard model should expose the active turn number.");
     expect(model.balanceMetrics[0].label == "Gold", "Dashboard model should expose kingdom balance labels.");
         expect(model.eventRows.size() >= 2, "Dashboard model should expose event history rows.");
@@ -3460,6 +3556,10 @@ void testInGameViewModelBuilder() {
         expect(model.eventRows.back().actorLabel.find("Player 1") != std::string::npos,
            "Event rows should use participant names in actor labels.");
     expect(!model.activeTurnLabel.empty(), "Dashboard model should expose the active turn label.");
+    expect(model.showTurnPointIndicators,
+        "The dashboard model should default to showing turn-point indicators when requested.");
+    expect(model.turnIndicatorTone == InGameTurnIndicatorTone::Neutral,
+        "The dashboard model should default to a neutral top turn-indicator tone.");
 }
 
 }
@@ -3471,6 +3571,7 @@ int main() {
         {"multiplayer validator controllers", testSessionValidatorRejectsInvalidMultiplayerControllers},
         {"multiplayer validator port", testSessionValidatorRejectsInvalidMultiplayerPort},
         {"local player context", testLocalPlayerContextModes},
+        {"single local hud modes", testSingleLocalHudModes},
         {"engine restore factory sync", testGameEngineRestoresFactoryIds},
         {"engine restore bishop parity", testGameEngineRestoresBishopSpawnMemory},
         {"engine world seed", testGameEngineAssignsWorldSeed},
@@ -3512,6 +3613,7 @@ int main() {
         {"interaction permissions game over navigation", testInteractionPermissionsKeepNavigationAvailableDuringGameOver},
         {"turn system move log piece type", testTurnSystemMoveLogIncludesPieceType},
         {"in-game view model check alert", testInGameViewModelShowsCheckAlertWhenActiveKingIsInCheck},
+        {"in-game hud kingdom presentation", testInGameViewModelUsesPresentedHudKingdom},
         {"overlay policy when selected visibility", testOverlayPolicyCanHideIndicatorsUntilSelected},
         {"overlay policy always visible", testOverlayPolicyAlwaysKeepsCurrentIndicatorsVisible},
         {"save manager roundtrip", testSaveManagerRoundTrip},

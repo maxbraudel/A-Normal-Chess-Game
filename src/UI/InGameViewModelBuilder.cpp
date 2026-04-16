@@ -141,23 +141,27 @@ int countOccupiedBuildingCells(const Kingdom& kingdom) {
 InGameViewModel buildInGameViewModel(const GameEngine& engine,
                                      const GameConfig& config,
                                      GameState state,
-                                     bool allowCommands) {
+                                     bool allowCommands,
+                                     const InGameHudPresentation& presentation) {
     InGameViewModel model;
     const Kingdom& activeKingdom = engine.activeKingdom();
+    const Kingdom& displayedHudKingdom = engine.kingdom(presentation.statsKingdom);
     const Kingdom& whiteKingdom = engine.kingdom(KingdomId::White);
     const Kingdom& blackKingdom = engine.kingdom(KingdomId::Black);
 
     model.turnNumber = engine.turnSystem().getTurnNumber();
     model.activeTurnLabel = engine.activeTurnLabel();
+    model.showTurnPointIndicators = presentation.showTurnPointIndicators;
+    model.turnIndicatorTone = presentation.turnIndicatorTone;
     if (state == GameState::GameOver) {
         model.alerts.push_back({"Checkmate", InGameAlertTone::Danger});
     } else if (CheckSystem::isInCheck(engine.activeKingdom().id, engine.board(), config)) {
         model.alerts.push_back({"Check", InGameAlertTone::Danger});
     }
-    model.activeGold = activeKingdom.gold;
-    model.activeOccupiedCells = countOccupiedBuildingCells(activeKingdom);
-    model.activeTroops = activeKingdom.pieceCount();
-    model.activeIncome = EconomySystem::calculateProjectedNetIncome(activeKingdom,
+    model.activeGold = displayedHudKingdom.gold;
+    model.activeOccupiedCells = countOccupiedBuildingCells(displayedHudKingdom);
+    model.activeTroops = displayedHudKingdom.pieceCount();
+    model.activeIncome = EconomySystem::calculateProjectedNetIncome(displayedHudKingdom,
                                                                     engine.board(),
                                                                     engine.publicBuildings(),
                                                                     config);

@@ -91,6 +91,7 @@ private:
     bool isLocalPlayerTurn() const;
     bool canLocalPlayerIssueCommands() const;
     KingdomId localPerspectiveKingdom() const;
+    InGameHudPresentation buildInGameHudPresentation() const;
     bool isMultiplayerSessionReady() const;
     void updateMultiplayerPresentation();
     void returnToMainMenu();

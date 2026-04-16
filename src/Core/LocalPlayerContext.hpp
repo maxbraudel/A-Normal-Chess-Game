@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 
 #include "Core/GameSessionConfig.hpp"
@@ -54,4 +55,14 @@ inline LocalPlayerContext makeLanClientLocalPlayerContext() {
     context.localControl = {false, true};
     context.perspectiveKingdom = KingdomId::Black;
     return context;
+}
+
+inline int countLocallyControlledKingdoms(const LocalPlayerContext& context) {
+    return static_cast<int>(std::count(context.localControl.begin(),
+                                       context.localControl.end(),
+                                       true));
+}
+
+inline bool hasSingleLocallyControlledKingdom(const LocalPlayerContext& context) {
+    return countLocallyControlledKingdoms(context) == 1;
 }

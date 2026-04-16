@@ -33,6 +33,7 @@ public:
 
 private:
     bool m_visible = false;
+    bool m_showTurnPointIndicators = true;
     tgui::Panel::Ptr m_metricsPanel;
     tgui::Panel::Ptr m_pointPanel;
     tgui::Panel::Ptr m_statusPanel;

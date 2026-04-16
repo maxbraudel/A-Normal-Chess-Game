@@ -370,6 +370,26 @@ KingdomId Game::localPerspectiveKingdom() const {
     return m_localPlayerContext.perspectiveKingdom;
 }
 
+InGameHudPresentation Game::buildInGameHudPresentation() const {
+    InGameHudPresentation presentation;
+    const bool singleLocalKingdom = hasSingleLocallyControlledKingdom(m_localPlayerContext);
+
+    presentation.statsKingdom = singleLocalKingdom
+        ? localPerspectiveKingdom()
+        : turnSystem().getActiveKingdom();
+    presentation.showTurnPointIndicators = !singleLocalKingdom || isLocalPlayerTurn();
+
+    if (singleLocalKingdom
+        && isLocalPlayerTurn()
+        && !m_waitingForRemoteTurnResult
+        && isMultiplayerSessionReady()
+        && (m_state == GameState::Playing || m_state == GameState::Paused)) {
+        presentation.turnIndicatorTone = InGameTurnIndicatorTone::LocalTurn;
+    }
+
+    return presentation;
+}
+
 bool Game::isMultiplayerSessionReady() const {
     if (isLanHost()) {
         return m_multiplayerServer.hasAuthenticatedClient();
@@ -1946,16 +1966,23 @@ void Game::updateUIState() {
     turnSystem().syncPointBudget(m_config);
     const CheckTurnValidation validation = validateActivePendingTurn();
     const InteractionPermissions permissions = currentInteractionPermissions(&validation);
-    InGameViewModel viewModel = buildInGameViewModel(m_engine, m_config, m_state, permissions.canIssueCommands);
+    const InGameHudPresentation hudPresentation = buildInGameHudPresentation();
+    InGameViewModel viewModel = buildInGameViewModel(
+        m_engine,
+        m_config,
+        m_state,
+        permissions.canIssueCommands,
+        hudPresentation);
     if (shouldUseTurnDraft() && m_turnDraft.isValid()) {
-        const Kingdom& displayedActiveKingdom = displayedKingdom(turnSystem().getActiveKingdom());
+        const Kingdom& displayedHudKingdom = displayedKingdom(hudPresentation.statsKingdom);
         const Kingdom& displayedWhiteKingdom = displayedKingdom(KingdomId::White);
         const Kingdom& displayedBlackKingdom = displayedKingdom(KingdomId::Black);
 
-        viewModel.activeGold = displayedActiveKingdom.gold;
-        viewModel.activeOccupiedCells = countDisplayedOccupiedBuildingCells(displayedActiveKingdom);
+        viewModel.activeGold = displayedHudKingdom.gold;
+        viewModel.activeOccupiedCells = countDisplayedOccupiedBuildingCells(displayedHudKingdom);
+        viewModel.activeTroops = displayedHudKingdom.pieceCount();
         viewModel.activeIncome = EconomySystem::calculateProjectedNetIncome(
-            displayedActiveKingdom,
+            displayedHudKingdom,
             displayedBoard(),
             displayedPublicBuildings(),
             m_config);

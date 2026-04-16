@@ -80,6 +80,28 @@ void applyAlertTone(const tgui::Label::Ptr& label, InGameAlertTone tone) {
     }
 }
 
+void applyTurnIndicatorTone(const tgui::Label::Ptr& label, InGameTurnIndicatorTone tone) {
+    if (!label) {
+        return;
+    }
+
+    auto renderer = label->getRenderer();
+    switch (tone) {
+        case InGameTurnIndicatorTone::LocalTurn:
+            renderer->setTextColor(tgui::Color(235, 245, 255));
+            renderer->setBackgroundColor(tgui::Color(28, 92, 190, 228));
+            renderer->setBorderColor(tgui::Color(132, 192, 255));
+            break;
+
+        case InGameTurnIndicatorTone::Neutral:
+        default:
+            renderer->setTextColor(tgui::Color::White);
+            renderer->setBackgroundColor(tgui::Color(18, 18, 18, 185));
+            renderer->setBorderColor(tgui::Color(105, 105, 105));
+            break;
+    }
+}
+
 } // namespace
 
 void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
@@ -213,7 +235,7 @@ void HUD::init(tgui::Gui& gui, const AssetManager& assets) {
 void HUD::show() {
     m_visible = true;
     if (m_metricsPanel) m_metricsPanel->setVisible(true);
-    if (m_pointPanel) m_pointPanel->setVisible(true);
+    if (m_pointPanel) m_pointPanel->setVisible(m_showTurnPointIndicators);
     if (m_statusPanel) m_statusPanel->setVisible(true);
     if (m_alertPanel && !m_alertLabels.empty()) m_alertPanel->setVisible(true);
     if (m_actionPanel) m_actionPanel->setVisible(true);
@@ -241,6 +263,7 @@ void HUD::update(const InGameViewModel& model) {
     if (m_metricLabels[1]) m_metricLabels[1]->setText(metricText(1, model.activeOccupiedCells));
     if (m_metricLabels[2]) m_metricLabels[2]->setText(metricText(2, model.activeTroops));
     if (m_metricLabels[3]) m_metricLabels[3]->setText(metricText(3, model.activeIncome));
+    m_showTurnPointIndicators = model.showTurnPointIndicators;
     if (m_pointLabels[1]) {
         m_pointLabels[1]->setText(pointText("Build Points",
                                             model.activeBuildPointsAvailable,
@@ -255,8 +278,9 @@ void HUD::update(const InGameViewModel& model) {
     if (m_statusLabel) {
         m_statusLabel->setText("T" + std::to_string(model.turnNumber) + " | "
                                + model.activeTurnLabel);
-        m_statusLabel->getRenderer()->setTextColor(tgui::Color::White);
+        applyTurnIndicatorTone(m_statusLabel, model.turnIndicatorTone);
     }
+    if (m_pointPanel) m_pointPanel->setVisible(m_visible && m_showTurnPointIndicators);
 
     if (m_alertPanel) {
         m_alertPanel->removeAllWidgets();

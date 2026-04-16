@@ -5,6 +5,8 @@
 #include <string>
 #include <vector>
 
+#include "Kingdom/KingdomId.hpp"
+
 inline constexpr std::size_t kInGameMetricCount = 4;
 
 inline const std::array<std::string, kInGameMetricCount>& inGameMetricLabels() {
@@ -37,6 +39,17 @@ struct InGamePlannedActionRow {
     bool predicted = false;
 };
 
+enum class InGameTurnIndicatorTone {
+    Neutral,
+    LocalTurn
+};
+
+struct InGameHudPresentation {
+    KingdomId statsKingdom = KingdomId::White;
+    bool showTurnPointIndicators = true;
+    InGameTurnIndicatorTone turnIndicatorTone = InGameTurnIndicatorTone::Neutral;
+};
+
 enum class InGameAlertTone {
     Neutral,
     Warning,
@@ -62,6 +75,8 @@ struct InGameViewModel {
     int activeBuildPointsTotal = 0;
     bool allowCommands = false;
     bool canEndTurn = false;
+    bool showTurnPointIndicators = true;
+    InGameTurnIndicatorTone turnIndicatorTone = InGameTurnIndicatorTone::Neutral;
     std::vector<InGameAlert> alerts;
     std::vector<InGameEventRow> eventRows;
     std::vector<InGamePlannedActionRow> plannedActionRows;
