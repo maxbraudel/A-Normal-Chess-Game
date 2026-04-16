@@ -12,6 +12,7 @@ struct InputSelectionBookmark {
     ToolState tool = ToolState::Select;
     int pieceId = -1;
     int buildingId = -1;
+    // Canonical world cell where the current selection was anchored.
     std::optional<sf::Vector2i> selectedCell;
     std::optional<sf::Vector2i> selectedBuildingOrigin;
     BuildingType selectedBuildingType = BuildingType::Barracks;

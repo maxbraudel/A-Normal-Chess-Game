@@ -33,6 +33,7 @@
 #include "Debug/GameStateDebugRecorder.hpp"
 #include "Input/InputHandler.hpp"
 #include "Input/LayeredSelection.hpp"
+#include "Render/Camera.hpp"
 #include "Render/StructureOverlay.hpp"
 #include "Multiplayer/MultiplayerClient.hpp"
 #include "Multiplayer/MultiplayerRuntime.hpp"
@@ -76,6 +77,7 @@
 #include "UI/HUDLayout.hpp"
 #include "UI/InGameViewModelBuilder.hpp"
 #include "UI/MainMenuUI.hpp"
+#include "UI/UIManager.hpp"
 #include "UI/ToolBar.hpp"
 #include "Units/MovementRules.hpp"
 #include "Units/Piece.hpp"
@@ -265,6 +267,42 @@ TurnCommand makeDisbandCommand(int pieceId) {
     command.type = TurnCommand::Disband;
     command.pieceId = pieceId;
     return command;
+}
+
+InputContext makePassiveInputContext(sf::RenderWindow& window,
+                                     Camera& camera,
+                                     Board& board,
+                                     TurnSystem& turnSystem,
+                                     BuildingFactory& buildingFactory,
+                                     Kingdom& controlledKingdom,
+                                     Kingdom& opposingKingdom,
+                                     std::vector<Building>& publicBuildings,
+                                     UIManager& uiManager,
+                                     const GameConfig& config) {
+    return InputContext{
+        window,
+        camera,
+        board,
+        turnSystem,
+        buildingFactory,
+        controlledKingdom,
+        opposingKingdom,
+        publicBuildings,
+        board,
+        controlledKingdom,
+        opposingKingdom,
+        publicBuildings,
+        TurnValidationContext{board,
+                              controlledKingdom,
+                              opposingKingdom,
+                              publicBuildings,
+                              turnSystem.getTurnNumber(),
+                              config},
+        uiManager,
+        config,
+        InteractionPermissions{},
+        false,
+        false};
 }
 
 InGameHudPresentation makeHudPresentation(
@@ -571,6 +609,143 @@ void testLayeredSelectionStackTreatsUnderConstructionBuildingAsNormalBuilding() 
         "Under-construction buildings should be selected through the normal building layer.");
     expect(stack.nextBelow(SelectionLayer::Building) == SelectionLayer::Terrain,
         "Cycling below an under-construction building should expose terrain next.");
+}
+
+void testInputHandlerBookmarksActivePieceSelectionCell() {
+    GameConfig config;
+    Board board;
+    board.init(12);
+
+    Kingdom white(KingdomId::White);
+    Kingdom black(KingdomId::Black);
+    Piece& pawn = addPieceToBoard(white, board, 1101, PieceType::Pawn, KingdomId::White, {4, 5});
+    addPieceToBoard(black, board, 2101, PieceType::King, KingdomId::Black, {9, 9});
+
+    TurnSystem turnSystem;
+    turnSystem.setActiveKingdom(KingdomId::White);
+    turnSystem.setTurnNumber(1);
+    BuildingFactory buildingFactory;
+    std::vector<Building> publicBuildings;
+    sf::RenderWindow window;
+    Camera camera;
+    UIManager uiManager;
+    InputContext context = makePassiveInputContext(window,
+                                                   camera,
+                                                   board,
+                                                   turnSystem,
+                                                   buildingFactory,
+                                                   white,
+                                                   black,
+                                                   publicBuildings,
+                                                   uiManager,
+                                                   config);
+    context.permissions.canIssueCommands = false;
+
+    InputHandler input;
+    input.reconcileSelection(InputSelectionBookmark{}, &pawn, nullptr, context);
+
+    const InputSelectionBookmark bookmark = input.createSelectionBookmark();
+    expect(bookmark.pieceId == pawn.id,
+        "InputHandler should preserve the selected piece id when creating a bookmark for a piece selection.");
+    expect(bookmark.selectedCell.has_value() && *bookmark.selectedCell == sf::Vector2i{4, 5},
+        "InputHandler should preserve the active piece selection cell in bookmarks so draft reconciliation can restore the original clicked location.");
+}
+
+void testInputHandlerReconcileSelectionDoesNotJumpToMismatchedPieceElsewhere() {
+    GameConfig config;
+    Board initialBoard;
+    initialBoard.init(12);
+    const sf::Vector2i bookmarkedCell{4, 5};
+    const sf::Vector2i movedCell{4, 6};
+
+    Kingdom initialWhite(KingdomId::White);
+    Kingdom initialBlack(KingdomId::Black);
+    Piece& initialPawn = addPieceToBoard(initialWhite,
+                                         initialBoard,
+                                         1102,
+                                         PieceType::Pawn,
+                                         KingdomId::White,
+                                         bookmarkedCell);
+    addPieceToBoard(initialBlack, initialBoard, 2102, PieceType::King, KingdomId::Black, {9, 9});
+
+    TurnSystem initialTurnSystem;
+    initialTurnSystem.setActiveKingdom(KingdomId::White);
+    initialTurnSystem.setTurnNumber(1);
+    BuildingFactory initialBuildingFactory;
+    std::vector<Building> initialPublicBuildings;
+    sf::RenderWindow initialWindow;
+    Camera initialCamera;
+    UIManager initialUiManager;
+    InputContext initialContext = makePassiveInputContext(initialWindow,
+                                                          initialCamera,
+                                                          initialBoard,
+                                                          initialTurnSystem,
+                                                          initialBuildingFactory,
+                                                          initialWhite,
+                                                          initialBlack,
+                                                          initialPublicBuildings,
+                                                          initialUiManager,
+                                                          config);
+    initialContext.permissions.canIssueCommands = false;
+
+    InputHandler input;
+    input.reconcileSelection(InputSelectionBookmark{}, &initialPawn, nullptr, initialContext);
+    const InputSelectionBookmark bookmark = input.createSelectionBookmark();
+
+    Board driftBoard;
+    driftBoard.init(12);
+    Kingdom driftWhite(KingdomId::White);
+    Kingdom driftBlack(KingdomId::Black);
+    addPieceToBoard(driftWhite,
+                    driftBoard,
+                    1103,
+                    PieceType::Rook,
+                    KingdomId::White,
+                    bookmarkedCell);
+    addPieceToBoard(driftWhite,
+                    driftBoard,
+                    1102,
+                    PieceType::Pawn,
+                    KingdomId::White,
+                    movedCell);
+    addPieceToBoard(driftBlack, driftBoard, 2103, PieceType::King, KingdomId::Black, {9, 9});
+    Piece* movedPawn = nullptr;
+    for (Piece& piece : driftWhite.pieces) {
+        if (piece.id == 1102) {
+            movedPawn = &piece;
+            break;
+        }
+    }
+
+    TurnSystem driftTurnSystem;
+    driftTurnSystem.setActiveKingdom(KingdomId::White);
+    driftTurnSystem.setTurnNumber(1);
+    BuildingFactory driftBuildingFactory;
+    std::vector<Building> driftPublicBuildings;
+    sf::RenderWindow driftWindow;
+    Camera driftCamera;
+    UIManager driftUiManager;
+    InputContext driftContext = makePassiveInputContext(driftWindow,
+                                                        driftCamera,
+                                                        driftBoard,
+                                                        driftTurnSystem,
+                                                        driftBuildingFactory,
+                                                        driftWhite,
+                                                        driftBlack,
+                                                        driftPublicBuildings,
+                                                        driftUiManager,
+                                                        config);
+    driftContext.permissions.canIssueCommands = false;
+
+    expect(movedPawn != nullptr,
+        "The drift setup should expose the moved same-id pawn so reconciliation can be tested against the stale id-based fallback path.");
+
+    input.reconcileSelection(bookmark, movedPawn, nullptr, driftContext);
+
+    expect(input.getSelectedPieceId() == -1,
+        "InputHandler should not jump selection to a same-id piece resolved elsewhere when the bookmarked cell no longer contains the originally selected piece.");
+    expect(input.hasSelectedCell() && input.getSelectedCell() == bookmarkedCell,
+        "InputHandler should preserve the bookmarked world cell as a terrain selection instead of selecting a distant piece after reconciliation drift.");
 }
 
     void testPublicBuildingOccupationStateResolvesAllOutcomes() {
@@ -5669,6 +5844,8 @@ int main() {
         {"layered selection building cycle", testLayeredSelectionStackSupportsBuildingTerrainCycle},
         {"layered selection preview override", testLayeredSelectionStackSupportsPreviewPieceOverride},
         {"layered selection under construction building", testLayeredSelectionStackTreatsUnderConstructionBuildingAsNormalBuilding},
+        {"input bookmarks active piece cell", testInputHandlerBookmarksActivePieceSelectionCell},
+        {"input reconcile avoids distant piece jump", testInputHandlerReconcileSelectionDoesNotJumpToMismatchedPieceElsewhere},
         {"public building occupation state", testPublicBuildingOccupationStateResolvesAllOutcomes},
         {"cell traversal water blocked", testCellTraversalTreatsWaterAsNotTraversable},
         {"private building overlay owner shield", testSelectedStructureOverlayPrivateBuildingsUseOwnerShield},

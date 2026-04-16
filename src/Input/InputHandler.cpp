@@ -105,7 +105,9 @@ InputSelectionBookmark InputHandler::createSelectionBookmark() const {
         bookmark.selectedBuildingIsNeutral = m_selectedBuildingIsNeutral;
         bookmark.selectedBuildingRotationQuarterTurns = m_selectedBuildingRotationQuarterTurns;
     }
-    if (m_hasSelectedCell) {
+    if (m_hasActiveSelectionCell) {
+        bookmark.selectedCell = m_activeSelectionCell;
+    } else if (m_hasSelectedCell) {
         bookmark.selectedCell = m_selectedCell;
     }
     if (m_currentTool == ToolState::Build && m_hasBuildPreview) {
@@ -121,6 +123,64 @@ void InputHandler::reconcileSelection(const InputSelectionBookmark& bookmark,
     m_currentTool = bookmark.tool;
     m_buildPreviewType = bookmark.buildPreviewType;
     m_buildPreviewRotationQuarterTurns = bookmark.buildPreviewRotationQuarterTurns;
+
+    const auto restoreSelectionAtBookmarkedCell = [&]() -> bool {
+        if (!bookmark.selectedCell.has_value()) {
+            return false;
+        }
+
+        const sf::Vector2i cellPos = *bookmark.selectedCell;
+        if (!context.board.isInBounds(cellPos.x, cellPos.y)) {
+            return false;
+        }
+
+        const Cell& cell = context.board.getCell(cellPos.x, cellPos.y);
+        if (!cell.isInCircle) {
+            return false;
+        }
+
+        const LayeredSelectionStack stack = resolveSelectionStackAtCell(context, cellPos);
+        if (bookmark.pieceId >= 0) {
+            if (stack.piece != nullptr && stack.piece->id == bookmark.pieceId) {
+                activatePieceSelection(stack.piece,
+                                       cellPos,
+                                       context,
+                                       context.permissions.canIssueCommands
+                                           && stack.piece->kingdom == context.controlledKingdom.id);
+            } else {
+                activateTerrainSelection(cellPos);
+            }
+            restoreBuildPreviewState(bookmark);
+            return true;
+        }
+
+        if (bookmark.buildingId >= 0) {
+            const bool sameBuildingId = stack.building != nullptr && stack.building->id == bookmark.buildingId;
+            const bool sameBuildingMetadata = stack.building != nullptr
+                && bookmark.selectedBuildingOrigin.has_value()
+                && stack.building->origin == *bookmark.selectedBuildingOrigin
+                && stack.building->type == bookmark.selectedBuildingType
+                && stack.building->owner == bookmark.selectedBuildingOwner
+                && stack.building->isNeutral == bookmark.selectedBuildingIsNeutral
+                && stack.building->rotationQuarterTurns == bookmark.selectedBuildingRotationQuarterTurns;
+
+            if (sameBuildingId || sameBuildingMetadata) {
+                activateBuildingSelection(stack.building, cellPos);
+            } else {
+                activateTerrainSelection(cellPos);
+            }
+            restoreBuildPreviewState(bookmark);
+            return true;
+        }
+
+        activateTerrainSelection(cellPos);
+        restoreBuildPreviewState(bookmark);
+        return true;
+    };
+
+    if (restoreSelectionAtBookmarkedCell()) {
+        return;
+    }
 
     if (selectedPiece) {
         activatePieceSelection(selectedPiece,

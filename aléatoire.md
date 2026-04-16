@@ -35,3 +35,7 @@ assombirr l'herbe avec gausienne
 totem qui generale malediction
 
 on augmente d'1 les points d'actions
+
+
+
+totem qui donne point de build ou point d'action
