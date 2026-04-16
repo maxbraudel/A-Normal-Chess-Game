@@ -4,6 +4,7 @@
 #include <map>
 #include <vector>
 #include "Systems/TurnCommand.hpp"
+#include "Systems/TurnValidationContext.hpp"
 #include "Kingdom/KingdomId.hpp"
 
 class Board;
@@ -32,6 +33,9 @@ public:
 
     void syncPointBudget(const GameConfig& config);
     bool queueCommand(const TurnCommand& cmd,
+                      const TurnValidationContext& context,
+                      BuildingFactory* buildingFactory = nullptr);
+    bool queueCommand(const TurnCommand& cmd,
                       const Board& board,
                       const Kingdom& activeKingdom,
                       const Kingdom& enemyKingdom,
@@ -40,11 +44,15 @@ public:
                       BuildingFactory* buildingFactory = nullptr);
     void resetPendingCommands();
     bool cancelMoveCommand(int pieceId,
+                           const TurnValidationContext& context);
+    bool cancelMoveCommand(int pieceId,
                            const Board& board,
                            const Kingdom& activeKingdom,
                            const Kingdom& enemyKingdom,
                            const std::vector<Building>& publicBuildings,
                            const GameConfig& config);
+    bool cancelBuildCommand(int buildId,
+                            const TurnValidationContext& context);
     bool cancelBuildCommand(int buildId,
                             const Board& board,
                             const Kingdom& activeKingdom,
@@ -52,11 +60,15 @@ public:
                             const std::vector<Building>& publicBuildings,
                             const GameConfig& config);
     bool replaceMoveCommand(const TurnCommand& moveCommand,
+                            const TurnValidationContext& context);
+    bool replaceMoveCommand(const TurnCommand& moveCommand,
                             const Board& board,
                             const Kingdom& activeKingdom,
                             const Kingdom& enemyKingdom,
                             const std::vector<Building>& publicBuildings,
                             const GameConfig& config);
+        bool cancelProduceCommand(int barracksId,
+                                                            const TurnValidationContext& context);
     bool cancelProduceCommand(int barracksId,
                               const Board& board,
                               const Kingdom& activeKingdom,
@@ -64,11 +76,15 @@ public:
                               const std::vector<Building>& publicBuildings,
                               const GameConfig& config);
     bool cancelUpgradeCommand(int pieceId,
+                              const TurnValidationContext& context);
+    bool cancelUpgradeCommand(int pieceId,
                               const Board& board,
                               const Kingdom& activeKingdom,
                               const Kingdom& enemyKingdom,
                               const std::vector<Building>& publicBuildings,
                               const GameConfig& config);
+    bool cancelDisbandCommand(int pieceId,
+                              const TurnValidationContext& context);
     bool cancelDisbandCommand(int pieceId,
                               const Board& board,
                               const Kingdom& activeKingdom,
@@ -121,10 +137,6 @@ private:
     std::uint64_t m_pendingStateRevision;
 
     void rebuildQueuedSpecialState();
-    void refreshProjectedBudgetState(const Board& board,
-                                     const Kingdom& activeKingdom,
-                                     const Kingdom& enemyKingdom,
-                                     const std::vector<Building>& publicBuildings,
-                                     const GameConfig& config);
+    void refreshProjectedBudgetState(const TurnValidationContext& context);
     void markPendingStateChanged();
 };

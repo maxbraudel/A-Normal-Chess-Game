@@ -17,6 +17,7 @@
 #include "Systems/PendingTurnProjection.hpp"
 #include "Systems/TurnPointRules.hpp"
 #include "Systems/TurnCommand.hpp"
+#include "Systems/TurnValidationContext.hpp"
 
 namespace BuildOverlayRules {
 
@@ -127,34 +128,24 @@ inline int blockedRectangleCount(const std::vector<int>& prefix,
 
 } // namespace detail
 
-inline BuildOverlayMap collectBuildOverlayMap(const Board& board,
-                                              const Kingdom& activeKingdom,
-                                              const Kingdom& enemyKingdom,
-                                              const std::vector<Building>& publicBuildings,
-                                              int turnNumber,
+inline BuildOverlayMap collectBuildOverlayMap(const TurnValidationContext& context,
                                               const std::vector<TurnCommand>& pendingCommands,
                                               BuildingType buildingType,
-                                              int rotationQuarterTurns,
-                                              const GameConfig& config) {
+                                              int rotationQuarterTurns) {
     BuildOverlayMap map;
 
     const PendingTurnProjectionResult projection = PendingTurnProjection::project(
-        board,
-        activeKingdom,
-        enemyKingdom,
-        publicBuildings,
-        turnNumber,
-        pendingCommands,
-        config);
+        context,
+        pendingCommands);
     if (!projection.valid) {
         return map;
     }
 
     const GameSnapshot& snapshot = projection.snapshot;
-    const SnapKingdom& projectedKingdom = snapshot.kingdom(activeKingdom.id);
-    const SnapTurnBudget& projectedBudget = snapshot.turnBudget(activeKingdom.id);
-    const int buildPointCost = TurnPointRules::buildCost(buildingType, config);
-    const int buildGoldCost = detail::goldBuildCost(buildingType, config);
+    const SnapKingdom& projectedKingdom = snapshot.kingdom(context.activeKingdom.id);
+    const SnapTurnBudget& projectedBudget = snapshot.turnBudget(context.activeKingdom.id);
+    const int buildPointCost = TurnPointRules::buildCost(buildingType, context.config);
+    const int buildGoldCost = detail::goldBuildCost(buildingType, context.config);
     if (buildPointCost <= 0 || buildGoldCost < 0) {
         return map;
     }
@@ -163,8 +154,8 @@ inline BuildOverlayMap collectBuildOverlayMap(const Board& board,
         return map;
     }
 
-    const int baseWidth = config.getBuildingWidth(buildingType);
-    const int baseHeight = config.getBuildingHeight(buildingType);
+    const int baseWidth = context.config.getBuildingWidth(buildingType);
+    const int baseHeight = context.config.getBuildingHeight(buildingType);
     const int footprintWidth = Building::getFootprintWidthFor(baseWidth, baseHeight, rotationQuarterTurns);
     const int footprintHeight = Building::getFootprintHeightFor(baseWidth, baseHeight, rotationQuarterTurns);
     const int diameter = snapshot.getDiameter();
@@ -241,6 +232,22 @@ inline BuildOverlayMap collectBuildOverlayMap(const Board& board,
     }
 
     return map;
+}
+
+inline BuildOverlayMap collectBuildOverlayMap(const Board& board,
+                                              const Kingdom& activeKingdom,
+                                              const Kingdom& enemyKingdom,
+                                              const std::vector<Building>& publicBuildings,
+                                              int turnNumber,
+                                              const std::vector<TurnCommand>& pendingCommands,
+                                              BuildingType buildingType,
+                                              int rotationQuarterTurns,
+                                              const GameConfig& config) {
+    return collectBuildOverlayMap(
+        TurnValidationContext{board, activeKingdom, enemyKingdom, publicBuildings, turnNumber, config},
+        pendingCommands,
+        buildingType,
+        rotationQuarterTurns);
 }
 
 inline std::vector<sf::Vector2i> collectBuildableOrigins(const Board& board,

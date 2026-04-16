@@ -10,8 +10,10 @@
 #include "Core/GameSessionConfig.hpp"
 #include "Kingdom/Kingdom.hpp"
 #include "Save/SaveData.hpp"
+#include "Systems/CheckResponseRules.hpp"
 #include "Systems/EventLog.hpp"
 #include "Systems/TurnSystem.hpp"
+#include "Systems/TurnValidationContext.hpp"
 #include "Units/PieceFactory.hpp"
 
 class GameConfig;
@@ -19,6 +21,20 @@ class GameConfig;
 void relinkBoardState(Board& board,
                       std::array<Kingdom, kNumKingdoms>& kingdoms,
                       std::vector<Building>& publicBuildings);
+
+struct PendingTurnCommitResult {
+    bool committed = false;
+    bool gameOver = false;
+    KingdomId winner = KingdomId::White;
+    CheckTurnValidation activeValidation;
+    CheckTurnValidation nextTurnValidation;
+};
+
+struct PendingTurnStagingResult {
+    CheckTurnValidation validation;
+    bool usedFallbackResponseMove = false;
+    bool usedBankruptcyDisbands = false;
+};
 
 class GameEngine {
 public:
@@ -33,6 +49,15 @@ public:
     SaveData createSaveData() const;
     bool validate(std::string* errorMessage = nullptr) const;
     void resetPendingTurn();
+    bool replacePendingCommands(const std::vector<TurnCommand>& commands,
+                               const GameConfig& config,
+                               bool assignAuthoritativeBuildIds = false,
+                               std::string* errorMessage = nullptr);
+    PendingTurnStagingResult stageAITurnPlan(const std::vector<TurnCommand>& commands,
+                                             const GameConfig& config);
+    TurnValidationContext makeTurnValidationContext(const GameConfig& config) const;
+    CheckTurnValidation validatePendingTurn(const GameConfig& config) const;
+    PendingTurnCommitResult commitPendingTurn(const GameConfig& config);
 
     Board& board() { return m_board; }
     const Board& board() const { return m_board; }

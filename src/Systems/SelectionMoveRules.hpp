@@ -5,6 +5,7 @@
 #include <SFML/System/Vector2.hpp>
 
 #include "Systems/TurnCommand.hpp"
+#include "Systems/TurnValidationContext.hpp"
 
 class Board;
 class Building;
@@ -21,6 +22,10 @@ struct SelectionMoveOptions {
 
 class SelectionMoveRules {
 public:
+    static SelectionMoveOptions classifyPieceMoves(const TurnValidationContext& context,
+                                                   const std::vector<TurnCommand>& pendingCommands,
+                                                   int pieceId);
+
     static SelectionMoveOptions classifyPieceMoves(const Board& board,
                                                    const Kingdom& activeKingdom,
                                                    const Kingdom& enemyKingdom,

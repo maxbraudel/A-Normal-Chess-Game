@@ -284,6 +284,167 @@ void GameEngine::resetPendingTurn() {
     m_turnSystem.resetPendingCommands();
 }
 
+bool GameEngine::replacePendingCommands(const std::vector<TurnCommand>& commands,
+                                        const GameConfig& config,
+                                        bool assignAuthoritativeBuildIds,
+                                        std::string* errorMessage) {
+    resetPendingTurn();
+    const TurnValidationContext turnContext = makeTurnValidationContext(config);
+    for (const auto& submittedCommand : commands) {
+        TurnCommand command = submittedCommand;
+        if (assignAuthoritativeBuildIds && command.type == TurnCommand::Build) {
+            command.buildId = -1;
+        }
+
+        if (!m_turnSystem.queueCommand(command, turnContext, &m_buildingFactory)) {
+            resetPendingTurn();
+            if (errorMessage) {
+                *errorMessage = "The submitted turn contains an invalid or conflicting command.";
+            }
+            return false;
+        }
+    }
+
+    return true;
+}
+
+PendingTurnStagingResult GameEngine::stageAITurnPlan(const std::vector<TurnCommand>& commands,
+                                                     const GameConfig& config) {
+    PendingTurnStagingResult result;
+
+    resetPendingTurn();
+    const TurnValidationContext turnContext = makeTurnValidationContext(config);
+    const bool restrictToResponseMove = CheckResponseRules::isActiveKingInCheck(
+        turnContext,
+        m_turnSystem.getPendingCommands());
+
+    for (const auto& command : commands) {
+        if (restrictToResponseMove && command.type != TurnCommand::Move) {
+            continue;
+        }
+
+        m_turnSystem.queueCommand(command, turnContext, &m_buildingFactory);
+    }
+
+    result.validation = validatePendingTurn(config);
+    if (!result.validation.valid && result.validation.hasAnyLegalResponse) {
+        resetPendingTurn();
+
+        if (result.validation.activeKingInCheck) {
+            for (Piece& piece : activeKingdom().pieces) {
+                const std::vector<sf::Vector2i> legalMoves = CheckResponseRules::filterLegalMovesForPiece(
+                    piece,
+                    m_board,
+                    config);
+                if (legalMoves.empty()) {
+                    continue;
+                }
+
+                TurnCommand fallbackMove;
+                fallbackMove.type = TurnCommand::Move;
+                fallbackMove.pieceId = piece.id;
+                fallbackMove.origin = piece.position;
+                fallbackMove.destination = legalMoves.front();
+                m_turnSystem.queueCommand(fallbackMove, turnContext, &m_buildingFactory);
+                result.usedFallbackResponseMove = true;
+                break;
+            }
+        }
+
+        result.validation = validatePendingTurn(config);
+        if (result.validation.bankrupt) {
+            std::vector<int> disbandCandidates;
+            disbandCandidates.reserve(activeKingdom().pieces.size());
+            for (const Piece& piece : activeKingdom().pieces) {
+                if (piece.type == PieceType::King) {
+                    continue;
+                }
+
+                disbandCandidates.push_back(piece.id);
+            }
+
+            std::sort(disbandCandidates.begin(), disbandCandidates.end(), [this, &config](int lhsId, int rhsId) {
+                const Piece* lhs = activeKingdom().getPieceById(lhsId);
+                const Piece* rhs = activeKingdom().getPieceById(rhsId);
+                const int lhsUpkeep = lhs ? config.getPieceUpkeepCost(lhs->type) : 0;
+                const int rhsUpkeep = rhs ? config.getPieceUpkeepCost(rhs->type) : 0;
+                if (lhsUpkeep != rhsUpkeep) {
+                    return lhsUpkeep > rhsUpkeep;
+                }
+
+                return lhsId < rhsId;
+            });
+
+            for (const int pieceId : disbandCandidates) {
+                TurnCommand disbandCommand;
+                disbandCommand.type = TurnCommand::Disband;
+                disbandCommand.pieceId = pieceId;
+                if (!m_turnSystem.queueCommand(disbandCommand, turnContext, &m_buildingFactory)) {
+                    continue;
+                }
+
+                result.usedBankruptcyDisbands = true;
+                result.validation = validatePendingTurn(config);
+                if (result.validation.valid) {
+                    break;
+                }
+            }
+        }
+    }
+
+    return result;
+}
+
+TurnValidationContext GameEngine::makeTurnValidationContext(const GameConfig& config) const {
+    return TurnValidationContext{
+        m_board,
+        activeKingdom(),
+        enemyKingdom(),
+        m_publicBuildings,
+        m_turnSystem.getTurnNumber(),
+        config};
+}
+
+CheckTurnValidation GameEngine::validatePendingTurn(const GameConfig& config) const {
+    return CheckResponseRules::validatePendingTurn(
+        makeTurnValidationContext(config),
+        m_turnSystem.getPendingCommands());
+}
+
+PendingTurnCommitResult GameEngine::commitPendingTurn(const GameConfig& config) {
+    PendingTurnCommitResult result;
+    const KingdomId activeId = m_turnSystem.getActiveKingdom();
+    const KingdomId enemyId = opponent(activeId);
+
+    result.activeValidation = validatePendingTurn(config);
+    if (!result.activeValidation.valid) {
+        if (result.activeValidation.activeKingInCheck && !result.activeValidation.hasAnyLegalResponse) {
+            result.gameOver = true;
+            result.winner = enemyId;
+        }
+        return result;
+    }
+
+    m_turnSystem.commitTurn(m_board,
+                            activeKingdom(),
+                            enemyKingdom(),
+                            m_publicBuildings,
+                            config,
+                            m_eventLog,
+                            m_pieceFactory,
+                            m_buildingFactory);
+    m_turnSystem.advanceTurn();
+    result.committed = true;
+
+    result.nextTurnValidation = validatePendingTurn(config);
+    if (result.nextTurnValidation.activeKingInCheck && !result.nextTurnValidation.hasAnyLegalResponse) {
+        result.gameOver = true;
+        result.winner = activeId;
+    }
+
+    return result;
+}
+
 ControllerType GameEngine::controller(KingdomId id) const {
     return kingdomParticipantConfig(m_sessionConfig.kingdoms, id).controller;
 }

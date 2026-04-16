@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "Core/InteractionPermissions.hpp"
+#include "Systems/TurnValidationContext.hpp"
 
 class Camera;
 class Board;
@@ -28,6 +29,7 @@ struct InputContext {
     Kingdom& authoritativeControlledKingdom;
     Kingdom& authoritativeOpposingKingdom;
     const std::vector<Building>& authoritativePublicBuildings;
+    TurnValidationContext authoritativeTurnContext;
     UIManager& uiManager;
     const GameConfig& config;
     InteractionPermissions permissions;

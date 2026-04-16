@@ -30,7 +30,10 @@ const auto kSelectionCycleThreshold = std::chrono::milliseconds(350);
 } // namespace
 
 InputHandler::InputHandler()
-    : m_currentTool(ToolState::Select), m_selectedPiece(nullptr), m_selectedBuilding(nullptr),
+    : m_currentTool(ToolState::Select), m_selectedPieceId(-1), m_selectedBuildingId(-1),
+    m_selectedBuildingType(BuildingType::Barracks),
+    m_selectedBuildingOwner(KingdomId::White), m_selectedBuildingIsNeutral(false),
+    m_selectedBuildingRotationQuarterTurns(0),
     m_hasSelectedCell(false), m_selectedCell({0, 0}),
     m_selectedOriginDangerous(false),
     m_hasBuildPreview(false), m_buildPreviewType(BuildingType::Barracks),
@@ -47,8 +50,8 @@ void InputHandler::setTool(ToolState tool) {
     clearSelection();
 }
 
-Piece* InputHandler::getSelectedPiece() const { return m_selectedPiece; }
-Building* InputHandler::getSelectedBuilding() const { return m_selectedBuilding; }
+int InputHandler::getSelectedPieceId() const { return m_selectedPieceId; }
+int InputHandler::getSelectedBuildingId() const { return m_selectedBuildingId; }
 bool InputHandler::hasSelectedCell() const { return m_hasSelectedCell; }
 sf::Vector2i InputHandler::getSelectedCell() const { return m_selectedCell; }
 const std::vector<sf::Vector2i>& InputHandler::getValidMoves() const { return m_validMoves; }
@@ -68,21 +71,39 @@ void InputHandler::setBuildType(BuildingType type) {
     m_buildPreviewType = type;
 }
 
+Piece* InputHandler::resolveSelectedPiece(const InputContext& context) const {
+    if (m_selectedPieceId < 0) {
+        return nullptr;
+    }
+
+    if (Piece* piece = context.controlledKingdom.getPieceById(m_selectedPieceId)) {
+        return piece;
+    }
+    if (Piece* piece = context.opposingKingdom.getPieceById(m_selectedPieceId)) {
+        return piece;
+    }
+    if (Piece* piece = context.authoritativeControlledKingdom.getPieceById(m_selectedPieceId)) {
+        return piece;
+    }
+
+    return context.authoritativeOpposingKingdom.getPieceById(m_selectedPieceId);
+}
+
 InputSelectionBookmark InputHandler::createSelectionBookmark() const {
     InputSelectionBookmark bookmark;
     bookmark.tool = m_currentTool;
     bookmark.buildPreviewType = m_buildPreviewType;
     bookmark.buildPreviewRotationQuarterTurns = m_buildPreviewRotationQuarterTurns;
-    if (m_selectedPiece) {
-        bookmark.pieceId = m_selectedPiece->id;
+    if (m_selectedPieceId >= 0) {
+        bookmark.pieceId = m_selectedPieceId;
     }
-    if (m_selectedBuilding) {
-        bookmark.buildingId = m_selectedBuilding->id;
-        bookmark.selectedBuildingOrigin = m_selectedBuilding->origin;
-        bookmark.selectedBuildingType = m_selectedBuilding->type;
-        bookmark.selectedBuildingOwner = m_selectedBuilding->owner;
-        bookmark.selectedBuildingIsNeutral = m_selectedBuilding->isNeutral;
-        bookmark.selectedBuildingRotationQuarterTurns = m_selectedBuilding->rotationQuarterTurns;
+    if (m_selectedBuildingId >= 0) {
+        bookmark.buildingId = m_selectedBuildingId;
+        bookmark.selectedBuildingOrigin = m_selectedBuildingOrigin;
+        bookmark.selectedBuildingType = m_selectedBuildingType;
+        bookmark.selectedBuildingOwner = m_selectedBuildingOwner;
+        bookmark.selectedBuildingIsNeutral = m_selectedBuildingIsNeutral;
+        bookmark.selectedBuildingRotationQuarterTurns = m_selectedBuildingRotationQuarterTurns;
     }
     if (m_hasSelectedCell) {
         bookmark.selectedCell = m_selectedCell;
@@ -147,8 +168,13 @@ void InputHandler::restoreBuildPreviewState(const InputSelectionBookmark& bookma
 }
 
 void InputHandler::clearSelection() {
-    m_selectedPiece = nullptr;
-    m_selectedBuilding = nullptr;
+    m_selectedPieceId = -1;
+    m_selectedBuildingId = -1;
+    m_selectedBuildingOrigin.reset();
+    m_selectedBuildingType = BuildingType::Barracks;
+    m_selectedBuildingOwner = KingdomId::White;
+    m_selectedBuildingIsNeutral = false;
+    m_selectedBuildingRotationQuarterTurns = 0;
     m_hasSelectedCell = false;
     m_selectedCell = {0, 0};
     m_activeSelectionLayer = SelectionLayer::None;
@@ -163,8 +189,13 @@ void InputHandler::clearSelection() {
 }
 
 void InputHandler::selectCell(sf::Vector2i cellPos) {
-    m_selectedPiece = nullptr;
-    m_selectedBuilding = nullptr;
+    m_selectedPieceId = -1;
+    m_selectedBuildingId = -1;
+    m_selectedBuildingOrigin.reset();
+    m_selectedBuildingType = BuildingType::Barracks;
+    m_selectedBuildingOwner = KingdomId::White;
+    m_selectedBuildingIsNeutral = false;
+    m_selectedBuildingRotationQuarterTurns = 0;
     m_selectedCell = cellPos;
     m_hasSelectedCell = true;
     m_validMoves.clear();
@@ -175,8 +206,13 @@ void InputHandler::selectCell(sf::Vector2i cellPos) {
 
 void InputHandler::activatePieceSelection(Piece* piece, sf::Vector2i cellPos,
                                           const InputContext& context, bool allowCommands) {
-    m_selectedPiece = piece;
-    m_selectedBuilding = nullptr;
+    m_selectedPieceId = piece ? piece->id : -1;
+    m_selectedBuildingId = -1;
+    m_selectedBuildingOrigin.reset();
+    m_selectedBuildingType = BuildingType::Barracks;
+    m_selectedBuildingOwner = KingdomId::White;
+    m_selectedBuildingIsNeutral = false;
+    m_selectedBuildingRotationQuarterTurns = 0;
     m_hasSelectedCell = false;
     if (piece && allowCommands && piece->kingdom == context.controlledKingdom.id) {
         refreshPieceMoves(piece, context);
@@ -189,8 +225,13 @@ void InputHandler::activatePieceSelection(Piece* piece, sf::Vector2i cellPos,
 }
 
 void InputHandler::activateBuildingSelection(Building* building, sf::Vector2i cellPos) {
-    m_selectedPiece = nullptr;
-    m_selectedBuilding = building;
+    m_selectedPieceId = -1;
+    m_selectedBuildingId = building ? building->id : -1;
+    m_selectedBuildingOrigin = building ? std::optional<sf::Vector2i>{building->origin} : std::nullopt;
+    m_selectedBuildingType = building ? building->type : BuildingType::Barracks;
+    m_selectedBuildingOwner = building ? building->owner : KingdomId::White;
+    m_selectedBuildingIsNeutral = building ? building->isNeutral : false;
+    m_selectedBuildingRotationQuarterTurns = building ? building->rotationQuarterTurns : 0;
     m_hasSelectedCell = false;
     m_validMoves.clear();
     m_dangerMoves.clear();
@@ -286,7 +327,7 @@ void InputHandler::applyResolvedSelection(const LayeredSelectionStack& stack,
 
 void InputHandler::cancelPieceSelectionContext(const InputContext& context) {
     (void) context;
-    m_selectedPiece = nullptr;
+    m_selectedPieceId = -1;
     m_validMoves.clear();
     m_dangerMoves.clear();
     m_selectedOriginDangerous = false;
@@ -310,16 +351,18 @@ void InputHandler::refreshPieceMoves(Piece* piece, const InputContext& context) 
     const std::vector<Building>& movePublicBuildings = context.useConcretePendingState
         ? context.authoritativePublicBuildings
         : context.publicBuildings;
-
-    const SelectionMoveOptions moveOptions = SelectionMoveRules::classifyPieceMoves(
+    const TurnValidationContext moveTurnContext{
         moveBoard,
         moveControlledKingdom,
         moveOpposingKingdom,
         movePublicBuildings,
         context.turnSystem.getTurnNumber(),
+        context.config};
+
+    const SelectionMoveOptions moveOptions = SelectionMoveRules::classifyPieceMoves(
+        moveTurnContext,
         context.turnSystem.getPendingCommands(),
-        piece->id,
-        context.config);
+        piece->id);
 
     m_validMoves = moveOptions.safeMoves;
     m_dangerMoves = moveOptions.unsafeMoves;
@@ -492,29 +535,30 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
             return;
         }
 
-        if (m_selectedPiece) {
-            const TurnCommand* pendingMove = context.turnSystem.getPendingMoveCommand(m_selectedPiece->id);
+        if (Piece* selectedPiece = resolveSelectedPiece(context)) {
+            const TurnCommand* pendingMove = context.turnSystem.getPendingMoveCommand(selectedPiece->id);
             if (pendingMove && cellPos == pendingMove->origin) {
                 const sf::Vector2i pendingOrigin = pendingMove->origin;
-                Piece* restoredPiece = context.controlledKingdom.getPieceById(m_selectedPiece->id);
-                if (Piece* authoritativePiece = context.authoritativeControlledKingdom.getPieceById(m_selectedPiece->id)) {
+                Piece* restoredPiece = context.controlledKingdom.getPieceById(selectedPiece->id);
+                if (Piece* authoritativePiece = context.authoritativeControlledKingdom.getPieceById(selectedPiece->id)) {
                     authoritativePiece->position = pendingOrigin;
                 }
                 if (restoredPiece && !context.useConcretePendingState) {
                     restoredPiece->position = pendingOrigin;
                 }
 
-                if (context.turnSystem.cancelMoveCommand(m_selectedPiece->id,
-                                                         context.authoritativeBoard,
-                                                         context.authoritativeControlledKingdom,
-                                                         context.authoritativeOpposingKingdom,
-                                                         context.authoritativePublicBuildings,
-                                                         context.config)) {
+                if (context.turnSystem.cancelMoveCommand(selectedPiece->id,
+                                                         context.authoritativeTurnContext)) {
                     syncQueuedMovePreviewState(context);
                 }
 
-                m_selectedPiece = restoredPiece;
-                m_selectedBuilding = nullptr;
+                m_selectedPieceId = restoredPiece ? restoredPiece->id : -1;
+                m_selectedBuildingId = -1;
+                m_selectedBuildingOrigin.reset();
+                m_selectedBuildingType = BuildingType::Barracks;
+                m_selectedBuildingOwner = KingdomId::White;
+                m_selectedBuildingIsNeutral = false;
+                m_selectedBuildingRotationQuarterTurns = 0;
                 m_hasSelectedCell = false;
                 refreshPieceMoves(restoredPiece, context);
                 setActiveSelectionMetadata(SelectionLayer::Piece, pendingOrigin);
@@ -526,8 +570,8 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
                 const bool hadPendingMove = (pendingMove != nullptr);
                 const sf::Vector2i moveOrigin = hadPendingMove
                     ? pendingMove->origin
-                    : m_selectedPiece->position;
-                Piece* restoredPiece = context.controlledKingdom.getPieceById(m_selectedPiece->id);
+                    : selectedPiece->position;
+                Piece* restoredPiece = context.controlledKingdom.getPieceById(selectedPiece->id);
                 if (!restoredPiece) {
                     return;
                 }
@@ -536,7 +580,7 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
                     restoredPiece->position = pendingMove->origin;
                 }
                 if (hadPendingMove) {
-                    if (Piece* authoritativePiece = context.authoritativeControlledKingdom.getPieceById(m_selectedPiece->id)) {
+                    if (Piece* authoritativePiece = context.authoritativeControlledKingdom.getPieceById(selectedPiece->id)) {
                         authoritativePiece->position = pendingMove->origin;
                     }
                 }
@@ -549,17 +593,9 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
 
                 const bool moveQueued = hadPendingMove
                     ? context.turnSystem.replaceMoveCommand(cmd,
-                                                            context.authoritativeBoard,
-                                                            context.authoritativeControlledKingdom,
-                                                            context.authoritativeOpposingKingdom,
-                                                            context.authoritativePublicBuildings,
-                                                            context.config)
+                                                            context.authoritativeTurnContext)
                     : context.turnSystem.queueCommand(cmd,
-                                                      context.authoritativeBoard,
-                                                      context.authoritativeControlledKingdom,
-                                                      context.authoritativeOpposingKingdom,
-                                                      context.authoritativePublicBuildings,
-                                                      context.config,
+                                                      context.authoritativeTurnContext,
                                                       &context.buildingFactory);
                 if (!moveQueued) {
                     syncQueuedMovePreviewState(context);
@@ -568,8 +604,13 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
                 }
 
                 syncQueuedMovePreviewState(context);
-                m_selectedPiece = restoredPiece;
-                m_selectedBuilding = nullptr;
+                m_selectedPieceId = restoredPiece->id;
+                m_selectedBuildingId = -1;
+                m_selectedBuildingOrigin.reset();
+                m_selectedBuildingType = BuildingType::Barracks;
+                m_selectedBuildingOwner = KingdomId::White;
+                m_selectedBuildingIsNeutral = false;
+                m_selectedBuildingRotationQuarterTurns = 0;
                 m_hasSelectedCell = false;
                 setActiveSelectionMetadata(SelectionLayer::Piece, cellPos);
                 armSelectionCycle(cellPos);
@@ -623,28 +664,15 @@ void InputHandler::handleBuildTool(const sf::Event& event, const InputContext& c
             }
 
             context.turnSystem.cancelBuildCommand(pendingCommand.buildId,
-                                                  context.authoritativeBoard,
-                                                  context.authoritativeControlledKingdom,
-                                                  context.authoritativeOpposingKingdom,
-                                                  context.authoritativePublicBuildings,
-                                                  context.config);
+                                                  context.authoritativeTurnContext);
             return;
         }
 
-        if (PendingTurnProjection::canAppendCommand(context.authoritativeBoard,
-                                                    context.authoritativeControlledKingdom,
-                                                    context.authoritativeOpposingKingdom,
-                                                    context.authoritativePublicBuildings,
-                                                    context.turnSystem.getTurnNumber(),
+        if (PendingTurnProjection::canAppendCommand(context.authoritativeTurnContext,
                                                     context.turnSystem.getPendingCommands(),
-                                                    cmd,
-                                                    context.config)
+                                                    cmd)
             && context.turnSystem.queueCommand(cmd,
-                                               context.authoritativeBoard,
-                                               context.authoritativeControlledKingdom,
-                                               context.authoritativeOpposingKingdom,
-                                               context.authoritativePublicBuildings,
-                                               context.config,
+                                               context.authoritativeTurnContext,
                                                &context.buildingFactory)) {
             syncQueuedMovePreviewState(context);
         }

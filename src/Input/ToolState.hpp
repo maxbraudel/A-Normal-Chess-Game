@@ -1,6 +1,3 @@
 #pragma once
 
-enum class ToolState {
-    Select,
-    Build
-};
+#include "Core/ToolState.hpp"

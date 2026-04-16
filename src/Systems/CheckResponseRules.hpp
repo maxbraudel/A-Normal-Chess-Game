@@ -6,6 +6,7 @@
 #include <SFML/System/Vector2.hpp>
 
 #include "Systems/TurnCommand.hpp"
+#include "Systems/TurnValidationContext.hpp"
 
 class Board;
 class Building;
@@ -26,6 +27,9 @@ struct CheckTurnValidation {
 
 class CheckResponseRules {
 public:
+    static bool isActiveKingInCheck(const TurnValidationContext& context,
+                                    const std::vector<TurnCommand>& pendingCommands);
+
     static bool isActiveKingInCheck(const Kingdom& activeKingdom,
                                     const Kingdom& enemyKingdom,
                                     const Board& board,
@@ -47,6 +51,9 @@ public:
     static bool hasAnyLegalResponse(Kingdom& kingdom,
                                     Board& board,
                                     const GameConfig& config);
+
+    static CheckTurnValidation validatePendingTurn(const TurnValidationContext& context,
+                                                   const std::vector<TurnCommand>& pendingCommands);
 
     static CheckTurnValidation validatePendingTurn(const Kingdom& activeKingdom,
                                                    const Kingdom& enemyKingdom,

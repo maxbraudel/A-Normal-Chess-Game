@@ -92,6 +92,19 @@ GameSnapshot simulateEndOfTurn(const GameSnapshot& snapshot,
 
 } // namespace
 
+bool CheckResponseRules::isActiveKingInCheck(const TurnValidationContext& context,
+                                             const std::vector<TurnCommand>& pendingCommands) {
+    const PendingTurnProjectionResult projection = PendingTurnProjection::project(
+        context,
+        pendingCommands);
+    if (!projection.valid) {
+        return true;
+    }
+
+    return ForwardModel::isInCheck(
+        projection.snapshot, context.activeKingdom.id, context.config.getGlobalMaxRange());
+}
+
 bool CheckResponseRules::isActiveKingInCheck(const Kingdom& activeKingdom,
                                              const Kingdom& enemyKingdom,
                                              const Board& board,
@@ -99,15 +112,9 @@ bool CheckResponseRules::isActiveKingInCheck(const Kingdom& activeKingdom,
                                              int turnNumber,
                                              const std::vector<TurnCommand>& pendingCommands,
                                              const GameConfig& config) {
-    const PendingTurnProjectionResult projection = PendingTurnProjection::project(
-        board, activeKingdom, enemyKingdom, publicBuildings,
-        turnNumber, pendingCommands, config);
-    if (!projection.valid) {
-        return true;
-    }
-
-    return ForwardModel::isInCheck(
-        projection.snapshot, activeKingdom.id, config.getGlobalMaxRange());
+    return isActiveKingInCheck(
+        TurnValidationContext{board, activeKingdom, enemyKingdom, publicBuildings, turnNumber, config},
+        pendingCommands);
 }
 
 std::vector<sf::Vector2i> CheckResponseRules::filterLegalMovesForPiece(Piece& piece,
@@ -171,28 +178,27 @@ bool CheckResponseRules::hasAnyLegalResponse(Kingdom& kingdom,
     return false;
 }
 
-CheckTurnValidation CheckResponseRules::validatePendingTurn(const Kingdom& activeKingdom,
-                                                            const Kingdom& enemyKingdom,
-                                                            const Board& board,
-                                                            const std::vector<Building>& publicBuildings,
-                                                            int turnNumber,
-                                                            const std::vector<TurnCommand>& pendingCommands,
-                                                            const GameConfig& config) {
+CheckTurnValidation CheckResponseRules::validatePendingTurn(const TurnValidationContext& context,
+                                                            const std::vector<TurnCommand>& pendingCommands) {
     CheckTurnValidation validation;
-    Kingdom restoredActiveKingdom = activeKingdom;
-    Kingdom restoredEnemyKingdom = enemyKingdom;
+    Kingdom restoredActiveKingdom = context.activeKingdom;
+    Kingdom restoredEnemyKingdom = context.enemyKingdom;
     restorePendingMoveOrigins(restoredActiveKingdom, pendingCommands);
 
     const GameSnapshot currentSnapshot = ForwardModel::createSnapshot(
-        board, restoredActiveKingdom, restoredEnemyKingdom, publicBuildings, turnNumber);
+        context.board,
+        restoredActiveKingdom,
+        restoredEnemyKingdom,
+        context.publicBuildings,
+        context.turnNumber);
 
     validation.activeKingInCheck = ForwardModel::isInCheck(
-        currentSnapshot, activeKingdom.id, config.getGlobalMaxRange());
+        currentSnapshot, context.activeKingdom.id, context.config.getGlobalMaxRange());
     validation.projectedKingInCheck = validation.activeKingInCheck;
     validation.hasAnyLegalResponse = hasAnySnapshotLegalResponse(
-        currentSnapshot, activeKingdom.id, config.getGlobalMaxRange())
+        currentSnapshot, context.activeKingdom.id, context.config.getGlobalMaxRange())
         || automaticCoronationResolvesCheck(
-            currentSnapshot, activeKingdom.id, config.getGlobalMaxRange());
+            currentSnapshot, context.activeKingdom.id, context.config.getGlobalMaxRange());
     validation.hasQueuedMove = hasQueuedMoveCommand(pendingCommands);
 
     if (validation.activeKingInCheck && !validation.hasAnyLegalResponse) {
@@ -216,8 +222,8 @@ CheckTurnValidation CheckResponseRules::validatePendingTurn(const Kingdom& activ
 
             prefixCommands.push_back(command);
             finalProjection = PendingTurnProjection::project(
-                board, activeKingdom, enemyKingdom, publicBuildings,
-                turnNumber, prefixCommands, config);
+                context,
+                prefixCommands);
             if (!finalProjection.valid) {
                 validation.valid = false;
                 validation.errorMessage = finalProjection.errorMessage;
@@ -225,7 +231,7 @@ CheckTurnValidation CheckResponseRules::validatePendingTurn(const Kingdom& activ
             }
 
             projectedKingInCheck = ForwardModel::isInCheck(
-                finalProjection.snapshot, activeKingdom.id, config.getGlobalMaxRange());
+                finalProjection.snapshot, context.activeKingdom.id, context.config.getGlobalMaxRange());
         }
 
         finalSnapshot = &finalProjection.snapshot;
@@ -235,7 +241,7 @@ CheckTurnValidation CheckResponseRules::validatePendingTurn(const Kingdom& activ
 
     if (projectedKingInCheck
         && !automaticCoronationResolvesCheck(
-            *finalSnapshot, activeKingdom.id, config.getGlobalMaxRange())) {
+            *finalSnapshot, context.activeKingdom.id, context.config.getGlobalMaxRange())) {
         validation.valid = false;
         validation.errorMessage = validation.activeKingInCheck
             ? "The queued turn still leaves the king in check."
@@ -245,9 +251,9 @@ CheckTurnValidation CheckResponseRules::validatePendingTurn(const Kingdom& activ
 
     const GameSnapshot endOfTurnSnapshot = simulateEndOfTurn(
         *finalSnapshot,
-        activeKingdom.id,
-        config);
-    validation.projectedEndingGold = endOfTurnSnapshot.kingdom(activeKingdom.id).gold;
+        context.activeKingdom.id,
+        context.config);
+    validation.projectedEndingGold = endOfTurnSnapshot.kingdom(context.activeKingdom.id).gold;
     validation.bankrupt = validation.projectedEndingGold < 0;
     if (validation.bankrupt) {
         validation.valid = false;
@@ -257,4 +263,16 @@ CheckTurnValidation CheckResponseRules::validatePendingTurn(const Kingdom& activ
     }
 
     return validation;
+}
+
+CheckTurnValidation CheckResponseRules::validatePendingTurn(const Kingdom& activeKingdom,
+                                                            const Kingdom& enemyKingdom,
+                                                            const Board& board,
+                                                            const std::vector<Building>& publicBuildings,
+                                                            int turnNumber,
+                                                            const std::vector<TurnCommand>& pendingCommands,
+                                                            const GameConfig& config) {
+    return validatePendingTurn(
+        TurnValidationContext{board, activeKingdom, enemyKingdom, publicBuildings, turnNumber, config},
+        pendingCommands);
 }

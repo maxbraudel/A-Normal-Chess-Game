@@ -1,5 +1,5 @@
 #pragma once
-#include "Input/ToolState.hpp"
+#include "Core/ToolState.hpp"
 #include <TGUI/Backend/SFML-Graphics.hpp>
 #include <TGUI/AllWidgets.hpp>
 #include <functional>

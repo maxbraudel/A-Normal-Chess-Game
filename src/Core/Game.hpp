@@ -1,13 +1,9 @@
 #pragma once
 #include "Core/LiveResizeRenderWindow.hpp"
+#include "Core/AITurnRunner.hpp"
 #include <TGUI/Backend/SFML-Graphics.hpp>
 #include <TGUI/AllWidgets.hpp>
 #include <array>
-#include <atomic>
-#include <memory>
-#include <mutex>
-#include <thread>
-#include <ctime>
 #include <vector>
 #include <string>
 
@@ -25,20 +21,31 @@
 #include "Core/GameEngine.hpp"
 #include "Core/TurnDraft.hpp"
 #include "Config/GameConfig.hpp"
-#include "Config/AIConfig.hpp"
 #include "Debug/GameStateDebugRecorder.hpp"
 #include "Systems/CheckSystem.hpp"
-#include "AI/AIController.hpp"
 #include "AI/AIDirector.hpp"
 #include "Input/InputHandler.hpp"
+#include "Input/InputSelectionBookmark.hpp"
 #include "Render/Camera.hpp"
 #include "Render/Renderer.hpp"
+#include "Runtime/AITurnCoordinator.hpp"
+#include "Runtime/FrontendCoordinator.hpp"
+#include "Runtime/InGamePresentationCoordinator.hpp"
+#include "Runtime/MultiplayerJoinCoordinator.hpp"
+#include "Runtime/MultiplayerRuntimeCoordinator.hpp"
+#include "Runtime/PanelActionCoordinator.hpp"
+#include "Runtime/SelectionQueryCoordinator.hpp"
+#include "Runtime/SessionFlow.hpp"
+#include "Runtime/SessionPresentationCoordinator.hpp"
+#include "Runtime/SessionRuntimeCoordinator.hpp"
+#include "Runtime/TurnCoordinator.hpp"
+#include "Runtime/TurnLifecycleCoordinator.hpp"
+#include "Runtime/UICallbackCoordinator.hpp"
 #include "Assets/AssetManager.hpp"
 #include "UI/UIManager.hpp"
 #include "Core/LocalPlayerContext.hpp"
 #include "Core/GameSessionConfig.hpp"
-#include "Multiplayer/MultiplayerClient.hpp"
-#include "Multiplayer/MultiplayerServer.hpp"
+#include "Multiplayer/MultiplayerRuntime.hpp"
 #include "Save/SaveManager.hpp"
 #include "Systems/CheckResponseRules.hpp"
 
@@ -65,43 +72,27 @@ private:
     bool saveGame();
     void commitPlayerTurn();
     void resetPlayerTurn();
-    void startAITurnIfNeeded();
-    void pollAITurn();
     void discardPendingAITurn();
     void refreshTurnPhase();
     void stopMultiplayer();
-    bool startMultiplayerHostIfNeeded(const GameSessionConfig& session, std::string* errorMessage = nullptr);
     bool joinMultiplayer(const JoinMultiplayerRequest& request, std::string* errorMessage = nullptr);
-    bool joinMultiplayerInternal(const JoinMultiplayerRequest& request,
-                                 bool preserveLanClientContext,
-                                 std::string* errorMessage = nullptr);
     bool reconnectToMultiplayerHost(std::string* errorMessage = nullptr);
     void updateMultiplayer();
-    void processMultiplayerServerEvent(const MultiplayerServer::Event& event);
-    void processMultiplayerClientEvent(const MultiplayerClient::Event& event);
-    bool submitClientTurn(std::string* errorMessage = nullptr);
-    bool applyRemoteTurnSubmission(const std::vector<TurnCommand>& commands, std::string* errorMessage = nullptr);
     void commitAuthoritativeTurn();
     bool pushSnapshotToRemote(std::string* errorMessage = nullptr);
-    void prepareForClientConnectionAttempt(bool preserveLanClientContext);
-    void cacheReconnectRequest(const JoinMultiplayerRequest& request);
-    void clearReconnectState();
-    void showLanClientDisconnectAlert(const std::string& title,
-                                      const std::string& message);
     void centerCameraOnKingdom(KingdomId kingdom);
     void configureLocalPlayerContext(const GameSessionConfig& session);
+    FrontendRuntimeState makeFrontendRuntimeState() const;
     bool isLocalPlayerTurn() const;
     bool canLocalPlayerIssueCommands() const;
     KingdomId localPerspectiveKingdom() const;
     InGameHudPresentation buildInGameHudPresentation() const;
     bool isMultiplayerSessionReady() const;
-    void updateMultiplayerPresentation();
     void returnToMainMenu();
     void openInGameMenu();
     void closeInGameMenu();
     void toggleInGameMenu();
     bool isInGameMenuOpen() const;
-    GameMenuPresentation buildGameMenuPresentation() const;
     bool isLanHost() const { return m_localPlayerContext.mode == LocalSessionMode::LanHost; }
     bool isLanClient() const { return m_localPlayerContext.mode == LocalSessionMode::LanClient; }
     std::string participantName(KingdomId id) const;
@@ -109,19 +100,23 @@ private:
 
     void setupUICallbacks();
     void updateUIState();
+    UICallbackRuntimeState makeUICallbackRuntimeState() const;
+    UICallbackCoordinatorDependencies makeUICallbackCoordinatorDependencies();
+    SessionRuntimeCallbacks makeSessionRuntimeCallbacks();
+    TurnLifecycleCallbacks makeTurnLifecycleCallbacks();
     CheckTurnValidation validateActivePendingTurn() const;
-    bool isActiveKingInCheckForRules() const;
     bool canQueueNonMoveActions() const;
     InteractionPermissions currentInteractionPermissions(const CheckTurnValidation* validation = nullptr) const;
+    TurnValidationContext authoritativeTurnContext() const;
     InputContext buildInputContext(const InteractionPermissions& permissions);
     bool shouldUseTurnDraft() const;
     void invalidateTurnDraft();
     void ensureTurnDraftUpToDate();
+    SelectionQueryView makeSelectionQueryView();
     InputSelectionBookmark captureSelectionBookmark() const;
     void reconcileSelectionBookmark(const InputSelectionBookmark& bookmark);
-    Piece* findPieceById(int pieceId);
-    Building* findBuildingById(int buildingId);
-    Building* findBuildingForBookmark(const InputSelectionBookmark& bookmark);
+    Piece* selectedDisplayedPiece();
+    Building* selectedDisplayedBuilding();
     void activateSelectTool();
     void refreshBuildableCellsOverlay(const InteractionPermissions& permissions);
     Board& displayedBoard();
@@ -180,23 +175,8 @@ private:
     TurnPhase m_turnPhase = TurnPhase::WhiteTurn;
     GameClock m_clock;
 
-    struct AsyncAITaskState {
-        std::mutex mutex;
-        bool ready = false;
-        std::uint64_t generation = 0;
-        KingdomId activeKingdom = KingdomId::Black;
-        int turnNumber = 0;
-        AITurnPlan plan;
-        AIDirectorPlan directorPlan;
-        bool usedDirector = false;
-    };
-
-    std::shared_ptr<AsyncAITaskState> m_aiTask;
-    std::atomic<std::uint64_t> m_aiTaskGeneration{0};
-
     // Config
     GameConfig m_config;
-    AIConfig m_aiConfig;
 
     GameEngine m_engine;
     TurnDraft m_turnDraft;
@@ -204,9 +184,9 @@ private:
     GameStateDebugRecorder m_debugRecorder;
 
     // AI
-    AIController m_ai;
     AIDirector m_aiDirector;
-    bool m_useNewAI = true;
+    AITurnRunner m_aiTurnRunner;
+    AITurnCoordinator m_aiTurnCoordinator;
 
     // Input/Render/UI
     InputHandler m_input;
@@ -215,21 +195,16 @@ private:
     AssetManager m_assets;
     UIManager m_uiManager;
     SaveManager m_saveManager;
-    struct ClientReconnectState {
-        bool available = false;
-        bool awaitingReconnect = false;
-        bool reconnectAttemptInProgress = false;
-        JoinMultiplayerRequest request;
-        std::string lastErrorMessage;
-    };
-
-    ClientReconnectState m_clientReconnectState;
     LocalPlayerContext m_localPlayerContext;
-    MultiplayerServer m_multiplayerServer;
-    MultiplayerClient m_multiplayerClient;
-    bool m_lanHostRemoteSessionEstablished = false;
+    MultiplayerRuntime m_multiplayer;
+    SessionFlow m_sessionFlow;
+    MultiplayerJoinCoordinator m_multiplayerJoinCoordinator;
+    TurnCoordinator m_turnCoordinator;
     bool m_waitingForRemoteTurnResult = false;
-    std::string m_multiplayerHostJoinHint;
+    SessionRuntimeCoordinator m_sessionRuntimeCoordinator;
+    TurnLifecycleCoordinator m_turnLifecycleCoordinator;
+    PanelActionCoordinator m_panelActionCoordinator;
+    MultiplayerRuntimeCoordinator m_multiplayerRuntimeCoordinator;
     std::vector<sf::Vector2i> m_buildableAnchorCellsOverlay;
     std::vector<sf::Vector2i> m_buildableCellsOverlay;
     std::uint64_t m_buildableCellsOverlayRevision = 0;

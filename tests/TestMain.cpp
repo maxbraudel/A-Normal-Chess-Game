@@ -30,12 +30,32 @@
 #include "Core/GameState.hpp"
 #include "Core/GameStateValidator.hpp"
 #include "Core/TurnDraft.hpp"
+#include "Debug/GameStateDebugRecorder.hpp"
+#include "Input/InputHandler.hpp"
 #include "Input/LayeredSelection.hpp"
 #include "Render/StructureOverlay.hpp"
 #include "Multiplayer/MultiplayerClient.hpp"
+#include "Multiplayer/MultiplayerRuntime.hpp"
 #include "Multiplayer/PasswordUtils.hpp"
 #include "Multiplayer/Protocol.hpp"
 #include "Multiplayer/MultiplayerServer.hpp"
+#include "Runtime/AITurnCoordinator.hpp"
+#include "Runtime/FrontendCoordinator.hpp"
+#include "Runtime/InGamePresentationCoordinator.hpp"
+#include "Runtime/InputCoordinator.hpp"
+#include "Runtime/MultiplayerJoinCoordinator.hpp"
+#include "Runtime/MultiplayerEventCoordinator.hpp"
+#include "Runtime/MultiplayerRuntimeCoordinator.hpp"
+#include "Runtime/PanelActionCoordinator.hpp"
+#include "Runtime/RenderCoordinator.hpp"
+#include "Runtime/SelectionQueryCoordinator.hpp"
+#include "Runtime/SessionFlow.hpp"
+#include "Runtime/SessionPresentationCoordinator.hpp"
+#include "Runtime/SessionRuntimeCoordinator.hpp"
+#include "Runtime/TurnCoordinator.hpp"
+#include "Runtime/TurnLifecycleCoordinator.hpp"
+#include "Runtime/UICallbackCoordinator.hpp"
+#include "Runtime/UpdateCoordinator.hpp"
 #include "Save/SaveManager.hpp"
 #include "Systems/BuildOverlayRules.hpp"
 #include "Systems/BuildSystem.hpp"
@@ -53,6 +73,7 @@
 #include "Systems/TurnSystem.hpp"
 #include "UI/HUDLayout.hpp"
 #include "UI/InGameViewModelBuilder.hpp"
+#include "UI/MainMenuUI.hpp"
 #include "UI/ToolBar.hpp"
 #include "Units/MovementRules.hpp"
 #include "Units/Piece.hpp"
@@ -1610,6 +1631,1283 @@ void testSessionValidatorRejectsInvalidOrdering() {
             "LAN client sessions should use the single-local HUD rules.");
     }
 
+    void testMultiplayerRuntimeReconnectStateLifecycle() {
+        MultiplayerRuntime runtime;
+        const MultiplayerJoinCredentials credentials{"127.0.0.1", 4242, "secret"};
+
+        runtime.cacheReconnectRequest(credentials);
+        expect(runtime.hasReconnectRequest(),
+            "Caching reconnect credentials should make the reconnect request available.");
+        expect(runtime.reconnectRequest().host == "127.0.0.1"
+         && runtime.reconnectRequest().port == 4242
+         && runtime.reconnectRequest().password == "secret",
+            "Cached reconnect credentials should round-trip through the runtime.");
+        expect(!runtime.awaitingReconnect(),
+            "Caching reconnect credentials should not mark the runtime as awaiting reconnect.");
+
+        runtime.noteReconnectAwaiting("Lost host connection.");
+        expect(runtime.awaitingReconnect(),
+            "Disconnect handling should mark the runtime as awaiting reconnect.");
+        expect(runtime.reconnectLastErrorMessage() == "Lost host connection.",
+            "The reconnect state should preserve the last disconnect reason.");
+
+        runtime.noteReconnectRecovered();
+        expect(!runtime.awaitingReconnect(),
+            "A recovered reconnect should clear the awaiting-reconnect flag.");
+        expect(runtime.reconnectLastErrorMessage().empty(),
+            "A recovered reconnect should clear the last disconnect reason.");
+
+        runtime.clearReconnectState();
+        expect(!runtime.hasReconnectRequest(),
+            "Clearing reconnect state should forget the cached reconnect request.");
+    }
+
+    void testSessionFlowStartsSavesAndLoadsSession() {
+        GameConfig config;
+        GameEngine engine;
+        SaveManager saveManager;
+        MultiplayerRuntime multiplayer;
+        GameStateDebugRecorder debugRecorder;
+        const auto tempDir = std::filesystem::temp_directory_path()
+            / ("anormalchessgame_sessionflow_"
+                + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        std::filesystem::create_directories(tempDir);
+
+        try {
+            const std::string saveName = "session_flow_roundtrip";
+            SessionFlow flow(engine,
+                             saveManager,
+                             multiplayer,
+                             debugRecorder,
+                             config,
+                             tempDir.string());
+            GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, saveName);
+
+            std::string error;
+            expect(flow.startNewSession(session, &error), error);
+            expect(flow.saveAuthoritativeSession(true, &error), error);
+            expect(std::filesystem::exists(tempDir / (saveName + ".json")),
+                   "SessionFlow should write the authoritative save file into the configured directory.");
+
+            GameEngine restoredEngine;
+            SaveManager restoredSaveManager;
+            MultiplayerRuntime restoredMultiplayer;
+            GameStateDebugRecorder restoredDebugRecorder;
+            SessionFlow restoredFlow(restoredEngine,
+                                     restoredSaveManager,
+                                     restoredMultiplayer,
+                                     restoredDebugRecorder,
+                                     config,
+                                     tempDir.string());
+
+            expect(restoredFlow.loadSession(saveName, &error), error);
+            expect(restoredEngine.gameName() == saveName,
+                   "Loading through SessionFlow should restore the saved session name.");
+            expect(restoredEngine.turnSystem().getTurnNumber() == 1,
+                   "Loading a freshly saved session through SessionFlow should restore the starting turn number.");
+            expect(restoredEngine.validate(&error), error);
+        } catch (...) {
+            std::filesystem::remove_all(tempDir);
+            throw;
+        }
+
+        std::filesystem::remove_all(tempDir);
+    }
+
+    void testFrontendCoordinatorBuildsHudAndLocksWaitingTurns() {
+        FrontendRuntimeState state;
+        state.gameState = GameState::Playing;
+        state.localPlayerContext = makeLanClientLocalPlayerContext();
+        state.activeKingdom = KingdomId::Black;
+        state.clientAuthenticated = true;
+
+        const InGameHudPresentation hud = FrontendCoordinator::buildInGameHudPresentation(state);
+        expect(hud.statsKingdom == KingdomId::Black,
+            "FrontendCoordinator should pin HUD stats to the local LAN client kingdom on the local turn.");
+        expect(hud.showTurnPointIndicators,
+            "FrontendCoordinator should keep turn-point indicators visible on the local turn.");
+        expect(hud.turnIndicatorTone == InGameTurnIndicatorTone::LocalTurn,
+            "FrontendCoordinator should highlight the local turn when the local LAN client can act.");
+
+        const InteractionPermissions activePermissions =
+            FrontendCoordinator::currentInteractionPermissions(state, std::nullopt);
+        expect(activePermissions.canIssueCommands,
+            "FrontendCoordinator should allow commands when the local LAN client is authenticated and not waiting.");
+        expect(activePermissions.canQueueNonMoveActions,
+            "FrontendCoordinator should allow non-move actions when no projected check restriction is present.");
+
+        state.waitingForRemoteTurnResult = true;
+        const InteractionPermissions waitingPermissions =
+            FrontendCoordinator::currentInteractionPermissions(state, std::nullopt);
+        expect(!waitingPermissions.canIssueCommands,
+            "FrontendCoordinator should lock commands while waiting for the host to confirm the submitted turn.");
+        expect(!waitingPermissions.canQueueNonMoveActions,
+            "FrontendCoordinator should also lock queued non-move actions while waiting for host confirmation.");
+        expect(waitingPermissions.canInspectWorld,
+            "FrontendCoordinator should still allow world inspection while waiting for remote turn confirmation.");
+    }
+
+    void testFrontendCoordinatorBuildsProjectedDashboardAndPiecePanel() {
+        GameConfig config;
+        GameEngine engine;
+        GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman,
+                                                                 "frontend_dashboard_projection_test");
+
+        std::string error;
+        expect(engine.startNewSession(session, config, &error), error);
+
+        FrontendRuntimeState state;
+        state.gameState = GameState::Playing;
+        state.localPlayerContext = makeLocalPlayerContextForSession(session);
+        state.activeKingdom = engine.turnSystem().getActiveKingdom();
+
+        const InteractionPermissions permissions =
+            FrontendCoordinator::currentInteractionPermissions(state, std::nullopt);
+        const InGameHudPresentation hud = FrontendCoordinator::buildInGameHudPresentation(state);
+
+        std::array<Kingdom, kNumKingdoms> projectedKingdoms = engine.kingdoms();
+        projectedKingdoms[kingdomIndex(KingdomId::White)].gold += 37;
+        projectedKingdoms[kingdomIndex(KingdomId::White)].pieces.push_back(
+            Piece(9999, PieceType::Pawn, KingdomId::White, {0, 0}));
+
+        CheckTurnValidation validation;
+        validation.valid = false;
+        validation.bankrupt = true;
+        validation.projectedEndingGold = -5;
+
+        const FrontendDashboardBindings dashboardBindings{
+            engine,
+            engine.board(),
+            projectedKingdoms,
+            engine.publicBuildings(),
+            config
+        };
+        const InGameViewModel projectedViewModel = FrontendCoordinator::buildDashboardViewModel(
+            state,
+            dashboardBindings,
+            permissions,
+            validation,
+            hud,
+            true);
+
+        expect(projectedViewModel.activeGold == projectedKingdoms[kingdomIndex(KingdomId::White)].gold,
+            "FrontendCoordinator should surface projected gold from the displayed kingdom state.");
+        expect(projectedViewModel.activeTroops == projectedKingdoms[kingdomIndex(KingdomId::White)].pieceCount(),
+            "FrontendCoordinator should surface projected troop counts from the displayed kingdom state.");
+        expect(projectedViewModel.balanceMetrics[0].whiteValue
+                == projectedKingdoms[kingdomIndex(KingdomId::White)].gold,
+            "FrontendCoordinator should project white balance metrics from the displayed kingdom state.");
+        expect(!projectedViewModel.canEndTurn,
+            "FrontendCoordinator should keep end-turn disabled when pending validation is invalid.");
+        expect(!projectedViewModel.alerts.empty()
+                && projectedViewModel.alerts.front().text.find("Bankruptcy") != std::string::npos,
+            "FrontendCoordinator should surface pending bankruptcy warnings in the dashboard model.");
+
+        const sf::Vector2i extraPieceCell = findEmptyTraversableCell(engine);
+        Piece& selectedPiece = addPieceToBoard(engine.kingdom(KingdomId::White),
+                                               engine.board(),
+                                               9998,
+                                               PieceType::Pawn,
+                                               KingdomId::White,
+                                               extraPieceCell);
+
+        const FrontendPanelBindings panelBindings{
+            ToolState::Select,
+            engine.board(),
+            engine.turnSystem(),
+            config,
+            &selectedPiece,
+            nullptr,
+            nullptr
+        };
+        const FrontendLeftPanelPresentation panelPresentation =
+            FrontendCoordinator::buildLeftPanelPresentation(state, panelBindings, permissions);
+
+        expect(panelPresentation.kind == FrontendLeftPanelKind::Piece,
+            "FrontendCoordinator should route a selected piece to the piece panel presentation.");
+        expect(panelPresentation.piece == &selectedPiece,
+            "FrontendCoordinator should preserve the selected piece pointer in the panel presentation.");
+        expect(panelPresentation.allowUpgrade,
+            "FrontendCoordinator should allow upgrades on a locally controlled selected piece when actions are unlocked.");
+        expect(panelPresentation.allowDisband,
+            "FrontendCoordinator should allow disband on a locally controlled non-king piece when no conflicting action is queued.");
+    }
+
+    void testMultiplayerEventCoordinatorPlansAlertsAndDisconnects() {
+        MultiplayerServer::Event hostEvent;
+        hostEvent.type = MultiplayerServer::Event::Type::ClientDisconnected;
+        hostEvent.message = "Black disconnected from the host.";
+
+        const MultiplayerServerEventPlan hostPlan = MultiplayerEventCoordinator::planServerEvent(
+            hostEvent,
+            MultiplayerHostEventState{8, true});
+        expect(hostPlan.remoteSessionEstablished.has_value() && !*hostPlan.remoteSessionEstablished,
+            "MultiplayerEventCoordinator should clear the host remote-session-established flag after a disconnect.");
+        expect(hostPlan.logMessage.has_value() && *hostPlan.logMessage == hostEvent.message,
+            "MultiplayerEventCoordinator should preserve the host disconnect log message.");
+        expect(hostPlan.alert.has_value() && hostPlan.alert->title == "Black Disconnected",
+            "MultiplayerEventCoordinator should raise a blocking host alert after an established Black disconnect.");
+
+        MultiplayerClient::Event clientEvent;
+        clientEvent.type = MultiplayerClient::Event::Type::Disconnected;
+        const MultiplayerClientEventPlan clientPlan = MultiplayerEventCoordinator::planClientEvent(clientEvent);
+        expect(clientPlan.type == MultiplayerClientEventPlan::Type::Disconnect,
+            "MultiplayerEventCoordinator should classify disconnected client packets as disconnect events.");
+        expect(clientPlan.title == "Host Disconnected",
+            "MultiplayerEventCoordinator should expose the host disconnect alert title.");
+        expect(clientPlan.message == "Multiplayer host disconnected.",
+            "MultiplayerEventCoordinator should provide the default disconnect message when the host transport closes silently.");
+
+        const MultiplayerAlertPlan reconnectAlert = MultiplayerEventCoordinator::buildClientDisconnectAlert(
+            MultiplayerReconnectDialogState{true},
+            clientPlan.title,
+            clientPlan.message);
+        expect(reconnectAlert.primaryAction.kind == MultiplayerAlertActionKind::Reconnect,
+            "MultiplayerEventCoordinator should prioritize reconnect when a cached host request exists.");
+        expect(reconnectAlert.secondaryAction.has_value()
+                && reconnectAlert.secondaryAction->kind == MultiplayerAlertActionKind::ReturnToMainMenu,
+            "MultiplayerEventCoordinator should keep return-to-menu as the fallback disconnect action.");
+    }
+
+    void testMultiplayerEventCoordinatorRestoresSnapshotsAndClientState() {
+        GameConfig config;
+        GameEngine engine;
+        GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman,
+                                                                 "multiplayer_event_restore_test");
+
+        std::string error;
+        expect(engine.startNewSession(session, config, &error), error);
+
+        SaveManager saveManager;
+        const std::string serializedSnapshot = saveManager.serialize(engine.createSaveData());
+
+        GameEngine restoredEngine;
+        expect(MultiplayerEventCoordinator::restoreClientSnapshot(
+                   serializedSnapshot,
+                   saveManager,
+                   restoredEngine,
+                   config,
+                   &error),
+               error);
+        expect(restoredEngine.gameName() == engine.gameName(),
+            "MultiplayerEventCoordinator should restore the serialized multiplayer snapshot into the engine.");
+        expect(restoredEngine.validate(&error), error);
+
+        MultiplayerRuntime runtime;
+        runtime.noteReconnectAwaiting("Connection lost.");
+        InputHandler input;
+        input.setTool(ToolState::Build);
+        LocalPlayerContext localPlayerContext;
+        bool waitingForRemoteTurnResult = true;
+
+        MultiplayerEventCoordinator::applyClientSnapshotState(
+            runtime,
+            input,
+            localPlayerContext,
+            waitingForRemoteTurnResult);
+        expect(localPlayerContext.mode == LocalSessionMode::LanClient,
+            "MultiplayerEventCoordinator should restore LAN client local context after a host snapshot arrives.");
+        expect(!waitingForRemoteTurnResult,
+            "MultiplayerEventCoordinator should clear remote-turn waiting after a fresh host snapshot arrives.");
+        expect(!runtime.awaitingReconnect(),
+            "MultiplayerEventCoordinator should clear the reconnect-awaiting flag after a successful snapshot restore.");
+
+        input.setTool(ToolState::Build);
+        waitingForRemoteTurnResult = true;
+        MultiplayerEventCoordinator::applyClientDisconnectState(
+            runtime,
+            restoredEngine,
+            input,
+            localPlayerContext,
+            waitingForRemoteTurnResult);
+        expect(localPlayerContext.mode == LocalSessionMode::LanClient,
+            "MultiplayerEventCoordinator should preserve LAN client perspective after a disconnect reset.");
+        expect(!waitingForRemoteTurnResult,
+            "MultiplayerEventCoordinator should clear remote-turn waiting during disconnect cleanup.");
+        expect(input.getCurrentTool() == ToolState::Select,
+            "MultiplayerEventCoordinator should force select mode during disconnect cleanup.");
+        expect(restoredEngine.turnSystem().getPendingCommands().empty(),
+            "MultiplayerEventCoordinator should clear pending commands during disconnect cleanup.");
+    }
+
+    void testMultiplayerRuntimeCoordinatorBuildsDialogActions() {
+        bool returnedToMainMenu = false;
+        bool reconnectAttemptInProgress = false;
+        bool reconnectCalled = false;
+        std::string shownReconnectFailureTitle;
+        std::string shownReconnectFailureMessage;
+
+        MultiplayerAlertActionBindings bindings;
+        bindings.onReturnToMainMenu = [&returnedToMainMenu]() {
+            returnedToMainMenu = true;
+        };
+        bindings.onReconnectToMultiplayerHost =
+            [&reconnectCalled](std::string* errorMessage) {
+                reconnectCalled = true;
+                if (errorMessage) {
+                    *errorMessage = "Timed out";
+                }
+                return false;
+            };
+        bindings.onShowReconnectFailure =
+            [&shownReconnectFailureTitle, &shownReconnectFailureMessage](const std::string& title,
+                                                                         const std::string& message) {
+                shownReconnectFailureTitle = title;
+                shownReconnectFailureMessage = message;
+            };
+        bindings.reconnectAttemptInProgress = [&reconnectAttemptInProgress]() {
+            return reconnectAttemptInProgress;
+        };
+        bindings.setReconnectAttemptInProgress = [&reconnectAttemptInProgress](bool inProgress) {
+            reconnectAttemptInProgress = inProgress;
+        };
+
+        const MultiplayerDialogAction returnAction = MultiplayerRuntimeCoordinator::buildDialogAction(
+            MultiplayerAlertActionPlan{MultiplayerAlertActionKind::ReturnToMainMenu, "Return"},
+            bindings);
+        returnAction.callback();
+        expect(returnedToMainMenu,
+            "MultiplayerRuntimeCoordinator should preserve the return-to-menu alert action callback.");
+
+        const MultiplayerDialogAction reconnectAction = MultiplayerRuntimeCoordinator::buildDialogAction(
+            MultiplayerAlertActionPlan{MultiplayerAlertActionKind::Reconnect, "Reconnect"},
+            bindings);
+        reconnectAction.callback();
+        expect(reconnectCalled,
+            "MultiplayerRuntimeCoordinator should invoke the reconnect callback when the alert requests a reconnect.");
+        expect(!reconnectAttemptInProgress,
+            "MultiplayerRuntimeCoordinator should clear the reconnect-in-progress flag again when reconnect fails immediately.");
+        expect(shownReconnectFailureTitle == "Reconnect Failed",
+            "MultiplayerRuntimeCoordinator should surface the reconnect failure alert title after a failed reconnect attempt.");
+        expect(shownReconnectFailureMessage == MultiplayerEventCoordinator::reconnectFailureMessage("Timed out"),
+            "MultiplayerRuntimeCoordinator should surface the standard reconnect failure message after a failed reconnect attempt.");
+
+        reconnectCalled = false;
+        reconnectAttemptInProgress = true;
+        reconnectAction.callback();
+        expect(!reconnectCalled,
+            "MultiplayerRuntimeCoordinator should ignore reconnect alert actions while a reconnect attempt is already in progress.");
+
+        const MultiplayerDialogAction continueAction = MultiplayerRuntimeCoordinator::buildDialogAction(
+            MultiplayerAlertActionPlan{MultiplayerAlertActionKind::Continue, "Continue"},
+            bindings);
+        expect(!continueAction.callback,
+            "MultiplayerRuntimeCoordinator should keep continue-only alert actions as passive buttons without side effects.");
+    }
+
+    void testInputCoordinatorPlansGameplayShortcuts() {
+        InputFrameState state;
+        state.gameState = GameState::Playing;
+        state.permissions.canIssueCommands = true;
+        state.permissions.canUseToolbar = true;
+        state.permissions.canInspectWorld = true;
+
+        sf::Event escapeEvent{};
+        escapeEvent.type = sf::Event::KeyPressed;
+        escapeEvent.key.code = sf::Keyboard::Escape;
+        expect(InputCoordinator::planPreGuiAction(escapeEvent, state).kind
+                   == InputPreGuiActionKind::ToggleInGameMenu,
+               "InputCoordinator should route Escape to the in-game menu in interactive gameplay states.");
+
+        sf::Event spaceEvent{};
+        spaceEvent.type = sf::Event::KeyPressed;
+        spaceEvent.key.code = sf::Keyboard::Space;
+        expect(InputCoordinator::planPreGuiAction(spaceEvent, state).kind
+                   == InputPreGuiActionKind::CommitTurn,
+               "InputCoordinator should route Space to commit the local turn when commands are allowed.");
+
+        state.inGameMenuOpen = true;
+        expect(InputCoordinator::planPreGuiAction(spaceEvent, state).kind
+                   == InputPreGuiActionKind::SkipEvent,
+               "InputCoordinator should swallow blocked gameplay shortcuts while the in-game menu is open.");
+
+        state.inGameMenuOpen = false;
+        state.permissions.canUseToolbar = false;
+        sf::Event rightClickEvent{};
+        rightClickEvent.type = sf::Event::MouseButtonPressed;
+        rightClickEvent.mouseButton.button = sf::Mouse::Right;
+        expect(InputCoordinator::planPreGuiAction(rightClickEvent, state).kind
+                   == InputPreGuiActionKind::SkipEvent,
+               "InputCoordinator should still swallow right-click quick-select when the toolbar is locked.");
+
+        state.permissions.canUseToolbar = true;
+        expect(InputCoordinator::planPreGuiAction(rightClickEvent, state).kind
+                   == InputPreGuiActionKind::ActivateSelectTool,
+               "InputCoordinator should route right click to the select tool when toolbar access is allowed.");
+
+        sf::Event tabEvent{};
+        tabEvent.type = sf::Event::KeyPressed;
+        tabEvent.key.code = sf::Keyboard::Tab;
+        expect(InputCoordinator::planPreGuiAction(tabEvent, state).kind
+                   == InputPreGuiActionKind::SkipEvent,
+               "InputCoordinator should block GUI navigation keys before they leak into the gameplay loop.");
+    }
+
+    void testInputCoordinatorRoutesWorldInputAfterGuiFiltering() {
+        InputFrameState state;
+        state.gameState = GameState::Playing;
+        state.permissions.canInspectWorld = true;
+
+        expect(InputCoordinator::planPostGuiAction(state, false, false).kind
+                   == InputPostGuiActionKind::DispatchToWorld,
+               "InputCoordinator should dispatch events to world input when gameplay inspection is available.");
+        expect(InputCoordinator::planPostGuiAction(state, true, false).kind
+                   == InputPostGuiActionKind::SkipEvent,
+               "InputCoordinator should stop world input after GUI widgets consume the event.");
+
+        state.overlaysVisible = true;
+        expect(InputCoordinator::planPostGuiAction(state, false, false).kind
+                   == InputPostGuiActionKind::SkipEvent,
+               "InputCoordinator should block world input while modal multiplayer overlays are visible.");
+
+        state.overlaysVisible = false;
+        state.inGameMenuOpen = true;
+        expect(InputCoordinator::planPostGuiAction(state, false, false).kind
+                   == InputPostGuiActionKind::SkipEvent,
+               "InputCoordinator should block world input while the in-game menu is open.");
+
+        state.inGameMenuOpen = false;
+        expect(InputCoordinator::planPostGuiAction(state, false, true).kind
+                   == InputPostGuiActionKind::SkipEvent,
+               "InputCoordinator should block world input when the cursor is over a UI-owned world-space region.");
+
+        state.gameState = GameState::MainMenu;
+        expect(InputCoordinator::planPostGuiAction(state, false, false).kind
+                   == InputPostGuiActionKind::SkipEvent,
+               "InputCoordinator should never dispatch main-menu events into the world input handler.");
+    }
+
+    void testRenderCoordinatorBuildsSelectionAndMoveOverlayPlan() {
+        GameConfig config;
+
+        Piece selectedPiece(77, PieceType::King, KingdomId::White, {4, 5});
+        WorldRenderState state;
+        state.gameState = GameState::Playing;
+        state.activeTool = ToolState::Select;
+        state.permissions.canShowActionOverlays = true;
+        state.activeKingdom = KingdomId::White;
+        state.selectedPiece = &selectedPiece;
+        state.selectedOriginDangerous = true;
+        state.validMoves = {{5, 5}, {6, 5}};
+        state.dangerMoves = {{4, 6}};
+        state.capturePreviewPieceIds.insert(999);
+
+        TurnCommand moveCommand = makeMoveCommand(selectedPiece.id, selectedPiece.position, {5, 5});
+        const WorldRenderPlan plan = RenderCoordinator::buildWorldRenderPlan(
+            state,
+            std::vector<TurnCommand>{moveCommand},
+            {},
+            {},
+            config);
+
+        expect(plan.renderWorld,
+            "RenderCoordinator should render the world during interactive in-game states.");
+        expect(plan.showOrientationCheckerboard,
+            "RenderCoordinator should request the orientation checkerboard when a piece is selected in select mode.");
+        expect(plan.capturePreviewPieceIds.count(999) == 1,
+            "RenderCoordinator should preserve the capture-preview skip-piece set for the renderer.");
+        expect(plan.selectedOriginCell.has_value()
+                && plan.selectedOriginCell->origin == selectedPiece.position,
+            "RenderCoordinator should highlight the selected origin cell for kings and queued moves.");
+        expect(plan.selectedOriginCell.has_value()
+                && plan.selectedOriginCell->color == sf::Color(255, 40, 40, 90),
+            "RenderCoordinator should color dangerous origin cells in red.");
+        expect(plan.highlightedCells.size() == 2,
+            "RenderCoordinator should expose reachable move cells for the selected local piece.");
+        expect(plan.dangerCells.size() == 1,
+            "RenderCoordinator should expose dangerous move cells separately from standard reachable cells.");
+        expect(plan.selectionFrames.size() == 1
+                && plan.selectionFrames.front().origin == selectedPiece.position,
+            "RenderCoordinator should add a selection frame for the selected piece.");
+        expect(plan.actionMarkers.size() == 1
+                && plan.actionMarkers.front().iconName == "move_ongoing",
+            "RenderCoordinator should add move action markers for queued movement commands.");
+    }
+
+    void testRenderCoordinatorBuildsBuildPreviewAndPendingBuildPlan() {
+        GameConfig config;
+
+        WorldRenderState state;
+        state.gameState = GameState::Playing;
+        state.activeTool = ToolState::Build;
+        state.permissions.canShowActionOverlays = true;
+        state.permissions.canShowBuildPreview = true;
+        state.permissions.canQueueNonMoveActions = true;
+        state.hasBuildPreview = true;
+        state.buildPreviewType = BuildingType::Barracks;
+        state.buildPreviewAnchorCell = {12, 12};
+        state.buildPreviewRotationQuarterTurns = 0;
+
+        const TurnCommand pendingBuild = makeBuildCommand(BuildingType::Barracks, {11, 11});
+        const std::vector<sf::Vector2i> buildableAnchors{{12, 12}};
+        const std::vector<sf::Vector2i> buildableCells{{12, 12}, {13, 12}};
+        const WorldRenderPlan plan = RenderCoordinator::buildWorldRenderPlan(
+            state,
+            std::vector<TurnCommand>{pendingBuild},
+            buildableAnchors,
+            buildableCells,
+            config);
+
+        expect(plan.liveBuildPreview.has_value(),
+            "RenderCoordinator should expose the live build preview when build-preview rendering is allowed.");
+        expect(plan.liveBuildPreview->valid,
+            "RenderCoordinator should mark the live build preview valid when its anchor cell is currently buildable.");
+        expect(plan.highlightedCells.size() == buildableCells.size(),
+            "RenderCoordinator should surface buildable overlay cells while the build tool is active.");
+        expect(plan.pendingBuildPreviews.size() == 1,
+            "RenderCoordinator should expose queued build previews when pending commands are rendered concretely as overlays.");
+        expect(plan.actionMarkers.size() == 1
+                && plan.actionMarkers.front().iconName == "build_ongoing",
+            "RenderCoordinator should add build action markers for queued build commands.");
+    }
+
+    void testUpdateCoordinatorPlansPlayingTick() {
+        const FrameUpdatePlan plan = UpdateCoordinator::planFrameUpdate(FrameUpdateState{
+            GameState::Playing,
+            true,
+            true,
+            false,
+            true
+        });
+
+        expect(plan.syncTurnDraft,
+            "UpdateCoordinator should keep turn-draft synchronization enabled on every gameplay tick.");
+        expect(plan.updateCamera,
+            "UpdateCoordinator should allow camera movement when permissions keep it enabled.");
+        expect(plan.updateMultiplayer,
+            "UpdateCoordinator should tick multiplayer while the game is actively playing.");
+        expect(plan.runAITurn,
+            "UpdateCoordinator should plan AI polling during playing ticks when the active kingdom is AI-controlled.");
+        expect(plan.updateUI && plan.updateUIManager,
+            "UpdateCoordinator should refresh both in-game UI state and UI animations during playing ticks.");
+    }
+
+    void testUpdateCoordinatorPlansPausedAndMenuTicks() {
+        const FrameUpdatePlan pausedPlan = UpdateCoordinator::planFrameUpdate(FrameUpdateState{
+            GameState::Paused,
+            false,
+            false,
+            false,
+            true
+        });
+        expect(!pausedPlan.runAITurn,
+            "UpdateCoordinator should never run AI ticks while the game is paused.");
+        expect(pausedPlan.updateUI && pausedPlan.updateUIManager,
+            "UpdateCoordinator should keep paused HUD and menu UI refreshed.");
+
+        const FrameUpdatePlan menuLanPlan = UpdateCoordinator::planFrameUpdate(FrameUpdateState{
+            GameState::MainMenu,
+            false,
+            false,
+            true,
+            false
+        });
+        expect(menuLanPlan.updateMultiplayer,
+            "UpdateCoordinator should keep LAN client transport updating even outside active gameplay states.");
+        expect(!menuLanPlan.updateUI && !menuLanPlan.updateUIManager,
+            "UpdateCoordinator should not run in-game UI refreshes while the game is in the main menu.");
+    }
+
+    void testAITurnCoordinatorPlansStartAndCompletion() {
+        AITurnRuntimeState runtimeState;
+        runtimeState.gameState = GameState::Playing;
+        runtimeState.activeAI = true;
+        runtimeState.activeKingdom = KingdomId::Black;
+        runtimeState.turnNumber = 7;
+
+        const AITurnStartPlan startPlan = AITurnCoordinator::buildStartPlan(runtimeState);
+        expect(startPlan.shouldStart,
+            "AITurnCoordinator should start AI planning when gameplay is active, an AI turn is active, and no runner is busy.");
+        expect(startPlan.activeKingdom == KingdomId::Black && startPlan.turnNumber == 7,
+            "AITurnCoordinator should preserve the active kingdom and turn number when starting a new AI planning task.");
+
+        runtimeState.runnerBusy = true;
+        expect(!AITurnCoordinator::buildStartPlan(runtimeState).shouldStart,
+            "AITurnCoordinator should not start a second AI planning task while the runner is already busy.");
+
+        runtimeState.runnerBusy = false;
+        runtimeState.gameState = GameState::Paused;
+        expect(!AITurnCoordinator::buildStartPlan(runtimeState).shouldStart,
+            "AITurnCoordinator should not start AI planning outside active gameplay.");
+
+        runtimeState.gameState = GameState::Playing;
+        AITurnRunner::CompletedTurn completedTurn;
+        completedTurn.activeKingdom = KingdomId::Black;
+        completedTurn.turnNumber = 7;
+        completedTurn.plan.objectiveName = "Pressure Net";
+
+        TurnCommand moveCommand;
+        moveCommand.type = TurnCommand::Move;
+        moveCommand.pieceId = 31;
+        moveCommand.origin = {4, 5};
+        moveCommand.destination = {5, 5};
+
+        TurnCommand buildCommand;
+        buildCommand.type = TurnCommand::Build;
+        buildCommand.buildingType = BuildingType::Barracks;
+        buildCommand.buildOrigin = {9, 10};
+
+        TurnCommand produceCommand;
+        produceCommand.type = TurnCommand::Produce;
+        produceCommand.barracksId = 22;
+        produceCommand.produceType = PieceType::Knight;
+
+        completedTurn.plan.commands = {moveCommand, buildCommand, produceCommand};
+
+        const AITurnCompletionPlan completionPlan = AITurnCoordinator::buildCompletionPlan(
+            runtimeState,
+            completedTurn);
+        expect(completionPlan.applyPlanMetadata
+                && completionPlan.printDebugSummary
+                && completionPlan.stageTurn
+                && completionPlan.logObjective
+                && completionPlan.logPlanningComplete
+                && completionPlan.commitAuthoritativeTurn,
+            "AITurnCoordinator should fully apply a completed AI plan when it still matches the active gameplay turn.");
+        expect(completionPlan.objectiveName == "Pressure Net"
+                && completionPlan.activeKingdom == KingdomId::Black
+                && completionPlan.turnNumber == 7,
+            "AITurnCoordinator should preserve the completed AI objective and authoritative turn identity.");
+        expect(completionPlan.debugLines.size() == 3,
+            "AITurnCoordinator should expose one debug summary line per AI command.");
+        expect(completionPlan.debugLines[0].find("Move piece=31") != std::string::npos,
+            "AITurnCoordinator should describe queued AI move commands in the debug summary.");
+        expect(completionPlan.debugLines[1].find("Barracks") != std::string::npos,
+            "AITurnCoordinator should describe queued AI build commands in the debug summary.");
+        expect(completionPlan.debugLines[2].find("Knight") != std::string::npos,
+            "AITurnCoordinator should describe queued AI production commands in the debug summary.");
+
+        runtimeState.turnNumber = 8;
+        const AITurnCompletionPlan stalePlan = AITurnCoordinator::buildCompletionPlan(runtimeState, completedTurn);
+        expect(stalePlan.shouldIgnore,
+            "AITurnCoordinator should ignore completed AI plans that no longer match the authoritative turn.");
+        expect(!stalePlan.commitAuthoritativeTurn,
+            "AITurnCoordinator should not request an authoritative commit for stale AI results.");
+    }
+
+    void testTurnCoordinatorBuildsCommitPlans() {
+        AuthoritativeTurnExecution pendingCheckmate;
+        pendingCheckmate.gameOver = true;
+        pendingCheckmate.winner = KingdomId::White;
+
+        const AuthoritativeCommitPlan pendingCheckmatePlan = TurnCoordinator::buildAuthoritativeCommitPlan(
+            pendingCheckmate,
+            true,
+            "White Player");
+        expect(pendingCheckmatePlan.nextGameState.has_value()
+                && *pendingCheckmatePlan.nextGameState == GameState::GameOver,
+            "TurnCoordinator should switch the runtime into game-over state when an uncommitted pending turn is already checkmate.");
+        expect(pendingCheckmatePlan.eventLogEntry.has_value()
+                && pendingCheckmatePlan.eventLogEntry->second.find("White Player wins") != std::string::npos,
+            "TurnCoordinator should expose the winner event log entry for checkmate commit plans.");
+        expect(pendingCheckmatePlan.persistLanHostSnapshot,
+            "TurnCoordinator should request host persistence when a LAN host reaches checkmate.");
+        expect(pendingCheckmatePlan.updateUI,
+            "TurnCoordinator should refresh the HUD immediately after a terminal checkmate outcome.");
+
+        AuthoritativeTurnExecution committedTurn;
+        committedTurn.committed = true;
+        const AuthoritativeCommitPlan committedPlan = TurnCoordinator::buildAuthoritativeCommitPlan(
+            committedTurn,
+            false,
+            "White Player");
+        expect(committedPlan.clearMovePreview
+                && committedPlan.clearWaitingForRemoteTurnResult
+                && committedPlan.refreshTurnPhase,
+            "TurnCoordinator should clear local pending-turn presentation state after a successful authoritative commit.");
+        expect(committedPlan.syncTurnDraftBeforeReconcile && committedPlan.reconcileSelection,
+            "TurnCoordinator should request turn-draft resync before restoring the selection bookmark after a successful commit.");
+        expect(committedPlan.startAITurn,
+            "TurnCoordinator should request the next AI turn after a successful non-terminal authoritative commit.");
+    }
+
+    void testTurnCoordinatorRejectsAndAcceptsNetworkTurnFlow() {
+        GameConfig config;
+        GameEngine engine;
+        MultiplayerRuntime multiplayer;
+        GameStateDebugRecorder debugRecorder;
+        TurnCoordinator coordinator(engine, multiplayer, debugRecorder, config);
+
+        GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman,
+                                                                 "turn_coordinator_network_test");
+        std::string error;
+        expect(engine.startNewSession(session, config, &error), error);
+
+        const ClientTurnSubmissionResult unauthenticatedSubmit = coordinator.submitClientTurn(true);
+        expect(!unauthenticatedSubmit.submitted,
+            "TurnCoordinator should reject client submissions when the LAN client transport is not authenticated.");
+        expect(unauthenticatedSubmit.errorMessage.find("not authenticated") != std::string::npos,
+            "TurnCoordinator should expose the authentication failure reason for client turn submission.");
+
+        const RemoteTurnSubmissionResult notHostResult = coordinator.applyRemoteTurnSubmission(false, {});
+        expect(!notHostResult.accepted,
+            "TurnCoordinator should reject remote turn application outside LAN host mode.");
+        expect(notHostResult.rejectionMessage.find("outside LAN host mode") != std::string::npos,
+            "TurnCoordinator should explain why remote turn application was rejected outside host mode.");
+
+        engine.turnSystem().setActiveKingdom(KingdomId::Black);
+        const RemoteTurnSubmissionResult acceptedResult = coordinator.applyRemoteTurnSubmission(true, {});
+        expect(acceptedResult.accepted,
+            "TurnCoordinator should accept a legal empty remote turn submission for Black when hosted authoritatively.");
+        expect(acceptedResult.shouldCommitAuthoritativeTurn,
+            "TurnCoordinator should request an authoritative commit after a valid remote turn submission.");
+        expect(!acceptedResult.shouldResetPendingCommands,
+            "TurnCoordinator should not request pending-turn reset after an accepted remote turn submission.");
+    }
+
+    void testTurnLifecycleCoordinatorBuildsDispatchAndResetPlans() {
+        const CommitPlayerTurnDispatchPlan localDispatchPlan =
+            TurnLifecycleCoordinator::buildCommitPlayerTurnDispatchPlan(false);
+        expect(localDispatchPlan.commitAuthoritativeTurn && !localDispatchPlan.submitClientTurn,
+            "TurnLifecycleCoordinator should route non-client end-turn requests directly to authoritative commit.");
+
+        const CommitPlayerTurnDispatchPlan lanClientDispatchPlan =
+            TurnLifecycleCoordinator::buildCommitPlayerTurnDispatchPlan(true);
+        expect(lanClientDispatchPlan.submitClientTurn && !lanClientDispatchPlan.commitAuthoritativeTurn,
+            "TurnLifecycleCoordinator should route LAN client end-turn requests through remote submission.");
+
+        const ClientTurnSubmissionFailurePlan connectedFailurePlan =
+            TurnLifecycleCoordinator::buildClientTurnSubmissionFailurePlan("Timed out", true);
+        expect(connectedFailurePlan.showAlert,
+            "TurnLifecycleCoordinator should surface a turn-not-sent alert when a connected LAN client submission fails with an error message.");
+        expect(connectedFailurePlan.alertTitle == "Turn Not Sent"
+                && connectedFailurePlan.alertMessage == "Timed out",
+            "TurnLifecycleCoordinator should preserve the submission failure message in the LAN client alert plan.");
+
+        const ClientTurnSubmissionFailurePlan disconnectedFailurePlan =
+            TurnLifecycleCoordinator::buildClientTurnSubmissionFailurePlan("Timed out", false);
+        expect(!disconnectedFailurePlan.showAlert,
+            "TurnLifecycleCoordinator should suppress the turn-not-sent alert when the LAN client is already disconnected.");
+
+        const ClientTurnSubmissionFailurePlan emptyFailurePlan =
+            TurnLifecycleCoordinator::buildClientTurnSubmissionFailurePlan("", true);
+        expect(!emptyFailurePlan.showAlert,
+            "TurnLifecycleCoordinator should suppress the turn-not-sent alert when no concrete failure message is available.");
+
+        const TurnResetPlan resetPlan = TurnLifecycleCoordinator::buildResetPlan();
+        expect(resetPlan.cancelLiveMove
+                && resetPlan.resetPendingCommands
+                && resetPlan.syncTurnDraftBeforeReconcile
+                && resetPlan.reconcileSelection,
+            "TurnLifecycleCoordinator should keep reset-turn flow aligned with live-move cancel, pending-command clear, draft resync, and selection restore.");
+    }
+
+    void testMultiplayerJoinCoordinatorPreparesReconnectAndRejectsInvalidJoin() {
+        GameConfig config;
+        GameEngine engine;
+        MultiplayerRuntime runtime;
+        SaveManager saveManager;
+        InputHandler input;
+        MultiplayerJoinCoordinator coordinator(engine, runtime, saveManager, input, config);
+
+        JoinMultiplayerRequest reconnectRequest;
+        std::string error;
+        expect(!MultiplayerJoinCoordinator::buildReconnectJoinRequest(runtime, reconnectRequest, &error),
+            "MultiplayerJoinCoordinator should reject reconnect requests when no previous host is cached.");
+        expect(error.find("No previous multiplayer host") != std::string::npos,
+            "MultiplayerJoinCoordinator should explain missing reconnect context.");
+
+        runtime.cacheReconnectRequest(MultiplayerJoinCredentials{"127.0.0.1", 4242, "secret"});
+        error.clear();
+        expect(MultiplayerJoinCoordinator::buildReconnectJoinRequest(runtime, reconnectRequest, &error),
+            "MultiplayerJoinCoordinator should rebuild a join request from cached reconnect credentials.");
+        expect(reconnectRequest.host == "127.0.0.1"
+                && reconnectRequest.port == 4242
+                && reconnectRequest.password == "secret",
+            "MultiplayerJoinCoordinator should preserve reconnect host, port and password.");
+
+        LocalPlayerContext localContext = makeLanClientLocalPlayerContext();
+        bool waitingForRemoteTurn = true;
+        input.setTool(ToolState::Build);
+        const MultiplayerJoinPreparationPlan preparationPlan = coordinator.prepareForClientConnectionAttempt(
+            localContext,
+            waitingForRemoteTurn,
+            false);
+        expect(preparationPlan.invalidateTurnDraft
+                && preparationPlan.hideGameMenu
+                && preparationPlan.hideMultiplayerAlert
+                && preparationPlan.hideMultiplayerWaitingOverlay
+                && preparationPlan.clearMultiplayerStatus,
+            "MultiplayerJoinCoordinator should request the expected UI cleanup before a client connection attempt.");
+        expect(!waitingForRemoteTurn,
+            "MultiplayerJoinCoordinator should clear the waiting-for-remote-turn flag before attempting a new client connection.");
+        expect(localContext.mode == LocalSessionMode::LocalOnly,
+            "MultiplayerJoinCoordinator should clear LAN client local-control context when the caller does not preserve it.");
+        expect(input.getCurrentTool() == ToolState::Select,
+            "MultiplayerJoinCoordinator should reset the input tool back to selection before joining a host.");
+
+        LocalPlayerContext preservedContext = makeLanClientLocalPlayerContext();
+        bool preservedWaiting = true;
+        coordinator.prepareForClientConnectionAttempt(preservedContext, preservedWaiting, true);
+        expect(preservedContext.mode == LocalSessionMode::LanClient,
+            "MultiplayerJoinCoordinator should preserve the LAN client control context during reconnect attempts.");
+
+        const MultiplayerJoinPresentationPlan joinPlan = coordinator.joinMultiplayer(
+            JoinMultiplayerRequest{"not_an_ip", 4242, "secret"},
+            preservedContext,
+            preservedWaiting);
+        expect(!joinPlan.joined,
+            "MultiplayerJoinCoordinator should surface join failures instead of pretending the client joined.");
+        expect(joinPlan.errorMessage.find("Invalid server IP address") != std::string::npos,
+            "MultiplayerJoinCoordinator should forward multiplayer join errors from the runtime.");
+    }
+
+    void testInGamePresentationCoordinatorPlansMenuTransitions() {
+        FrontendRuntimeState localState;
+        localState.gameState = GameState::Playing;
+
+        const InGameMenuOpenPlan localOpenPlan = InGamePresentationCoordinator::planOpenInGameMenu(localState);
+        expect(localOpenPlan.shouldOpen,
+            "InGamePresentationCoordinator should allow opening the in-game menu during local gameplay.");
+        expect(localOpenPlan.nextGameState.has_value()
+                && *localOpenPlan.nextGameState == GameState::Paused,
+            "InGamePresentationCoordinator should pause local gameplay when opening the in-game menu.");
+        expect(localOpenPlan.presentation.pauseState == GameMenuPauseState::Paused,
+            "InGamePresentationCoordinator should mark the local in-game menu as paused.");
+        expect(localOpenPlan.presentation.showSave,
+            "InGamePresentationCoordinator should keep save actions visible for local sessions.");
+
+        FrontendRuntimeState lanClientState;
+        lanClientState.gameState = GameState::Playing;
+        lanClientState.localPlayerContext = makeLanClientLocalPlayerContext();
+
+        const InGameMenuOpenPlan lanClientOpenPlan = InGamePresentationCoordinator::planOpenInGameMenu(
+            lanClientState);
+        expect(lanClientOpenPlan.shouldOpen,
+            "InGamePresentationCoordinator should still allow opening the in-game menu during LAN client gameplay.");
+        expect(!lanClientOpenPlan.nextGameState.has_value(),
+            "InGamePresentationCoordinator should not pause the runtime when a networked session opens the menu.");
+        expect(lanClientOpenPlan.presentation.pauseState == GameMenuPauseState::NotPaused,
+            "InGamePresentationCoordinator should mark networked menus as non-pausing overlays.");
+        expect(!lanClientOpenPlan.presentation.showSave,
+            "InGamePresentationCoordinator should hide save actions for LAN clients.");
+
+        FrontendRuntimeState mainMenuState;
+        mainMenuState.gameState = GameState::MainMenu;
+        expect(!InGamePresentationCoordinator::planOpenInGameMenu(mainMenuState).shouldOpen,
+            "InGamePresentationCoordinator should reject menu-open requests outside in-game states.");
+
+        FrontendRuntimeState pausedLocalState;
+        pausedLocalState.gameState = GameState::Paused;
+        const InGameMenuClosePlan localClosePlan = InGamePresentationCoordinator::planCloseInGameMenu(
+            pausedLocalState);
+        expect(localClosePlan.shouldClose,
+            "InGamePresentationCoordinator should allow closing an already-open in-game menu.");
+        expect(localClosePlan.nextGameState.has_value()
+                && *localClosePlan.nextGameState == GameState::Playing,
+            "InGamePresentationCoordinator should resume local gameplay when the paused in-game menu closes.");
+
+        const InGameMenuClosePlan lanClientClosePlan = InGamePresentationCoordinator::planCloseInGameMenu(
+            lanClientState);
+        expect(lanClientClosePlan.shouldClose,
+            "InGamePresentationCoordinator should still close networked in-game menus.");
+        expect(!lanClientClosePlan.nextGameState.has_value(),
+            "InGamePresentationCoordinator should leave networked runtime state unchanged when closing the menu.");
+    }
+
+    void testSessionPresentationCoordinatorPlansSessionEntryAndMenuReturn() {
+        const SessionResetPlan resetPlan = SessionPresentationCoordinator::buildAuthoritativeSessionResetPlan();
+        expect(resetPlan.stopMultiplayer
+                && resetPlan.discardPendingAiTurn
+                && resetPlan.clearMovePreview
+                && resetPlan.activateSelectTool
+                && resetPlan.resetPendingTurn
+                && resetPlan.invalidateTurnDraft,
+            "SessionPresentationCoordinator should request the full authoritative session reset before start/load transitions.");
+
+        GameSessionConfig localSession = makeDefaultGameSessionConfig(GameMode::HumanVsHuman,
+                                                                      "session_presentation_local_test");
+        const SessionPresentationPlan localPresentationPlan =
+            SessionPresentationCoordinator::buildSessionPresentationPlan(localSession, true);
+        expect(localPresentationPlan.localPlayerContext.mode == LocalSessionMode::LocalOnly,
+            "SessionPresentationCoordinator should keep local sessions in local-only control mode.");
+        expect(localPresentationPlan.cameraKingdom == KingdomId::White,
+            "SessionPresentationCoordinator should center the camera on White for the default local session.");
+        expect(localPresentationPlan.nextGameState == GameState::Playing
+                && localPresentationPlan.refreshTurnPhase
+                && localPresentationPlan.showHud
+                && localPresentationPlan.updateUI,
+            "SessionPresentationCoordinator should request the normal post-load/post-start gameplay presentation updates.");
+        expect(localPresentationPlan.saveAuthoritativeSession,
+            "SessionPresentationCoordinator should request an initial save after starting a fresh authoritative session.");
+
+        GameSessionConfig lanSession = makeDefaultGameSessionConfig(GameMode::HumanVsHuman,
+                                                                    "session_presentation_lan_test");
+        lanSession.multiplayer.enabled = true;
+        lanSession.multiplayer.port = 4242;
+        const SessionPresentationPlan lanPresentationPlan =
+            SessionPresentationCoordinator::buildSessionPresentationPlan(lanSession, false);
+        expect(lanPresentationPlan.localPlayerContext.mode == LocalSessionMode::LanHost,
+            "SessionPresentationCoordinator should restore LAN host local-control context for multiplayer sessions.");
+        expect(lanPresentationPlan.cameraKingdom == KingdomId::White,
+            "SessionPresentationCoordinator should keep the host camera centered on White after session restore.");
+        expect(!lanPresentationPlan.saveAuthoritativeSession,
+            "SessionPresentationCoordinator should not force an extra save when only restoring an existing session.");
+
+        const MainMenuPresentationPlan mainMenuPlan = SessionPresentationCoordinator::buildReturnToMainMenuPlan();
+        expect(mainMenuPlan.stopMultiplayer
+                && mainMenuPlan.discardPendingAiTurn
+                && mainMenuPlan.clearMovePreview
+                && mainMenuPlan.activateSelectTool
+                && mainMenuPlan.resetPendingTurn
+                && mainMenuPlan.invalidateTurnDraft,
+            "SessionPresentationCoordinator should request a full runtime cleanup before returning to the main menu.");
+        expect(mainMenuPlan.nextGameState == GameState::MainMenu
+                && mainMenuPlan.hideGameMenu
+                && mainMenuPlan.showMainMenu,
+            "SessionPresentationCoordinator should restore the main-menu presentation after quitting an in-game session.");
+    }
+
+    void testPanelActionCoordinatorQueuesAndCancelsPieceAndBarracksActions() {
+        GameConfig config;
+        GameEngine engine;
+        InputHandler input;
+        PanelActionCoordinator coordinator(engine, input, config);
+
+        GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman,
+                                                                 "panel_action_coordinator_test");
+        std::string error;
+        expect(engine.startNewSession(session, config, &error), error);
+        engine.activeKingdom().gold = 1000;
+
+        InteractionPermissions permissions;
+        permissions.canQueueNonMoveActions = true;
+
+        const sf::Vector2i pawnCell = findEmptyTraversableCell(engine);
+        Piece& pawn = addPieceToBoard(engine.activeKingdom(),
+                                      engine.board(),
+                                      9100,
+                                      PieceType::Pawn,
+                                      KingdomId::White,
+                                      pawnCell);
+        pawn.xp = config.getXPThresholdPawnToKnightOrBishop();
+
+        coordinator.handlePieceUpgradeRequest(permissions, pawn.id, PieceType::Knight);
+        const TurnCommand* queuedUpgrade = engine.turnSystem().getPendingUpgradeCommand(pawn.id);
+        expect(queuedUpgrade != nullptr && queuedUpgrade->upgradeTarget == PieceType::Knight,
+            "PanelActionCoordinator should queue an upgrade command for an eligible active piece.");
+
+        coordinator.handlePieceUpgradeRequest(permissions, pawn.id, PieceType::Knight);
+        expect(engine.turnSystem().getPendingUpgradeCommand(pawn.id) == nullptr,
+            "PanelActionCoordinator should cancel the queued upgrade when the same upgrade is requested twice.");
+
+        coordinator.handlePieceDisbandRequest(permissions, pawn.id);
+        expect(engine.turnSystem().getPendingDisbandCommand(pawn.id) != nullptr,
+            "PanelActionCoordinator should queue disband for a non-king active piece.");
+
+        coordinator.handlePieceDisbandRequest(permissions, pawn.id);
+        expect(engine.turnSystem().getPendingDisbandCommand(pawn.id) == nullptr,
+            "PanelActionCoordinator should cancel disband when the same piece is toggled again.");
+
+        const sf::Vector2i barracksOrigin = findEmptyTraversableCell(engine);
+        engine.activeKingdom().addBuilding(makeTestBarracks(9200, KingdomId::White, barracksOrigin, config));
+        Building* barracks = findBuildingById(engine.activeKingdom(), 9200);
+        expect(barracks != nullptr,
+            "PanelActionCoordinator test should create an active barracks before queueing production.");
+        if (barracks != nullptr) {
+            linkBuildingOnBoard(*barracks, engine.board());
+
+            coordinator.handleBarracksProduceRequest(permissions, barracks->id, PieceType::Pawn);
+            const TurnCommand* queuedProduce = engine.turnSystem().getPendingProduceCommand(barracks->id);
+            expect(queuedProduce != nullptr && queuedProduce->produceType == PieceType::Pawn,
+                "PanelActionCoordinator should queue production for the active barracks.");
+
+            coordinator.handleBarracksProduceRequest(permissions, barracks->id, PieceType::Pawn);
+            expect(engine.turnSystem().getPendingProduceCommand(barracks->id) == nullptr,
+                "PanelActionCoordinator should cancel production when the same barracks order is toggled twice.");
+        }
+    }
+
+    void testSessionRuntimeCoordinatorAppliesSessionEntryAndMainMenuTransitions() {
+        GameConfig config;
+        GameEngine engine;
+        SaveManager saveManager;
+        MultiplayerRuntime multiplayer;
+        GameStateDebugRecorder debugRecorder;
+        InputHandler input;
+        const auto tempDir = std::filesystem::temp_directory_path()
+            / ("anormalchessgame_sessionruntime_"
+                + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+        std::filesystem::create_directories(tempDir);
+
+        try {
+            SessionFlow flow(engine,
+                             saveManager,
+                             multiplayer,
+                             debugRecorder,
+                             config,
+                             tempDir.string());
+            MultiplayerJoinCoordinator joinCoordinator(engine, multiplayer, saveManager, input, config);
+
+            GameState gameState = GameState::Paused;
+            bool waitingForRemoteTurnResult = true;
+            LocalPlayerContext localPlayerContext = makeLanClientLocalPlayerContext();
+            SessionRuntimeCoordinator coordinator(gameState,
+                                                 waitingForRemoteTurnResult,
+                                                 localPlayerContext,
+                                                 engine,
+                                                 multiplayer,
+                                                 flow,
+                                                 joinCoordinator);
+
+            bool stopMultiplayer = false;
+            bool discardPendingAiTurn = false;
+            bool clearMovePreview = false;
+            bool activateSelectTool = false;
+            bool resetPendingTurn = false;
+            bool resetPendingCommands = false;
+            bool invalidateTurnDraft = false;
+            bool centerCamera = false;
+            bool refreshTurnPhase = false;
+            bool showHud = false;
+            bool updateUi = false;
+            bool saveGame = false;
+            bool reconcileSelection = false;
+            bool hideGameMenu = false;
+            bool hideMultiplayerAlert = false;
+            bool hideMultiplayerWaitingOverlay = false;
+            bool clearMultiplayerStatus = false;
+            bool showMainMenu = false;
+            KingdomId centeredKingdom = KingdomId::Black;
+
+            SessionRuntimeCallbacks callbacks{
+                [&stopMultiplayer]() {
+                    stopMultiplayer = true;
+                },
+                [&discardPendingAiTurn]() {
+                    discardPendingAiTurn = true;
+                },
+                [&clearMovePreview]() {
+                    clearMovePreview = true;
+                },
+                [&activateSelectTool]() {
+                    activateSelectTool = true;
+                },
+                [&resetPendingTurn]() {
+                    resetPendingTurn = true;
+                },
+                [&resetPendingCommands]() {
+                    resetPendingCommands = true;
+                },
+                [&invalidateTurnDraft]() {
+                    invalidateTurnDraft = true;
+                },
+                [&centerCamera, &centeredKingdom](KingdomId kingdom) {
+                    centerCamera = true;
+                    centeredKingdom = kingdom;
+                },
+                [&refreshTurnPhase]() {
+                    refreshTurnPhase = true;
+                },
+                [&showHud]() {
+                    showHud = true;
+                },
+                [&updateUi]() {
+                    updateUi = true;
+                },
+                [&saveGame]() {
+                    saveGame = true;
+                },
+                []() {
+                    return InputSelectionBookmark{};
+                },
+                [&reconcileSelection](const InputSelectionBookmark&) {
+                    reconcileSelection = true;
+                },
+                [&hideGameMenu]() {
+                    hideGameMenu = true;
+                },
+                [&hideMultiplayerAlert]() {
+                    hideMultiplayerAlert = true;
+                },
+                [&hideMultiplayerWaitingOverlay]() {
+                    hideMultiplayerWaitingOverlay = true;
+                },
+                [&clearMultiplayerStatus]() {
+                    clearMultiplayerStatus = true;
+                },
+                [&showMainMenu]() {
+                    showMainMenu = true;
+                }};
+
+            coordinator.returnToMainMenu(callbacks);
+            expect(gameState == GameState::MainMenu,
+                "SessionRuntimeCoordinator should switch the runtime back to the main menu state when quitting a session.");
+            expect(stopMultiplayer
+                    && discardPendingAiTurn
+                    && clearMovePreview
+                    && activateSelectTool
+                    && resetPendingCommands
+                    && invalidateTurnDraft,
+                "SessionRuntimeCoordinator should apply the full main-menu cleanup plan before leaving a session.");
+            expect(hideGameMenu && showMainMenu,
+                "SessionRuntimeCoordinator should restore the main-menu presentation after quitting an in-game session.");
+
+            stopMultiplayer = false;
+            discardPendingAiTurn = false;
+            clearMovePreview = false;
+            activateSelectTool = false;
+            resetPendingTurn = false;
+            resetPendingCommands = false;
+            invalidateTurnDraft = false;
+            centerCamera = false;
+            refreshTurnPhase = false;
+            showHud = false;
+            updateUi = false;
+            saveGame = false;
+            reconcileSelection = false;
+            hideGameMenu = false;
+            hideMultiplayerAlert = false;
+            hideMultiplayerWaitingOverlay = false;
+            clearMultiplayerStatus = false;
+            showMainMenu = false;
+            centeredKingdom = KingdomId::Black;
+            waitingForRemoteTurnResult = true;
+            localPlayerContext = makeLanClientLocalPlayerContext();
+
+            GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman,
+                                                                     "session_runtime_transition_test");
+            std::string error;
+            expect(coordinator.startNewGame(session, callbacks, &error), error);
+            expect(resetPendingTurn && invalidateTurnDraft,
+                "SessionRuntimeCoordinator should apply the authoritative session reset before starting a new session.");
+            expect(gameState == GameState::Playing,
+                "SessionRuntimeCoordinator should transition into active gameplay after starting a new session.");
+            expect(localPlayerContext.mode == LocalSessionMode::LocalOnly,
+                "SessionRuntimeCoordinator should restore local-only control context for a fresh local session.");
+            expect(!waitingForRemoteTurnResult,
+                "SessionRuntimeCoordinator should clear the waiting-for-remote-turn flag after entering a fresh session.");
+            expect(centerCamera && centeredKingdom == KingdomId::White,
+                "SessionRuntimeCoordinator should center the camera on White after entering a default local session.");
+            expect(refreshTurnPhase && showHud && updateUi && saveGame,
+                "SessionRuntimeCoordinator should apply the expected HUD, phase, UI and save callbacks after starting a new session.");
+        } catch (...) {
+            std::filesystem::remove_all(tempDir);
+            throw;
+        }
+    }
+
+    void testUICallbackCoordinatorGuardsHudAndToolbarActions() {
+        GameConfig config;
+        GameEngine engine;
+        SaveManager saveManager;
+        InputHandler input;
+        PanelActionCoordinator panelActionCoordinator(engine, input, config);
+        UIManager uiManager;
+        Kingdom whiteKingdom(KingdomId::White);
+        Kingdom blackKingdom(KingdomId::Black);
+
+        UICallbackRuntimeState runtimeState;
+        runtimeState.gameState = GameState::MainMenu;
+
+        int toggleMenuCalls = 0;
+        int resetTurnCalls = 0;
+        int commitTurnCalls = 0;
+        int activateSelectToolCalls = 0;
+        int toggleOverviewCalls = 0;
+
+        const UICallbackBindings bindings = UICallbackCoordinator::buildBindings(
+            UICallbackCoordinatorDependencies{
+                [&runtimeState]() {
+                    return runtimeState;
+                },
+                uiManager,
+                saveManager,
+                input,
+                panelActionCoordinator,
+                config,
+                []() {},
+                []() {},
+                []() {},
+                [](const GameSessionConfig&, std::string*) {
+                    return true;
+                },
+                [](const std::string&) {},
+                [](const JoinMultiplayerRequest&, std::string*) {
+                    return true;
+                },
+                []() {},
+                []() {},
+                [&toggleMenuCalls]() {
+                    ++toggleMenuCalls;
+                },
+                [&resetTurnCalls]() {
+                    ++resetTurnCalls;
+                },
+                [&commitTurnCalls]() {
+                    ++commitTurnCalls;
+                },
+                [&activateSelectToolCalls]() {
+                    ++activateSelectToolCalls;
+                },
+                [&toggleOverviewCalls]() {
+                    ++toggleOverviewCalls;
+                },
+                []() {},
+                []() {
+                    return KingdomId::White;
+                },
+                []() {
+                    return KingdomId::White;
+                },
+                [&whiteKingdom, &blackKingdom](KingdomId id) -> Kingdom& {
+                    return id == KingdomId::White ? whiteKingdom : blackKingdom;
+                }});
+
+        bindings.hud.onMenu();
+        bindings.hud.onResetTurn();
+        bindings.hud.onEndTurn();
+        bindings.toolBar.onSelect();
+        bindings.toolBar.onOverview();
+        expect(toggleMenuCalls == 0
+                && resetTurnCalls == 0
+                && commitTurnCalls == 0
+                && activateSelectToolCalls == 0
+                && toggleOverviewCalls == 0,
+            "UICallbackCoordinator should block HUD and toolbar actions while gameplay state or permissions do not allow them.");
+
+        runtimeState.gameState = GameState::Playing;
+        runtimeState.permissions.canIssueCommands = true;
+        runtimeState.permissions.canUseToolbar = true;
+
+        bindings.hud.onMenu();
+        bindings.hud.onResetTurn();
+        bindings.hud.onEndTurn();
+        bindings.toolBar.onSelect();
+        bindings.toolBar.onOverview();
+        expect(toggleMenuCalls == 1,
+            "UICallbackCoordinator should forward the HUD menu action during interactive gameplay states.");
+        expect(resetTurnCalls == 1 && commitTurnCalls == 1,
+            "UICallbackCoordinator should forward reset/end-turn HUD actions when the local player can issue commands.");
+        expect(activateSelectToolCalls == 1 && toggleOverviewCalls == 1,
+            "UICallbackCoordinator should forward toolbar actions when toolbar interaction is allowed.");
+    }
+
+    void testSelectionQueryCoordinatorResolvesBookmarkFallback() {
+        GameConfig config;
+        std::array<Kingdom, kNumKingdoms> kingdoms{Kingdom(KingdomId::White), Kingdom(KingdomId::Black)};
+        std::vector<Building> publicBuildings;
+
+        Building trackedBuilding = makeTestBarracks(41, KingdomId::White, {6, 4}, config);
+        trackedBuilding.rotationQuarterTurns = 1;
+        kingdoms[0].buildings.push_back(trackedBuilding);
+
+        InputSelectionBookmark bookmark;
+        bookmark.buildingId = 999;
+        bookmark.selectedBuildingOrigin = trackedBuilding.origin;
+        bookmark.selectedBuildingType = trackedBuilding.type;
+        bookmark.selectedBuildingOwner = trackedBuilding.owner;
+        bookmark.selectedBuildingIsNeutral = trackedBuilding.isNeutral;
+        bookmark.selectedBuildingRotationQuarterTurns = trackedBuilding.rotationQuarterTurns;
+
+        const SelectionQueryView view{kingdoms, publicBuildings};
+        Building* resolvedByBookmark = SelectionQueryCoordinator::findBuildingForBookmark(view, bookmark);
+        expect(resolvedByBookmark == &kingdoms[0].buildings.front(),
+            "SelectionQueryCoordinator should recover a building selection from bookmark metadata when the cached building id is stale.");
+        expect(SelectionQueryCoordinator::findBuildingById(view, trackedBuilding.id) == &kingdoms[0].buildings.front(),
+            "SelectionQueryCoordinator should still resolve displayed building selections directly by stable id.");
+    }
+
 void testGameEngineRestoresFactoryIds() {
     GameConfig config;
     GameEngine engine;
@@ -1667,6 +2965,76 @@ void testGameEngineRestoresBishopSpawnMemory() {
         const SaveData save = engine.createSaveData();
         expect(save.worldSeed == engine.sessionConfig().worldSeed,
             "Save data should persist the runtime world seed.");
+    }
+
+    void testGameEngineStagesAITurnFallbackMoveWhenInCheck() {
+        GameConfig config;
+        GameEngine engine;
+        engine.board().init(12);
+        engine.kingdom(KingdomId::White) = Kingdom(KingdomId::White);
+        engine.kingdom(KingdomId::Black) = Kingdom(KingdomId::Black);
+        engine.publicBuildings().clear();
+        engine.turnSystem().setActiveKingdom(KingdomId::White);
+        engine.turnSystem().setTurnNumber(1);
+
+        Kingdom& white = engine.kingdom(KingdomId::White);
+        Kingdom& black = engine.kingdom(KingdomId::Black);
+        addPieceToBoard(white, engine.board(), 1000, PieceType::King, KingdomId::White, {12, 12});
+        addPieceToBoard(white, engine.board(), 1001, PieceType::Pawn, KingdomId::White, {11, 11});
+        addPieceToBoard(black, engine.board(), 2000, PieceType::King, KingdomId::Black, {4, 4});
+        addPieceToBoard(black, engine.board(), 2001, PieceType::Rook, KingdomId::Black, {12, 4});
+
+        const PendingTurnStagingResult stagingResult = engine.stageAITurnPlan(
+         {makeBuildCommand(BuildingType::Farm, {6, 6})},
+         config);
+
+        expect(stagingResult.usedFallbackResponseMove,
+            "AI turn staging should queue a legal fallback move when the active king starts in check.");
+        expect(stagingResult.validation.valid,
+            "The fallback move should leave a valid pending turn when a legal response exists.");
+        expect(!engine.turnSystem().getPendingCommands().empty(),
+            "The fallback path should leave a concrete pending command queued.");
+        expect(engine.turnSystem().getPendingCommands().front().type == TurnCommand::Move,
+            "The fallback command queued from check should be a move.");
+    }
+
+    void testGameEngineStagesAITurnDisbandsToResolveBankruptcy() {
+        GameConfig config;
+        GameEngine engine;
+        engine.board().init(12);
+        engine.kingdom(KingdomId::White) = Kingdom(KingdomId::White);
+        engine.kingdom(KingdomId::Black) = Kingdom(KingdomId::Black);
+        engine.publicBuildings().clear();
+        engine.turnSystem().setActiveKingdom(KingdomId::White);
+        engine.turnSystem().setTurnNumber(1);
+
+        Kingdom& white = engine.kingdom(KingdomId::White);
+        Kingdom& black = engine.kingdom(KingdomId::Black);
+        addPieceToBoard(white, engine.board(), 1010, PieceType::King, KingdomId::White, {12, 12});
+        addPieceToBoard(white, engine.board(), 1011, PieceType::Rook, KingdomId::White, {11, 12});
+        addPieceToBoard(white, engine.board(), 1012, PieceType::Knight, KingdomId::White, {10, 12});
+        addPieceToBoard(black, engine.board(), 2010, PieceType::King, KingdomId::Black, {4, 4});
+        white.gold = 0;
+
+        const int stagedUpkeep = config.getPieceUpkeepCost(PieceType::Rook)
+         + config.getPieceUpkeepCost(PieceType::Knight);
+        expect(stagedUpkeep > 0,
+            "The bankruptcy recovery test requires at least one upkeep-bearing non-king piece.");
+
+        const PendingTurnStagingResult stagingResult = engine.stageAITurnPlan({}, config);
+
+        expect(stagingResult.usedBankruptcyDisbands,
+            "AI turn staging should queue emergency disbands when the planned end-of-turn state is bankrupt.");
+        expect(stagingResult.validation.valid,
+            "Emergency disbands should recover a valid pending turn when enough upkeep can be removed.");
+        expect(!engine.turnSystem().getPendingCommands().empty(),
+            "Bankruptcy recovery should leave at least one queued disband command.");
+        expect(std::all_of(engine.turnSystem().getPendingCommands().begin(),
+                  engine.turnSystem().getPendingCommands().end(),
+                  [](const TurnCommand& command) {
+                      return command.type == TurnCommand::Disband;
+                  }),
+            "Bankruptcy recovery should only queue disband commands after resetting the invalid plan.");
     }
 
     void testBoardGeneratorUsesDeterministicSeed() {
@@ -4093,9 +5461,35 @@ int main() {
         {"multiplayer validator port", testSessionValidatorRejectsInvalidMultiplayerPort},
         {"local player context", testLocalPlayerContextModes},
         {"single local hud modes", testSingleLocalHudModes},
+        {"multiplayer runtime reconnect state", testMultiplayerRuntimeReconnectStateLifecycle},
+        {"session flow roundtrip", testSessionFlowStartsSavesAndLoadsSession},
+        {"session runtime coordinator flow", testSessionRuntimeCoordinatorAppliesSessionEntryAndMainMenuTransitions},
+        {"selection query coordinator bookmark fallback", testSelectionQueryCoordinatorResolvesBookmarkFallback},
+        {"ui callback coordinator guards", testUICallbackCoordinatorGuardsHudAndToolbarActions},
+        {"frontend coordinator hud and waiting lock", testFrontendCoordinatorBuildsHudAndLocksWaitingTurns},
+        {"frontend coordinator dashboard and panel presentation", testFrontendCoordinatorBuildsProjectedDashboardAndPiecePanel},
+        {"multiplayer event coordinator plans", testMultiplayerEventCoordinatorPlansAlertsAndDisconnects},
+        {"multiplayer event coordinator restore and cleanup", testMultiplayerEventCoordinatorRestoresSnapshotsAndClientState},
+        {"multiplayer runtime coordinator dialog actions", testMultiplayerRuntimeCoordinatorBuildsDialogActions},
+        {"input coordinator gameplay shortcuts", testInputCoordinatorPlansGameplayShortcuts},
+        {"input coordinator world routing", testInputCoordinatorRoutesWorldInputAfterGuiFiltering},
+        {"render coordinator move overlay plan", testRenderCoordinatorBuildsSelectionAndMoveOverlayPlan},
+        {"render coordinator build overlay plan", testRenderCoordinatorBuildsBuildPreviewAndPendingBuildPlan},
+        {"update coordinator playing tick", testUpdateCoordinatorPlansPlayingTick},
+        {"update coordinator paused and menu tick", testUpdateCoordinatorPlansPausedAndMenuTicks},
+        {"ai turn coordinator plans", testAITurnCoordinatorPlansStartAndCompletion},
+        {"turn coordinator commit plans", testTurnCoordinatorBuildsCommitPlans},
+        {"turn coordinator network flow", testTurnCoordinatorRejectsAndAcceptsNetworkTurnFlow},
+        {"turn lifecycle coordinator plans", testTurnLifecycleCoordinatorBuildsDispatchAndResetPlans},
+        {"multiplayer join coordinator flow", testMultiplayerJoinCoordinatorPreparesReconnectAndRejectsInvalidJoin},
+        {"in-game presentation coordinator menu flow", testInGamePresentationCoordinatorPlansMenuTransitions},
+        {"session presentation coordinator flow", testSessionPresentationCoordinatorPlansSessionEntryAndMenuReturn},
+        {"panel action coordinator flow", testPanelActionCoordinatorQueuesAndCancelsPieceAndBarracksActions},
         {"engine restore factory sync", testGameEngineRestoresFactoryIds},
         {"engine restore bishop parity", testGameEngineRestoresBishopSpawnMemory},
         {"engine world seed", testGameEngineAssignsWorldSeed},
+        {"engine ai staging check fallback", testGameEngineStagesAITurnFallbackMoveWhenInCheck},
+        {"engine ai staging bankruptcy recovery", testGameEngineStagesAITurnDisbandsToResolveBankruptcy},
         {"board generator deterministic seed", testBoardGeneratorUsesDeterministicSeed},
         {"board generator terrain balance", testBoardGeneratorProducesGrassDominantTerrain},
         {"board generator centered church", testBoardGeneratorCentersChurchWithoutRotation},

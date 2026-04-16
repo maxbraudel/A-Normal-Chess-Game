@@ -237,19 +237,16 @@ void TurnSystem::rebuildQueuedSpecialState() {
     }
 }
 
-void TurnSystem::refreshProjectedBudgetState(const Board& board,
-                                             const Kingdom& activeKingdom,
-                                             const Kingdom& enemyKingdom,
-                                             const std::vector<Building>& publicBuildings,
-                                             const GameConfig& config) {
-    syncPointBudget(config);
+void TurnSystem::refreshProjectedBudgetState(const TurnValidationContext& context) {
+    syncPointBudget(context.config);
     if (m_pendingCommands.empty()) {
         return;
     }
 
     const PendingTurnNormalizationResult projection = PendingTurnProjection::normalize(
-        board, activeKingdom, enemyKingdom, publicBuildings, m_turnNumber,
-        m_pendingCommands, config, PendingTurnInvalidCommandPolicy::DropInvalidBuilds);
+        context,
+        m_pendingCommands,
+        PendingTurnInvalidCommandPolicy::DropInvalidBuilds);
     if (!projection.valid) {
         return;
     }
@@ -260,20 +257,16 @@ void TurnSystem::refreshProjectedBudgetState(const Board& board,
         markPendingStateChanged();
     }
 
-    const SnapTurnBudget& budget = projection.snapshot.turnBudget(activeKingdom.id);
+    const SnapTurnBudget& budget = projection.snapshot.turnBudget(context.activeKingdom.id);
     m_movementPointsRemaining = budget.movementPointsRemaining;
     m_buildPointsRemaining = budget.buildPointsRemaining;
     m_pieceMoveCounts = budget.pieceMoveCounts;
 }
 
 bool TurnSystem::queueCommand(const TurnCommand& cmd,
-                              const Board& board,
-                              const Kingdom& activeKingdom,
-                              const Kingdom& enemyKingdom,
-                              const std::vector<Building>& publicBuildings,
-                              const GameConfig& config,
+                              const TurnValidationContext& context,
                               BuildingFactory* buildingFactory) {
-    syncPointBudget(config);
+    syncPointBudget(context.config);
 
     TurnCommand queuedCommand = cmd;
 
@@ -318,8 +311,7 @@ bool TurnSystem::queueCommand(const TurnCommand& cmd,
 
     std::string errorMessage;
     if (!PendingTurnProjection::canAppendCommand(
-            board, activeKingdom, enemyKingdom, publicBuildings,
-            m_turnNumber, m_pendingCommands, queuedCommand, config, &errorMessage)) {
+            context, m_pendingCommands, queuedCommand, &errorMessage)) {
         return false;
     }
 
@@ -337,9 +329,22 @@ bool TurnSystem::queueCommand(const TurnCommand& cmd,
 
     m_pendingCommands.push_back(queuedCommand);
     rebuildQueuedSpecialState();
-    refreshProjectedBudgetState(board, activeKingdom, enemyKingdom, publicBuildings, config);
+    refreshProjectedBudgetState(context);
     markPendingStateChanged();
     return true;
+}
+
+bool TurnSystem::queueCommand(const TurnCommand& cmd,
+                              const Board& board,
+                              const Kingdom& activeKingdom,
+                              const Kingdom& enemyKingdom,
+                              const std::vector<Building>& publicBuildings,
+                              const GameConfig& config,
+                              BuildingFactory* buildingFactory) {
+    return queueCommand(
+        cmd,
+        TurnValidationContext{board, activeKingdom, enemyKingdom, publicBuildings, m_turnNumber, config},
+        buildingFactory);
 }
 
 void TurnSystem::resetPendingCommands() {
@@ -352,11 +357,7 @@ void TurnSystem::resetPendingCommands() {
 }
 
 bool TurnSystem::cancelMoveCommand(int pieceId,
-                                   const Board& board,
-                                   const Kingdom& activeKingdom,
-                                   const Kingdom& enemyKingdom,
-                                   const std::vector<Building>& publicBuildings,
-                                   const GameConfig& config) {
+                                   const TurnValidationContext& context) {
     const auto originalSize = m_pendingCommands.size();
     auto it = std::remove_if(m_pendingCommands.begin(), m_pendingCommands.end(),
         [pieceId](const TurnCommand& c) {
@@ -368,17 +369,24 @@ bool TurnSystem::cancelMoveCommand(int pieceId,
     }
 
     rebuildQueuedSpecialState();
-    refreshProjectedBudgetState(board, activeKingdom, enemyKingdom, publicBuildings, config);
+    refreshProjectedBudgetState(context);
     markPendingStateChanged();
     return true;
 }
 
+bool TurnSystem::cancelMoveCommand(int pieceId,
+                                   const Board& board,
+                                   const Kingdom& activeKingdom,
+                                   const Kingdom& enemyKingdom,
+                                   const std::vector<Building>& publicBuildings,
+                                   const GameConfig& config) {
+    return cancelMoveCommand(
+        pieceId,
+        TurnValidationContext{board, activeKingdom, enemyKingdom, publicBuildings, m_turnNumber, config});
+}
+
 bool TurnSystem::cancelBuildCommand(int buildId,
-                                    const Board& board,
-                                    const Kingdom& activeKingdom,
-                                    const Kingdom& enemyKingdom,
-                                    const std::vector<Building>& publicBuildings,
-                                    const GameConfig& config) {
+                                    const TurnValidationContext& context) {
     const auto originalSize = m_pendingCommands.size();
     auto it = std::remove_if(m_pendingCommands.begin(), m_pendingCommands.end(),
         [buildId](const TurnCommand& c) {
@@ -390,17 +398,24 @@ bool TurnSystem::cancelBuildCommand(int buildId,
     }
 
     rebuildQueuedSpecialState();
-    refreshProjectedBudgetState(board, activeKingdom, enemyKingdom, publicBuildings, config);
+    refreshProjectedBudgetState(context);
     markPendingStateChanged();
     return true;
 }
 
-bool TurnSystem::replaceMoveCommand(const TurnCommand& moveCommand,
+bool TurnSystem::cancelBuildCommand(int buildId,
                                     const Board& board,
                                     const Kingdom& activeKingdom,
                                     const Kingdom& enemyKingdom,
                                     const std::vector<Building>& publicBuildings,
                                     const GameConfig& config) {
+    return cancelBuildCommand(
+        buildId,
+        TurnValidationContext{board, activeKingdom, enemyKingdom, publicBuildings, m_turnNumber, config});
+}
+
+bool TurnSystem::replaceMoveCommand(const TurnCommand& moveCommand,
+                                    const TurnValidationContext& context) {
     if (moveCommand.type != TurnCommand::Move) {
         return false;
     }
@@ -408,7 +423,7 @@ bool TurnSystem::replaceMoveCommand(const TurnCommand& moveCommand,
         return false;
     }
 
-    syncPointBudget(config);
+    syncPointBudget(context.config);
 
     std::vector<TurnCommand> candidateCommands;
     candidateCommands.reserve(m_pendingCommands.size() + 1);
@@ -422,8 +437,9 @@ bool TurnSystem::replaceMoveCommand(const TurnCommand& moveCommand,
     candidateCommands.push_back(moveCommand);
 
     const PendingTurnNormalizationResult projection = PendingTurnProjection::normalize(
-        board, activeKingdom, enemyKingdom, publicBuildings, m_turnNumber,
-        candidateCommands, config, PendingTurnInvalidCommandPolicy::DropInvalidBuilds);
+        context,
+        candidateCommands,
+        PendingTurnInvalidCommandPolicy::DropInvalidBuilds);
     if (!projection.valid) {
         return false;
     }
@@ -431,7 +447,7 @@ bool TurnSystem::replaceMoveCommand(const TurnCommand& moveCommand,
     m_pendingCommands = projection.normalizedCommands;
     rebuildQueuedSpecialState();
 
-    const SnapTurnBudget& budget = projection.snapshot.turnBudget(activeKingdom.id);
+    const SnapTurnBudget& budget = projection.snapshot.turnBudget(context.activeKingdom.id);
     m_movementPointsRemaining = budget.movementPointsRemaining;
     m_buildPointsRemaining = budget.buildPointsRemaining;
     m_pieceMoveCounts = budget.pieceMoveCounts;
@@ -439,12 +455,19 @@ bool TurnSystem::replaceMoveCommand(const TurnCommand& moveCommand,
     return true;
 }
 
+bool TurnSystem::replaceMoveCommand(const TurnCommand& moveCommand,
+                                    const Board& board,
+                                    const Kingdom& activeKingdom,
+                                    const Kingdom& enemyKingdom,
+                                    const std::vector<Building>& publicBuildings,
+                                    const GameConfig& config) {
+    return replaceMoveCommand(
+        moveCommand,
+        TurnValidationContext{board, activeKingdom, enemyKingdom, publicBuildings, m_turnNumber, config});
+}
+
 bool TurnSystem::cancelProduceCommand(int barracksId,
-                                      const Board& board,
-                                      const Kingdom& activeKingdom,
-                                      const Kingdom& enemyKingdom,
-                                      const std::vector<Building>& publicBuildings,
-                                      const GameConfig& config) {
+                                      const TurnValidationContext& context) {
     const auto originalSize = m_pendingCommands.size();
     auto it = std::remove_if(m_pendingCommands.begin(), m_pendingCommands.end(),
         [barracksId](const TurnCommand& c) {
@@ -456,17 +479,24 @@ bool TurnSystem::cancelProduceCommand(int barracksId,
     }
 
     rebuildQueuedSpecialState();
-    refreshProjectedBudgetState(board, activeKingdom, enemyKingdom, publicBuildings, config);
+    refreshProjectedBudgetState(context);
     markPendingStateChanged();
     return true;
 }
 
-bool TurnSystem::cancelUpgradeCommand(int pieceId,
+bool TurnSystem::cancelProduceCommand(int barracksId,
                                       const Board& board,
                                       const Kingdom& activeKingdom,
                                       const Kingdom& enemyKingdom,
                                       const std::vector<Building>& publicBuildings,
                                       const GameConfig& config) {
+    return cancelProduceCommand(
+        barracksId,
+        TurnValidationContext{board, activeKingdom, enemyKingdom, publicBuildings, m_turnNumber, config});
+}
+
+bool TurnSystem::cancelUpgradeCommand(int pieceId,
+                                      const TurnValidationContext& context) {
     const auto originalSize = m_pendingCommands.size();
     auto it = std::remove_if(m_pendingCommands.begin(), m_pendingCommands.end(),
         [pieceId](const TurnCommand& c) {
@@ -478,17 +508,24 @@ bool TurnSystem::cancelUpgradeCommand(int pieceId,
     }
 
     rebuildQueuedSpecialState();
-    refreshProjectedBudgetState(board, activeKingdom, enemyKingdom, publicBuildings, config);
+    refreshProjectedBudgetState(context);
     markPendingStateChanged();
     return true;
 }
 
-bool TurnSystem::cancelDisbandCommand(int pieceId,
+bool TurnSystem::cancelUpgradeCommand(int pieceId,
                                       const Board& board,
                                       const Kingdom& activeKingdom,
                                       const Kingdom& enemyKingdom,
                                       const std::vector<Building>& publicBuildings,
                                       const GameConfig& config) {
+    return cancelUpgradeCommand(
+        pieceId,
+        TurnValidationContext{board, activeKingdom, enemyKingdom, publicBuildings, m_turnNumber, config});
+}
+
+bool TurnSystem::cancelDisbandCommand(int pieceId,
+                                      const TurnValidationContext& context) {
     const auto originalSize = m_pendingCommands.size();
     auto it = std::remove_if(m_pendingCommands.begin(), m_pendingCommands.end(),
         [pieceId](const TurnCommand& c) {
@@ -500,9 +537,20 @@ bool TurnSystem::cancelDisbandCommand(int pieceId,
     }
 
     rebuildQueuedSpecialState();
-    refreshProjectedBudgetState(board, activeKingdom, enemyKingdom, publicBuildings, config);
+    refreshProjectedBudgetState(context);
     markPendingStateChanged();
     return true;
+}
+
+bool TurnSystem::cancelDisbandCommand(int pieceId,
+                                      const Board& board,
+                                      const Kingdom& activeKingdom,
+                                      const Kingdom& enemyKingdom,
+                                      const std::vector<Building>& publicBuildings,
+                                      const GameConfig& config) {
+    return cancelDisbandCommand(
+        pieceId,
+        TurnValidationContext{board, activeKingdom, enemyKingdom, publicBuildings, m_turnNumber, config});
 }
 
 const std::vector<TurnCommand>& TurnSystem::getPendingCommands() const {

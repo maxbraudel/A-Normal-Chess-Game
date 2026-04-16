@@ -12,6 +12,7 @@
 #include "Systems/EventLog.hpp"
 #include "Systems/MarriageSystem.hpp"
 #include "Systems/PendingTurnProjection.hpp"
+#include "Systems/TurnValidationContext.hpp"
 
 namespace {
 
@@ -104,14 +105,16 @@ void appendPlannedActionRows(InGameViewModel& model,
         model.plannedActionRows.push_back(std::move(row));
     }
 
-    const PendingTurnProjectionResult projection = PendingTurnProjection::project(
+    const TurnValidationContext turnContext{
         engine.board(),
         engine.activeKingdom(),
         engine.enemyKingdom(),
         engine.publicBuildings(),
         engine.turnSystem().getTurnNumber(),
-        engine.turnSystem().getPendingCommands(),
-        config);
+        config};
+    const PendingTurnProjectionResult projection = PendingTurnProjection::project(
+        turnContext,
+        engine.turnSystem().getPendingCommands());
     if (projection.valid
         && MarriageSystem::canPerformChurchCoronation(projection.snapshot, activeKingdom.id)) {
         model.plannedActionRows.push_back({
@@ -144,7 +147,6 @@ InGameViewModel buildInGameViewModel(const GameEngine& engine,
                                      bool allowCommands,
                                      const InGameHudPresentation& presentation) {
     InGameViewModel model;
-    const Kingdom& activeKingdom = engine.activeKingdom();
     const Kingdom& displayedHudKingdom = engine.kingdom(presentation.statsKingdom);
     const Kingdom& whiteKingdom = engine.kingdom(KingdomId::White);
     const Kingdom& blackKingdom = engine.kingdom(KingdomId::Black);

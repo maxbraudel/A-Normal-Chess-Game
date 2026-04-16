@@ -22,13 +22,113 @@ set(TGUI_BACKEND "SFML_GRAPHICS" CACHE STRING "" FORCE)
 set(TGUI_BUILD_GUI_BUILDER OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(TGUI)
 
-# Collect source files
-file(GLOB_RECURSE SOURCES CONFIGURE_DEPENDS
-    src/*.cpp
+# Explicit source list keeps module membership intentional and avoids silent build drift.
+set(CORE_SOURCES
+    src/AI/AIBrain.cpp
+    src/AI/AIBuildModule.cpp
+    src/AI/AIController.cpp
+    src/AI/AIDirector.cpp
+    src/AI/AIEconomyModule.cpp
+    src/AI/AIEvaluator.cpp
+    src/AI/AIMCTS.cpp
+    src/AI/AISpecialModule.cpp
+    src/AI/AIStrategy.cpp
+    src/AI/AIStrategyBuild.cpp
+    src/AI/AIStrategyEcon.cpp
+    src/AI/AIStrategyMove.cpp
+    src/AI/AIStrategySpecial.cpp
+    src/AI/AITacticalEngine.cpp
+    src/AI/AITurnContext.cpp
+    src/AI/CheckmateSolver.cpp
+    src/AI/ForwardModel.cpp
+    src/Assets/AssetManager.cpp
+    src/Board/Board.cpp
+    src/Board/BoardGenerator.cpp
+    src/Board/CellTraversal.cpp
+    src/Buildings/Building.cpp
+    src/Buildings/BuildingFactory.cpp
+    src/Buildings/StructureChunkRegistry.cpp
+    src/Buildings/StructurePlacementProfile.cpp
+    src/Config/AIConfig.cpp
+    src/Config/GameConfig.cpp
+    src/Core/AITurnRunner.cpp
+    src/Core/Game.cpp
+    src/Core/GameClock.cpp
+    src/Core/GameEngine.cpp
+    src/Core/GameStateValidator.cpp
+    src/Core/InteractionPermissions.cpp
+    src/Core/TurnDraft.cpp
+    src/Debug/GameStateDebugRecorder.cpp
+    src/Input/InputHandler.cpp
+    src/Input/LayeredSelection.cpp
+    src/Kingdom/Kingdom.cpp
+    src/Multiplayer/MultiplayerClient.cpp
+    src/Multiplayer/MultiplayerRuntime.cpp
+    src/Multiplayer/MultiplayerServer.cpp
+    src/Multiplayer/Protocol.cpp
+    src/Render/Camera.cpp
+    src/Render/OverlayRenderer.cpp
+    src/Render/Renderer.cpp
+    src/Render/StructureOverlay.cpp
+    src/Runtime/AITurnCoordinator.cpp
+    src/Runtime/FrontendCoordinator.cpp
+    src/Runtime/InGamePresentationCoordinator.cpp
+    src/Runtime/InputCoordinator.cpp
+    src/Runtime/MultiplayerJoinCoordinator.cpp
+    src/Runtime/MultiplayerEventCoordinator.cpp
+    src/Runtime/MultiplayerRuntimeCoordinator.cpp
+    src/Runtime/PanelActionCoordinator.cpp
+    src/Runtime/RenderCoordinator.cpp
+    src/Runtime/SelectionQueryCoordinator.cpp
+    src/Runtime/SessionFlow.cpp
+    src/Runtime/SessionPresentationCoordinator.cpp
+    src/Runtime/SessionRuntimeCoordinator.cpp
+    src/Runtime/TurnCoordinator.cpp
+    src/Runtime/TurnLifecycleCoordinator.cpp
+    src/Runtime/UICallbackBinder.cpp
+    src/Runtime/UICallbackCoordinator.cpp
+    src/Runtime/UpdateCoordinator.cpp
+    src/Save/SaveManager.cpp
+    src/Systems/BuildReachRules.cpp
+    src/Systems/BuildSystem.cpp
+    src/Systems/CheckResponseRules.cpp
+    src/Systems/CheckSystem.cpp
+    src/Systems/CombatSystem.cpp
+    src/Systems/EconomySystem.cpp
+    src/Systems/EventLog.cpp
+    src/Systems/FormationSystem.cpp
+    src/Systems/MarriageSystem.cpp
+    src/Systems/PendingTurnProjection.cpp
+    src/Systems/ProductionSpawnRules.cpp
+    src/Systems/ProductionSystem.cpp
+    src/Systems/PublicBuildingOccupation.cpp
+    src/Systems/SelectionMoveRules.cpp
+    src/Systems/StructureIntegrityRules.cpp
+    src/Systems/TurnPointRules.cpp
+    src/Systems/TurnSystem.cpp
+    src/Systems/XPSystem.cpp
+    src/UI/BarracksPanel.cpp
+    src/UI/BuildingPanel.cpp
+    src/UI/BuildToolPanel.cpp
+    src/UI/CellPanel.cpp
+    src/UI/EventLogPanel.cpp
+    src/UI/GameMenuUI.cpp
+    src/UI/HUD.cpp
+    src/UI/InGameViewModelBuilder.cpp
+    src/UI/KingdomBalancePanel.cpp
+    src/UI/MainMenuUI.cpp
+    src/UI/PiecePanel.cpp
+    src/UI/PlannedActionsPanel.cpp
+    src/UI/ToolBar.cpp
+    src/UI/UIManager.cpp
+    src/Units/MovementRules.cpp
+    src/Units/Piece.cpp
+    src/Units/PieceFactory.cpp
 )
 
-set(CORE_SOURCES ${SOURCES})
-list(REMOVE_ITEM CORE_SOURCES "${CMAKE_SOURCE_DIR}/src/main.cpp")
+set(APP_SOURCES
+    src/main.cpp
+)
 
 # Core library
 add_library(${PROJECT_NAME}Core STATIC ${CORE_SOURCES})
@@ -44,10 +144,22 @@ target_link_libraries(${PROJECT_NAME}Core PUBLIC
     "C:/msys64/ucrt64/lib/libpthread.dll.a"
 )
 
+if(MSVC)
+    target_compile_options(${PROJECT_NAME}Core PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(${PROJECT_NAME}Core PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 # Executable
-add_executable(${PROJECT_NAME} src/main.cpp)
+add_executable(${PROJECT_NAME} ${APP_SOURCES})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ${PROJECT_NAME}Core)
+
+if(MSVC)
+    target_compile_options(${PROJECT_NAME} PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 
 # Sync assets into the build directory whenever any source asset changes.
 file(GLOB_RECURSE ASSET_INPUTS CONFIGURE_DEPENDS
@@ -116,5 +228,11 @@ add_executable(${PROJECT_NAME}Tests tests/TestMain.cpp)
 target_link_libraries(${PROJECT_NAME}Tests PRIVATE ${PROJECT_NAME}Core)
 target_include_directories(${PROJECT_NAME}Tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
 add_dependencies(${PROJECT_NAME}Tests ${PROJECT_NAME}Assets)
+
+if(MSVC)
+    target_compile_options(${PROJECT_NAME}Tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(${PROJECT_NAME}Tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 
 add_test(NAME ${PROJECT_NAME}Tests COMMAND ${PROJECT_NAME}Tests)

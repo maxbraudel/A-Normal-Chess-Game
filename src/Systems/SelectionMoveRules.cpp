@@ -24,22 +24,6 @@ const TurnCommand* findPendingMoveCommand(const std::vector<TurnCommand>& pendin
     return nullptr;
 }
 
-std::vector<TurnCommand> pendingCommandsWithoutPieceMove(const std::vector<TurnCommand>& pendingCommands,
-                                                         int pieceId) {
-    std::vector<TurnCommand> filteredCommands;
-    filteredCommands.reserve(pendingCommands.size());
-
-    for (const TurnCommand& command : pendingCommands) {
-        if (command.type == TurnCommand::Move && command.pieceId == pieceId) {
-            continue;
-        }
-
-        filteredCommands.push_back(command);
-    }
-
-    return filteredCommands;
-}
-
 std::vector<TurnCommand> pendingCommandsWithoutPieceLiveStateChanges(
     const std::vector<TurnCommand>& pendingCommands,
     int pieceId) {
@@ -61,17 +45,12 @@ std::vector<TurnCommand> pendingCommandsWithoutPieceLiveStateChanges(
     return filteredCommands;
 }
 
-PendingTurnProjectionResult projectSelectionState(const Board& board,
-                                                  const Kingdom& activeKingdom,
-                                                  const Kingdom& enemyKingdom,
-                                                  const std::vector<Building>& publicBuildings,
-                                                  int turnNumber,
+PendingTurnProjectionResult projectSelectionState(const TurnValidationContext& context,
                                                   const std::vector<TurnCommand>& pendingCommands,
-                                                  int pieceId,
-                                                  const GameConfig& config) {
+                                                  int pieceId) {
     PendingTurnProjectionResult result;
 
-    Kingdom restoredActiveKingdom = activeKingdom;
+    Kingdom restoredActiveKingdom = context.activeKingdom;
     if (const TurnCommand* pendingMove = findPendingMoveCommand(pendingCommands, pieceId)) {
         if (Piece* restoredPiece = restoredActiveKingdom.getPieceById(pieceId)) {
             restoredPiece->position = pendingMove->origin;
@@ -79,13 +58,14 @@ PendingTurnProjectionResult projectSelectionState(const Board& board,
     }
 
     const PendingTurnNormalizationResult normalization = PendingTurnProjection::normalize(
-        board,
-        restoredActiveKingdom,
-        enemyKingdom,
-        publicBuildings,
-        turnNumber,
+        TurnValidationContext{
+            context.board,
+            restoredActiveKingdom,
+            context.enemyKingdom,
+            context.publicBuildings,
+            context.turnNumber,
+            context.config},
         pendingCommandsWithoutPieceLiveStateChanges(pendingCommands, pieceId),
-        config,
         PendingTurnInvalidCommandPolicy::DropInvalidBuilds);
     result.snapshot = normalization.snapshot;
     result.valid = normalization.valid;
@@ -100,56 +80,46 @@ bool SelectionMoveOptions::contains(sf::Vector2i destination) const {
         || std::find(unsafeMoves.begin(), unsafeMoves.end(), destination) != unsafeMoves.end();
 }
 
-SelectionMoveOptions SelectionMoveRules::classifyPieceMoves(const Board& board,
-                                                            const Kingdom& activeKingdom,
-                                                            const Kingdom& enemyKingdom,
-                                                            const std::vector<Building>& publicBuildings,
-                                                            int turnNumber,
+SelectionMoveOptions SelectionMoveRules::classifyPieceMoves(const TurnValidationContext& context,
                                                             const std::vector<TurnCommand>& pendingCommands,
-                                                            int pieceId,
-                                                            const GameConfig& config) {
+                                                            int pieceId) {
     SelectionMoveOptions moveOptions;
 
     const PendingTurnProjectionResult projection = projectSelectionState(
-        board,
-        activeKingdom,
-        enemyKingdom,
-        publicBuildings,
-        turnNumber,
+        context,
         pendingCommands,
-        pieceId,
-        config);
+        pieceId);
     if (!projection.valid) {
         return moveOptions;
     }
 
-    const SnapPiece* projectedPiece = projection.snapshot.kingdom(activeKingdom.id).getPieceById(pieceId);
+    const SnapPiece* projectedPiece = projection.snapshot.kingdom(context.activeKingdom.id).getPieceById(pieceId);
     if (!projectedPiece) {
         return moveOptions;
     }
 
     moveOptions.originUnsafe = ForwardModel::isInCheck(
         projection.snapshot,
-        activeKingdom.id,
-        config.getGlobalMaxRange());
+        context.activeKingdom.id,
+        context.config.getGlobalMaxRange());
 
-    const SnapTurnBudget& budget = projection.snapshot.turnBudget(activeKingdom.id);
-    if (budget.moveCountForPiece(pieceId) >= TurnPointRules::moveAllowance(projectedPiece->type, config)) {
+    const SnapTurnBudget& budget = projection.snapshot.turnBudget(context.activeKingdom.id);
+    if (budget.moveCountForPiece(pieceId) >= TurnPointRules::moveAllowance(projectedPiece->type, context.config)) {
         return moveOptions;
     }
-    if (budget.movementPointsRemaining < TurnPointRules::movementCost(projectedPiece->type, config)) {
+    if (budget.movementPointsRemaining < TurnPointRules::movementCost(projectedPiece->type, context.config)) {
         return moveOptions;
     }
 
     moveOptions.safeMoves = ForwardModel::getLegalMoves(
         projection.snapshot,
         *projectedPiece,
-        config.getGlobalMaxRange());
+        context.config.getGlobalMaxRange());
 
     const std::vector<sf::Vector2i> pseudoLegalMoves = ForwardModel::getPseudoLegalMoves(
         projection.snapshot,
         *projectedPiece,
-        config.getGlobalMaxRange());
+        context.config.getGlobalMaxRange());
     for (const sf::Vector2i& destination : pseudoLegalMoves) {
         if (std::find(moveOptions.safeMoves.begin(), moveOptions.safeMoves.end(), destination)
             == moveOptions.safeMoves.end()) {
@@ -158,4 +128,18 @@ SelectionMoveOptions SelectionMoveRules::classifyPieceMoves(const Board& board,
     }
 
     return moveOptions;
+}
+
+SelectionMoveOptions SelectionMoveRules::classifyPieceMoves(const Board& board,
+                                                            const Kingdom& activeKingdom,
+                                                            const Kingdom& enemyKingdom,
+                                                            const std::vector<Building>& publicBuildings,
+                                                            int turnNumber,
+                                                            const std::vector<TurnCommand>& pendingCommands,
+                                                            int pieceId,
+                                                            const GameConfig& config) {
+    return classifyPieceMoves(
+        TurnValidationContext{board, activeKingdom, enemyKingdom, publicBuildings, turnNumber, config},
+        pendingCommands,
+        pieceId);
 }

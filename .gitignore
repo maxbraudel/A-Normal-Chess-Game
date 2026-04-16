@@ -1,4 +1,11 @@
 build
+build-msvc
 build-probe
 build-ucrt64
+cmake-build-*/
+.venv/
 .vscode
+debug_game_state/
+build/saves/
+*.log
+*.tmp

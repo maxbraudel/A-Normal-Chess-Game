@@ -325,16 +325,12 @@ void PendingTurnProjection::initializeBudgets(GameSnapshot& snapshot,
 }
 
 PendingTurnProjectionResult PendingTurnProjection::project(
-    const Board& board,
-    const Kingdom& activeKingdom,
-    const Kingdom& enemyKingdom,
-    const std::vector<Building>& publicBuildings,
-    int turnNumber,
-    const std::vector<TurnCommand>& commands,
-    const GameConfig& config) {
+    const TurnValidationContext& context,
+    const std::vector<TurnCommand>& commands) {
     const PendingTurnNormalizationResult normalization = normalize(
-        board, activeKingdom, enemyKingdom, publicBuildings,
-        turnNumber, commands, config, PendingTurnInvalidCommandPolicy::FailFast);
+        context,
+        commands,
+        PendingTurnInvalidCommandPolicy::FailFast);
 
     PendingTurnProjectionResult result;
     result.snapshot = normalization.snapshot;
@@ -343,23 +339,31 @@ PendingTurnProjectionResult PendingTurnProjection::project(
     return result;
 }
 
-PendingTurnNormalizationResult PendingTurnProjection::normalize(
+PendingTurnProjectionResult PendingTurnProjection::project(
     const Board& board,
     const Kingdom& activeKingdom,
     const Kingdom& enemyKingdom,
     const std::vector<Building>& publicBuildings,
     int turnNumber,
     const std::vector<TurnCommand>& commands,
-    const GameConfig& config,
+    const GameConfig& config) {
+    return project(
+        TurnValidationContext{board, activeKingdom, enemyKingdom, publicBuildings, turnNumber, config},
+        commands);
+}
+
+PendingTurnNormalizationResult PendingTurnProjection::normalize(
+    const TurnValidationContext& context,
+    const std::vector<TurnCommand>& commands,
     PendingTurnInvalidCommandPolicy invalidCommandPolicy) {
     PendingTurnNormalizationResult result = normalizeSequentialCommands(
-        board,
-        activeKingdom,
-        enemyKingdom,
-        publicBuildings,
-        turnNumber,
+        context.board,
+        context.activeKingdom,
+        context.enemyKingdom,
+        context.publicBuildings,
+        context.turnNumber,
         commands,
-        config,
+        context.config,
         invalidCommandPolicy);
     if (!result.valid || invalidCommandPolicy != PendingTurnInvalidCommandPolicy::DropInvalidBuilds) {
         return result;
@@ -368,22 +372,22 @@ PendingTurnNormalizationResult PendingTurnProjection::normalize(
     std::vector<TurnCommand> finalCoverageCommands;
     std::vector<PendingTurnDroppedCommand> finalCoverageDrops = collectFinalCoverageDroppedBuilds(
         result.snapshot,
-        activeKingdom.id,
+        context.activeKingdom.id,
         result.normalizedCommands,
-        config,
+        context.config,
         &finalCoverageCommands);
     if (finalCoverageDrops.empty()) {
         return result;
     }
 
     PendingTurnNormalizationResult replay = normalizeSequentialCommands(
-        board,
-        activeKingdom,
-        enemyKingdom,
-        publicBuildings,
-        turnNumber,
+        context.board,
+        context.activeKingdom,
+        context.enemyKingdom,
+        context.publicBuildings,
+        context.turnNumber,
         finalCoverageCommands,
-        config,
+        context.config,
         invalidCommandPolicy);
     if (!replay.valid) {
         return replay;
@@ -400,6 +404,30 @@ PendingTurnNormalizationResult PendingTurnProjection::normalize(
     return replay;
 }
 
+PendingTurnNormalizationResult PendingTurnProjection::normalize(
+    const Board& board,
+    const Kingdom& activeKingdom,
+    const Kingdom& enemyKingdom,
+    const std::vector<Building>& publicBuildings,
+    int turnNumber,
+    const std::vector<TurnCommand>& commands,
+    const GameConfig& config,
+    PendingTurnInvalidCommandPolicy invalidCommandPolicy) {
+    return normalize(
+        TurnValidationContext{board, activeKingdom, enemyKingdom, publicBuildings, turnNumber, config},
+        commands,
+        invalidCommandPolicy);
+}
+
+PendingTurnProjectionResult PendingTurnProjection::projectWithCandidate(
+    const TurnValidationContext& context,
+    const std::vector<TurnCommand>& commands,
+    const TurnCommand& candidate) {
+    std::vector<TurnCommand> projectedCommands = commands;
+    projectedCommands.push_back(candidate);
+    return project(context, projectedCommands);
+}
+
 PendingTurnProjectionResult PendingTurnProjection::projectWithCandidate(
     const Board& board,
     const Kingdom& activeKingdom,
@@ -409,10 +437,23 @@ PendingTurnProjectionResult PendingTurnProjection::projectWithCandidate(
     const std::vector<TurnCommand>& commands,
     const TurnCommand& candidate,
     const GameConfig& config) {
-    std::vector<TurnCommand> projectedCommands = commands;
-    projectedCommands.push_back(candidate);
-    return project(board, activeKingdom, enemyKingdom, publicBuildings,
-                   turnNumber, projectedCommands, config);
+    return projectWithCandidate(
+        TurnValidationContext{board, activeKingdom, enemyKingdom, publicBuildings, turnNumber, config},
+        commands,
+        candidate);
+}
+
+bool PendingTurnProjection::canAppendCommand(
+    const TurnValidationContext& context,
+    const std::vector<TurnCommand>& commands,
+    const TurnCommand& candidate,
+    std::string* errorMessage) {
+    const PendingTurnProjectionResult projection = projectWithCandidate(context, commands, candidate);
+    if (!projection.valid && errorMessage) {
+        *errorMessage = projection.errorMessage;
+    }
+
+    return projection.valid;
 }
 
 bool PendingTurnProjection::canAppendCommand(
@@ -425,14 +466,37 @@ bool PendingTurnProjection::canAppendCommand(
     const TurnCommand& candidate,
     const GameConfig& config,
     std::string* errorMessage) {
-    const PendingTurnProjectionResult projection = projectWithCandidate(
-        board, activeKingdom, enemyKingdom, publicBuildings,
-        turnNumber, commands, candidate, config);
-    if (!projection.valid && errorMessage) {
-        *errorMessage = projection.errorMessage;
+    return canAppendCommand(
+        TurnValidationContext{board, activeKingdom, enemyKingdom, publicBuildings, turnNumber, config},
+        commands,
+        candidate,
+        errorMessage);
+}
+
+std::vector<sf::Vector2i> PendingTurnProjection::projectedPseudoLegalMovesForPiece(
+    const TurnValidationContext& context,
+    const std::vector<TurnCommand>& commands,
+    int pieceId) {
+    const PendingTurnProjectionResult projection = project(context, commands);
+    if (!projection.valid) {
+        return {};
     }
 
-    return projection.valid;
+    const SnapPiece* piece = projection.snapshot.kingdom(context.activeKingdom.id).getPieceById(pieceId);
+    if (!piece) {
+        return {};
+    }
+
+    const SnapTurnBudget& budget = projection.snapshot.turnBudget(context.activeKingdom.id);
+    if (budget.moveCountForPiece(pieceId) >= TurnPointRules::moveAllowance(piece->type, context.config)) {
+        return {};
+    }
+    if (budget.movementPointsRemaining < TurnPointRules::movementCost(piece->type, context.config)) {
+        return {};
+    }
+
+    return ForwardModel::getPseudoLegalMoves(
+        projection.snapshot, *piece, context.config.getGlobalMaxRange());
 }
 
 std::vector<sf::Vector2i> PendingTurnProjection::projectedPseudoLegalMovesForPiece(
@@ -444,25 +508,8 @@ std::vector<sf::Vector2i> PendingTurnProjection::projectedPseudoLegalMovesForPie
     const std::vector<TurnCommand>& commands,
     int pieceId,
     const GameConfig& config) {
-    const PendingTurnProjectionResult projection = project(
-        board, activeKingdom, enemyKingdom, publicBuildings, turnNumber, commands, config);
-    if (!projection.valid) {
-        return {};
-    }
-
-    const SnapPiece* piece = projection.snapshot.kingdom(activeKingdom.id).getPieceById(pieceId);
-    if (!piece) {
-        return {};
-    }
-
-    const SnapTurnBudget& budget = projection.snapshot.turnBudget(activeKingdom.id);
-    if (budget.moveCountForPiece(pieceId) >= TurnPointRules::moveAllowance(piece->type, config)) {
-        return {};
-    }
-    if (budget.movementPointsRemaining < TurnPointRules::movementCost(piece->type, config)) {
-        return {};
-    }
-
-    return ForwardModel::getPseudoLegalMoves(
-        projection.snapshot, *piece, config.getGlobalMaxRange());
+    return projectedPseudoLegalMovesForPiece(
+        TurnValidationContext{board, activeKingdom, enemyKingdom, publicBuildings, turnNumber, config},
+        commands,
+        pieceId);
 }

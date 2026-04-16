@@ -10,6 +10,7 @@
 #include "Kingdom/Kingdom.hpp"
 #include "Systems/TurnSystem.hpp"
 #include "Systems/TurnCommand.hpp"
+#include "Systems/TurnValidationContext.hpp"
 #include "Systems/CheckSystem.hpp"
 #include "Systems/EventLog.hpp"
 #include "Config/GameConfig.hpp"
@@ -111,14 +112,11 @@ AITurnPlan AIController::computeTurnPlan(Board& board, Kingdom& self, Kingdom& e
     TurnSystem planningTurnSystem;
     planningTurnSystem.setActiveKingdom(self.id);
     BuildingFactory planningBuildingFactory = makePlanningBuildingFactory(self, enemy, publicBuildings);
+    const TurnValidationContext planningContext{board, self, enemy, publicBuildings, turnNumber, config};
 
     auto queuePlanned = [&](const TurnCommand& cmd) {
         if (planningTurnSystem.queueCommand(cmd,
-                                            board,
-                                            self,
-                                            enemy,
-                                            publicBuildings,
-                                            config,
+                                            planningContext,
                                             &planningBuildingFactory)) {
             plan.commands.push_back(cmd);
             return true;
@@ -297,15 +295,12 @@ void AIController::playTurn(Board& board, Kingdom& self, Kingdom& enemy,
                                                             BuildingFactory& buildingFactory) {
     AITurnPlan plan = computeTurnPlan(board, self, enemy, publicBuildings,
                                       turnSystem.getTurnNumber(), config);
+    const TurnValidationContext turnContext{board, self, enemy, publicBuildings, turnSystem.getTurnNumber(), config};
     applyTurnPlanMetadata(plan);
     log.log(turnSystem.getTurnNumber(), self.id, "AI Phase: " + plan.phaseName);
     for (const auto& cmd : plan.commands) {
         turnSystem.queueCommand(cmd,
-                                board,
-                                self,
-                                enemy,
-                                publicBuildings,
-                                                                config,
+                                turnContext,
                                                                 &buildingFactory);
     }
     log.log(turnSystem.getTurnNumber(), self.id, "AI completed turn planning.");

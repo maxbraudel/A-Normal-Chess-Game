@@ -1,13 +1,15 @@
 #pragma once
 #include <chrono>
 #include <map>
+#include <optional>
 #include <set>
 #include <SFML/System/Vector2.hpp>
 #include <SFML/Window/Event.hpp>
+#include "Core/ToolState.hpp"
 #include <vector>
 #include "Input/InputContext.hpp"
+#include "Input/InputSelectionBookmark.hpp"
 #include "Input/LayeredSelection.hpp"
-#include "Input/ToolState.hpp"
 #include "Buildings/BuildingType.hpp"
 
 class Camera;
@@ -29,8 +31,8 @@ public:
     ToolState getCurrentTool() const;
     void setTool(ToolState tool);
 
-    Piece* getSelectedPiece() const;
-    Building* getSelectedBuilding() const;
+    int getSelectedPieceId() const;
+    int getSelectedBuildingId() const;
     bool hasSelectedCell() const;
     sf::Vector2i getSelectedCell() const;
     const std::vector<sf::Vector2i>& getValidMoves() const;
@@ -57,8 +59,13 @@ public:
 
 private:
     ToolState m_currentTool;
-    Piece* m_selectedPiece;
-    Building* m_selectedBuilding;
+    int m_selectedPieceId;
+    int m_selectedBuildingId;
+    std::optional<sf::Vector2i> m_selectedBuildingOrigin;
+    BuildingType m_selectedBuildingType;
+    KingdomId m_selectedBuildingOwner;
+    bool m_selectedBuildingIsNeutral;
+    int m_selectedBuildingRotationQuarterTurns;
     bool m_hasSelectedCell;
     sf::Vector2i m_selectedCell;
     std::vector<sf::Vector2i> m_validMoves;
@@ -86,6 +93,7 @@ private:
     void handleSelectTool(const sf::Event& event, const InputContext& context);
     void handleBuildTool(const sf::Event& event, const InputContext& context);
     void handleCameraInput(const sf::Event& event, sf::RenderWindow& window, Camera& camera);
+    Piece* resolveSelectedPiece(const InputContext& context) const;
     // Recompute move targets for piece given the projected queued turn state.
     void refreshPieceMoves(Piece* piece, const InputContext& context);
     bool isSelectableMoveDestination(sf::Vector2i cellPos) const;
