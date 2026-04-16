@@ -1,4 +1,6 @@
 #include "Systems/MarriageSystem.hpp"
+
+#include "AI/GameSnapshot.hpp"
 #include "Kingdom/Kingdom.hpp"
 #include "Board/Board.hpp"
 #include "Board/Cell.hpp"
@@ -6,59 +8,161 @@
 #include "Buildings/BuildingType.hpp"
 #include "Units/Piece.hpp"
 #include "Systems/EventLog.hpp"
-#include <cmath>
 
-bool MarriageSystem::canMarry(const Kingdom& kingdom, const Board& board, const Building& church) {
-    if (church.type != BuildingType::Church) return false;
-    if (kingdom.hasQueen()) return false;
+namespace {
 
-    auto cells = church.getOccupiedCells();
+template <typename PieceLookup>
+bool churchCoronationState(const std::vector<sf::Vector2i>& cells,
+                           PieceLookup&& lookupPiece,
+                           KingdomId kingdomId,
+                           bool& hasKing,
+                           bool& hasBishop,
+                           int& rookId) {
+    hasKing = false;
+    hasBishop = false;
+    rookId = -1;
 
-    // Check if king, bishop, and pawn are all on church cells
-    const Piece* king = nullptr;
-    const Piece* bishop = nullptr;
-    const Piece* pawn = nullptr;
-    bool enemyPresent = false;
+    for (const sf::Vector2i& pos : cells) {
+        const auto* piece = lookupPiece(pos);
+        if (!piece) {
+            continue;
+        }
 
-    for (const auto& pos : cells) {
-        const Cell& cell = board.getCell(pos.x, pos.y);
-        if (cell.piece) {
-            if (cell.piece->kingdom != kingdom.id) {
-                enemyPresent = true;
-                continue;
-            }
-            if (cell.piece->type == PieceType::King) king = cell.piece;
-            else if (cell.piece->type == PieceType::Bishop) bishop = cell.piece;
-            else if (cell.piece->type == PieceType::Pawn) pawn = cell.piece;
+        if (piece->kingdom != kingdomId) {
+            return false;
+        }
+
+        if (piece->type == PieceType::King) {
+            hasKing = true;
+        } else if (piece->type == PieceType::Bishop) {
+            hasBishop = true;
+        } else if (piece->type == PieceType::Rook && rookId < 0) {
+            rookId = piece->id;
         }
     }
-
-    if (enemyPresent) return false;
-    if (!king || !bishop || !pawn) return false;
-
-    // King and pawn must be adjacent
-    int dx = std::abs(king->position.x - pawn->position.x);
-    int dy = std::abs(king->position.y - pawn->position.y);
-    if (dx > 1 || dy > 1 || (dx == 0 && dy == 0)) return false;
 
     return true;
 }
 
-void MarriageSystem::performMarriage(Kingdom& kingdom, const Board& board, const Building& church,
-                                      EventLog& log, int turnNumber) {
-    if (!canMarry(kingdom, board, church)) return;
+template <typename PieceLookup>
+bool canPerformChurchCoronationOnCells(const std::vector<sf::Vector2i>& cells,
+                                       KingdomId kingdomId,
+                                       PieceLookup&& lookupPiece,
+                                       int& rookId) {
+    bool hasKing = false;
+    bool hasBishop = false;
+    rookId = -1;
+    if (!churchCoronationState(cells, lookupPiece, kingdomId, hasKing, hasBishop, rookId)) {
+        return false;
+    }
 
-    auto cells = church.getOccupiedCells();
-    for (const auto& pos : cells) {
-        const Cell& cell = board.getCell(pos.x, pos.y);
-        if (cell.piece && cell.piece->kingdom == kingdom.id && cell.piece->type == PieceType::Pawn) {
-            // Find this piece in kingdom
-            Piece* pawn = kingdom.getPieceById(cell.piece->id);
-            if (pawn) {
-                pawn->type = PieceType::Queen;
-                log.log(turnNumber, kingdom.id, "Marriage! A pawn becomes Queen!");
-                return;
-            }
+    return hasKing && hasBishop && rookId >= 0;
+}
+
+}
+
+bool MarriageSystem::canPerformChurchCoronation(const Kingdom& kingdom,
+                                                const Board& board,
+                                                const Building& church) {
+    if (church.type != BuildingType::Church || church.isDestroyed()) {
+        return false;
+    }
+
+    int rookId = -1;
+    return canPerformChurchCoronationOnCells(
+        church.getOccupiedCells(),
+        kingdom.id,
+        [&board](const sf::Vector2i& pos) -> const Piece* {
+            return board.getCell(pos.x, pos.y).piece;
+        },
+        rookId);
+}
+
+bool MarriageSystem::performChurchCoronation(Kingdom& kingdom,
+                                             const Board& board,
+                                             const Building& church,
+                                             EventLog& log,
+                                             int turnNumber) {
+    int rookId = -1;
+    if (church.type != BuildingType::Church || church.isDestroyed()) {
+        return false;
+    }
+
+    if (!canPerformChurchCoronationOnCells(
+            church.getOccupiedCells(),
+            kingdom.id,
+            [&board](const sf::Vector2i& pos) -> const Piece* {
+                return board.getCell(pos.x, pos.y).piece;
+            },
+            rookId)) {
+        return false;
+    }
+
+    Piece* rook = kingdom.getPieceById(rookId);
+    if (!rook) {
+        return false;
+    }
+
+    rook->type = PieceType::Queen;
+    log.log(turnNumber, kingdom.id, "Coronation! A rook becomes Queen at the church!");
+    return true;
+}
+
+bool MarriageSystem::canPerformChurchCoronation(const GameSnapshot& snapshot, KingdomId kingdomId) {
+    for (const SnapBuilding& building : snapshot.publicBuildings) {
+        if (building.type != BuildingType::Church || building.isDestroyed()) {
+            continue;
+        }
+
+        int rookId = -1;
+        if (canPerformChurchCoronationOnCells(
+                building.getOccupiedCells(),
+                kingdomId,
+                [&snapshot](const sf::Vector2i& pos) -> const SnapPiece* {
+                    return snapshot.pieceAt(pos);
+                },
+                rookId)) {
+            return true;
         }
     }
+
+    return false;
+}
+
+bool MarriageSystem::applyChurchCoronation(GameSnapshot& snapshot, KingdomId kingdomId) {
+    for (const SnapBuilding& building : snapshot.publicBuildings) {
+        if (building.type != BuildingType::Church || building.isDestroyed()) {
+            continue;
+        }
+
+        int rookId = -1;
+        if (!canPerformChurchCoronationOnCells(
+                building.getOccupiedCells(),
+                kingdomId,
+                [&snapshot](const sf::Vector2i& pos) -> const SnapPiece* {
+                    return snapshot.pieceAt(pos);
+                },
+                rookId)) {
+            continue;
+        }
+
+        SnapPiece* rook = snapshot.kingdom(kingdomId).getPieceById(rookId);
+        if (!rook) {
+            return false;
+        }
+
+        rook->type = PieceType::Queen;
+        return true;
+    }
+
+    return false;
+}
+
+bool MarriageSystem::canMarry(const Kingdom& kingdom, const Board& board, const Building& church) {
+    return canPerformChurchCoronation(kingdom, board, church);
+}
+
+void MarriageSystem::performMarriage(Kingdom& kingdom, const Board& board, const Building& church,
+                                      EventLog& log, int turnNumber) {
+    performChurchCoronation(kingdom, board, church, log, turnNumber);
 }

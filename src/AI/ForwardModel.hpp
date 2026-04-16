@@ -37,6 +37,7 @@ public:
                            const GameConfig& config);
     static bool applyProduce(GameSnapshot& s, int barracksId, PieceType type,
                              int cost, int productionTurns, KingdomId k);
+    static bool applyAutomaticChurchCoronation(GameSnapshot& s, KingdomId k);
     static bool applyMarriage(GameSnapshot& s, KingdomId k);
 
     // ---- Turn advancement (income, production tick, spawns) ----
@@ -54,6 +55,8 @@ private:
     // Movement helpers
     static std::vector<sf::Vector2i> getPawnMoves(const SnapPiece& piece,
                                                    const GameSnapshot& s);
+    static std::vector<sf::Vector2i> getPawnThreatenedSquares(const SnapPiece& piece,
+                                                               const GameSnapshot& s);
     static std::vector<sf::Vector2i> getKnightMoves(const SnapPiece& piece,
                                                      const GameSnapshot& s);
     static std::vector<sf::Vector2i> getDirectionalMoves(const SnapPiece& piece,

@@ -13,7 +13,7 @@ ThreatMap CheckSystem::buildThreatMap(const Kingdom& attacker,
                                        const Board& board, const GameConfig& config) {
     ThreatMap map;
     for (const auto& piece : attacker.pieces) {
-        auto moves = MovementRules::getValidMoves(piece, board, config);
+        auto moves = MovementRules::getThreatenedSquares(piece, board, config);
         for (const auto& m : moves) {
             map.mark(m);
         }
@@ -28,7 +28,7 @@ bool CheckSystem::isInCheckFast(const Kingdom& kingdom, const Kingdom& enemy,
 
     // Check directly: can any enemy piece reach the king?
     for (const auto& ep : enemy.pieces) {
-        auto moves = MovementRules::getValidMoves(ep, board, config);
+        auto moves = MovementRules::getThreatenedSquares(ep, board, config);
         for (const auto& m : moves) {
             if (m == king->position) return true;
         }
@@ -59,7 +59,7 @@ bool CheckSystem::isInCheck(KingdomId kingdomId, const Board& board, const GameC
         for (int x = 0; x < diameter; ++x) {
             const Cell& cell = board.getCell(x, y);
             if (cell.piece && cell.piece->kingdom == enemyId) {
-                auto moves = MovementRules::getValidMoves(*cell.piece, board, config);
+                auto moves = MovementRules::getThreatenedSquares(*cell.piece, board, config);
                 for (const auto& m : moves) {
                     if (m == kingPos) return true;
                 }
@@ -110,7 +110,7 @@ std::set<sf::Vector2i, Vec2iCompare> CheckSystem::getThreatenedSquares(
         for (int x = 0; x < diameter; ++x) {
             const Cell& cell = board.getCell(x, y);
             if (cell.piece && cell.piece->kingdom == attackerKingdom) {
-                auto moves = MovementRules::getValidMoves(*cell.piece, board, config);
+                auto moves = MovementRules::getThreatenedSquares(*cell.piece, board, config);
                 for (const auto& m : moves) {
                     threatened.insert(m);
                 }

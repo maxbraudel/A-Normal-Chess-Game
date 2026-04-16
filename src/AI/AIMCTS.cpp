@@ -273,13 +273,6 @@ std::vector<MCTSAction> AIMCTS::generateCandidateActions(
         }
     }
 
-    // --- MARRIAGE ---
-    if (objective == StrategicObjective::PURSUE_QUEEN) {
-        MCTSAction a;
-        a.type = MCTSAction::MARRY;
-        scored.push_back({a, 30.0f});
-    }
-
     // --- END TURN (always available) ---
     scored.push_back({{MCTSAction::END_TURN}, 1.0f});
 
@@ -460,7 +453,6 @@ void AIMCTS::applyAction(GameSnapshot& s, const MCTSAction& action, KingdomId k,
                                        config.getProductionTurns(action.prodType), k);
             break;
         case MCTSAction::MARRY:
-            ForwardModel::applyMarriage(s, k);
             break;
         case MCTSAction::END_TURN:
             break;

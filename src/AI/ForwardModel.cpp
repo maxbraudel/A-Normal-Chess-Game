@@ -7,6 +7,7 @@
 #include "Config/GameConfig.hpp"
 #include "Systems/BuildReachRules.hpp"
 #include "Systems/EconomySystem.hpp"
+#include "Systems/MarriageSystem.hpp"
 #include "Systems/ProductionSpawnRules.hpp"
 #include "Systems/StructureIntegrityRules.hpp"
 #include "Systems/TurnPointRules.hpp"
@@ -32,6 +33,13 @@ bool isBlockingWallCell(const SnapBuilding* building, sf::Vector2i pos) {
     const int localX = pos.x - building->origin.x;
     const int localY = pos.y - building->origin.y;
     return StructureIntegrityRules::isWallCellBlocking(*building, localX, localY);
+}
+
+bool isEnemyCapturableBuildingCell(const GameSnapshot& snapshot,
+                                   sf::Vector2i pos,
+                                   KingdomId mover) {
+    const SnapBuilding* building = snapshot.buildingAt(pos);
+    return building && !building->isNeutral && building->owner != mover;
 }
 
 void processEnemyStructureOccupancy(GameSnapshot& snapshot,
@@ -194,11 +202,56 @@ bool ForwardModel::canLandOn(const GameSnapshot& s, sf::Vector2i pos, KingdomId 
 std::vector<sf::Vector2i> ForwardModel::getPawnMoves(const SnapPiece& piece,
                                                       const GameSnapshot& s) {
     std::vector<sf::Vector2i> moves;
-    static const int dirs[4][2] = {{0,-1},{0,1},{-1,0},{1,0}};
-    for (auto& d : dirs) {
-        sf::Vector2i dest{piece.position.x + d[0], piece.position.y + d[1]};
-        if (canLandOn(s, dest, piece.kingdom))
+    static const int orthogonalDirs[4][2] = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
+    static const int diagonalDirs[4][2] = {{-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
+
+    for (const auto& direction : orthogonalDirs) {
+        const sf::Vector2i dest{piece.position.x + direction[0], piece.position.y + direction[1]};
+        if (!s.isTraversable(dest.x, dest.y)) {
+            continue;
+        }
+
+        if (s.pieceAt(dest)) {
+            continue;
+        }
+        if (isEnemyCapturableBuildingCell(s, dest, piece.kingdom)) {
+            continue;
+        }
+        if (isBlockingWallCell(s.buildingAt(dest), dest)) {
+            continue;
+        }
+
+        moves.push_back(dest);
+    }
+
+    for (const auto& direction : diagonalDirs) {
+        const sf::Vector2i dest{piece.position.x + direction[0], piece.position.y + direction[1]};
+        if (!s.isTraversable(dest.x, dest.y)) {
+            continue;
+        }
+
+        const SnapPiece* occupant = s.pieceAt(dest);
+        if (occupant && occupant->kingdom != piece.kingdom) {
             moves.push_back(dest);
+            continue;
+        }
+        if (isEnemyCapturableBuildingCell(s, dest, piece.kingdom)) {
+            moves.push_back(dest);
+        }
+    }
+
+    return moves;
+}
+
+std::vector<sf::Vector2i> ForwardModel::getPawnThreatenedSquares(const SnapPiece& piece,
+                                                                  const GameSnapshot& s) {
+    std::vector<sf::Vector2i> moves;
+    static const int diagonalDirs[4][2] = {{-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
+    for (const auto& direction : diagonalDirs) {
+        const sf::Vector2i dest{piece.position.x + direction[0], piece.position.y + direction[1]};
+        if (s.isTraversable(dest.x, dest.y)) {
+            moves.push_back(dest);
+        }
     }
     return moves;
 }
@@ -452,49 +505,12 @@ bool ForwardModel::applyProduce(GameSnapshot& s, int barracksId, PieceType type,
     return true;
 }
 
+bool ForwardModel::applyAutomaticChurchCoronation(GameSnapshot& s, KingdomId k) {
+    return MarriageSystem::applyChurchCoronation(s, k);
+}
+
 bool ForwardModel::applyMarriage(GameSnapshot& s, KingdomId k) {
-    SnapKingdom& myK = s.kingdom(k);
-    if (myK.hasQueen()) return false;
-
-    // Find church
-    const SnapBuilding* church = nullptr;
-    for (auto& b : s.publicBuildings) {
-        if (b.type == BuildingType::Church) { church = &b; break; }
-    }
-    if (!church) return false;
-
-    auto cells = church->getOccupiedCells();
-
-    // Check no enemy pieces on church
-    SnapKingdom& enemyK = s.enemyKingdom(k);
-    for (auto& cell : cells) {
-        if (enemyK.getPieceAt(cell)) return false;
-    }
-
-    // Find king, bishop, pawn on church
-    SnapPiece* king = nullptr;
-    SnapPiece* bishop = nullptr;
-    SnapPiece* pawn = nullptr;
-    for (auto& p : myK.pieces) {
-        bool onChurch = false;
-        for (auto& c : cells) if (p.position == c) { onChurch = true; break; }
-        if (!onChurch) continue;
-        if (p.type == PieceType::King) king = &p;
-        else if (p.type == PieceType::Bishop && !bishop) bishop = &p;
-        else if (p.type == PieceType::Pawn && !pawn) pawn = &p;
-    }
-
-    if (!king || !bishop || !pawn) return false;
-
-    // Check king-pawn adjacency
-    int dx = std::abs(king->position.x - pawn->position.x);
-    int dy = std::abs(king->position.y - pawn->position.y);
-    if (dx > 1 || dy > 1) return false;
-
-    // Transform pawn into queen
-    pawn->type = PieceType::Queen;
-    pawn->xp = 0;
-    return true;
+    return applyAutomaticChurchCoronation(s, k);
 }
 
 // ========================================================================
@@ -528,6 +544,7 @@ void ForwardModel::advanceTurn(GameSnapshot& s, KingdomId k,
     SnapKingdom& myK = s.kingdom(k);
 
     processEnemyStructureOccupancy(s, k, config);
+    applyAutomaticChurchCoronation(s, k);
 
     // 1. Advance production timers and spawn
     for (auto& b : myK.buildings) {
@@ -614,7 +631,7 @@ ThreatMap ForwardModel::buildThreatMap(const GameSnapshot& s, KingdomId attacker
 
         switch (piece.type) {
             case PieceType::Pawn:
-                attackSquares = getPawnMoves(piece, s);
+                attackSquares = getPawnThreatenedSquares(piece, s);
                 break;
             case PieceType::Knight:
                 attackSquares = getKnightMoves(piece, s);

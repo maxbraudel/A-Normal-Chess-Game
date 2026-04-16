@@ -7,6 +7,7 @@
 #include "AI/ForwardModel.hpp"
 #include "Config/GameConfig.hpp"
 #include "Kingdom/Kingdom.hpp"
+#include "Systems/MarriageSystem.hpp"
 #include "Systems/PendingTurnProjection.hpp"
 #include "Systems/CheckSystem.hpp"
 #include "Units/MovementRules.hpp"
@@ -62,6 +63,17 @@ bool hasAnySnapshotLegalResponse(const GameSnapshot& snapshot,
     }
 
     return false;
+}
+
+bool automaticCoronationResolvesCheck(const GameSnapshot& snapshot,
+                                      KingdomId activeKingdom,
+                                      int globalMaxRange) {
+    GameSnapshot simulatedSnapshot = snapshot.clone();
+    if (!MarriageSystem::applyChurchCoronation(simulatedSnapshot, activeKingdom)) {
+        return false;
+    }
+
+    return !ForwardModel::isInCheck(simulatedSnapshot, activeKingdom, globalMaxRange);
 }
 
 } // namespace
@@ -163,7 +175,9 @@ CheckTurnValidation CheckResponseRules::validatePendingTurn(const Kingdom& activ
     validation.activeKingInCheck = ForwardModel::isInCheck(
         currentSnapshot, activeKingdom.id, config.getGlobalMaxRange());
     validation.hasAnyLegalResponse = hasAnySnapshotLegalResponse(
-        currentSnapshot, activeKingdom.id, config.getGlobalMaxRange());
+        currentSnapshot, activeKingdom.id, config.getGlobalMaxRange())
+        || automaticCoronationResolvesCheck(
+            currentSnapshot, activeKingdom.id, config.getGlobalMaxRange());
     validation.hasQueuedMove = hasQueuedMoveCommand(pendingCommands);
 
     if (validation.activeKingInCheck && !validation.hasAnyLegalResponse) {
@@ -174,8 +188,11 @@ CheckTurnValidation CheckResponseRules::validatePendingTurn(const Kingdom& activ
 
     if (pendingCommands.empty()) {
         if (validation.activeKingInCheck) {
-            validation.valid = false;
-            validation.errorMessage = "A kingdom in check cannot pass its turn and must resolve the check before ending the turn.";
+            if (!automaticCoronationResolvesCheck(
+                    currentSnapshot, activeKingdom.id, config.getGlobalMaxRange())) {
+                validation.valid = false;
+                validation.errorMessage = "A kingdom in check cannot pass its turn and must resolve the check before ending the turn.";
+            }
         }
         return validation;
     }
@@ -183,6 +200,7 @@ CheckTurnValidation CheckResponseRules::validatePendingTurn(const Kingdom& activ
     bool projectedKingInCheck = validation.activeKingInCheck;
     std::vector<TurnCommand> prefixCommands;
     prefixCommands.reserve(pendingCommands.size());
+    PendingTurnProjectionResult finalProjection;
     for (const TurnCommand& command : pendingCommands) {
         if (projectedKingInCheck && command.type != TurnCommand::Move) {
             validation.valid = false;
@@ -191,20 +209,22 @@ CheckTurnValidation CheckResponseRules::validatePendingTurn(const Kingdom& activ
         }
 
         prefixCommands.push_back(command);
-        const PendingTurnProjectionResult prefixProjection = PendingTurnProjection::project(
+        finalProjection = PendingTurnProjection::project(
             board, activeKingdom, enemyKingdom, publicBuildings,
             turnNumber, prefixCommands, config);
-        if (!prefixProjection.valid) {
+        if (!finalProjection.valid) {
             validation.valid = false;
-            validation.errorMessage = prefixProjection.errorMessage;
+            validation.errorMessage = finalProjection.errorMessage;
             return validation;
         }
 
         projectedKingInCheck = ForwardModel::isInCheck(
-            prefixProjection.snapshot, activeKingdom.id, config.getGlobalMaxRange());
+            finalProjection.snapshot, activeKingdom.id, config.getGlobalMaxRange());
     }
 
-    if (projectedKingInCheck) {
+    if (projectedKingInCheck
+        && !automaticCoronationResolvesCheck(
+            finalProjection.snapshot, activeKingdom.id, config.getGlobalMaxRange())) {
         validation.valid = false;
         validation.errorMessage = validation.activeKingInCheck
             ? "The queued turn still leaves the king in check."

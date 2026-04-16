@@ -78,9 +78,6 @@ private:
     void executeProductions(AIDirectorPlan& plan, const GameSnapshot& snapshot,
                              KingdomId aiKingdom, const TurnPlan& stratPlan,
                              int turnNumber, const GameConfig& config);
-    void executeMarriage(AIDirectorPlan& plan, const GameSnapshot& snapshot,
-                          KingdomId aiKingdom);
-
     // Heuristic fallback (when no time for MCTS)
     void heuristicMove(AIDirectorPlan& plan, const GameSnapshot& snapshot,
                         const AITurnContext& ctx, KingdomId aiKingdom,

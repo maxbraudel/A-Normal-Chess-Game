@@ -10,9 +10,12 @@ class MovementRules {
 public:
     static std::vector<sf::Vector2i> getValidMoves(
         const Piece& piece, const Board& board, const GameConfig& config);
+    static std::vector<sf::Vector2i> getThreatenedSquares(
+        const Piece& piece, const Board& board, const GameConfig& config);
 
 private:
     static std::vector<sf::Vector2i> getPawnMoves(const Piece& piece, const Board& board);
+    static std::vector<sf::Vector2i> getPawnThreatenedSquares(const Piece& piece, const Board& board);
     static std::vector<sf::Vector2i> getKnightMoves(const Piece& piece, const Board& board, const GameConfig& config);
     static std::vector<sf::Vector2i> getBishopMoves(const Piece& piece, const Board& board, const GameConfig& config);
     static std::vector<sf::Vector2i> getRookMoves(const Piece& piece, const Board& board, const GameConfig& config);

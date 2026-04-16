@@ -498,12 +498,11 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
     }
 
     // =========================================================================
-    // 6. MARRIAGE PURSUIT — move pieces toward church to create a Queen
+    // 6. CHURCH CORONATION PURSUIT — move king, bishop, and rook toward church
     //    Only in non-attack phases, and only if pieces are CLOSE to the church.
-    //    In AGGRESSION/ENDGAME, the army should be attacking, not chasing marriage.
-    //    (was section 5 before retreat logic was added)
+    //    In AGGRESSION/ENDGAME, the army should be attacking, not chasing coronation.
     // =========================================================================
-    if (!self.hasQueen() && nonKingPieces >= 2
+    if (nonKingPieces >= 2
         && phase != AIPhase::AGGRESSION && phase != AIPhase::ENDGAME
         && !(brain.countCombatPieces(enemy) == 0 && brain.hasSufficientMatingMaterial(self))) {
         // Find a church
@@ -526,13 +525,13 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
             churchCenter.y /= static_cast<int>(churchCells.size());
 
             // Check which pieces we need on the church
-            bool kingOnChurch = false, bishopOnChurch = false, pawnOnChurch = false;
+            bool kingOnChurch = false, bishopOnChurch = false, rookOnChurch = false;
             for (const auto& cc : churchCells) {
                 const Cell& cell = board.getCell(cc.x, cc.y);
                 if (cell.piece && cell.piece->kingdom == self.id) {
                     if (cell.piece->type == PieceType::King) kingOnChurch = true;
                     else if (cell.piece->type == PieceType::Bishop) bishopOnChurch = true;
-                    else if (cell.piece->type == PieceType::Pawn) pawnOnChurch = true;
+                    else if (cell.piece->type == PieceType::Rook) rookOnChurch = true;
                 }
             }
 
@@ -541,19 +540,19 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
             auto needsToReachChurch = [&](const Piece& p) -> bool {
                 if (p.type == PieceType::King && !kingOnChurch) return true;
                 if (p.type == PieceType::Bishop && !bishopOnChurch) return true;
-                if (p.type == PieceType::Pawn && !pawnOnChurch) return true;
+                if (p.type == PieceType::Rook && !rookOnChurch) return true;
                 return false;
             };
 
             // Check if we have all required pieces
-            bool hasBishop = false, hasPawn = false;
+            bool hasBishop = false, hasRook = false;
             for (const auto& p : self.pieces) {
                 if (p.type == PieceType::Bishop) hasBishop = true;
-                if (p.type == PieceType::Pawn) hasPawn = true;
+                if (p.type == PieceType::Rook) hasRook = true;
             }
 
-            if (hasBishop && hasPawn && king) {
-                // Only pursue marriage if the needed pieces are reasonably close
+            if (hasBishop && hasRook && king) {
+                // Only pursue coronation if the needed pieces are reasonably close
                 // (within 8 Manhattan distance of church center)
                 bool closeEnough = true;
                 for (const auto& piece : self.pieces) {
@@ -607,7 +606,7 @@ std::vector<TurnCommand> AIStrategyMove::decide(Board& board, Kingdom& self,
                 if (bestPId >= 0 && bestScore > 0.0f) {
                     Piece* p = self.getPieceById(bestPId);
                     if (p) {
-                        std::cerr << "    [Move] Marriage pursuit: piece " << bestPId
+                        std::cerr << "    [Move] Church coronation pursuit: piece " << bestPId
                                   << " toward church at (" << bestDest.x << "," << bestDest.y << ")" << std::endl;
                         commands.push_back(makeMoveCmd(bestPId, p->position, bestDest));
                         return commands;

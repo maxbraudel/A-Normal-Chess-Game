@@ -36,6 +36,7 @@
 #include "Save/SaveManager.hpp"
 #include "Systems/BuildSystem.hpp"
 #include "Systems/CheckResponseRules.hpp"
+#include "Systems/CheckSystem.hpp"
 #include "Systems/EconomySystem.hpp"
 #include "Systems/EventLog.hpp"
 #include "Systems/ProductionSpawnRules.hpp"
@@ -44,6 +45,7 @@
 #include "Systems/TurnCommand.hpp"
 #include "Systems/TurnSystem.hpp"
 #include "UI/InGameViewModelBuilder.hpp"
+#include "Units/MovementRules.hpp"
 #include "Units/Piece.hpp"
 #include "Units/PieceFactory.hpp"
 
@@ -713,6 +715,212 @@ void testLayeredSelectionStackSupportsPreviewPieceOverride() {
             "Unsafe queued moves should remain present for end-turn validation.");
     }
 
+    void testAutomaticChurchCoronationTurnsFirstRookIntoQueen() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        std::vector<Building> publicBuildings;
+        publicBuildings.push_back(makeTestPublicBuilding(BuildingType::Church, {10, 10}, 4, 3));
+        linkBuildingOnBoard(publicBuildings.back(), board);
+
+        addPieceToBoard(white, board, 500, PieceType::King, KingdomId::White, {10, 10});
+        addPieceToBoard(white, board, 501, PieceType::Bishop, KingdomId::White, {11, 10});
+        addPieceToBoard(white, board, 502, PieceType::Rook, KingdomId::White, {12, 10});
+        addPieceToBoard(white, board, 503, PieceType::Rook, KingdomId::White, {10, 11});
+
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+        EventLog eventLog;
+        PieceFactory pieceFactory;
+        BuildingFactory buildingFactory;
+        turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+
+        const Piece* firstRook = white.getPieceById(502);
+        const Piece* secondRook = white.getPieceById(503);
+        expect(firstRook && firstRook->type == PieceType::Queen,
+            "The first rook found on the church should become a queen at turn commit.");
+        expect(secondRook && secondRook->type == PieceType::Rook,
+            "Only one rook should coronate per turn when multiple rooks stand in the church.");
+    }
+
+    void testAutomaticChurchCoronationAllowsMultipleQueens() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        std::vector<Building> publicBuildings;
+        publicBuildings.push_back(makeTestPublicBuilding(BuildingType::Church, {10, 10}, 4, 3));
+        linkBuildingOnBoard(publicBuildings.back(), board);
+
+        addPieceToBoard(white, board, 510, PieceType::King, KingdomId::White, {10, 10});
+        addPieceToBoard(white, board, 511, PieceType::Bishop, KingdomId::White, {11, 10});
+        addPieceToBoard(white, board, 512, PieceType::Rook, KingdomId::White, {12, 10});
+        addPieceToBoard(white, board, 513, PieceType::Queen, KingdomId::White, {6, 6});
+
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+        EventLog eventLog;
+        PieceFactory pieceFactory;
+        BuildingFactory buildingFactory;
+        turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+
+        int queenCount = 0;
+        for (const Piece& piece : white.pieces) {
+            if (piece.type == PieceType::Queen) {
+                ++queenCount;
+            }
+        }
+
+        expect(queenCount == 2,
+            "Church coronation should still happen when the kingdom already owns a queen.");
+    }
+
+    void testAutomaticChurchCoronationBlockedByEnemyPresence() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        std::vector<Building> publicBuildings;
+        publicBuildings.push_back(makeTestPublicBuilding(BuildingType::Church, {10, 10}, 4, 3));
+        linkBuildingOnBoard(publicBuildings.back(), board);
+
+        addPieceToBoard(white, board, 520, PieceType::King, KingdomId::White, {10, 10});
+        addPieceToBoard(white, board, 521, PieceType::Bishop, KingdomId::White, {11, 10});
+        addPieceToBoard(white, board, 522, PieceType::Rook, KingdomId::White, {12, 10});
+        addPieceToBoard(black, board, 620, PieceType::Pawn, KingdomId::Black, {13, 10});
+
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+        EventLog eventLog;
+        PieceFactory pieceFactory;
+        BuildingFactory buildingFactory;
+        turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+
+        const Piece* rook = white.getPieceById(522);
+        expect(rook && rook->type == PieceType::Rook,
+            "Enemy presence in the church should block automatic coronation.");
+    }
+
+    void testPawnMovesOrthogonallyAndCapturesDiagonally() {
+        GameConfig config;
+        Board board;
+        board.init(8);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        Piece& pawn = addPieceToBoard(white, board, 700, PieceType::Pawn, KingdomId::White, {8, 8});
+        addPieceToBoard(black, board, 701, PieceType::Knight, KingdomId::Black, {9, 9});
+        addPieceToBoard(black, board, 702, PieceType::Knight, KingdomId::Black, {8, 9});
+
+        const std::vector<sf::Vector2i> validMoves = MovementRules::getValidMoves(pawn, board, config);
+        expect(containsCell(validMoves, {8, 7}),
+            "Pawns should still move orthogonally onto open squares.");
+        expect(!containsCell(validMoves, {8, 9}),
+            "Pawns should no longer capture enemy pieces orthogonally.");
+        expect(containsCell(validMoves, {9, 9}),
+            "Pawns should capture enemy pieces diagonally.");
+        expect(!containsCell(validMoves, {7, 7}),
+            "Pawns should not gain diagonal non-capturing moves.");
+    }
+
+    void testPawnThreatSquaresStayDiagonal() {
+        GameConfig config;
+        Board board;
+        board.init(8);
+
+        Kingdom white(KingdomId::White);
+        Piece& pawn = addPieceToBoard(white, board, 710, PieceType::Pawn, KingdomId::White, {8, 8});
+
+        const std::vector<sf::Vector2i> threatenedSquares = MovementRules::getThreatenedSquares(pawn, board, config);
+        expect(containsCell(threatenedSquares, {7, 7})
+            && containsCell(threatenedSquares, {9, 7})
+            && containsCell(threatenedSquares, {7, 9})
+            && containsCell(threatenedSquares, {9, 9}),
+            "Pawn threat squares should be the four diagonal adjacent cells.");
+        expect(!containsCell(threatenedSquares, {8, 7}) && !containsCell(threatenedSquares, {8, 9}),
+            "Pawn threat squares should no longer include orthogonal cells.");
+    }
+
+    void testCheckSystemUsesPawnDiagonalThreats() {
+        GameConfig config;
+        Board board;
+        board.init(8);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 715, PieceType::King, KingdomId::White, {9, 9});
+        addPieceToBoard(black, board, 716, PieceType::Pawn, KingdomId::Black, {8, 8});
+
+        expect(CheckSystem::isInCheck(KingdomId::White, board, config),
+            "Runtime check detection should treat diagonal pawn attacks as checks.");
+        expect(!CheckSystem::isInCheck(KingdomId::Black, board, config),
+            "A pawn should not create a false orthogonal check against its own kingdom setup.");
+    }
+
+    void testPawnCapturesEnemyStructuresDiagonallyOnly() {
+        GameConfig config;
+        Board board;
+        board.init(8);
+
+        Kingdom white(KingdomId::White);
+        Piece& pawn = addPieceToBoard(white, board, 720, PieceType::Pawn, KingdomId::White, {8, 8});
+
+        Building diagonalWall = makeTestStoneWall(800, KingdomId::Black, {9, 9}, config);
+        Building orthogonalWall = makeTestStoneWall(801, KingdomId::Black, {8, 9}, config);
+        linkBuildingOnBoard(diagonalWall, board);
+        linkBuildingOnBoard(orthogonalWall, board);
+
+        const std::vector<sf::Vector2i> validMoves = MovementRules::getValidMoves(pawn, board, config);
+        expect(containsCell(validMoves, {9, 9}),
+            "Pawns should attack enemy structures diagonally.");
+        expect(!containsCell(validMoves, {8, 9}),
+            "Pawns should not attack enemy structures orthogonally anymore.");
+    }
+
+    void testForwardModelPawnRulesMatchRuntimeSemantics() {
+        GameConfig config;
+        Board board;
+        board.init(8);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 730, PieceType::Pawn, KingdomId::White, {8, 8});
+        addPieceToBoard(black, board, 731, PieceType::Knight, KingdomId::Black, {9, 9});
+        addPieceToBoard(black, board, 732, PieceType::Bishop, KingdomId::Black, {8, 9});
+
+        black.addBuilding(makeTestStoneWall(810, KingdomId::Black, {7, 9}, config));
+        linkBuildingOnBoard(black.buildings.back(), board);
+
+        GameSnapshot snapshot = ForwardModel::createSnapshot(board, white, black, {}, 1);
+        const SnapPiece* snapPawn = snapshot.white.getPieceById(730);
+        expect(snapPawn != nullptr,
+            "The snapshot pawn test setup should preserve the white pawn.");
+
+        const std::vector<sf::Vector2i> pseudoLegalMoves = ForwardModel::getPseudoLegalMoves(
+            snapshot, *snapPawn, config.getGlobalMaxRange());
+        expect(containsCell(pseudoLegalMoves, {8, 7}),
+            "ForwardModel pawns should keep orthogonal non-capturing moves.");
+        expect(containsCell(pseudoLegalMoves, {9, 9}),
+            "ForwardModel pawns should capture enemy pieces diagonally.");
+        expect(containsCell(pseudoLegalMoves, {7, 9}),
+            "ForwardModel pawns should capture enemy structures diagonally.");
+        expect(!containsCell(pseudoLegalMoves, {8, 9}),
+            "ForwardModel pawns should not treat orthogonal enemy contact as a capture.");
+
+        const ThreatMap threats = ForwardModel::buildThreatMap(snapshot, KingdomId::White, config.getGlobalMaxRange());
+        expect(threats.isSet({7, 7}) && threats.isSet({9, 9}),
+            "ForwardModel pawn threat maps should include diagonal attack squares.");
+        expect(!threats.isSet({8, 7}) && !threats.isSet({8, 9}),
+            "ForwardModel pawn threat maps should exclude orthogonal squares.");
+    }
+
         void testCheckResponseAllowsKingSidestepAgainstRookCheck() {
          GameConfig config;
          Board board;
@@ -1153,6 +1361,36 @@ void testGameEngineRestoresBishopSpawnMemory() {
         expect(board.getCell(generation.aiSpawn.x, generation.aiSpawn.y).building == nullptr,
             "AI spawn must never overlap a public building.");
         expectPublicBuildingsAvoidWater(board, publicBuildings);
+    }
+
+    void testBoardGeneratorCentersChurchWithoutRotation() {
+        GameConfig config;
+
+        Board board;
+        board.init(25);
+        std::vector<Building> publicBuildings;
+        BoardGenerator::generate(board, config, publicBuildings, 987654u);
+
+        const Building* church = nullptr;
+        for (const Building& building : publicBuildings) {
+            if (building.type == BuildingType::Church) {
+                church = &building;
+                break;
+            }
+        }
+
+        expect(church != nullptr,
+            "World generation should always place a church.");
+        expect(church->rotationQuarterTurns == 0,
+            "The church should no longer spawn with a random rotation.");
+        expect(church->flipMask == 0,
+            "The church should no longer spawn with a random flip state.");
+
+        const sf::Vector2i expectedOrigin{
+            board.getRadius() - (church->getFootprintWidth() / 2),
+            board.getRadius() - (church->getFootprintHeight() / 2)};
+        expect(church->origin == expectedOrigin,
+            "The church should be centered on the map footprint.");
     }
 
 void testSaveManagerRoundTrip() {
@@ -1765,7 +2003,7 @@ void testTurnSystemSkipsUnaffordableProduction() {
         Kingdom white(KingdomId::White);
         Kingdom black(KingdomId::Black);
         addPieceToBoard(white, board, 1, PieceType::King, KingdomId::White, {0, 0});
-        addPieceToBoard(white, board, 2, PieceType::Pawn, KingdomId::White, {3, 4});
+        addPieceToBoard(white, board, 2, PieceType::Rook, KingdomId::White, {3, 4});
         addPieceToBoard(black, board, 3, PieceType::King, KingdomId::Black, {9, 9});
         black.addBuilding(makeTestStoneWall(82, KingdomId::Black, {4, 4}, config));
         linkBuildingOnBoard(black.buildings.back(), board);
@@ -1807,7 +2045,7 @@ void testTurnSystemSkipsUnaffordableProduction() {
         Kingdom white(KingdomId::White);
         Kingdom black(KingdomId::Black);
         addPieceToBoard(white, board, 1, PieceType::King, KingdomId::White, {0, 0});
-        addPieceToBoard(white, board, 2, PieceType::Pawn, KingdomId::White, {3, 4});
+        addPieceToBoard(white, board, 2, PieceType::Rook, KingdomId::White, {3, 4});
         addPieceToBoard(black, board, 3, PieceType::King, KingdomId::Black, {9, 9});
         black.addBuilding(makeTestStoneWall(83, KingdomId::Black, {4, 4}, config));
         linkBuildingOnBoard(black.buildings.back(), board);
@@ -2362,6 +2600,7 @@ int main() {
         {"engine world seed", testGameEngineAssignsWorldSeed},
         {"board generator deterministic seed", testBoardGeneratorUsesDeterministicSeed},
         {"board generator terrain balance", testBoardGeneratorProducesGrassDominantTerrain},
+        {"board generator centered church", testBoardGeneratorCentersChurchWithoutRotation},
         {"layered selection priority", testLayeredSelectionStackResolvesPriority},
         {"layered selection building cycle", testLayeredSelectionStackSupportsBuildingTerrainCycle},
         {"layered selection preview override", testLayeredSelectionStackSupportsPreviewPieceOverride},
@@ -2376,6 +2615,14 @@ int main() {
         {"selection move rules unsafe non-king selectable", testSelectionMoveRulesClassifyUnsafeNonKingMovesAsSelectable},
         {"selection move rules unsafe king selectable", testSelectionMoveRulesKeepUnsafeKingSquaresSelectable},
         {"pending turn unsafe move end-turn rejection", testPendingTurnValidationRejectsUnsafeQueuedMoveOnlyAtEndTurn},
+        {"church coronation first rook", testAutomaticChurchCoronationTurnsFirstRookIntoQueen},
+        {"church coronation multiple queens", testAutomaticChurchCoronationAllowsMultipleQueens},
+        {"church coronation enemy blocked", testAutomaticChurchCoronationBlockedByEnemyPresence},
+        {"pawn orthogonal move diagonal capture", testPawnMovesOrthogonallyAndCapturesDiagonally},
+        {"pawn diagonal threat map", testPawnThreatSquaresStayDiagonal},
+        {"check system pawn diagonal threat", testCheckSystemUsesPawnDiagonalThreats},
+        {"pawn diagonal structure capture", testPawnCapturesEnemyStructuresDiagonallyOnly},
+        {"forward model pawn semantics", testForwardModelPawnRulesMatchRuntimeSemantics},
         {"check response king sidestep", testCheckResponseAllowsKingSidestepAgainstRookCheck},
         {"check response edge king escape", testCheckResponseAllowsEdgeKingEscapeFromRookCheck},
         {"check response true edge checkmate", testCheckResponseDetectsTrueEdgeCheckmate},

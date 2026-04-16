@@ -467,10 +467,6 @@ AIDirectorPlan AIDirector::computeTurn(Board& board, Kingdom& self, Kingdom& ene
     if (shouldContinuePressureProduction)
         executeProductions(plan, snapshot, aiKingdom, stratPlan, turnNumber, config);
 
-    // --- 10. Marriage ---
-    if (!forcePressure && stratPlan.shouldMarry)
-        executeMarriage(plan, snapshot, aiKingdom);
-
     return plan;
 }
 
@@ -910,16 +906,3 @@ void AIDirector::executeProductions(AIDirectorPlan& plan, const GameSnapshot& sn
     }
 }
 
-// =========================================================================
-//  executeMarriage
-// =========================================================================
-
-void AIDirector::executeMarriage(AIDirectorPlan& plan, const GameSnapshot& snapshot,
-                                    KingdomId aiKingdom) {
-    MarriagePlan mp = m_specialModule.evaluateMarriage(snapshot, aiKingdom);
-    if (mp.canMarryNow) {
-        TurnCommand cmd;
-        cmd.type = TurnCommand::Marry;
-        plan.commands.push_back(cmd);
-    }
-}

@@ -19,6 +19,19 @@ bool isBlockingWallCell(const Cell& cell, int worldX, int worldY) {
         && !cell.building->isCellDestroyed(localX, localY);
 }
 
+bool isEnemyCapturableBuildingCell(const Cell& cell, KingdomId mover) {
+    return cell.building && !cell.building->isNeutral && cell.building->owner != mover;
+}
+
+bool isPawnBoardDestinationTraversable(const Board& board, int x, int y) {
+    if (!board.isInBounds(x, y)) {
+        return false;
+    }
+
+    const Cell& cell = board.getCell(x, y);
+    return cell.isInCircle && cell.type != CellType::Water;
+}
+
 }
 
 std::vector<sf::Vector2i> MovementRules::getValidMoves(
@@ -34,26 +47,74 @@ std::vector<sf::Vector2i> MovementRules::getValidMoves(
     return {};
 }
 
+std::vector<sf::Vector2i> MovementRules::getThreatenedSquares(
+    const Piece& piece, const Board& board, const GameConfig& config) {
+    if (piece.type == PieceType::Pawn) {
+        return getPawnThreatenedSquares(piece, board);
+    }
+
+    return getValidMoves(piece, board, config);
+}
+
 std::vector<sf::Vector2i> MovementRules::getPawnMoves(const Piece& piece, const Board& board) {
     std::vector<sf::Vector2i> moves;
-    const int dx[] = {0, 0, 1, -1};
-    const int dy[] = {1, -1, 0, 0};
+    static const int orthogonalDirs[4][2] = {{0, 1}, {0, -1}, {1, 0}, {-1, 0}};
+    static const int diagonalDirs[4][2] = {{1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
 
-    for (int d = 0; d < 4; ++d) {
-        int nx = piece.position.x + dx[d];
-        int ny = piece.position.y + dy[d];
-        if (!board.isInBounds(nx, ny)) continue;
-        const Cell& cell = board.getCell(nx, ny);
-        if (!cell.isInCircle || cell.type == CellType::Water) continue;
-
-        if (isBlockingWallCell(cell, nx, ny)) {
-            if (cell.building->owner != piece.kingdom && !cell.building->isNeutral)
-                moves.push_back({nx, ny});
+    for (const auto& direction : orthogonalDirs) {
+        const int nx = piece.position.x + direction[0];
+        const int ny = piece.position.y + direction[1];
+        if (!isPawnBoardDestinationTraversable(board, nx, ny)) {
             continue;
         }
-        if (cell.piece && cell.piece->kingdom == piece.kingdom) continue;
+
+        const Cell& cell = board.getCell(nx, ny);
+        if (cell.piece) {
+            continue;
+        }
+        if (isEnemyCapturableBuildingCell(cell, piece.kingdom)) {
+            continue;
+        }
+        if (isBlockingWallCell(cell, nx, ny)) {
+            continue;
+        }
         moves.push_back({nx, ny});
     }
+
+    for (const auto& direction : diagonalDirs) {
+        const int nx = piece.position.x + direction[0];
+        const int ny = piece.position.y + direction[1];
+        if (!isPawnBoardDestinationTraversable(board, nx, ny)) {
+            continue;
+        }
+
+        const Cell& cell = board.getCell(nx, ny);
+        if (cell.piece && cell.piece->kingdom != piece.kingdom) {
+            moves.push_back({nx, ny});
+            continue;
+        }
+        if (isEnemyCapturableBuildingCell(cell, piece.kingdom)) {
+            moves.push_back({nx, ny});
+        }
+    }
+
+    return moves;
+}
+
+std::vector<sf::Vector2i> MovementRules::getPawnThreatenedSquares(const Piece& piece, const Board& board) {
+    std::vector<sf::Vector2i> moves;
+    static const int diagonalDirs[4][2] = {{1, 1}, {1, -1}, {-1, 1}, {-1, -1}};
+
+    for (const auto& direction : diagonalDirs) {
+        const int nx = piece.position.x + direction[0];
+        const int ny = piece.position.y + direction[1];
+        if (!isPawnBoardDestinationTraversable(board, nx, ny)) {
+            continue;
+        }
+
+        moves.push_back({nx, ny});
+    }
+
     return moves;
 }
 

@@ -259,10 +259,7 @@ bool TurnSystem::queueCommand(const TurnCommand& cmd,
             break;
 
         case TurnCommand::Marry:
-            if (m_hasMarried) {
-                return false;
-            }
-            break;
+            return false;
 
         default:
             break;
@@ -467,17 +464,17 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                 break;
             }
             case TurnCommand::Marry: {
-                // Find pawn on church for marriage
-                for (auto& b : publicBuildings) {
-                    if (b.type == BuildingType::Church) {
-                        MarriageSystem::performMarriage(activeKingdom, board, b, log, m_turnNumber);
-                        break;
-                    }
-                }
                 break;
             }
             default:
                 break;
+        }
+    }
+
+    for (auto& building : publicBuildings) {
+        if (building.type == BuildingType::Church) {
+            MarriageSystem::performChurchCoronation(activeKingdom, board, building, log, m_turnNumber);
+            break;
         }
     }
 

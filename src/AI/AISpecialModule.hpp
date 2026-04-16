@@ -6,25 +6,25 @@
 struct GameSnapshot;
 struct AITurnContext;
 
-/// Marriage pursuit plan
+/// Church coronation pursuit plan
 struct MarriagePlan {
     bool pursuing = false;
     sf::Vector2i kingTarget{0, 0};
     sf::Vector2i bishopTarget{0, 0};
-    sf::Vector2i pawnTarget{0, 0};
+    sf::Vector2i rookTarget{0, 0};
     int estimatedTurns = 999;
-    bool canMarryNow = false; // all conditions met this turn
+    bool canCoronateNow = false;
 };
 
-/// Special actions module — handles marriage pursuit
+/// Special actions module — handles church coronation pursuit
 class AISpecialModule {
 public:
     AISpecialModule() = default;
 
-    /// Evaluate whether marriage is worth pursuing and build a plan.
+    /// Evaluate whether church coronation is worth pursuing and build a plan.
     MarriagePlan evaluateMarriage(const GameSnapshot& s, KingdomId k) const;
 
-    /// Find the best movement target for a piece pursuing marriage.
+    /// Find the best movement target for a piece pursuing church coronation.
     /// Returns the cell this piece should move toward.
     sf::Vector2i getMarriageMoveTarget(const GameSnapshot& s, KingdomId k,
                                         int pieceId) const;

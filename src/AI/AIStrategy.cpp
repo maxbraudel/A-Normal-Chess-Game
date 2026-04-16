@@ -233,14 +233,13 @@ float AIStrategy::scoreBuildInfra(const AITurnContext& /*ctx*/, const GameSnapsh
 
 float AIStrategy::scorePursueQueen(const AITurnContext& /*ctx*/, const GameSnapshot& s,
                                      KingdomId k, int turnNumber) const {
-    if (s.kingdom(k).hasQueen()) return 0.0f;
-
-    bool hasBishop = false, hasPawn = false;
+    bool hasBishop = false;
+    bool hasRook = false;
     for (auto& p : s.kingdom(k).pieces) {
         if (p.type == PieceType::Bishop) hasBishop = true;
-        if (p.type == PieceType::Pawn)   hasPawn   = true;
+        if (p.type == PieceType::Rook)   hasRook   = true;
     }
-    if (!hasBishop || !hasPawn) return 0.0f;
+    if (!hasBishop || !hasRook) return 0.0f;
 
     float score = 40.0f;
     float dist = avgDistanceToChurch(s, k);

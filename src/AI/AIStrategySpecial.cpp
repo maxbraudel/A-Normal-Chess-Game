@@ -71,22 +71,5 @@ std::vector<TurnCommand> AIStrategySpecial::decide(const Board& board, const Kin
         }
     }
 
-    // =========================================================================
-    // 2. Marriage: actively pursue when strategic
-    // =========================================================================
-    if (!hasMarried && !self.hasQueen()) {
-        for (const auto& b : publicBuildings) {
-            if (b.type != BuildingType::Church || b.isDestroyed()) continue;
-
-            // Check if marriage conditions are already met
-            if (MarriageSystem::canMarry(self, board, b)) {
-                TurnCommand cmd;
-                cmd.type = TurnCommand::Marry;
-                commands.push_back(cmd);
-                break;
-            }
-        }
-    }
-
     return commands;
 }

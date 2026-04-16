@@ -39,14 +39,11 @@ sf::Vector2i AISpecialModule::closestChurchCell(sf::Vector2i from,
 MarriagePlan AISpecialModule::evaluateMarriage(const GameSnapshot& s, KingdomId k) const {
     MarriagePlan plan;
 
-    // Already have a queen → no marriage needed
-    if (s.kingdom(k).hasQueen()) return plan;
-
     // Find required pieces
     auto& kd = s.kingdom(k);
     auto* king = kd.getKing();
     const SnapPiece* bishop = nullptr;
-    const SnapPiece* pawn = nullptr;
+    const SnapPiece* rook = nullptr;
 
     if (!king) return plan;
 
@@ -66,49 +63,34 @@ MarriagePlan AISpecialModule::evaluateMarriage(const GameSnapshot& s, KingdomId 
         }
     }
 
-    // Find the pawn closest to church
-    int bestPawnDist = INT_MAX;
+    // Find the rook closest to church
+    int bestRookDist = INT_MAX;
     for (auto& p : kd.pieces) {
-        if (p.type == PieceType::Pawn) {
+        if (p.type == PieceType::Rook) {
             sf::Vector2i target = closestChurchCell(p.position, churchCells);
             int d = std::abs(p.position.x - target.x) + std::abs(p.position.y - target.y);
-            if (d < bestPawnDist) {
-                bestPawnDist = d;
-                pawn = &p;
+            if (d < bestRookDist) {
+                bestRookDist = d;
+                rook = &p;
             }
         }
     }
 
-    if (!bishop || !pawn) return plan;
+    if (!bishop || !rook) return plan;
 
     // Assign church cells for each piece
     plan.kingTarget   = closestChurchCell(king->position,   churchCells);
     plan.bishopTarget = closestChurchCell(bishop->position, churchCells);
-    plan.pawnTarget   = closestChurchCell(pawn->position,   churchCells);
-
-    // Ensure king and pawn target cells are adjacent (Chebyshev ≤ 1)
-    int chebDist = std::max(std::abs(plan.kingTarget.x - plan.pawnTarget.x),
-                             std::abs(plan.kingTarget.y - plan.pawnTarget.y));
-    if (chebDist > 1) {
-        // Try swapping pawn target to a church cell adjacent to king's target
-        for (auto& c : churchCells) {
-            int d = std::max(std::abs(plan.kingTarget.x - c.x),
-                             std::abs(plan.kingTarget.y - c.y));
-            if (d <= 1 && c != plan.bishopTarget) {
-                plan.pawnTarget = c;
-                break;
-            }
-        }
-    }
+    plan.rookTarget   = closestChurchCell(rook->position,   churchCells);
 
     // Estimated turns = max distance across the three pieces
     int kingTurns   = std::abs(king->position.x - plan.kingTarget.x)
                     + std::abs(king->position.y - plan.kingTarget.y);
     int bishopTurns = std::abs(bishop->position.x - plan.bishopTarget.x)
                     + std::abs(bishop->position.y - plan.bishopTarget.y);
-    int pawnTurns   = std::abs(pawn->position.x - plan.pawnTarget.x)
-                    + std::abs(pawn->position.y - plan.pawnTarget.y);
-    plan.estimatedTurns = std::max({kingTurns, bishopTurns, pawnTurns});
+    int rookTurns   = std::abs(rook->position.x - plan.rookTarget.x)
+                    + std::abs(rook->position.y - plan.rookTarget.y);
+    plan.estimatedTurns = std::max({kingTurns, bishopTurns, rookTurns});
 
     // Cost-benefit: Queen value (900) vs lost turns (50 per turn)
     float marriageValue = 900.0f - plan.estimatedTurns * 50.0f;
@@ -122,18 +104,16 @@ MarriagePlan AISpecialModule::evaluateMarriage(const GameSnapshot& s, KingdomId 
     };
     bool kingOnChurch   = isOnChurch(king);
     bool bishopOnChurch = isOnChurch(bishop);
-    bool pawnOnChurch   = isOnChurch(pawn);
-    bool adjacent = std::max(std::abs(king->position.x - pawn->position.x),
-                              std::abs(king->position.y - pawn->position.y)) <= 1;
+    bool rookOnChurch   = isOnChurch(rook);
 
     // Check no enemy pieces on church
     bool churchClear = true;
     for (auto& c : churchCells)
         if (s.enemyKingdom(k).getPieceAt(c)) { churchClear = false; break; }
 
-    if (kingOnChurch && bishopOnChurch && pawnOnChurch && adjacent && churchClear) {
+    if (kingOnChurch && bishopOnChurch && rookOnChurch && churchClear) {
         plan.pursuing = true;
-        plan.canMarryNow = true;
+        plan.canCoronateNow = true;
         plan.estimatedTurns = 0;
     }
 
@@ -156,7 +136,7 @@ sf::Vector2i AISpecialModule::getMarriageMoveTarget(const GameSnapshot& s, Kingd
     if (king && piece->id == king->id) return plan.kingTarget;
 
     if (piece->type == PieceType::Bishop) return plan.bishopTarget;
-    if (piece->type == PieceType::Pawn)   return plan.pawnTarget;
+    if (piece->type == PieceType::Rook)   return plan.rookTarget;
 
     return piece->position;
 }

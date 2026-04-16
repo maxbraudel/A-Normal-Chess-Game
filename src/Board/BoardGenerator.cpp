@@ -115,6 +115,30 @@ float computeRadialDistance(int x, int y, int radius) {
     return std::sqrt((dx * dx) + (dy * dy));
 }
 
+sf::Vector2i centeredFootprintOrigin(const Board& board, int width, int height) {
+    return {board.getRadius() - (width / 2), board.getRadius() - (height / 2)};
+}
+
+void prepareCenteredPublicFootprint(Board& board,
+                                    sf::Vector2i origin,
+                                    int width,
+                                    int height,
+                                    std::uint32_t worldSeed) {
+    for (int dy = 0; dy < height; ++dy) {
+        for (int dx = 0; dx < width; ++dx) {
+            const int x = origin.x + dx;
+            const int y = origin.y + dy;
+            if (!board.isInBounds(x, y)) {
+                continue;
+            }
+
+            Cell& cell = board.getCell(x, y);
+            cell.type = CellType::Grass;
+            cell.terrainFlipMask = terrainFlipMaskFor(worldSeed, x, y, cell.type);
+        }
+    }
+}
+
 bool isProtectedTerrainColumn(int x, int spawnLeftMax, int spawnRightMin, int clearance) {
     return x <= (spawnLeftMax + clearance) || x >= (spawnRightMin - clearance);
 }
@@ -497,12 +521,12 @@ GenerationResult BoardGenerator::generate(Board& board, const GameConfig& config
 
     const int churchW = config.getBuildingWidth(BuildingType::Church);
     const int churchH = config.getBuildingHeight(BuildingType::Church);
-    const int churchRotation = rotationDist(random);
-    const int churchFlipMask = flipMaskDist(random);
+    const int churchRotation = 0;
+    const int churchFlipMask = 0;
     const int churchFootprintW = Building::getFootprintWidthFor(churchW, churchH, churchRotation);
     const int churchFootprintH = Building::getFootprintHeightFor(churchW, churchH, churchRotation);
-    const sf::Vector2i churchPos = findValidBuildingPos(board, publicBuildings, churchFootprintW, churchFootprintH,
-                                                        0, spawnLeftMax, spawnRightMin, random);
+    const sf::Vector2i churchPos = centeredFootprintOrigin(board, churchFootprintW, churchFootprintH);
+    prepareCenteredPublicFootprint(board, churchPos, churchFootprintW, churchFootprintH, worldSeed);
     {
         Building church;
         church.id = 0;
