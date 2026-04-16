@@ -99,7 +99,7 @@ WorldRenderPlan RenderCoordinator::buildWorldRenderPlan(
         const TurnCommand* pendingMove = findPendingMoveForPiece(pendingCommands, state.selectedPiece->id);
         const sf::Vector2i highlightedOrigin = pendingMove != nullptr
             ? pendingMove->origin
-            : state.selectedPiece->position;
+            : state.selectedCell.value_or(state.selectedPiece->position);
         const bool shouldShowOriginOverlay = state.selectedPiece->type == PieceType::King || pendingMove != nullptr;
         if (shouldShowOriginOverlay) {
             plan.selectedOriginCell = OriginCellSpec{
@@ -115,7 +115,7 @@ WorldRenderPlan RenderCoordinator::buildWorldRenderPlan(
 
     if (state.activeTool == ToolState::Select) {
         if (state.selectedPiece != nullptr) {
-            plan.selectionFrames.push_back(SelectionFrameSpec{state.selectedPiece->position, 1, 1});
+            plan.selectionFrames.push_back(SelectionFrameSpec{state.selectedCell.value_or(state.selectedPiece->position), 1, 1});
         }
         if (state.selectedBuilding != nullptr) {
             plan.selectionFrames.push_back(SelectionFrameSpec{

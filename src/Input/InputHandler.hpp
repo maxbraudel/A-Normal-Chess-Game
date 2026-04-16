@@ -35,6 +35,8 @@ public:
     int getSelectedBuildingId() const;
     bool hasSelectedCell() const;
     sf::Vector2i getSelectedCell() const;
+    bool hasSelectionAnchorCell() const;
+    sf::Vector2i getSelectionAnchorCell() const;
     const std::vector<sf::Vector2i>& getValidMoves() const;
     const std::vector<sf::Vector2i>& getDangerMoves() const; // selectable moves that still leave the active king in check
     bool isSelectedOriginDangerous() const;

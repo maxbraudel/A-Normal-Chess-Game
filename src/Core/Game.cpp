@@ -767,8 +767,8 @@ void Game::render() {
         renderState.activeKingdom = activeKingdom().id;
         renderState.selectedPiece = selectedDisplayedPiece();
         renderState.selectedBuilding = selectedDisplayedBuilding();
-        if (m_input.hasSelectedCell()) {
-            renderState.selectedCell = m_input.getSelectedCell();
+        if (m_input.hasSelectionAnchorCell()) {
+            renderState.selectedCell = m_input.getSelectionAnchorCell();
         }
         renderState.selectedOriginDangerous = m_input.isSelectedOriginDangerous();
         renderState.validMoves = m_input.getValidMoves();

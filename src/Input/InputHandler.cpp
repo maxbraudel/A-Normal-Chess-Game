@@ -54,6 +54,10 @@ int InputHandler::getSelectedPieceId() const { return m_selectedPieceId; }
 int InputHandler::getSelectedBuildingId() const { return m_selectedBuildingId; }
 bool InputHandler::hasSelectedCell() const { return m_hasSelectedCell; }
 sf::Vector2i InputHandler::getSelectedCell() const { return m_selectedCell; }
+bool InputHandler::hasSelectionAnchorCell() const { return m_hasActiveSelectionCell || m_hasSelectedCell; }
+sf::Vector2i InputHandler::getSelectionAnchorCell() const {
+    return m_hasActiveSelectionCell ? m_activeSelectionCell : m_selectedCell;
+}
 const std::vector<sf::Vector2i>& InputHandler::getValidMoves() const { return m_validMoves; }
 const std::vector<sf::Vector2i>& InputHandler::getDangerMoves() const { return m_dangerMoves; }
 bool InputHandler::isSelectedOriginDangerous() const { return m_selectedOriginDangerous; }
@@ -348,9 +352,13 @@ LayeredSelectionStack InputHandler::resolveSelectionStackAtCell(const InputConte
         }
 
         if (cellPos == command.destination) {
-            pieceOverride = context.controlledKingdom.getPieceById(command.pieceId);
-            suppressCellPiece = true;
-        } else if (cellPos == command.origin) {
+            if (cell.piece == nullptr) {
+                pieceOverride = context.controlledKingdom.getPieceById(command.pieceId);
+                suppressCellPiece = (pieceOverride != nullptr);
+            }
+        } else if (cellPos == command.origin
+                   && cell.piece != nullptr
+                   && cell.piece->id == command.pieceId) {
             suppressCellPiece = true;
         }
     }
@@ -435,17 +443,22 @@ bool InputHandler::isSelectableMoveDestination(sf::Vector2i cellPos) const {
 }
 
 void InputHandler::syncQueuedMovePreviewState(const InputContext& context) {
+    const auto restorePreviewPositions = [&]() {
+        for (const auto& [pieceId, origin] : m_movePreviewOrigins) {
+            if (Piece* piece = context.controlledKingdom.getPieceById(pieceId)) {
+                piece->position = origin;
+            }
+        }
+    };
+
     if (context.materializePendingStateLocally) {
+        restorePreviewPositions();
         m_movePreviewOrigins.clear();
         m_capturePreviewPieceIds.clear();
         return;
     }
 
-    for (const auto& [pieceId, origin] : m_movePreviewOrigins) {
-        if (Piece* piece = context.controlledKingdom.getPieceById(pieceId)) {
-            piece->position = origin;
-        }
-    }
+    restorePreviewPositions();
 
     m_movePreviewOrigins.clear();
     m_capturePreviewPieceIds.clear();

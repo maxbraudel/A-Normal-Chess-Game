@@ -750,6 +750,100 @@ void testInputHandlerReconcileSelectionDoesNotJumpToMismatchedPieceElsewhere() {
         "InputHandler should preserve the bookmarked world cell as a terrain selection instead of selecting a distant piece after reconciliation drift.");
 }
 
+void testInputHandlerReconcileSelectionPrefersVisiblePieceOverPendingMoveOverride() {
+    GameConfig config;
+    const sf::Vector2i bookmarkedCell{4, 2};
+
+    Board initialBoard;
+    initialBoard.init(12);
+    Kingdom initialWhite(KingdomId::White);
+    Kingdom initialBlack(KingdomId::Black);
+    addPieceToBoard(initialWhite, initialBoard, 1200, PieceType::King, KingdomId::White, {1, 1});
+    addPieceToBoard(initialWhite, initialBoard, 1201, PieceType::Rook, KingdomId::White, {2, 2});
+    Piece& initialBlackPawn = addPieceToBoard(initialBlack,
+                                              initialBoard,
+                                              2201,
+                                              PieceType::Pawn,
+                                              KingdomId::Black,
+                                              bookmarkedCell);
+    addPieceToBoard(initialBlack, initialBoard, 2200, PieceType::King, KingdomId::Black, {9, 9});
+
+    TurnSystem initialTurnSystem;
+    initialTurnSystem.setActiveKingdom(KingdomId::White);
+    initialTurnSystem.setTurnNumber(1);
+    BuildingFactory initialBuildingFactory;
+    std::vector<Building> initialPublicBuildings;
+    sf::RenderWindow initialWindow;
+    Camera initialCamera;
+    UIManager initialUiManager;
+    InputContext initialContext = makePassiveInputContext(initialWindow,
+                                                          initialCamera,
+                                                          initialBoard,
+                                                          initialTurnSystem,
+                                                          initialBuildingFactory,
+                                                          initialWhite,
+                                                          initialBlack,
+                                                          initialPublicBuildings,
+                                                          initialUiManager,
+                                                          config);
+    initialContext.permissions.canIssueCommands = false;
+
+    InputHandler input;
+    input.reconcileSelection(InputSelectionBookmark{}, &initialBlackPawn, nullptr, initialContext);
+    const InputSelectionBookmark bookmark = input.createSelectionBookmark();
+
+    Board previewBoard;
+    previewBoard.init(12);
+    Kingdom previewWhite(KingdomId::White);
+    Kingdom previewBlack(KingdomId::Black);
+    addPieceToBoard(previewWhite, previewBoard, 1200, PieceType::King, KingdomId::White, {1, 1});
+    addPieceToBoard(previewWhite, previewBoard, 1201, PieceType::Rook, KingdomId::White, {2, 2});
+    Piece& previewBlackPawn = addPieceToBoard(previewBlack,
+                                              previewBoard,
+                                              2201,
+                                              PieceType::Pawn,
+                                              KingdomId::Black,
+                                              bookmarkedCell);
+    addPieceToBoard(previewBlack, previewBoard, 2200, PieceType::King, KingdomId::Black, {9, 9});
+
+    TurnSystem previewTurnSystem;
+    previewTurnSystem.setActiveKingdom(KingdomId::White);
+    previewTurnSystem.setTurnNumber(1);
+    std::vector<Building> previewPublicBuildings;
+    TurnCommand pendingCapture = makeMoveCommand(1201, {2, 2}, bookmarkedCell);
+    expect(previewTurnSystem.queueCommand(pendingCapture,
+                                          previewBoard,
+                                          previewWhite,
+                                          previewBlack,
+                                          previewPublicBuildings,
+                                          config),
+        "The pending override regression test should queue a legal capture so the preview resolver sees a move destination at the bookmarked cell.");
+
+    BuildingFactory previewBuildingFactory;
+    sf::RenderWindow previewWindow;
+    Camera previewCamera;
+    UIManager previewUiManager;
+    InputContext previewContext = makePassiveInputContext(previewWindow,
+                                                          previewCamera,
+                                                          previewBoard,
+                                                          previewTurnSystem,
+                                                          previewBuildingFactory,
+                                                          previewWhite,
+                                                          previewBlack,
+                                                          previewPublicBuildings,
+                                                          previewUiManager,
+                                                          config);
+    previewContext.permissions.canIssueCommands = false;
+
+    input.reconcileSelection(bookmark, &previewBlackPawn, nullptr, previewContext);
+
+    const InputSelectionBookmark restoredBookmark = input.createSelectionBookmark();
+    expect(input.getSelectedPieceId() == previewBlackPawn.id,
+        "InputHandler should keep the visible piece selected when a pending move also targets the clicked cell in a non-concrete preview state.");
+    expect(restoredBookmark.selectedCell.has_value() && *restoredBookmark.selectedCell == bookmarkedCell,
+        "InputHandler should preserve the bookmarked cell anchor instead of demoting the selection when a visible piece still occupies that cell.");
+}
+
     void testPublicBuildingOccupationStateResolvesAllOutcomes() {
         Board board;
         board.init(5);
@@ -2455,6 +2549,32 @@ void testSessionValidatorRejectsInvalidOrdering() {
         expect(plan.actionMarkers.size() == 1
                 && plan.actionMarkers.front().iconName == "move_ongoing",
             "RenderCoordinator should add move action markers for queued movement commands.");
+    }
+
+    void testRenderCoordinatorPrefersAnchoredSelectionCellForPieceFrame() {
+        GameConfig config;
+
+        Piece selectedPiece(88, PieceType::King, KingdomId::White, {4, 5});
+        WorldRenderState state;
+        state.gameState = GameState::Playing;
+        state.activeTool = ToolState::Select;
+        state.permissions.canShowActionOverlays = true;
+        state.activeKingdom = KingdomId::White;
+        state.selectedPiece = &selectedPiece;
+        state.selectedCell = sf::Vector2i{7, 8};
+
+        const WorldRenderPlan plan = RenderCoordinator::buildWorldRenderPlan(
+            state,
+            {},
+            {},
+            {},
+            config);
+
+        expect(plan.selectionFrames.size() == 1
+                && plan.selectionFrames.front().origin == sf::Vector2i(7, 8),
+            "RenderCoordinator should keep the selection frame anchored to the canonical selected cell even when the piece object currently reports a different position.");
+        expect(plan.selectedOriginCell.has_value() && plan.selectedOriginCell->origin == sf::Vector2i(7, 8),
+            "RenderCoordinator should align the selected origin overlay with the anchored selection cell when no queued move overrides the origin.");
     }
 
     void testRenderCoordinatorBuildsBuildPreviewAndPendingBuildPlan() {
@@ -5980,6 +6100,7 @@ int main() {
         {"input coordinator gameplay shortcuts", testInputCoordinatorPlansGameplayShortcuts},
         {"input coordinator world routing", testInputCoordinatorRoutesWorldInputAfterGuiFiltering},
         {"render coordinator move overlay plan", testRenderCoordinatorBuildsSelectionAndMoveOverlayPlan},
+        {"render coordinator anchored piece selection frame", testRenderCoordinatorPrefersAnchoredSelectionCellForPieceFrame},
         {"render coordinator build overlay plan", testRenderCoordinatorBuildsBuildPreviewAndPendingBuildPlan},
         {"update coordinator playing tick", testUpdateCoordinatorPlansPlayingTick},
         {"update coordinator paused and menu tick", testUpdateCoordinatorPlansPausedAndMenuTicks},
@@ -6006,6 +6127,7 @@ int main() {
         {"layered selection under construction building", testLayeredSelectionStackTreatsUnderConstructionBuildingAsNormalBuilding},
         {"input bookmarks active piece cell", testInputHandlerBookmarksActivePieceSelectionCell},
         {"input reconcile avoids distant piece jump", testInputHandlerReconcileSelectionDoesNotJumpToMismatchedPieceElsewhere},
+        {"input reconcile prefers visible piece over pending override", testInputHandlerReconcileSelectionPrefersVisiblePieceOverPendingMoveOverride},
         {"public building occupation state", testPublicBuildingOccupationStateResolvesAllOutcomes},
         {"cell traversal water blocked", testCellTraversalTreatsWaterAsNotTraversable},
         {"private building overlay owner shield", testSelectedStructureOverlayPrivateBuildingsUseOwnerShield},
