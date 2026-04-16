@@ -4,6 +4,8 @@
 
 #include <vector>
 
+#include "Core/InteractionPermissions.hpp"
+
 class Camera;
 class Board;
 class TurnSystem;
@@ -22,6 +24,5 @@ struct InputContext {
     const std::vector<Building>& publicBuildings;
     UIManager& uiManager;
     const GameConfig& config;
-    bool allowCommands = true;
-    bool allowNonMoveActions = true;
+    InteractionPermissions permissions;
 };

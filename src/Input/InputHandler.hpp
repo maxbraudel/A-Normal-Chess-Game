@@ -34,7 +34,8 @@ public:
     bool hasSelectedCell() const;
     sf::Vector2i getSelectedCell() const;
     const std::vector<sf::Vector2i>& getValidMoves() const;
-    const std::vector<sf::Vector2i>& getDangerMoves() const; // king squares under enemy threat
+    const std::vector<sf::Vector2i>& getDangerMoves() const; // selectable moves that still leave the active king in check
+    bool isSelectedOriginDangerous() const;
     const std::set<int>& getCapturePreviewPieceIds() const; // enemy pieces visually hidden during queued capture previews
     bool hasMovePreview() const;
     void cancelLiveMove(Kingdom& controlledKingdom, const TurnSystem& turnSystem);   // restores queued preview positions and clears preview state
@@ -47,6 +48,11 @@ public:
     bool hasBuildPreview() const;
     void setBuildType(BuildingType type);
 
+    InputSelectionBookmark createSelectionBookmark() const;
+    void reconcileSelection(const InputSelectionBookmark& bookmark,
+                            Piece* selectedPiece,
+                            Building* selectedBuilding,
+                            const InputContext& context);
     void clearSelection();
 
 private:
@@ -56,7 +62,8 @@ private:
     bool m_hasSelectedCell;
     sf::Vector2i m_selectedCell;
     std::vector<sf::Vector2i> m_validMoves;
-    std::vector<sf::Vector2i> m_dangerMoves; // king moves onto threatened squares (shown red, blocked)
+    std::vector<sf::Vector2i> m_dangerMoves; // selectable moves shown red because they leave the active king in check
+    bool m_selectedOriginDangerous;
     std::set<int> m_capturePreviewPieceIds;
     std::map<int, sf::Vector2i> m_movePreviewOrigins;
 
@@ -81,6 +88,7 @@ private:
     void handleCameraInput(const sf::Event& event, sf::RenderWindow& window, Camera& camera);
     // Recompute move targets for piece given the projected queued turn state.
     void refreshPieceMoves(Piece* piece, const InputContext& context);
+    bool isSelectableMoveDestination(sf::Vector2i cellPos) const;
     void syncQueuedMovePreviewState(const InputContext& context);
     void selectCell(sf::Vector2i cellPos);
     void activatePieceSelection(Piece* piece, sf::Vector2i cellPos,

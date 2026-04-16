@@ -21,6 +21,25 @@
 
 namespace {
 
+const char* pieceTypeDisplayName(PieceType type) {
+    switch (type) {
+        case PieceType::Pawn:
+            return "Pawn";
+        case PieceType::Knight:
+            return "Knight";
+        case PieceType::Bishop:
+            return "Bishop";
+        case PieceType::Rook:
+            return "Rook";
+        case PieceType::Queen:
+            return "Queen";
+        case PieceType::King:
+            return "King";
+        default:
+            return "Piece";
+    }
+}
+
 int getBuildCost(BuildingType type, const GameConfig& config) {
     switch (type) {
         case BuildingType::Barracks:
@@ -387,7 +406,8 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                 Cell& newCell = board.getCell(cmd.destination.x, cmd.destination.y);
                 newCell.piece = piece;
 
-                log.log(m_turnNumber, m_activeKingdom, "Moved piece to (" +
+                log.log(m_turnNumber, m_activeKingdom, "Moved " +
+                    std::string(pieceTypeDisplayName(piece->type)) + " to (" +
                         std::to_string(cmd.destination.x) + "," + std::to_string(cmd.destination.y) + ")");
                 break;
             }

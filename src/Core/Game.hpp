@@ -19,6 +19,7 @@
 #endif
 
 #include "Core/GameState.hpp"
+#include "Core/InteractionPermissions.hpp"
 #include "Core/TurnPhase.hpp"
 #include "Core/GameClock.hpp"
 #include "Core/GameEngine.hpp"
@@ -104,9 +105,15 @@ private:
 
     void setupUICallbacks();
     void updateUIState();
-    CheckTurnValidation validateActivePendingTurn();
-    bool isActiveKingInCheckForRules();
-    bool canQueueNonMoveActions();
+    CheckTurnValidation validateActivePendingTurn() const;
+    bool isActiveKingInCheckForRules() const;
+    bool canQueueNonMoveActions() const;
+    InteractionPermissions currentInteractionPermissions(const CheckTurnValidation* validation = nullptr) const;
+    InputContext buildInputContext(const InteractionPermissions& permissions);
+    InputSelectionBookmark captureSelectionBookmark() const;
+    void reconcileSelectionBookmark(const InputSelectionBookmark& bookmark);
+    Piece* findPieceById(int pieceId);
+    Building* findBuildingById(int buildingId);
 
 #ifdef _WIN32
     friend LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam);

@@ -285,27 +285,23 @@ bool Game::isLocalPlayerTurn() const {
 }
 
 bool Game::canLocalPlayerIssueCommands() const {
-    return (m_state == GameState::Playing)
-    && !m_uiManager.isMultiplayerAlertVisible()
-        && !m_waitingForRemoteTurnResult
-        && isMultiplayerSessionReady()
-        && isLocalPlayerTurn();
+    return currentInteractionPermissions().canIssueCommands;
 }
 
-CheckTurnValidation Game::validateActivePendingTurn() {
+CheckTurnValidation Game::validateActivePendingTurn() const {
     return CheckResponseRules::validatePendingTurn(
         activeKingdom(), enemyKingdom(), board(), publicBuildings(),
         turnSystem().getTurnNumber(), turnSystem().getPendingCommands(), m_config);
 }
 
-bool Game::isActiveKingInCheckForRules() {
+bool Game::isActiveKingInCheckForRules() const {
     return CheckResponseRules::isActiveKingInCheck(
         activeKingdom(), enemyKingdom(), board(), publicBuildings(),
         turnSystem().getTurnNumber(), turnSystem().getPendingCommands(), m_config);
 }
 
-bool Game::canQueueNonMoveActions() {
-    return !isActiveKingInCheckForRules();
+bool Game::canQueueNonMoveActions() const {
+    return currentInteractionPermissions().canQueueNonMoveActions;
 }
 
 KingdomId Game::localPerspectiveKingdom() const {
@@ -328,6 +324,106 @@ bool Game::isMultiplayerSessionReady() const {
     return true;
 }
 
+InteractionPermissions Game::currentInteractionPermissions(const CheckTurnValidation* validation) const {
+    InteractionPermissionInputs inputs;
+    inputs.gameState = m_state;
+    inputs.overlaysVisible = m_uiManager.isMultiplayerAlertVisible()
+        || m_uiManager.isMultiplayerWaitingOverlayVisible();
+    inputs.inGameMenuOpen = isInGameMenuOpen();
+    inputs.waitingForRemoteTurnResult = m_waitingForRemoteTurnResult;
+    inputs.multiplayerSessionReady = isMultiplayerSessionReady();
+    inputs.isLocalPlayerTurn = isLocalPlayerTurn();
+
+    const bool shouldEvaluateTurnValidation = inputs.gameState == GameState::Playing
+        && !inputs.overlaysVisible
+        && !inputs.waitingForRemoteTurnResult
+        && inputs.multiplayerSessionReady
+        && inputs.isLocalPlayerTurn;
+    if (validation) {
+        inputs.activeKingInCheck = validation->activeKingInCheck;
+        inputs.hasAnyLegalResponse = validation->hasAnyLegalResponse;
+    } else if (shouldEvaluateTurnValidation) {
+        const CheckTurnValidation liveValidation = validateActivePendingTurn();
+        inputs.activeKingInCheck = liveValidation.activeKingInCheck;
+        inputs.hasAnyLegalResponse = liveValidation.hasAnyLegalResponse;
+    }
+
+    return computeInteractionPermissions(inputs);
+}
+
+InputContext Game::buildInputContext(const InteractionPermissions& permissions) {
+    const KingdomId perspectiveKingdom = permissions.canIssueCommands
+        ? turnSystem().getActiveKingdom()
+        : localPerspectiveKingdom();
+    Kingdom& selectableKingdom = permissions.canIssueCommands
+        ? activeKingdom()
+        : kingdom(perspectiveKingdom);
+    Kingdom& opposingKingdom = permissions.canIssueCommands
+        ? enemyKingdom()
+        : kingdom(opponent(perspectiveKingdom));
+
+    return {
+        m_window,
+        m_camera,
+        board(),
+        turnSystem(),
+        selectableKingdom,
+        opposingKingdom,
+        publicBuildings(),
+        m_uiManager,
+        m_config,
+        permissions
+    };
+}
+
+InputSelectionBookmark Game::captureSelectionBookmark() const {
+    return m_input.createSelectionBookmark();
+}
+
+Piece* Game::findPieceById(int pieceId) {
+    if (pieceId < 0) {
+        return nullptr;
+    }
+
+    if (Piece* piece = kingdom(KingdomId::White).getPieceById(pieceId)) {
+        return piece;
+    }
+    return kingdom(KingdomId::Black).getPieceById(pieceId);
+}
+
+Building* Game::findBuildingById(int buildingId) {
+    if (buildingId < 0) {
+        return nullptr;
+    }
+
+    for (Building& building : publicBuildings()) {
+        if (building.id == buildingId) {
+            return &building;
+        }
+    }
+    for (Building& building : kingdom(KingdomId::White).buildings) {
+        if (building.id == buildingId) {
+            return &building;
+        }
+    }
+    for (Building& building : kingdom(KingdomId::Black).buildings) {
+        if (building.id == buildingId) {
+            return &building;
+        }
+    }
+
+    return nullptr;
+}
+
+void Game::reconcileSelectionBookmark(const InputSelectionBookmark& bookmark) {
+    const InteractionPermissions permissions = currentInteractionPermissions();
+    InputContext inputContext = buildInputContext(permissions);
+    m_input.reconcileSelection(bookmark,
+                               findPieceById(bookmark.pieceId),
+                               findBuildingById(bookmark.buildingId),
+                               inputContext);
+}
+
 GameMenuPresentation Game::buildGameMenuPresentation() const {
     GameMenuPresentation presentation;
     presentation.pauseState = m_localPlayerContext.isNetworked()
@@ -342,7 +438,7 @@ bool Game::isInGameMenuOpen() const {
 }
 
 void Game::openInGameMenu() {
-    if (m_state != GameState::Playing && m_state != GameState::Paused) {
+    if (m_state != GameState::Playing && m_state != GameState::Paused && m_state != GameState::GameOver) {
         return;
     }
 
@@ -623,35 +719,16 @@ void Game::handleInput() {
             continue;
         }
 
-        if (m_state == GameState::Playing) {
-            const bool allowCommands = canLocalPlayerIssueCommands();
-            const bool allowNonMoveActions = allowCommands ? canQueueNonMoveActions() : false;
-            const KingdomId perspectiveKingdom = localPerspectiveKingdom();
-            Kingdom& selectableKingdom = allowCommands ? activeKingdom() : kingdom(perspectiveKingdom);
-            Kingdom& opposingKingdom = allowCommands ? enemyKingdom() : kingdom(opponent(perspectiveKingdom));
-            const InputContext inputContext{
-                m_window,
-                m_camera,
-                board(),
-                turnSystem(),
-                selectableKingdom,
-                opposingKingdom,
-                publicBuildings(),
-                m_uiManager,
-                m_config,
-                allowCommands,
-                allowNonMoveActions
-            };
+        const InteractionPermissions permissions = currentInteractionPermissions();
+        if (permissions.canInspectWorld) {
+            InputContext inputContext = buildInputContext(permissions);
             m_input.handleEvent(event, inputContext);
         }
     }
 }
 
 void Game::update() {
-    if ((m_state == GameState::Playing || m_state == GameState::Paused || m_state == GameState::GameOver)
-        && !m_uiManager.isMultiplayerAlertVisible()
-        && !m_uiManager.isMultiplayerWaitingOverlayVisible()
-        && !m_uiManager.isGameMenuVisible()) {
+    if (currentInteractionPermissions().canMoveCamera) {
         m_input.updateCameraMovement(m_clock.getDeltaTime(), m_camera);
     }
 
@@ -670,7 +747,10 @@ void Game::update() {
             m_uiManager.update();
             break;
         }
+        case GameState::Paused:
         case GameState::GameOver:
+            updateUIState();
+            m_uiManager.update();
             break;
         default:
             break;
@@ -686,7 +766,7 @@ void Game::render() {
         m_renderer.drawWorldBase(m_window, m_camera, board(), kingdoms(),
             publicBuildings());
 
-        const bool showActionOverlays = canLocalPlayerIssueCommands();
+        const bool showActionOverlays = currentInteractionPermissions().canShowActionOverlays;
         const Piece* selectedPiece = m_input.getSelectedPiece();
         const bool canShowSelectedPieceActions = showActionOverlays
             && selectedPiece
@@ -702,8 +782,14 @@ void Game::render() {
             const sf::Vector2i highlightedOrigin = pendingMove
                 ? pendingMove->origin
                 : selectedPiece->position;
-            m_renderer.getOverlay().drawOriginCell(m_window, m_camera,
-                highlightedOrigin, m_config.getCellSizePx());
+            const bool shouldShowOriginOverlay = (selectedPiece->type == PieceType::King) || (pendingMove != nullptr);
+            if (shouldShowOriginOverlay) {
+                const sf::Color originColor = m_input.isSelectedOriginDangerous()
+                    ? sf::Color(255, 40, 40, 90)
+                    : sf::Color(40, 120, 255, 130);
+                m_renderer.getOverlay().drawOriginCell(m_window, m_camera,
+                    highlightedOrigin, m_config.getCellSizePx(), originColor);
+            }
             m_renderer.getOverlay().drawReachableCells(m_window, m_camera,
                 m_input.getValidMoves(), m_config.getCellSizePx());
             if (!m_input.getDangerMoves().empty()) {
@@ -908,6 +994,7 @@ void Game::commitPlayerTurn() {
 void Game::commitAuthoritativeTurn() {
     KingdomId activeId = turnSystem().getActiveKingdom();
     KingdomId enemyId  = opponent(activeId);
+    const InputSelectionBookmark selectionBookmark = captureSelectionBookmark();
 
     const CheckTurnValidation validation = validateActivePendingTurn();
     if (!validation.valid) {
@@ -916,7 +1003,7 @@ void Game::commitAuthoritativeTurn() {
             eventLog().log(turnSystem().getTurnNumber(), enemyId,
                            "Checkmate! " + participantName(enemyId) + " wins!");
             m_input.clearMovePreview();
-            m_input.clearSelection();
+            reconcileSelectionBookmark(selectionBookmark);
             if (isLanHost()) {
                 saveGame();
                 pushSnapshotToRemote(nullptr);
@@ -937,9 +1024,9 @@ void Game::commitAuthoritativeTurn() {
 
     turnSystem().advanceTurn();
     m_input.clearMovePreview();
-    m_input.clearSelection();
     m_waitingForRemoteTurnResult = false;
     refreshTurnPhase();
+    reconcileSelectionBookmark(selectionBookmark);
 
     const CheckTurnValidation enemyValidation = validateActivePendingTurn();
     if (enemyValidation.activeKingInCheck && !enemyValidation.hasAnyLegalResponse) {
@@ -947,6 +1034,7 @@ void Game::commitAuthoritativeTurn() {
         std::string winner = participantName(activeId);
         eventLog().log(turnSystem().getTurnNumber(), activeId,
                        "Checkmate! " + winner + " wins!");
+        reconcileSelectionBookmark(selectionBookmark);
         if (isLanHost()) {
             saveGame();
             pushSnapshotToRemote(nullptr);
@@ -963,9 +1051,10 @@ void Game::commitAuthoritativeTurn() {
 }
 
 void Game::resetPlayerTurn() {
+    const InputSelectionBookmark selectionBookmark = captureSelectionBookmark();
     m_input.cancelLiveMove(activeKingdom(), turnSystem());  // restore piece positions for queued move previews
     turnSystem().resetPendingCommands();
-    m_input.clearSelection();
+    reconcileSelectionBookmark(selectionBookmark);
 }
 
 void Game::stopMultiplayer() {
@@ -1067,10 +1156,11 @@ bool Game::submitClientTurn(std::string* errorMessage) {
         return false;
     }
 
+    const InputSelectionBookmark selectionBookmark = captureSelectionBookmark();
     m_waitingForRemoteTurnResult = true;
     m_input.clearMovePreview();
-    m_input.clearSelection();
     turnSystem().resetPendingCommands();
+    reconcileSelectionBookmark(selectionBookmark);
     return true;
 }
 
@@ -1139,6 +1229,7 @@ bool Game::reconnectToMultiplayerHost(std::string* errorMessage) {
 bool Game::joinMultiplayerInternal(const JoinMultiplayerRequest& request,
                                   bool preserveLanClientContext,
                                   std::string* errorMessage) {
+    const InputSelectionBookmark selectionBookmark = captureSelectionBookmark();
     discardPendingAITurn();
     prepareForClientConnectionAttempt(preserveLanClientContext);
 
@@ -1206,8 +1297,8 @@ bool Game::joinMultiplayerInternal(const JoinMultiplayerRequest& request,
     m_clientReconnectState.reconnectAttemptInProgress = false;
     m_state = GameState::Playing;
     m_input.clearMovePreview();
-    m_input.clearSelection();
     refreshTurnPhase();
+    reconcileSelectionBookmark(selectionBookmark);
     centerCameraOnKingdom(KingdomId::Black);
     m_uiManager.hideMultiplayerAlert();
     m_uiManager.showHUD();
@@ -1294,6 +1385,7 @@ void Game::processMultiplayerServerEvent(const MultiplayerServer::Event& event) 
 void Game::processMultiplayerClientEvent(const MultiplayerClient::Event& event) {
     switch (event.type) {
         case MultiplayerClient::Event::Type::SnapshotReceived: {
+            const InputSelectionBookmark selectionBookmark = captureSelectionBookmark();
             SaveData snapshotData;
             if (!m_saveManager.deserialize(event.serializedSaveData, snapshotData)) {
                 std::cerr << "Received an invalid multiplayer snapshot from the host." << std::endl;
@@ -1312,9 +1404,9 @@ void Game::processMultiplayerClientEvent(const MultiplayerClient::Event& event) 
             m_clientReconnectState.reconnectAttemptInProgress = false;
             m_clientReconnectState.lastErrorMessage.clear();
             m_input.clearMovePreview();
-            m_input.clearSelection();
             m_uiManager.hideMultiplayerAlert();
             refreshTurnPhase();
+            reconcileSelectionBookmark(selectionBookmark);
             updateUIState();
             break;
         }
@@ -1446,36 +1538,43 @@ void Game::setupUICallbacks() {
 
     // HUD
     m_uiManager.hud().setOnMenu([this]() {
-        if (m_state != GameState::Playing && m_state != GameState::Paused) {
+        if (m_state != GameState::Playing && m_state != GameState::Paused && m_state != GameState::GameOver) {
             return;
         }
 
         toggleInGameMenu();
     });
     m_uiManager.hud().setOnResetTurn([this]() {
-        if (!canLocalPlayerIssueCommands()) return;
+        if (!currentInteractionPermissions().canIssueCommands) return;
         resetPlayerTurn();
     });
     m_uiManager.hud().setOnEndTurn([this]() {
-        if (!canLocalPlayerIssueCommands()) return;
+        if (!currentInteractionPermissions().canIssueCommands) return;
         commitPlayerTurn();
     });
 
     // Toolbar
     m_uiManager.toolBar().setOnSelect([this]() {
+        if (!currentInteractionPermissions().canUseToolbar) return;
         m_input.setTool(ToolState::Select);
         m_uiManager.showSelectionEmptyState();
     });
     m_uiManager.toolBar().setOnBuild([this]() {
-        if (!canLocalPlayerIssueCommands() || !canQueueNonMoveActions()) return;
+        const InteractionPermissions permissions = currentInteractionPermissions();
+        if (!permissions.canUseToolbar || !permissions.canOpenBuildPanel) return;
         m_input.setTool(ToolState::Build);
         m_uiManager.buildToolPanel().setSelectedBuildType(m_input.getBuildPreviewType());
-        m_uiManager.showBuildToolPanel(activeKingdom(), m_config, true);
+        const KingdomId viewedKingdomId = permissions.canIssueCommands
+            ? activeKingdom().id
+            : localPerspectiveKingdom();
+        m_uiManager.showBuildToolPanel(kingdom(viewedKingdomId),
+                                       m_config,
+                                       permissions.canQueueNonMoveActions);
     });
 
     // Build tool panel
     m_uiManager.buildToolPanel().setOnSelectBuildType([this](int type) {
-        if (!canLocalPlayerIssueCommands() || !canQueueNonMoveActions()) return;
+        if (!currentInteractionPermissions().canQueueNonMoveActions) return;
         const BuildingType buildingType = static_cast<BuildingType>(type);
         m_input.setBuildType(buildingType);
         m_uiManager.buildToolPanel().setSelectedBuildType(buildingType);
@@ -1483,7 +1582,7 @@ void Game::setupUICallbacks() {
 
     // Piece panel upgrade
     m_uiManager.piecePanel().setOnUpgrade([this](int pieceId, int targetType) {
-        if (!canLocalPlayerIssueCommands() || !canQueueNonMoveActions()) return;
+        if (!currentInteractionPermissions().canQueueNonMoveActions) return;
         Piece* piece = activeKingdom().getPieceById(pieceId);
         if (!piece) return;
         TurnCommand cmd;
@@ -1503,7 +1602,7 @@ void Game::setupUICallbacks() {
 
     // Barracks panel produce
     m_uiManager.barracksPanel().setOnProduce([this](int barracksId, int pieceType) {
-        if (!canLocalPlayerIssueCommands() || !canQueueNonMoveActions()) return;
+        if (!currentInteractionPermissions().canQueueNonMoveActions) return;
         TurnCommand cmd;
         cmd.type = TurnCommand::Produce;
         cmd.barracksId = barracksId;
@@ -1519,25 +1618,26 @@ void Game::setupUICallbacks() {
 
 void Game::updateUIState() {
     turnSystem().syncPointBudget(m_config);
-    const bool allowCommands = canLocalPlayerIssueCommands();
     const CheckTurnValidation validation = validateActivePendingTurn();
-    InGameViewModel viewModel = buildInGameViewModel(m_engine, m_config, m_state, allowCommands);
+    const InteractionPermissions permissions = currentInteractionPermissions(&validation);
+    InGameViewModel viewModel = buildInGameViewModel(m_engine, m_config, m_state, permissions.canIssueCommands);
     viewModel.statusTone = validation.activeKingInCheck ? InGameStatusTone::Danger : InGameStatusTone::Neutral;
     if (m_state != GameState::GameOver) {
         viewModel.statusLabel = validation.activeKingInCheck
             ? (validation.hasAnyLegalResponse ? "Check" : "Checkmate")
             : "Idle";
     }
-    viewModel.canEndTurn = allowCommands && validation.valid;
+    viewModel.canEndTurn = permissions.canIssueCommands && validation.valid;
     m_uiManager.updateDashboard(viewModel);
     updateMultiplayerPresentation();
-    const KingdomId viewedKingdomId = allowCommands ? activeKingdom().id : localPerspectiveKingdom();
-    const bool allowNonMoveActions = allowCommands && canQueueNonMoveActions();
+    const KingdomId viewedKingdomId = permissions.canIssueCommands ? activeKingdom().id : localPerspectiveKingdom();
 
     switch (m_input.getCurrentTool()) {
         case ToolState::Build:
-            if (allowNonMoveActions) {
-                m_uiManager.showBuildToolPanel(activeKingdom(), m_config, true);
+            if (permissions.canOpenBuildPanel) {
+                m_uiManager.showBuildToolPanel(kingdom(viewedKingdomId),
+                                               m_config,
+                                               permissions.canQueueNonMoveActions);
             } else {
                 m_uiManager.showSelectionEmptyState();
             }
@@ -1546,13 +1646,13 @@ void Game::updateUIState() {
         case ToolState::Select:
         default:
             if (m_input.getSelectedPiece()) {
-                const bool allowUpgrade = allowNonMoveActions
+                const bool allowUpgrade = permissions.canQueueNonMoveActions
                     && (m_input.getSelectedPiece()->kingdom == viewedKingdomId);
                 m_uiManager.showPiecePanel(*m_input.getSelectedPiece(), m_config, allowUpgrade);
             } else if (m_input.getSelectedBuilding()) {
                 Building* building = m_input.getSelectedBuilding();
                 if (building->type == BuildingType::Barracks) {
-                    const bool allowProduce = allowNonMoveActions && (building->owner == viewedKingdomId);
+                    const bool allowProduce = permissions.canQueueNonMoveActions && (building->owner == viewedKingdomId);
                     m_uiManager.showBarracksPanel(*building, kingdom(building->owner), m_config, allowProduce);
                 } else {
                     std::optional<ResourceIncomeBreakdown> resourceIncome;

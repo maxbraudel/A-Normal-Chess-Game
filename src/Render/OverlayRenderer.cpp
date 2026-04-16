@@ -9,6 +9,8 @@
 namespace {
 
 const sf::Color kSelectionBlue(80, 160, 255, 240);
+const sf::Color kReachableCellColor(0, 255, 0, 80);
+const sf::Color kDangerCellColor(255, 40, 40, 90);
 const sf::Color kOverlayBackground(24, 24, 28, 220);
 const sf::Color kOverlayOutline(235, 235, 235, 210);
 const sf::Color kOverlayFill(80, 160, 255, 220);
@@ -348,8 +350,9 @@ void OverlayRenderer::drawSelectionFrame(sf::RenderWindow& window, const Camera&
 
 void OverlayRenderer::drawReachableCells(sf::RenderWindow& window, const Camera& camera,
                                            const std::vector<sf::Vector2i>& cells, int cellSize) {
+    (void)camera;
     sf::RectangleShape overlay(sf::Vector2f(static_cast<float>(cellSize), static_cast<float>(cellSize)));
-    overlay.setFillColor(sf::Color(0, 255, 0, 80));
+    overlay.setFillColor(kReachableCellColor);
 
     for (const auto& pos : cells) {
         overlay.setPosition(static_cast<float>(pos.x * cellSize), static_cast<float>(pos.y * cellSize));
@@ -358,17 +361,19 @@ void OverlayRenderer::drawReachableCells(sf::RenderWindow& window, const Camera&
 }
 
 void OverlayRenderer::drawOriginCell(sf::RenderWindow& window, const Camera& camera,
-                                       sf::Vector2i origin, int cellSize) {
+                                       sf::Vector2i origin, int cellSize, sf::Color color) {
+    (void)camera;
     sf::RectangleShape rect(sf::Vector2f(static_cast<float>(cellSize), static_cast<float>(cellSize)));
-    rect.setFillColor(sf::Color(40, 120, 255, 130));
+    rect.setFillColor(color);
     rect.setPosition(static_cast<float>(origin.x * cellSize), static_cast<float>(origin.y * cellSize));
     window.draw(rect);
 }
 
 void OverlayRenderer::drawDangerCells(sf::RenderWindow& window, const Camera& camera,
                                         const std::vector<sf::Vector2i>& cells, int cellSize) {
+    (void)camera;
     sf::RectangleShape overlay(sf::Vector2f(static_cast<float>(cellSize), static_cast<float>(cellSize)));
-    overlay.setFillColor(sf::Color(255, 40, 40, 90));
+    overlay.setFillColor(kDangerCellColor);
     for (const auto& pos : cells) {
         overlay.setPosition(static_cast<float>(pos.x * cellSize), static_cast<float>(pos.y * cellSize));
         window.draw(overlay);

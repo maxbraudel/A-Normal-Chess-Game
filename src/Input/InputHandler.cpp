@@ -13,6 +13,7 @@
 #include "Systems/CheckResponseRules.hpp"
 #include "Systems/BuildSystem.hpp"
 #include "Systems/PendingTurnProjection.hpp"
+#include "Systems/SelectionMoveRules.hpp"
 #include "Config/GameConfig.hpp"
 #include "UI/UIManager.hpp"
 
@@ -30,6 +31,7 @@ const auto kSelectionCycleThreshold = std::chrono::milliseconds(350);
 InputHandler::InputHandler()
     : m_currentTool(ToolState::Select), m_selectedPiece(nullptr), m_selectedBuilding(nullptr),
     m_hasSelectedCell(false), m_selectedCell({0, 0}),
+    m_selectedOriginDangerous(false),
     m_hasBuildPreview(false), m_buildPreviewType(BuildingType::Barracks),
     m_buildPreviewRotationQuarterTurns(0),
     m_activeSelectionLayer(SelectionLayer::None), m_hasActiveSelectionCell(false),
@@ -49,6 +51,7 @@ bool InputHandler::hasSelectedCell() const { return m_hasSelectedCell; }
 sf::Vector2i InputHandler::getSelectedCell() const { return m_selectedCell; }
 const std::vector<sf::Vector2i>& InputHandler::getValidMoves() const { return m_validMoves; }
 const std::vector<sf::Vector2i>& InputHandler::getDangerMoves() const { return m_dangerMoves; }
+bool InputHandler::isSelectedOriginDangerous() const { return m_selectedOriginDangerous; }
 const std::set<int>& InputHandler::getCapturePreviewPieceIds() const { return m_capturePreviewPieceIds; }
 bool InputHandler::hasMovePreview() const { return !m_movePreviewOrigins.empty(); }
 
@@ -63,6 +66,55 @@ void InputHandler::setBuildType(BuildingType type) {
     m_buildPreviewType = type;
 }
 
+InputSelectionBookmark InputHandler::createSelectionBookmark() const {
+    InputSelectionBookmark bookmark;
+    bookmark.tool = m_currentTool;
+    if (m_selectedPiece) {
+        bookmark.pieceId = m_selectedPiece->id;
+    }
+    if (m_selectedBuilding) {
+        bookmark.buildingId = m_selectedBuilding->id;
+    }
+    if (m_hasSelectedCell) {
+        bookmark.selectedCell = m_selectedCell;
+    }
+    return bookmark;
+}
+
+void InputHandler::reconcileSelection(const InputSelectionBookmark& bookmark,
+                                      Piece* selectedPiece,
+                                      Building* selectedBuilding,
+                                      const InputContext& context) {
+    m_currentTool = bookmark.tool;
+
+    if (selectedPiece) {
+        activatePieceSelection(selectedPiece,
+                               selectedPiece->position,
+                               context,
+                               context.permissions.canIssueCommands
+                                   && selectedPiece->kingdom == context.controlledKingdom.id);
+        return;
+    }
+
+    if (selectedBuilding) {
+        activateBuildingSelection(selectedBuilding, selectedBuilding->origin);
+        return;
+    }
+
+    if (bookmark.selectedCell.has_value()) {
+        const sf::Vector2i cellPos = *bookmark.selectedCell;
+        if (context.board.isInBounds(cellPos.x, cellPos.y)) {
+            const Cell& cell = context.board.getCell(cellPos.x, cellPos.y);
+            if (cell.isInCircle) {
+                activateTerrainSelection(cellPos);
+                return;
+            }
+        }
+    }
+
+    clearSelection();
+}
+
 void InputHandler::clearSelection() {
     m_selectedPiece = nullptr;
     m_selectedBuilding = nullptr;
@@ -73,6 +125,7 @@ void InputHandler::clearSelection() {
     m_activeSelectionCell = {0, 0};
     m_validMoves.clear();
     m_dangerMoves.clear();
+    m_selectedOriginDangerous = false;
     clearSelectionCycle();
     // NOTE: does NOT clear queued move previews — call cancelLiveMove() / clearMovePreview() separately
     m_hasBuildPreview = false;
@@ -85,6 +138,7 @@ void InputHandler::selectCell(sf::Vector2i cellPos) {
     m_hasSelectedCell = true;
     m_validMoves.clear();
     m_dangerMoves.clear();
+    m_selectedOriginDangerous = false;
     setActiveSelectionMetadata(SelectionLayer::Terrain, cellPos);
 }
 
@@ -98,6 +152,7 @@ void InputHandler::activatePieceSelection(Piece* piece, sf::Vector2i cellPos,
     } else {
         m_validMoves.clear();
         m_dangerMoves.clear();
+        m_selectedOriginDangerous = false;
     }
     setActiveSelectionMetadata(SelectionLayer::Piece, cellPos);
 }
@@ -108,6 +163,7 @@ void InputHandler::activateBuildingSelection(Building* building, sf::Vector2i ce
     m_hasSelectedCell = false;
     m_validMoves.clear();
     m_dangerMoves.clear();
+    m_selectedOriginDangerous = false;
     setActiveSelectionMetadata(SelectionLayer::Building, cellPos);
 }
 
@@ -177,7 +233,7 @@ void InputHandler::applyResolvedSelection(const LayeredSelectionStack& stack,
         case SelectionLayer::Piece:
             activatePieceSelection(stack.piece, stack.cellPos,
                                    context,
-                                   context.allowCommands && stack.piece
+                                   context.permissions.canIssueCommands && stack.piece
                                        && stack.piece->kingdom == context.controlledKingdom.id);
             return;
         case SelectionLayer::Building:
@@ -198,16 +254,18 @@ void InputHandler::cancelPieceSelectionContext(const InputContext& context) {
     m_selectedPiece = nullptr;
     m_validMoves.clear();
     m_dangerMoves.clear();
+    m_selectedOriginDangerous = false;
 }
 
 void InputHandler::refreshPieceMoves(Piece* piece, const InputContext& context) {
     m_validMoves.clear();
     m_dangerMoves.clear();
-    if (!piece || context.turnSystem.hasPendingMoveForPiece(piece->id)) {
+    m_selectedOriginDangerous = false;
+    if (!piece) {
         return;
     }
 
-    m_validMoves = PendingTurnProjection::projectedPseudoLegalMovesForPiece(
+    const SelectionMoveOptions moveOptions = SelectionMoveRules::classifyPieceMoves(
         context.board,
         context.controlledKingdom,
         context.opposingKingdom,
@@ -216,6 +274,15 @@ void InputHandler::refreshPieceMoves(Piece* piece, const InputContext& context) 
         context.turnSystem.getPendingCommands(),
         piece->id,
         context.config);
+
+    m_validMoves = moveOptions.safeMoves;
+    m_dangerMoves = moveOptions.unsafeMoves;
+    m_selectedOriginDangerous = (piece->type == PieceType::King) && moveOptions.originUnsafe;
+}
+
+bool InputHandler::isSelectableMoveDestination(sf::Vector2i cellPos) const {
+    return std::find(m_validMoves.begin(), m_validMoves.end(), cellPos) != m_validMoves.end()
+        || std::find(m_dangerMoves.begin(), m_dangerMoves.end(), cellPos) != m_dangerMoves.end();
 }
 
 void InputHandler::syncQueuedMovePreviewState(const InputContext& context) {
@@ -290,7 +357,7 @@ void InputHandler::handleEvent(const sf::Event& event, const InputContext& conte
     }
 
     if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::R
-        && m_currentTool == ToolState::Build && context.allowCommands) {
+        && m_currentTool == ToolState::Build && context.permissions.canQueueNonMoveActions) {
         m_buildPreviewRotationQuarterTurns = (m_buildPreviewRotationQuarterTurns + 1) % 4;
     }
 
@@ -299,11 +366,7 @@ void InputHandler::handleEvent(const sf::Event& event, const InputContext& conte
             handleSelectTool(event, context);
             break;
         case ToolState::Build:
-            if (context.allowCommands) {
-                handleBuildTool(event, context);
-            } else {
-                handleSelectTool(event, context);
-            }
+            handleBuildTool(event, context);
             break;
     }
 }
@@ -371,7 +434,7 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
             return;
         }
 
-        if (!context.allowCommands) {
+        if (!context.permissions.canIssueCommands) {
             applyResolvedSelection(stack, stack.top(), context);
             armSelectionCycle(cellPos);
             return;
@@ -380,9 +443,10 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
         if (m_selectedPiece) {
             const TurnCommand* pendingMove = context.turnSystem.getPendingMoveCommand(m_selectedPiece->id);
             if (pendingMove && cellPos == pendingMove->origin) {
+                const sf::Vector2i pendingOrigin = pendingMove->origin;
                 Piece* restoredPiece = context.controlledKingdom.getPieceById(m_selectedPiece->id);
                 if (restoredPiece) {
-                    restoredPiece->position = pendingMove->origin;
+                    restoredPiece->position = pendingOrigin;
                 }
 
                 if (context.turnSystem.cancelMoveCommand(m_selectedPiece->id,
@@ -398,34 +462,67 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
                 m_selectedBuilding = nullptr;
                 m_hasSelectedCell = false;
                 refreshPieceMoves(restoredPiece, context);
-                setActiveSelectionMetadata(SelectionLayer::Piece, pendingMove->origin);
-                armSelectionCycle(pendingMove->origin);
+                setActiveSelectionMetadata(SelectionLayer::Piece, pendingOrigin);
+                armSelectionCycle(pendingOrigin);
                 return;
             }
 
-            if (!pendingMove) {
-                auto it = std::find(m_validMoves.begin(), m_validMoves.end(), cellPos);
-                if (it != m_validMoves.end()) {
-                    TurnCommand cmd;
-                    cmd.type = TurnCommand::Move;
-                    cmd.pieceId = m_selectedPiece->id;
-                    cmd.origin = m_selectedPiece->position;
-                    cmd.destination = cellPos;
-                    if (context.turnSystem.queueCommand(cmd,
+            if (isSelectableMoveDestination(cellPos)) {
+                const TurnCommand previousMove = pendingMove ? *pendingMove : TurnCommand{};
+                const bool hadPendingMove = (pendingMove != nullptr);
+                const sf::Vector2i moveOrigin = hadPendingMove
+                    ? previousMove.origin
+                    : m_selectedPiece->position;
+                Piece* restoredPiece = context.controlledKingdom.getPieceById(m_selectedPiece->id);
+                if (!restoredPiece) {
+                    return;
+                }
+
+                if (hadPendingMove) {
+                    restoredPiece->position = previousMove.origin;
+                    if (!context.turnSystem.cancelMoveCommand(m_selectedPiece->id,
+                                                              context.board,
+                                                              context.controlledKingdom,
+                                                              context.opposingKingdom,
+                                                              context.publicBuildings,
+                                                              context.config)) {
+                        return;
+                    }
+                }
+
+                TurnCommand cmd;
+                cmd.type = TurnCommand::Move;
+                cmd.pieceId = restoredPiece->id;
+                cmd.origin = moveOrigin;
+                cmd.destination = cellPos;
+
+                if (!context.turnSystem.queueCommand(cmd,
+                                                     context.board,
+                                                     context.controlledKingdom,
+                                                     context.opposingKingdom,
+                                                     context.publicBuildings,
+                                                     context.config)) {
+                    if (hadPendingMove) {
+                        context.turnSystem.queueCommand(previousMove,
                                                         context.board,
                                                         context.controlledKingdom,
                                                         context.opposingKingdom,
                                                         context.publicBuildings,
-                                                        context.config)) {
-                        syncQueuedMovePreviewState(context);
-                        m_selectedBuilding = nullptr;
-                        m_hasSelectedCell = false;
-                        setActiveSelectionMetadata(SelectionLayer::Piece, cellPos);
-                        armSelectionCycle(cellPos);
-                        refreshPieceMoves(m_selectedPiece, context);
+                                                        context.config);
                     }
+                    syncQueuedMovePreviewState(context);
+                    refreshPieceMoves(restoredPiece, context);
                     return;
                 }
+
+                syncQueuedMovePreviewState(context);
+                m_selectedPiece = restoredPiece;
+                m_selectedBuilding = nullptr;
+                m_hasSelectedCell = false;
+                setActiveSelectionMetadata(SelectionLayer::Piece, cellPos);
+                armSelectionCycle(cellPos);
+                refreshPieceMoves(restoredPiece, context);
+                return;
             }
         }
 
@@ -435,7 +532,7 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
 }
 
 void InputHandler::handleBuildTool(const sf::Event& event, const InputContext& context) {
-    if (!context.allowCommands || !context.allowNonMoveActions) {
+    if (!context.permissions.canIssueCommands || !context.permissions.canQueueNonMoveActions) {
         m_hasBuildPreview = false;
         return;
     }

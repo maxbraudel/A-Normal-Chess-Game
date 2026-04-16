@@ -609,9 +609,64 @@ ThreatMap ForwardModel::buildThreatMap(const GameSnapshot& s, KingdomId attacker
                                         int globalMaxRange) {
     ThreatMap tm;
     const SnapKingdom& atk = s.kingdom(attacker);
+    auto getAttackSquares = [&](const SnapPiece& piece) {
+        std::vector<sf::Vector2i> attackSquares;
+
+        switch (piece.type) {
+            case PieceType::Pawn:
+                attackSquares = getPawnMoves(piece, s);
+                break;
+            case PieceType::Knight:
+                attackSquares = getKnightMoves(piece, s);
+                break;
+            case PieceType::Bishop:
+                for (const auto& direction : std::vector<std::pair<int, int>>{{-1, -1}, {-1, 1}, {1, -1}, {1, 1}}) {
+                    auto directionalMoves = getDirectionalMoves(piece, s, direction.first, direction.second, globalMaxRange);
+                    attackSquares.insert(attackSquares.end(), directionalMoves.begin(), directionalMoves.end());
+                }
+                break;
+            case PieceType::Rook:
+                for (const auto& direction : std::vector<std::pair<int, int>>{{0, -1}, {0, 1}, {-1, 0}, {1, 0}}) {
+                    auto directionalMoves = getDirectionalMoves(piece, s, direction.first, direction.second, globalMaxRange);
+                    attackSquares.insert(attackSquares.end(), directionalMoves.begin(), directionalMoves.end());
+                }
+                break;
+            case PieceType::Queen:
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        if (dx == 0 && dy == 0) {
+                            continue;
+                        }
+
+                        auto directionalMoves = getDirectionalMoves(piece, s, dx, dy, globalMaxRange);
+                        attackSquares.insert(attackSquares.end(), directionalMoves.begin(), directionalMoves.end());
+                    }
+                }
+                break;
+            case PieceType::King:
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        if (dx == 0 && dy == 0) {
+                            continue;
+                        }
+
+                        sf::Vector2i destination{piece.position.x + dx, piece.position.y + dy};
+                        if (canLandOn(s, destination, piece.kingdom)) {
+                            attackSquares.push_back(destination);
+                        }
+                    }
+                }
+                break;
+        }
+
+        return attackSquares;
+    };
+
     for (auto& piece : atk.pieces) {
-        auto moves = getPseudoLegalMoves(s, piece, globalMaxRange);
-        for (auto& m : moves) tm.mark(m);
+        const auto attackSquares = getAttackSquares(piece);
+        for (const auto& square : attackSquares) {
+            tm.mark(square);
+        }
     }
     return tm;
 }

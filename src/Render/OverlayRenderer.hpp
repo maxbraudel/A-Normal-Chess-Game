@@ -18,7 +18,7 @@ public:
     void drawReachableCells(sf::RenderWindow& window, const Camera& camera,
                              const std::vector<sf::Vector2i>& cells, int cellSize);
     void drawOriginCell(sf::RenderWindow& window, const Camera& camera,
-                         sf::Vector2i origin, int cellSize);
+                         sf::Vector2i origin, int cellSize, sf::Color color);
     void drawDangerCells(sf::RenderWindow& window, const Camera& camera,
                           const std::vector<sf::Vector2i>& cells, int cellSize);
     void drawBuildPreview(sf::RenderWindow& window, const Camera& camera,

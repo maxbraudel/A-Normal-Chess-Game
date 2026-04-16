@@ -23,6 +23,7 @@
 #include "Config/AIConfig.hpp"
 #include "Config/GameConfig.hpp"
 #include "Core/GameEngine.hpp"
+#include "Core/InteractionPermissions.hpp"
 #include "Core/LocalPlayerContext.hpp"
 #include "Core/GameState.hpp"
 #include "Core/GameStateValidator.hpp"
@@ -39,6 +40,7 @@
 #include "Systems/EventLog.hpp"
 #include "Systems/ProductionSpawnRules.hpp"
 #include "Systems/ProductionSystem.hpp"
+#include "Systems/SelectionMoveRules.hpp"
 #include "Systems/TurnCommand.hpp"
 #include "Systems/TurnSystem.hpp"
 #include "UI/InGameViewModelBuilder.hpp"
@@ -138,6 +140,28 @@ bool waitUntil(Predicate predicate, int timeoutMs = 1000) {
     }
 
     return predicate();
+}
+
+bool snapshotHasAnyLegalResponse(const Board& board,
+                                 const Kingdom& activeKingdom,
+                                 const Kingdom& enemyKingdom,
+                                 const std::vector<Building>& publicBuildings,
+                                 int turnNumber,
+                                 const GameConfig& config) {
+    const GameSnapshot snapshot = ForwardModel::createSnapshot(
+        board, activeKingdom, enemyKingdom, publicBuildings, turnNumber);
+    for (const SnapPiece& piece : snapshot.kingdom(activeKingdom.id).pieces) {
+        if (!ForwardModel::getLegalMoves(snapshot, piece, config.getGlobalMaxRange()).empty()) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool containsCell(const std::vector<sf::Vector2i>& cells,
+                  const sf::Vector2i& target) {
+    return std::find(cells.begin(), cells.end(), target) != cells.end();
 }
 
 unsigned short startLoopbackServerOnFreePort(MultiplayerServer& server,
@@ -608,6 +632,261 @@ void testLayeredSelectionStackSupportsPreviewPieceOverride() {
         expect(!validation.valid,
                "Build and other non-move commands must be rejected while the active kingdom is in check.");
     }
+
+    void testSelectionMoveRulesClassifyUnsafeNonKingMovesAsSelectable() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+
+        addPieceToBoard(white, board, 310, PieceType::King, KingdomId::White, {16, 16});
+        addPieceToBoard(white, board, 311, PieceType::Rook, KingdomId::White, {10, 16});
+        addPieceToBoard(black, board, 410, PieceType::King, KingdomId::Black, {10, 10});
+        Piece& blackRook = addPieceToBoard(black, board, 411, PieceType::Rook, KingdomId::Black, {10, 12});
+
+        const std::vector<Building> publicBuildings;
+        const SelectionMoveOptions moveOptions = SelectionMoveRules::classifyPieceMoves(
+            board, black, white, publicBuildings, 1, {}, blackRook.id, config);
+
+        expect(containsCell(moveOptions.safeMoves, {10, 13}),
+            "A shielding rook should keep safe moves that continue protecting its king.");
+        expect(containsCell(moveOptions.unsafeMoves, {9, 12}),
+            "Unsafe self-check moves should still be exposed as red selectable destinations.");
+        expect(moveOptions.contains({9, 12}),
+            "Selection move options should treat unsafe red destinations as selectable.");
+    }
+
+    void testSelectionMoveRulesKeepUnsafeKingSquaresSelectable() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+
+        addPieceToBoard(white, board, 320, PieceType::King, KingdomId::White, {4, 4});
+        addPieceToBoard(white, board, 321, PieceType::Rook, KingdomId::White, {10, 12});
+        Piece& blackKing = addPieceToBoard(black, board, 420, PieceType::King, KingdomId::Black, {10, 10});
+
+        const std::vector<Building> publicBuildings;
+        const SelectionMoveOptions moveOptions = SelectionMoveRules::classifyPieceMoves(
+            board, black, white, publicBuildings, 1, {}, blackKing.id, config);
+
+        expect(containsCell(moveOptions.safeMoves, {9, 10}),
+            "The king should keep safe escape squares in the selection model.");
+        expect(containsCell(moveOptions.unsafeMoves, {10, 11}),
+            "King squares that remain under attack should stay classified as red destinations.");
+        expect(moveOptions.contains({10, 11}),
+            "Red king destinations should remain selectable even though they are unsafe.");
+    }
+
+    void testPendingTurnValidationRejectsUnsafeQueuedMoveOnlyAtEndTurn() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+
+        addPieceToBoard(white, board, 330, PieceType::King, KingdomId::White, {16, 16});
+        addPieceToBoard(white, board, 331, PieceType::Rook, KingdomId::White, {10, 16});
+        addPieceToBoard(black, board, 430, PieceType::King, KingdomId::Black, {10, 10});
+        Piece& blackRook = addPieceToBoard(black, board, 431, PieceType::Rook, KingdomId::Black, {10, 12});
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::Black);
+
+        TurnCommand moveCommand;
+        moveCommand.type = TurnCommand::Move;
+        moveCommand.pieceId = blackRook.id;
+        moveCommand.origin = blackRook.position;
+        moveCommand.destination = {9, 12};
+
+        expect(turnSystem.queueCommand(moveCommand, board, black, white, publicBuildings, config),
+            "Unsafe self-check moves should still be queueable so the player can preview them.");
+
+        const CheckTurnValidation validation = CheckResponseRules::validatePendingTurn(
+            black, white, board, publicBuildings, 1, turnSystem.getPendingCommands(), config);
+        expect(!validation.valid,
+            "The queued turn must stay invalid until the player resolves a red self-check move.");
+        expect(validation.hasQueuedMove,
+            "Unsafe queued moves should remain present for end-turn validation.");
+    }
+
+        void testCheckResponseAllowsKingSidestepAgainstRookCheck() {
+         GameConfig config;
+         Board board;
+         board.init(12);
+         Kingdom white(KingdomId::White);
+         Kingdom black(KingdomId::Black);
+
+         addPieceToBoard(white, board, 131, PieceType::King, KingdomId::White, {4, 4});
+         addPieceToBoard(white, board, 132, PieceType::Rook, KingdomId::White, {10, 12});
+         Piece& blackKing = addPieceToBoard(black, board, 231, PieceType::King, KingdomId::Black, {10, 10});
+
+         const std::vector<sf::Vector2i> legalMoves = CheckResponseRules::filterLegalMovesForPiece(
+             blackKing, board, config);
+         expect(std::find(legalMoves.begin(), legalMoves.end(), sf::Vector2i{9, 10}) != legalMoves.end(),
+             "A checked king should keep a legal sidestep escape when one exists.");
+
+         const std::vector<Building> publicBuildings;
+         const CheckTurnValidation validation = CheckResponseRules::validatePendingTurn(
+             black, white, board, publicBuildings, 1, {}, config);
+         expect(validation.activeKingInCheck,
+             "The king should be recognized as checked in the sidestep regression setup.");
+         expect(validation.hasAnyLegalResponse,
+             "The validator must recognize that the checked king can still sidestep out of check.");
+         expect(snapshotHasAnyLegalResponse(board, black, white, publicBuildings, 1, config),
+             "Snapshot evaluation should also find the sidestep response in the same position.");
+        }
+
+        void testCheckResponseAllowsEdgeKingEscapeFromRookCheck() {
+         GameConfig config;
+         Board board;
+         board.init(25);
+         Kingdom white(KingdomId::White);
+         Kingdom black(KingdomId::Black);
+
+         addPieceToBoard(white, board, 140, PieceType::King, KingdomId::White, {32, 20});
+         addPieceToBoard(white, board, 141, PieceType::Rook, KingdomId::White, {24, 24});
+         addPieceToBoard(white, board, 142, PieceType::Rook, KingdomId::White, {47, 16});
+         Piece& blackKing = addPieceToBoard(black, board, 240, PieceType::King, KingdomId::Black, {47, 14});
+
+         const std::vector<sf::Vector2i> legalMoves = CheckResponseRules::filterLegalMovesForPiece(
+             blackKing, board, config);
+         expect(std::find(legalMoves.begin(), legalMoves.end(), sf::Vector2i{46, 14}) != legalMoves.end(),
+             "The edge king should be able to escape left from the reported false-checkmate position.");
+
+         const std::vector<Building> publicBuildings;
+         const CheckTurnValidation validation = CheckResponseRules::validatePendingTurn(
+             black, white, board, publicBuildings, 125, {}, config);
+         expect(validation.activeKingInCheck,
+             "The edge regression setup should still be a real check.");
+         expect(validation.hasAnyLegalResponse,
+             "The validator must not classify the reported edge position as checkmate.");
+         expect(snapshotHasAnyLegalResponse(board, black, white, publicBuildings, 125, config),
+             "Snapshot evaluation should confirm the king escape from the edge regression setup.");
+        }
+
+        void testCheckResponseDetectsTrueEdgeCheckmate() {
+         GameConfig config;
+         Board board;
+         board.init(25);
+         Kingdom white(KingdomId::White);
+         Kingdom black(KingdomId::Black);
+
+         addPieceToBoard(white, board, 150, PieceType::King, KingdomId::White, {45, 13});
+         addPieceToBoard(white, board, 151, PieceType::Rook, KingdomId::White, {47, 16});
+         addPieceToBoard(white, board, 152, PieceType::Rook, KingdomId::White, {45, 15});
+         Piece& blackKing = addPieceToBoard(black, board, 250, PieceType::King, KingdomId::Black, {47, 14});
+
+         const std::vector<sf::Vector2i> legalMoves = CheckResponseRules::filterLegalMovesForPiece(
+             blackKing, board, config);
+         expect(legalMoves.empty(),
+             "The edge control setup should leave the checked king with no legal move.");
+
+         const std::vector<Building> publicBuildings;
+         const CheckTurnValidation validation = CheckResponseRules::validatePendingTurn(
+             black, white, board, publicBuildings, 1, {}, config);
+         expect(validation.activeKingInCheck,
+             "The edge control setup must still be recognized as check.");
+         expect(!validation.hasAnyLegalResponse,
+             "The validator should report no legal response in a true edge checkmate.");
+         expect(!snapshotHasAnyLegalResponse(board, black, white, publicBuildings, 1, config),
+             "Snapshot evaluation should agree that the edge control setup is a real checkmate.");
+        }
+
+        void testInteractionPermissionsAllowReadOnlyInspectionOutsideTurn() {
+         InteractionPermissionInputs inputs;
+         inputs.gameState = GameState::Playing;
+         inputs.multiplayerSessionReady = true;
+         inputs.isLocalPlayerTurn = false;
+
+         const InteractionPermissions permissions = computeInteractionPermissions(inputs);
+         expect(permissions.canInspectWorld,
+             "Read-only world inspection should stay available when it is not the local player's turn.");
+         expect(permissions.canUseToolbar,
+             "Toolbar access should stay available when the player can only inspect the world.");
+         expect(permissions.canOpenBuildPanel,
+             "The build panel should remain openable even when actual commands are blocked.");
+         expect(!permissions.canIssueCommands,
+             "Players must not issue commands outside their actionable turn.");
+         expect(!permissions.canShowActionOverlays,
+             "Read-only inspection states must not render actionable overlays.");
+        }
+
+        void testInteractionPermissionsKeepBuildPanelReadOnlyDuringCheck() {
+         InteractionPermissionInputs inputs;
+         inputs.gameState = GameState::Playing;
+         inputs.multiplayerSessionReady = true;
+         inputs.isLocalPlayerTurn = true;
+         inputs.activeKingInCheck = true;
+         inputs.hasAnyLegalResponse = true;
+
+         const InteractionPermissions permissions = computeInteractionPermissions(inputs);
+         expect(permissions.canIssueCommands,
+             "The active kingdom should still be able to issue legal response moves while in check.");
+         expect(!permissions.canQueueNonMoveActions,
+             "Non-move actions must stay blocked while the active king is in check.");
+         expect(permissions.canOpenBuildPanel,
+             "The build panel should remain openable while in check so the UI can show disabled actions.");
+        }
+
+        void testInteractionPermissionsKeepNavigationAvailableDuringGameOver() {
+         InteractionPermissionInputs inputs;
+         inputs.gameState = GameState::GameOver;
+
+         const InteractionPermissions permissions = computeInteractionPermissions(inputs);
+         expect(permissions.canOpenMenu,
+             "Game-over state should still allow opening the in-game menu.");
+         expect(permissions.canMoveCamera,
+             "Game-over state should still allow camera movement.");
+         expect(permissions.canInspectWorld,
+             "Game-over state should still allow selecting and inspecting the world.");
+         expect(permissions.canUseToolbar,
+             "Game-over state should still allow switching between inspection tools.");
+         expect(permissions.canOpenBuildPanel,
+             "Game-over state should still allow opening the read-only build panel.");
+         expect(!permissions.canIssueCommands,
+             "Game-over state must block gameplay commands.");
+        }
+
+        void testTurnSystemMoveLogIncludesPieceType() {
+         GameConfig config;
+         Board board;
+         board.init(8);
+
+         Kingdom white(KingdomId::White);
+         Kingdom black(KingdomId::Black);
+         addPieceToBoard(white, board, 150, PieceType::King, KingdomId::White, {2, 2});
+         Piece& bishop = addPieceToBoard(white, board, 151, PieceType::Bishop, KingdomId::White, {4, 4});
+         addPieceToBoard(black, board, 250, PieceType::King, KingdomId::Black, {12, 12});
+
+         std::vector<Building> publicBuildings;
+         TurnSystem turnSystem;
+         turnSystem.setActiveKingdom(KingdomId::White);
+
+         TurnCommand moveCommand;
+         moveCommand.type = TurnCommand::Move;
+         moveCommand.pieceId = bishop.id;
+         moveCommand.origin = bishop.position;
+         moveCommand.destination = {6, 6};
+
+         expect(turnSystem.queueCommand(moveCommand, board, white, black, publicBuildings, config),
+             "Bishop move command should be accepted for move log regression coverage.");
+
+         EventLog eventLog;
+         PieceFactory pieceFactory;
+         BuildingFactory buildingFactory;
+         turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+
+         const auto& events = eventLog.getEvents();
+         const bool foundMoveEvent = std::any_of(events.begin(), events.end(), [](const EventLog::Event& event) {
+             return event.message == "Moved Bishop to (6,6)";
+         });
+         expect(foundMoveEvent,
+             "Move history entries should include the moved piece type.");
+        }
 
     void testInGameViewModelShowsDangerToneWhenActiveKingIsInCheck() {
         GameConfig config;
@@ -2094,6 +2373,16 @@ int main() {
         {"check response allows blocking move", testCheckResponseAllowsBlockingMove},
         {"check response rejects pass", testCheckResponseRejectsPassWhileInCheck},
         {"check response rejects non-move", testCheckResponseRejectsNonMoveActionsWhileInCheck},
+        {"selection move rules unsafe non-king selectable", testSelectionMoveRulesClassifyUnsafeNonKingMovesAsSelectable},
+        {"selection move rules unsafe king selectable", testSelectionMoveRulesKeepUnsafeKingSquaresSelectable},
+        {"pending turn unsafe move end-turn rejection", testPendingTurnValidationRejectsUnsafeQueuedMoveOnlyAtEndTurn},
+        {"check response king sidestep", testCheckResponseAllowsKingSidestepAgainstRookCheck},
+        {"check response edge king escape", testCheckResponseAllowsEdgeKingEscapeFromRookCheck},
+        {"check response true edge checkmate", testCheckResponseDetectsTrueEdgeCheckmate},
+        {"interaction permissions read-only outside turn", testInteractionPermissionsAllowReadOnlyInspectionOutsideTurn},
+        {"interaction permissions check build panel", testInteractionPermissionsKeepBuildPanelReadOnlyDuringCheck},
+        {"interaction permissions game over navigation", testInteractionPermissionsKeepNavigationAvailableDuringGameOver},
+        {"turn system move log piece type", testTurnSystemMoveLogIncludesPieceType},
         {"in-game view model check tone", testInGameViewModelShowsDangerToneWhenActiveKingIsInCheck},
         {"overlay policy when selected visibility", testOverlayPolicyCanHideIndicatorsUntilSelected},
         {"overlay policy always visible", testOverlayPolicyAlwaysKeepsCurrentIndicatorsVisible},

@@ -38,12 +38,25 @@ bool isPseudoLegalMove(const Piece& piece,
     return std::find(pseudoLegalMoves.begin(), pseudoLegalMoves.end(), destination) != pseudoLegalMoves.end();
 }
 
-bool hasAnyPseudoLegalResponse(const GameSnapshot& snapshot,
-                               KingdomId activeKingdom,
-                               int globalMaxRange) {
+void restorePendingMoveOrigins(Kingdom& activeKingdom,
+                               const std::vector<TurnCommand>& pendingCommands) {
+    for (const TurnCommand& command : pendingCommands) {
+        if (command.type != TurnCommand::Move) {
+            continue;
+        }
+
+        if (Piece* piece = activeKingdom.getPieceById(command.pieceId)) {
+            piece->position = command.origin;
+        }
+    }
+}
+
+bool hasAnySnapshotLegalResponse(const GameSnapshot& snapshot,
+                                 KingdomId activeKingdom,
+                                 int globalMaxRange) {
     const SnapKingdom& kingdom = snapshot.kingdom(activeKingdom);
     for (const SnapPiece& piece : kingdom.pieces) {
-        if (!ForwardModel::getPseudoLegalMoves(snapshot, piece, globalMaxRange).empty()) {
+        if (!ForwardModel::getLegalMoves(snapshot, piece, globalMaxRange).empty()) {
             return true;
         }
     }
@@ -140,12 +153,17 @@ CheckTurnValidation CheckResponseRules::validatePendingTurn(const Kingdom& activ
                                                             const std::vector<TurnCommand>& pendingCommands,
                                                             const GameConfig& config) {
     CheckTurnValidation validation;
+    Kingdom restoredActiveKingdom = activeKingdom;
+    Kingdom restoredEnemyKingdom = enemyKingdom;
+    restorePendingMoveOrigins(restoredActiveKingdom, pendingCommands);
 
-    validation.activeKingInCheck = CheckSystem::isInCheckFast(
-        activeKingdom, enemyKingdom, board, config);
-    Kingdom activeCopy = activeKingdom;
-    Board boardCopy = board;
-    validation.hasAnyLegalResponse = hasAnyLegalResponse(activeCopy, boardCopy, config);
+    const GameSnapshot currentSnapshot = ForwardModel::createSnapshot(
+        board, restoredActiveKingdom, restoredEnemyKingdom, publicBuildings, turnNumber);
+
+    validation.activeKingInCheck = ForwardModel::isInCheck(
+        currentSnapshot, activeKingdom.id, config.getGlobalMaxRange());
+    validation.hasAnyLegalResponse = hasAnySnapshotLegalResponse(
+        currentSnapshot, activeKingdom.id, config.getGlobalMaxRange());
     validation.hasQueuedMove = hasQueuedMoveCommand(pendingCommands);
 
     if (validation.activeKingInCheck && !validation.hasAnyLegalResponse) {
