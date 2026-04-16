@@ -29,6 +29,7 @@
 #include "Render/Camera.hpp"
 #include "Render/Renderer.hpp"
 #include "Runtime/AITurnCoordinator.hpp"
+#include "Runtime/BuildOverlayCoordinator.hpp"
 #include "Runtime/FrontendCoordinator.hpp"
 #include "Runtime/InGamePresentationCoordinator.hpp"
 #include "Runtime/MultiplayerJoinCoordinator.hpp"
@@ -39,6 +40,7 @@
 #include "Runtime/SessionPresentationCoordinator.hpp"
 #include "Runtime/SessionRuntimeCoordinator.hpp"
 #include "Runtime/TurnCoordinator.hpp"
+#include "Runtime/TurnDraftCoordinator.hpp"
 #include "Runtime/TurnLifecycleCoordinator.hpp"
 #include "Runtime/UICallbackCoordinator.hpp"
 #include "Assets/AssetManager.hpp"
@@ -104,6 +106,8 @@ private:
     UICallbackCoordinatorDependencies makeUICallbackCoordinatorDependencies();
     SessionRuntimeCallbacks makeSessionRuntimeCallbacks();
     TurnLifecycleCallbacks makeTurnLifecycleCallbacks();
+    TurnDraftRuntimeState makeTurnDraftRuntimeState() const;
+    BuildOverlayRuntimeState makeBuildOverlayRuntimeState(const InteractionPermissions& permissions) const;
     CheckTurnValidation validateActivePendingTurn() const;
     bool canQueueNonMoveActions() const;
     InteractionPermissions currentInteractionPermissions(const CheckTurnValidation* validation = nullptr) const;
@@ -205,14 +209,7 @@ private:
     TurnLifecycleCoordinator m_turnLifecycleCoordinator;
     PanelActionCoordinator m_panelActionCoordinator;
     MultiplayerRuntimeCoordinator m_multiplayerRuntimeCoordinator;
-    std::vector<sf::Vector2i> m_buildableAnchorCellsOverlay;
-    std::vector<sf::Vector2i> m_buildableCellsOverlay;
-    std::uint64_t m_buildableCellsOverlayRevision = 0;
-    int m_buildableCellsOverlayTurnNumber = -1;
-    KingdomId m_buildableCellsOverlayActiveKingdom = KingdomId::White;
-    BuildingType m_buildableCellsOverlayType = BuildingType::Barracks;
-    int m_buildableCellsOverlayRotationQuarterTurns = 0;
-    bool m_buildableCellsOverlayCacheValid = false;
+    BuildOverlayCache m_buildOverlayCache;
 
 #ifdef _WIN32
     WNDPROC m_originalWndProc = nullptr;

@@ -40,6 +40,7 @@
 #include "Multiplayer/Protocol.hpp"
 #include "Multiplayer/MultiplayerServer.hpp"
 #include "Runtime/AITurnCoordinator.hpp"
+#include "Runtime/BuildOverlayCoordinator.hpp"
 #include "Runtime/FrontendCoordinator.hpp"
 #include "Runtime/InGamePresentationCoordinator.hpp"
 #include "Runtime/InputCoordinator.hpp"
@@ -53,6 +54,7 @@
 #include "Runtime/SessionPresentationCoordinator.hpp"
 #include "Runtime/SessionRuntimeCoordinator.hpp"
 #include "Runtime/TurnCoordinator.hpp"
+#include "Runtime/TurnDraftCoordinator.hpp"
 #include "Runtime/TurnLifecycleCoordinator.hpp"
 #include "Runtime/UICallbackCoordinator.hpp"
 #include "Runtime/UpdateCoordinator.hpp"
@@ -4643,6 +4645,86 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             "Valid anchor cells should convert back to the exact same canonical build origins.");
     }
 
+    void testBuildOverlayCoordinatorRefreshesClearsAndInvalidatesCache() {
+        GameConfig config;
+        GameEngine engine;
+        engine.board().init(12);
+        engine.kingdom(KingdomId::White) = Kingdom(KingdomId::White);
+        engine.kingdom(KingdomId::Black) = Kingdom(KingdomId::Black);
+        engine.publicBuildings().clear();
+        engine.turnSystem().setActiveKingdom(KingdomId::White);
+        engine.turnSystem().setTurnNumber(1);
+        engine.kingdom(KingdomId::White).gold = config.getWoodWallCost() + 10;
+
+        Piece& whiteKing = addPieceToBoard(engine.kingdom(KingdomId::White),
+                                           engine.board(),
+                                           6117,
+                                           PieceType::King,
+                                           KingdomId::White,
+                                           {10, 10});
+        addPieceToBoard(engine.kingdom(KingdomId::Black),
+                        engine.board(),
+                        7117,
+                        PieceType::King,
+                        KingdomId::Black,
+                        {18, 18});
+
+        std::string error;
+        expect(engine.replacePendingCommands({makeMoveCommand(whiteKing.id, {10, 10}, {11, 10})}, config, false, &error),
+            error);
+
+        const TurnValidationContext turnContext = engine.makeTurnValidationContext(config);
+        BuildOverlayRuntimeState runtimeState;
+        runtimeState.activeTool = ToolState::Build;
+        runtimeState.permissions.canShowBuildPreview = true;
+        runtimeState.permissions.canQueueNonMoveActions = true;
+        runtimeState.revision = engine.turnSystem().getPendingStateRevision();
+        runtimeState.turnNumber = engine.turnSystem().getTurnNumber();
+        runtimeState.activeKingdom = engine.activeKingdom().id;
+        runtimeState.buildType = BuildingType::WoodWall;
+        runtimeState.rotationQuarterTurns = 0;
+        runtimeState.canQueueNonMoveActions = true;
+
+        const BuildOverlayRules::BuildOverlayMap expectedMap = BuildOverlayRules::collectBuildOverlayMap(
+            turnContext,
+            engine.turnSystem().getPendingCommands(),
+            runtimeState.buildType,
+            runtimeState.rotationQuarterTurns);
+        expect(!expectedMap.validAnchorCells.empty() && !expectedMap.coverageCells.empty(),
+            "BuildOverlayCoordinator test should use a projected state that exposes a non-empty build preview.");
+
+        BuildOverlayCache cache;
+        BuildOverlayCoordinator::refresh(runtimeState,
+                                         turnContext,
+                                         engine.turnSystem().getPendingCommands(),
+                                         cache);
+        expect(cache.cacheValid,
+            "BuildOverlayCoordinator should mark the cache as valid after computing build preview overlays.");
+        expect(sameCellSet(cache.validAnchorCells, expectedMap.validAnchorCells),
+            "BuildOverlayCoordinator should reuse BuildOverlayRules exactly for valid anchor cells.");
+        expect(sameCellSet(cache.coverageCells, expectedMap.coverageCells),
+            "BuildOverlayCoordinator should reuse BuildOverlayRules exactly for coverage cells.");
+
+        runtimeState.permissions.canQueueNonMoveActions = false;
+        runtimeState.canQueueNonMoveActions = false;
+        BuildOverlayCoordinator::refresh(runtimeState,
+                                         turnContext,
+                                         engine.turnSystem().getPendingCommands(),
+                                         cache);
+        expect(cache.cacheValid,
+            "BuildOverlayCoordinator should keep a valid cache key after clearing overlays because non-move actions are temporarily disallowed.");
+        expect(cache.validAnchorCells.empty() && cache.coverageCells.empty(),
+            "BuildOverlayCoordinator should clear projected build overlays when build actions are no longer queueable for the current local state.");
+
+        runtimeState.activeTool = ToolState::Select;
+        BuildOverlayCoordinator::refresh(runtimeState,
+                                         turnContext,
+                                         engine.turnSystem().getPendingCommands(),
+                                         cache);
+        expect(!cache.cacheValid,
+            "BuildOverlayCoordinator should invalidate the cached build preview when the active tool stops being the build tool.");
+    }
+
     void testTurnSystemCancelMoveKeepsBuildWhenAnotherBuilderStillSupportsIt() {
         GameConfig config;
         Board board;
@@ -4813,6 +4895,95 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             "A materialized draft building should immediately occupy its board cells.");
         expect(draft.kingdom(KingdomId::White).gold == engine.kingdom(KingdomId::White).gold - config.getBarracksCost(),
             "Replaying a queued build into the turn draft should reserve the building cost from the displayed gold.");
+    }
+
+    void testTurnDraftCoordinatorSynchronizesAndClearsProjectedDraft() {
+        GameConfig config;
+        GameEngine engine;
+        engine.board().init(12);
+        engine.kingdom(KingdomId::White) = Kingdom(KingdomId::White);
+        engine.kingdom(KingdomId::Black) = Kingdom(KingdomId::Black);
+        engine.publicBuildings().clear();
+        engine.turnSystem().setActiveKingdom(KingdomId::White);
+        engine.turnSystem().setTurnNumber(1);
+        engine.kingdom(KingdomId::White).gold = config.getWoodWallCost() + 10;
+
+        addPieceToBoard(engine.kingdom(KingdomId::White),
+                        engine.board(),
+                        610,
+                        PieceType::King,
+                        KingdomId::White,
+                        {10, 10});
+        addPieceToBoard(engine.kingdom(KingdomId::Black),
+                        engine.board(),
+                        710,
+                        PieceType::King,
+                        KingdomId::Black,
+                        {18, 18});
+
+        std::optional<TurnCommand> queuedBuild;
+        const TurnValidationContext turnContext = engine.makeTurnValidationContext(config);
+        for (const sf::Vector2i& origin : engine.board().getAllValidCells()) {
+            TurnCommand candidate = makeBuildCommand(BuildingType::WoodWall, origin);
+            if (PendingTurnProjection::canAppendCommand(turnContext, {}, candidate, nullptr)) {
+                queuedBuild = candidate;
+                break;
+            }
+        }
+
+        expect(queuedBuild.has_value(),
+            "TurnDraftCoordinator test should find a legal build origin on the projected board.");
+
+        std::string error;
+        expect(engine.replacePendingCommands({*queuedBuild}, config, false, &error), error);
+        expect(!engine.turnSystem().getPendingCommands().empty(),
+            "TurnDraftCoordinator test should leave a concrete pending command queued before draft synchronization.");
+
+        const int queuedBuildId = engine.turnSystem().getPendingCommands().front().buildId;
+        TurnDraft draft;
+        std::uint64_t lastRevision = 0;
+        InputSelectionBookmark bookmark;
+        bookmark.buildingId = queuedBuildId;
+        int captureCalls = 0;
+        int reconcileCalls = 0;
+
+        TurnDraftSynchronizationContext context{
+            TurnDraftRuntimeState{GameState::Playing, true, false, true},
+            engine,
+            draft,
+            lastRevision,
+            config,
+            TurnDraftSynchronizationCallbacks{
+                [&bookmark, &captureCalls]() {
+                    ++captureCalls;
+                    return bookmark;
+                },
+                [&bookmark, &reconcileCalls](const InputSelectionBookmark& restoredBookmark) {
+                    ++reconcileCalls;
+                    expect(restoredBookmark.buildingId == bookmark.buildingId,
+                        "TurnDraftCoordinator should reconcile the same stable selection bookmark around draft synchronization.");
+                }}};
+
+        TurnDraftCoordinator::ensureUpToDate(context);
+        expect(draft.isValid(),
+            "TurnDraftCoordinator should rebuild the projected draft when a local player has queued commands in an interactive game state.");
+        expect(lastRevision == engine.turnSystem().getPendingStateRevision(),
+            "TurnDraftCoordinator should remember the pending-state revision after a successful rebuild.");
+        expect(captureCalls == 1 && reconcileCalls == 1,
+            "TurnDraftCoordinator should capture and reconcile selection once when it refreshes the projected draft.");
+        expect(findBuildingById(draft.kingdom(KingdomId::White), queuedBuildId) != nullptr,
+            "TurnDraftCoordinator should expose the queued build in the projected kingdom state after rebuilding the draft.");
+
+        TurnDraftCoordinator::ensureUpToDate(context);
+        expect(captureCalls == 1 && reconcileCalls == 1,
+            "TurnDraftCoordinator should not rebuild or reconcile the draft again while the pending-state revision is unchanged.");
+
+        context.runtimeState.waitingForRemoteTurnResult = true;
+        TurnDraftCoordinator::ensureUpToDate(context);
+        expect(!draft.isValid(),
+            "TurnDraftCoordinator should clear the projected draft as soon as the local client starts waiting for remote turn confirmation.");
+        expect(captureCalls == 2 && reconcileCalls == 2,
+            "TurnDraftCoordinator should capture and reconcile selection again when it clears an existing projected draft.");
     }
 
     void testPendingTurnProjectionMaterializesQueuedBuildWithStableId() {
@@ -5570,10 +5741,12 @@ int main() {
         {"structure placement uses configured anchors", testStructurePlacementProfilesUseConfiguredAnchorSourceLocals},
         {"structure placement round trips anchors", testStructurePlacementProfilesRoundTripAnchorConversionAcrossRotations},
         {"build overlay origins match brute force", testBuildOverlayRulesOriginsMatchBruteForceProjection},
+        {"build overlay coordinator cache lifecycle", testBuildOverlayCoordinatorRefreshesClearsAndInvalidatesCache},
         {"turn system keep build with other builder", testTurnSystemCancelMoveKeepsBuildWhenAnotherBuilderStillSupportsIt},
         {"turn system stable pending build ids", testTurnSystemAssignsStablePendingBuildIds},
         {"turn system commit preserves reserved build id", testTurnSystemCommitPreservesReservedBuildId},
         {"turn draft materializes under construction build", testTurnDraftMaterializesQueuedBuildingAsUnderConstruction},
+        {"turn draft coordinator sync and clear", testTurnDraftCoordinatorSynchronizesAndClearsProjectedDraft},
         {"pending turn projection stable build id", testPendingTurnProjectionMaterializesQueuedBuildWithStableId},
         {"pending turn projection rejects under construction produce", testPendingTurnProjectionRejectsProductionFromUnderConstructionBarracks},
         {"forward model completes under construction barracks", testForwardModelCompletesUnderConstructionBarracksOnTurnAdvance},

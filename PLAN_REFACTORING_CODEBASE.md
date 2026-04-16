@@ -55,6 +55,8 @@ Les points suivants ont deja ete implementes dans la codebase :
 - un `UICallbackBinder` dedie encapsule maintenant le branchement concret des callbacks `UIManager` vers des closures de runtime, ce qui retire de `Game` la plomberie repetitive de registration des `setOn...` ;
 - un `UICallbackCoordinator` dedie encapsule maintenant la construction des callbacks runtime `game menu / main menu / HUD / toolbar / panneaux`, y compris leurs guards d'etat/permissions et l'ouverture du panneau de build, ce qui retire de `Game` le coeur restant du wiring UI ;
 - un `SelectionQueryCoordinator` dedie encapsule maintenant la resolution des selections affichees et des bookmarks par IDs/metadonnees de batiments sur la vue projetee, ce qui retire de `Game` le coeur de la recherche d'entites affichees ;
+- un `TurnDraftCoordinator` dedie encapsule maintenant la politique d'activation, d'invalidation et de rebuild du draft local projete, ainsi que la reconciliation de selection associee, ce qui retire de `Game` le coeur du cycle de vie du `TurnDraft` ;
+- un `BuildOverlayCoordinator` dedie encapsule maintenant le cache de preview de build, son invalidation et son rafraichissement via `BuildOverlayRules`, ce qui retire de `Game` le coeur de la maintenance du cache d'overlay de build ;
 - un `SessionFlow` dedie encapsule maintenant le coeur du cycle de vie start/load/save des sessions autoritaires, y compris la restauration moteur, l'auto-host LAN associe et l'initialisation du debug snapshot, ce qui retire une partie du flux de session hors de `Game` ;
 - un `SessionPresentationCoordinator` dedie encapsule maintenant les resets et la presentation post-start/post-load/retour menu autour de `SessionFlow`, ce qui retire de `Game` le coeur des transitions visuelles de session ;
 - un `SessionRuntimeCoordinator` dedie encapsule maintenant l'application runtime des transitions `start/load/join/reconnect/retour menu` autour de `SessionFlow`, `SessionPresentationCoordinator` et `MultiplayerJoinCoordinator`, ce qui retire de `Game` le coeur restant des transitions de session ;
@@ -72,6 +74,7 @@ Les points suivants ont deja ete implementes dans la codebase :
 - des tests couvrent maintenant aussi un round-trip `start -> save -> load` via `SessionFlow` sur un repertoire de sauvegarde isole ;
 - des tests couvrent maintenant aussi les plans de reset/session/menu extraits dans `SessionPresentationCoordinator` ;
 - des tests couvrent maintenant aussi les regles extraites de `FrontendCoordinator` pour le HUD local, le verrouillage des commandes pendant l'attente de confirmation distante, le dashboard projete et le routage des panneaux lateraux ;
+- des tests couvrent maintenant aussi le cycle de vie du cache extrait dans `BuildOverlayCoordinator` pour le calcul, le clear sous verrou d'actions et l'invalidation hors mode build ;
 - la build et les tests ont ete revalidees apres cette tranche.
 
 ### Consequence sur la roadmap
@@ -92,6 +95,8 @@ Les points suivants ont deja ete implementes dans la codebase :
 - **Phase 2** : avancee aussi via l'extraction de `PanelActionCoordinator` et `UICallbackBinder`, qui absorbent les actions gameplay issues des panneaux UI et la plomberie repetitive de branchement des callbacks hors de `Game.cpp` ;
 - **Phase 2** : avancee aussi via l'extraction de `UICallbackCoordinator`, qui absorbe la construction des callbacks runtime UI et leurs guards hors de `Game.cpp` ;
 - **Phase 5** : avancee aussi via l'extraction de `SelectionQueryCoordinator`, qui absorbe la resolution de selection projetee/affichee et la reconciliation par bookmark hors de `Game.cpp` ;
+- **Phase 2** : avancee aussi via l'extraction de `TurnDraftCoordinator`, qui absorbe le cycle de vie du draft local projete et sa reconciliation de selection hors de `Game.cpp` ;
+- **Phase 2** : avancee aussi via l'extraction de `BuildOverlayCoordinator`, qui absorbe le cache runtime d'overlay de build hors de `Game.cpp` ;
 - **Phase 2** : avancee egalement via une premiere extraction explicite du cycle de vie de session dans `SessionFlow`, qui absorbe le noyau `start/load/save` hors de `Game.cpp` ;
 - **Phase 2** : avancee egalement via l'extraction de `SessionPresentationCoordinator`, qui absorbe les transitions de presentation autour des entrees/sorties de session hors de `Game.cpp` ;
 - **Phase 2** : avancee egalement via l'extraction de `SessionRuntimeCoordinator`, qui absorbe l'application runtime des transitions `start/load/join/reconnect/retour menu` hors de `Game.cpp` ;

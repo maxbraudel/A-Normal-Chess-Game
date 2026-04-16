@@ -279,6 +279,28 @@ TurnLifecycleCallbacks Game::makeTurnLifecycleCallbacks() {
         }};
 }
 
+TurnDraftRuntimeState Game::makeTurnDraftRuntimeState() const {
+    TurnDraftRuntimeState state;
+    state.gameState = m_state;
+    state.isLocalPlayerTurn = isLocalPlayerTurn();
+    state.waitingForRemoteTurnResult = m_waitingForRemoteTurnResult;
+    state.hasPendingCommands = !turnSystem().getPendingCommands().empty();
+    return state;
+}
+
+BuildOverlayRuntimeState Game::makeBuildOverlayRuntimeState(const InteractionPermissions& permissions) const {
+    BuildOverlayRuntimeState state;
+    state.activeTool = m_input.getCurrentTool();
+    state.permissions = permissions;
+    state.revision = turnSystem().getPendingStateRevision();
+    state.turnNumber = turnSystem().getTurnNumber();
+    state.activeKingdom = activeKingdom().id;
+    state.buildType = m_input.getBuildPreviewType();
+    state.rotationQuarterTurns = m_input.getBuildPreviewRotationQuarterTurns();
+    state.canQueueNonMoveActions = permissions.canQueueNonMoveActions;
+    return state;
+}
+
 TurnValidationContext Game::authoritativeTurnContext() const {
     return m_engine.makeTurnValidationContext(m_config);
 }
@@ -292,91 +314,34 @@ bool Game::canQueueNonMoveActions() const {
 }
 
 void Game::refreshBuildableCellsOverlay(const InteractionPermissions& permissions) {
-    if (m_input.getCurrentTool() != ToolState::Build || !permissions.canShowBuildPreview) {
-        m_buildableAnchorCellsOverlay.clear();
-        m_buildableCellsOverlay.clear();
-        m_buildableCellsOverlayCacheValid = false;
-        return;
-    }
-
-    const std::uint64_t revision = turnSystem().getPendingStateRevision();
-    const int turnNumber = turnSystem().getTurnNumber();
-    const KingdomId activeKingdomId = activeKingdom().id;
-    const BuildingType buildType = m_input.getBuildPreviewType();
-    const int rotationQuarterTurns = m_input.getBuildPreviewRotationQuarterTurns();
-
-    if (m_buildableCellsOverlayCacheValid
-        && m_buildableCellsOverlayRevision == revision
-        && m_buildableCellsOverlayTurnNumber == turnNumber
-        && m_buildableCellsOverlayActiveKingdom == activeKingdomId
-        && m_buildableCellsOverlayType == buildType
-        && m_buildableCellsOverlayRotationQuarterTurns == rotationQuarterTurns) {
-        return;
-    }
-
-    if (!permissions.canQueueNonMoveActions) {
-        m_buildableAnchorCellsOverlay.clear();
-        m_buildableCellsOverlay.clear();
-    } else {
-        const TurnValidationContext turnContext = authoritativeTurnContext();
-        const BuildOverlayRules::BuildOverlayMap buildOverlayMap = BuildOverlayRules::collectBuildOverlayMap(
-            turnContext,
-            turnSystem().getPendingCommands(),
-            buildType,
-            rotationQuarterTurns);
-        m_buildableAnchorCellsOverlay = std::move(buildOverlayMap.validAnchorCells);
-        m_buildableCellsOverlay = std::move(buildOverlayMap.coverageCells);
-    }
-
-    m_buildableCellsOverlayRevision = revision;
-    m_buildableCellsOverlayTurnNumber = turnNumber;
-    m_buildableCellsOverlayActiveKingdom = activeKingdomId;
-    m_buildableCellsOverlayType = buildType;
-    m_buildableCellsOverlayRotationQuarterTurns = rotationQuarterTurns;
-    m_buildableCellsOverlayCacheValid = true;
+    BuildOverlayCoordinator::refresh(makeBuildOverlayRuntimeState(permissions),
+                                     authoritativeTurnContext(),
+                                     turnSystem().getPendingCommands(),
+                                     m_buildOverlayCache);
 }
 
 bool Game::shouldUseTurnDraft() const {
-    return (m_state == GameState::Playing || m_state == GameState::Paused || m_state == GameState::GameOver)
-        && isLocalPlayerTurn()
-        && !m_waitingForRemoteTurnResult
-        && !turnSystem().getPendingCommands().empty();
+    return TurnDraftCoordinator::shouldUseTurnDraft(makeTurnDraftRuntimeState());
 }
 
 void Game::invalidateTurnDraft() {
-    m_turnDraft.clear();
-    m_lastTurnDraftRevision = 0;
+    TurnDraftCoordinator::invalidate(m_turnDraft, m_lastTurnDraftRevision);
 }
 
 void Game::ensureTurnDraftUpToDate() {
-    const std::uint64_t revision = turnSystem().getPendingStateRevision();
-    if (!shouldUseTurnDraft()) {
-        if (m_turnDraft.isValid()) {
-            const InputSelectionBookmark selectionBookmark = captureSelectionBookmark();
-            m_turnDraft.clear();
-            m_lastTurnDraftRevision = revision;
-            reconcileSelectionBookmark(selectionBookmark);
-        } else {
-            m_lastTurnDraftRevision = revision;
-        }
-        return;
-    }
-
-    if (m_turnDraft.isValid() && m_lastTurnDraftRevision == revision) {
-        return;
-    }
-
-    const InputSelectionBookmark selectionBookmark = captureSelectionBookmark();
-    std::string errorMessage;
-    if (!m_turnDraft.rebuild(m_engine, m_config, turnSystem().getPendingCommands(), &errorMessage)) {
-        m_turnDraft.clear();
-        m_lastTurnDraftRevision = revision;
-        reconcileSelectionBookmark(selectionBookmark);
-        return;
-    }
-
-    m_lastTurnDraftRevision = revision;
-    reconcileSelectionBookmark(selectionBookmark);
+    TurnDraftCoordinator::ensureUpToDate(TurnDraftSynchronizationContext{
+        makeTurnDraftRuntimeState(),
+        m_engine,
+        m_turnDraft,
+        m_lastTurnDraftRevision,
+        m_config,
+        TurnDraftSynchronizationCallbacks{
+            [this]() {
+                return captureSelectionBookmark();
+            },
+            [this](const InputSelectionBookmark& bookmark) {
+                reconcileSelectionBookmark(bookmark);
+            }}});
 }
 
 KingdomId Game::localPerspectiveKingdom() const {
@@ -797,8 +762,8 @@ void Game::render() {
         const WorldRenderPlan renderPlan = RenderCoordinator::buildWorldRenderPlan(
             renderState,
             turnSystem().getPendingCommands(),
-            m_buildableAnchorCellsOverlay,
-            m_buildableCellsOverlay,
+            m_buildOverlayCache.validAnchorCells,
+            m_buildOverlayCache.coverageCells,
             m_config);
         RenderCoordinator::renderWorldFrame(bindings, renderPlan);
     }

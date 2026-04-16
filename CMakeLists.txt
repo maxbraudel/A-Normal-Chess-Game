@@ -71,6 +71,7 @@ set(CORE_SOURCES
     src/Render/Renderer.cpp
     src/Render/StructureOverlay.cpp
     src/Runtime/AITurnCoordinator.cpp
+    src/Runtime/BuildOverlayCoordinator.cpp
     src/Runtime/FrontendCoordinator.cpp
     src/Runtime/InGamePresentationCoordinator.cpp
     src/Runtime/InputCoordinator.cpp
@@ -84,6 +85,7 @@ set(CORE_SOURCES
     src/Runtime/SessionPresentationCoordinator.cpp
     src/Runtime/SessionRuntimeCoordinator.cpp
     src/Runtime/TurnCoordinator.cpp
+    src/Runtime/TurnDraftCoordinator.cpp
     src/Runtime/TurnLifecycleCoordinator.cpp
     src/Runtime/UICallbackBinder.cpp
     src/Runtime/UICallbackCoordinator.cpp
