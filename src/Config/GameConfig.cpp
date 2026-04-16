@@ -119,15 +119,17 @@ void GameConfig::setDefaults() {
     m_barracksCellHP = 1;
     m_globalMaxRange = 8;
 
-    m_barracksWidth = 4; m_barracksHeight = 2;
+    m_barracksWidth = 4; m_barracksHeight = 3;
     m_churchWidth = 4; m_churchHeight = 3;
     m_mineWidth = 6; m_mineHeight = 6;
     m_farmWidth = 6; m_farmHeight = 4;
-    m_arenaWidth = 3; m_arenaHeight = 3;
+    m_arenaWidth = 4; m_arenaHeight = 4;
 
+    alignChunkedStructureDimensions("barracks", BuildingType::Barracks, m_barracksWidth, m_barracksHeight);
     alignChunkedStructureDimensions("church", BuildingType::Church, m_churchWidth, m_churchHeight);
     alignChunkedStructureDimensions("mine", BuildingType::Mine, m_mineWidth, m_mineHeight);
     alignChunkedStructureDimensions("farm", BuildingType::Farm, m_farmWidth, m_farmHeight);
+    alignChunkedStructureDimensions("arena", BuildingType::Arena, m_arenaWidth, m_arenaHeight);
 }
 
 std::string GameConfig::readFile(const std::string& path) {
@@ -367,9 +369,11 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
         m_arenaHeight = extractInt(buildSec, "arena_height", m_arenaHeight);
     }
 
+    alignChunkedStructureDimensions("barracks", BuildingType::Barracks, m_barracksWidth, m_barracksHeight);
     alignChunkedStructureDimensions("church", BuildingType::Church, m_churchWidth, m_churchHeight);
     alignChunkedStructureDimensions("mine", BuildingType::Mine, m_mineWidth, m_mineHeight);
     alignChunkedStructureDimensions("farm", BuildingType::Farm, m_farmWidth, m_farmHeight);
+    alignChunkedStructureDimensions("arena", BuildingType::Arena, m_arenaWidth, m_arenaHeight);
 
     return true;
 }

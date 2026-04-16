@@ -3497,14 +3497,26 @@ void testResourceIncomeHelperSupportsBothResourceTypes() {
         expect(church != nullptr, "Church should have a chunked structure definition.");
         expect(church->width == 4 && church->height == 3,
             "Church chunk definition should expose the expected 4x3 footprint.");
+        const StructureChunkDefinition* barracks = StructureChunkRegistry::find(BuildingType::Barracks);
+        expect(barracks != nullptr, "Barracks should now have a chunked structure definition.");
+        expect(barracks->width == 4 && barracks->height == 3,
+            "Barracks chunk definition should expose the expected 4x3 footprint.");
+        const StructureChunkDefinition* arena = StructureChunkRegistry::find(BuildingType::Arena);
+        expect(arena != nullptr, "Arena should now have a chunked structure definition.");
+        expect(arena->width == 4 && arena->height == 4,
+            "Arena chunk definition should expose the expected 4x4 footprint.");
         expect(StructureChunkRegistry::makeChunkTextureRelativePath(BuildingType::Farm, 5, 3)
              == "/textures/cells/structures/farm/farm_6_4.png",
             "Farm chunk path generation should match the runtime asset layout.");
         expect(StructureChunkRegistry::makeChunkTextureKey(BuildingType::Mine, 5, 5)
              == "building_chunk_mine_6_6",
             "Mine chunk keys should be generated from local coordinates.");
-        expect(!StructureChunkRegistry::hasChunkedTextures(BuildingType::Barracks),
-            "Non-structure buildings should keep the legacy single-texture path.");
+        expect(StructureChunkRegistry::makeChunkTextureRelativePath(BuildingType::Barracks, 3, 2)
+             == "/textures/cells/structures/barracks/barracks_4_3.png",
+            "Barracks chunk paths should match the runtime asset layout.");
+        expect(StructureChunkRegistry::makeChunkTextureKey(BuildingType::Arena, 3, 3)
+             == "building_chunk_arena_4_4",
+            "Arena chunk keys should be generated from local coordinates.");
     }
 
     void testGameConfigAlignsChunkedStructureDimensions() {
@@ -3513,12 +3525,16 @@ void testResourceIncomeHelperSupportsBothResourceTypes() {
          std::ofstream out(tempPath);
          out << "{\n"
              << "  \"buildings\": {\n"
+             << "    \"barracks_width\": 1,\n"
+             << "    \"barracks_height\": 1,\n"
              << "    \"church_width\": 4,\n"
              << "    \"church_height\": 3,\n"
              << "    \"mine_width\": 6,\n"
              << "    \"mine_height\": 6,\n"
              << "    \"farm_width\": 4,\n"
-             << "    \"farm_height\": 3\n"
+             << "    \"farm_height\": 3,\n"
+             << "    \"arena_width\": 2,\n"
+             << "    \"arena_height\": 2\n"
              << "  }\n"
              << "}\n";
         }
@@ -3527,10 +3543,18 @@ void testResourceIncomeHelperSupportsBothResourceTypes() {
         expect(config.loadFromFile(tempPath.string()), "GameConfig should load a partial JSON override file.");
         std::filesystem::remove(tempPath);
 
+        expect(config.getBuildingWidth(BuildingType::Barracks) == 4,
+            "Chunked barracks definitions should force the runtime footprint width to 4.");
+        expect(config.getBuildingHeight(BuildingType::Barracks) == 3,
+            "Chunked barracks definitions should force the runtime footprint height to 3.");
         expect(config.getBuildingWidth(BuildingType::Farm) == 6,
             "Chunked farm definitions should force the runtime footprint width to 6.");
         expect(config.getBuildingHeight(BuildingType::Farm) == 4,
             "Chunked farm definitions should force the runtime footprint height to 4.");
+        expect(config.getBuildingWidth(BuildingType::Arena) == 4,
+            "Chunked arena definitions should force the runtime footprint width to 4.");
+        expect(config.getBuildingHeight(BuildingType::Arena) == 4,
+            "Chunked arena definitions should force the runtime footprint height to 4.");
     }
 
 void testInGameViewModelBuilder() {

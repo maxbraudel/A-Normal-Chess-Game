@@ -89,7 +89,7 @@
     },
     "buildings": {
         "barracks_width": 4,
-        "barracks_height": 2,
+        "barracks_height": 3,
         "church_width": 4,
         "church_height": 3,
         "mine_width": 6,
@@ -97,7 +97,7 @@
         "farm_width": 6,
         "farm_height": 4,
         "arena_size": 9,
-        "arena_width": 3,
-        "arena_height": 3
+        "arena_width": 4,
+        "arena_height": 4
     }
 }

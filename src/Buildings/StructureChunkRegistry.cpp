@@ -3,9 +3,11 @@
 namespace {
 
 const std::vector<StructureChunkDefinition> kStructureChunkDefinitions = {
+    {BuildingType::Barracks, "barracks", 4, 3},
     {BuildingType::Church, "church", 4, 3},
     {BuildingType::Mine, "mine", 6, 6},
     {BuildingType::Farm, "farm", 6, 4},
+    {BuildingType::Arena, "arena", 4, 4},
 };
 
 }
