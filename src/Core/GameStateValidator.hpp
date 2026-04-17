@@ -13,6 +13,7 @@
 #include "Save/SaveData.hpp"
 #include "Systems/InfernalSystem.hpp"
 #include "Systems/TurnSystem.hpp"
+#include "Systems/XPTypes.hpp"
 
 class GameStateValidator {
 public:
@@ -25,6 +26,7 @@ public:
                                      const std::vector<AutonomousUnit>& autonomousUnits,
                                      const TurnSystem& turnSystem,
                                      const GameSessionConfig& session,
+                                     const XPSystemState& xpSystemState,
                                      const InfernalSystemState& infernalSystemState,
                                      std::string* errorMessage = nullptr);
 

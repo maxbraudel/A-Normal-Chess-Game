@@ -1,8 +1,10 @@
 #pragma once
+#include <cstdint>
 #include <optional>
 #include <vector>
 #include "AI/GameSnapshot.hpp"
 #include "AI/ThreatMap.hpp"
+#include "Systems/XPTypes.hpp"
 
 class Board;
 class Kingdom;
@@ -19,7 +21,9 @@ public:
                                        const Kingdom& first,
                                        const Kingdom& second,
                                        const std::vector<Building>& publicBuildings,
-                                       int turnNumber);
+                                       int turnNumber,
+                                       std::uint32_t worldSeed = 0,
+                                       XPSystemState xpSystemState = XPSystemState{});
 
     // ---- Legal move generation on snapshots ----
     static std::vector<sf::Vector2i> getPseudoLegalMoves(const GameSnapshot& s,
@@ -45,7 +49,7 @@ public:
     // ---- Turn advancement (income, production tick, spawns) ----
     static void advanceTurn(GameSnapshot& s, KingdomId k,
                             int mineIncomePerCell, int farmIncomePerCell,
-                            int arenaXP, const GameConfig& config);
+                            const GameConfig& config);
 
     // ---- Tactical queries ----
     static ThreatMap buildThreatMap(const GameSnapshot& s, KingdomId attacker,

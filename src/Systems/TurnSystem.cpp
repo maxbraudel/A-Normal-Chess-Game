@@ -112,6 +112,8 @@ void removeAutonomousUnitAtCell(std::vector<AutonomousUnit>& autonomousUnits,
 
 int processEnemyStructureOccupancy(Board& board,
                                    Kingdom& activeKingdom,
+                                   XPSystemState& xpSystemState,
+                                   std::uint32_t worldSeed,
                                    const GameConfig& config,
                                    EventLog& log,
                                    int turnNumber) {
@@ -132,7 +134,7 @@ int processEnemyStructureOccupancy(Board& board,
         }
 
         ++structureDamageEvents;
-        piece.xp += config.getDestroyBlockXP();
+        XPSystem::grantBlockDestroyXP(piece, xpSystemState, worldSeed, config);
 
         switch (result) {
             case StructureOccupancyResult::Breached:
@@ -674,8 +676,10 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                              std::vector<Building>& publicBuildings,
                              std::vector<MapObject>& mapObjects,
                              ChestSystemState& chestSystemState,
+                             XPSystemState& xpSystemState,
                              std::vector<AutonomousUnit>& autonomousUnits,
                              InfernalSystemState& infernalSystemState,
+                             std::uint32_t worldSeed,
                              const GameConfig& config, EventLog& log,
                              std::vector<GameplayNotification>& gameplayNotifications,
                              PieceFactory& pieceFactory, BuildingFactory& buildingFactory) {
@@ -710,6 +714,8 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                     cmd.destination,
                     activeKingdom,
                     enemyKingdom,
+                    xpSystemState,
+                    worldSeed,
                     config,
                     log,
                     m_turnNumber);
@@ -858,6 +864,8 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
     const int structureDamageEvents = processEnemyStructureOccupancy(
         board,
         activeKingdom,
+        xpSystemState,
+        worldSeed,
         config,
         log,
         m_turnNumber);
@@ -904,7 +912,7 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
     EconomySystem::collectIncome(activeKingdom, board, publicBuildings, config, log, m_turnNumber);
 
     // Arena XP
-    XPSystem::grantArenaXP(activeKingdom, board, activeKingdom.buildings, config);
+    XPSystem::grantArenaXP(activeKingdom, board, activeKingdom.buildings, xpSystemState, worldSeed, config);
 
     m_pendingCommands.clear();
     m_pieceMoveCounts.clear();

@@ -1,4 +1,5 @@
 #pragma once
+#include <cstdint>
 #include <vector>
 #include <string>
 #include "AI/AIStrategy.hpp"
@@ -14,6 +15,7 @@
 #include "AI/ForwardModel.hpp"
 #include "AI/TimeBudget.hpp"
 #include "Config/AIConfig.hpp"
+#include "Systems/XPTypes.hpp"
 #include "Systems/TurnCommand.hpp"
 #include "Kingdom/KingdomId.hpp"
 
@@ -43,7 +45,10 @@ public:
     /// Called on a COPY of the game state (thread-safe).
     AIDirectorPlan computeTurn(Board& board, Kingdom& self, Kingdom& enemy,
                                 const std::vector<Building>& publicBuildings,
-                                int turnNumber, const GameConfig& config);
+                                int turnNumber,
+                                const GameConfig& config,
+                                std::uint32_t worldSeed = 0,
+                                XPSystemState xpSystemState = XPSystemState{});
 
     /// Apply metadata from a completed plan (enemy king tracking)
     void applyPlanMetadata(const AIDirectorPlan& plan);

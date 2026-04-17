@@ -7,6 +7,18 @@
 
 namespace {
 
+XPRewardProfile makeXPRewardProfile(int mean,
+                                    int sigmaMultiplierTimes100,
+                                    int clampSigmaMultiplierTimes100,
+                                    int minimum) {
+    XPRewardProfile profile;
+    profile.mean = mean;
+    profile.sigmaMultiplierTimes100 = sigmaMultiplierTimes100;
+    profile.clampSigmaMultiplierTimes100 = clampSigmaMultiplierTimes100;
+    profile.minimum = minimum;
+    return profile;
+}
+
 void alignChunkedStructureDimensions(const char* label, BuildingType type, int& width, int& height) {
     const int expectedWidth = StructureChunkRegistry::getChunkWidth(type, width);
     const int expectedHeight = StructureChunkRegistry::getChunkHeight(type, height);
@@ -31,6 +43,17 @@ int clampNonNegativeConfigValue(const char* label, int value) {
     std::cerr << "GameConfig: Clamping negative " << label << " value "
               << value << " to 0.\n";
     return 0;
+}
+
+int clampRangedConfigValue(const std::string& label, int value, int minValue, int maxValue) {
+    const int clampedValue = std::clamp(value, minValue, maxValue);
+    if (clampedValue == value) {
+        return clampedValue;
+    }
+
+    std::cerr << "GameConfig: Clamping " << label << " value "
+              << value << " to range [" << minValue << ", " << maxValue << "].\n";
+    return clampedValue;
 }
 
 }
@@ -104,13 +127,13 @@ void GameConfig::setDefaults() {
     m_bishopTurns = 4;
     m_rookTurns = 6;
 
-    m_killPawn = 20;
-    m_killKnight = 50;
-    m_killBishop = 50;
-    m_killRook = 100;
-    m_killQueen = 300;
-    m_destroyBlock = 10;
-    m_arenaPerTurn = 10;
+    m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::KillPawn)] = makeXPRewardProfile(20, 18, 200, 1);
+    m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::KillKnight)] = makeXPRewardProfile(50, 16, 200, 1);
+    m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::KillBishop)] = makeXPRewardProfile(50, 16, 200, 1);
+    m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::KillRook)] = makeXPRewardProfile(100, 12, 200, 1);
+    m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::KillQueen)] = makeXPRewardProfile(300, 10, 200, 1);
+    m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::DestroyBlock)] = makeXPRewardProfile(10, 15, 200, 1);
+    m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::ArenaPerTurn)] = makeXPRewardProfile(10, 15, 200, 1);
     m_thresholdPawnToKnightOrBishop = 100;
     m_thresholdToRook = 300;
 
@@ -373,16 +396,90 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
 
     std::string xpSec = extractSection(root, "xp");
     if (!xpSec.empty()) {
-        m_killPawn = extractInt(xpSec, "kill_pawn", m_killPawn);
-        m_killKnight = extractInt(xpSec, "kill_knight", m_killKnight);
-        m_killBishop = extractInt(xpSec, "kill_bishop", m_killBishop);
-        m_killRook = extractInt(xpSec, "kill_rook", m_killRook);
-        m_killQueen = extractInt(xpSec, "kill_queen", m_killQueen);
-        m_destroyBlock = extractInt(xpSec, "destroy_block", m_destroyBlock);
-        m_arenaPerTurn = extractInt(xpSec, "arena_per_turn", m_arenaPerTurn);
+        m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::KillPawn)].mean = extractInt(
+            xpSec, "kill_pawn", m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::KillPawn)].mean);
+        m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::KillKnight)].mean = extractInt(
+            xpSec, "kill_knight", m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::KillKnight)].mean);
+        m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::KillBishop)].mean = extractInt(
+            xpSec, "kill_bishop", m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::KillBishop)].mean);
+        m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::KillRook)].mean = extractInt(
+            xpSec, "kill_rook", m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::KillRook)].mean);
+        m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::KillQueen)].mean = extractInt(
+            xpSec, "kill_queen", m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::KillQueen)].mean);
+        m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::DestroyBlock)].mean = extractInt(
+            xpSec, "destroy_block", m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::DestroyBlock)].mean);
+        m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::ArenaPerTurn)].mean = extractInt(
+            xpSec, "arena_per_turn", m_xpRewardProfiles[xpRewardSourceIndex(XPRewardSource::ArenaPerTurn)].mean);
         m_thresholdPawnToKnightOrBishop = extractInt(xpSec, "threshold_pawn_to_knight_or_bishop", m_thresholdPawnToKnightOrBishop);
         m_thresholdToRook = extractInt(xpSec, "threshold_to_rook", m_thresholdToRook);
+
+        const std::string xpThresholdSec = extractSection(xpSec, "thresholds");
+        if (!xpThresholdSec.empty()) {
+            m_thresholdPawnToKnightOrBishop = extractInt(
+                xpThresholdSec,
+                "pawn_to_knight_or_bishop",
+                m_thresholdPawnToKnightOrBishop);
+            m_thresholdToRook = extractInt(
+                xpThresholdSec,
+                "to_rook",
+                m_thresholdToRook);
+        }
+
+        const std::string xpSourcesSec = extractSection(xpSec, "sources");
+        if (!xpSourcesSec.empty()) {
+            const auto parseXPProfile = [&](XPRewardSource source, const char* key) {
+                const std::string profileSec = extractSection(xpSourcesSec, key);
+                if (profileSec.empty()) {
+                    return;
+                }
+
+                XPRewardProfile& profile = m_xpRewardProfiles[xpRewardSourceIndex(source)];
+                profile.mean = extractInt(profileSec, "mean", profile.mean);
+                profile.sigmaMultiplierTimes100 = extractInt(
+                    profileSec,
+                    "sigma_multiplier_times_100",
+                    profile.sigmaMultiplierTimes100);
+                profile.clampSigmaMultiplierTimes100 = extractInt(
+                    profileSec,
+                    "clamp_sigma_multiplier_times_100",
+                    profile.clampSigmaMultiplierTimes100);
+                profile.minimum = extractInt(profileSec, "minimum", profile.minimum);
+            };
+
+            parseXPProfile(XPRewardSource::KillPawn, "kill_pawn");
+            parseXPProfile(XPRewardSource::KillKnight, "kill_knight");
+            parseXPProfile(XPRewardSource::KillBishop, "kill_bishop");
+            parseXPProfile(XPRewardSource::KillRook, "kill_rook");
+            parseXPProfile(XPRewardSource::KillQueen, "kill_queen");
+            parseXPProfile(XPRewardSource::DestroyBlock, "destroy_block");
+            parseXPProfile(XPRewardSource::ArenaPerTurn, "arena_per_turn");
+        }
     }
+
+    const auto clampXPProfile = [&](XPRewardSource source, const char* label) {
+        XPRewardProfile& profile = m_xpRewardProfiles[xpRewardSourceIndex(source)];
+        const std::string baseLabel = std::string("xp.sources.") + label;
+        profile.mean = clampNonNegativeConfigValue((baseLabel + ".mean").c_str(), profile.mean);
+        profile.sigmaMultiplierTimes100 = clampRangedConfigValue(
+            baseLabel + ".sigma_multiplier_times_100",
+            profile.sigmaMultiplierTimes100,
+            0,
+            1000);
+        profile.clampSigmaMultiplierTimes100 = clampRangedConfigValue(
+            baseLabel + ".clamp_sigma_multiplier_times_100",
+            profile.clampSigmaMultiplierTimes100,
+            0,
+            500);
+        profile.minimum = clampNonNegativeConfigValue((baseLabel + ".minimum").c_str(), profile.minimum);
+    };
+
+    clampXPProfile(XPRewardSource::KillPawn, "kill_pawn");
+    clampXPProfile(XPRewardSource::KillKnight, "kill_knight");
+    clampXPProfile(XPRewardSource::KillBishop, "kill_bishop");
+    clampXPProfile(XPRewardSource::KillRook, "kill_rook");
+    clampXPProfile(XPRewardSource::KillQueen, "kill_queen");
+    clampXPProfile(XPRewardSource::DestroyBlock, "destroy_block");
+    clampXPProfile(XPRewardSource::ArenaPerTurn, "arena_per_turn");
 
     std::string combatSec = extractSection(root, "combat");
     if (!combatSec.empty()) {
@@ -663,19 +760,23 @@ int GameConfig::getProductionTurns(PieceType type) const {
     }
 }
 
+XPRewardProfile GameConfig::getXPRewardProfile(XPRewardSource source) const {
+    return m_xpRewardProfiles[xpRewardSourceIndex(source)];
+}
+
 int GameConfig::getKillXP(PieceType victim) const {
     switch (victim) {
-        case PieceType::Pawn: return m_killPawn;
-        case PieceType::Knight: return m_killKnight;
-        case PieceType::Bishop: return m_killBishop;
-        case PieceType::Rook: return m_killRook;
-        case PieceType::Queen: return m_killQueen;
+        case PieceType::Pawn: return getXPRewardProfile(XPRewardSource::KillPawn).mean;
+        case PieceType::Knight: return getXPRewardProfile(XPRewardSource::KillKnight).mean;
+        case PieceType::Bishop: return getXPRewardProfile(XPRewardSource::KillBishop).mean;
+        case PieceType::Rook: return getXPRewardProfile(XPRewardSource::KillRook).mean;
+        case PieceType::Queen: return getXPRewardProfile(XPRewardSource::KillQueen).mean;
         default: return 0;
     }
 }
 
-int GameConfig::getDestroyBlockXP() const { return m_destroyBlock; }
-int GameConfig::getArenaXPPerTurn() const { return m_arenaPerTurn; }
+int GameConfig::getDestroyBlockXP() const { return getXPRewardProfile(XPRewardSource::DestroyBlock).mean; }
+int GameConfig::getArenaXPPerTurn() const { return getXPRewardProfile(XPRewardSource::ArenaPerTurn).mean; }
 int GameConfig::getXPThresholdPawnToKnightOrBishop() const { return m_thresholdPawnToKnightOrBishop; }
 int GameConfig::getXPThresholdToRook() const { return m_thresholdToRook; }
 

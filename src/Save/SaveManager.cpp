@@ -192,6 +192,10 @@ void SaveManager::writeJson(std::ostream& output, const SaveData& data) {
            << "\"rngCounter\":" << normalized.chestSystemState.rngCounter
            << "},\n";
 
+        output << "  \"xpState\": {"
+            << "\"rngCounter\":" << normalized.xpSystemState.rngCounter
+            << "},\n";
+
     output << "  \"infernalState\": {"
            << "\"activeInfernalUnitId\":" << normalized.infernalSystemState.activeInfernalUnitId << ","
            << "\"nextSpawnTurn\":" << normalized.infernalSystemState.nextSpawnTurn << ","
@@ -711,6 +715,11 @@ bool SaveManager::deserialize(const std::string& json, SaveData& outData) {
     outData.chestSystemState.rngCounter = static_cast<std::uint32_t>(std::max(
         0,
         extractInt(chestStateSection, "rngCounter", 0)));
+
+    const std::string xpStateSection = extractSection(json, "xpState");
+    outData.xpSystemState.rngCounter = static_cast<std::uint32_t>(std::max(
+        0,
+        extractInt(xpStateSection, "rngCounter", 0)));
 
     const std::string infernalStateSection = extractSection(json, "infernalState");
     outData.infernalSystemState.activeInfernalUnitId = extractInt(

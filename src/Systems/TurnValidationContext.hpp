@@ -1,6 +1,9 @@
 #pragma once
 
+#include <cstdint>
 #include <vector>
+
+#include "Systems/XPTypes.hpp"
 
 class Board;
 class Building;
@@ -14,4 +17,6 @@ struct TurnValidationContext {
     const std::vector<Building>& publicBuildings;
     int turnNumber;
     const GameConfig& config;
+    std::uint32_t worldSeed = 0;
+    XPSystemState xpSystemState{};
 };

@@ -10,6 +10,7 @@
 #include "Core/GameSessionConfig.hpp"
 #include "Kingdom/Kingdom.hpp"
 #include "Objects/MapObject.hpp"
+#include "Systems/XPTypes.hpp"
 
 class GameConfig;
 class GameEngine;
@@ -45,7 +46,9 @@ public:
     const Kingdom& kingdom(KingdomId id) const { return m_kingdoms[kingdomIndex(id)]; }
 
 private:
-    bool applyMoveCommand(const TurnCommand& command, KingdomId activeKingdomId);
+    bool applyMoveCommand(const TurnCommand& command,
+                          KingdomId activeKingdomId,
+                          const GameConfig& config);
     bool applyBuildCommand(const TurnCommand& command,
                            KingdomId activeKingdomId,
                            const GameConfig& config);
@@ -64,6 +67,8 @@ private:
     std::vector<Building> m_publicBuildings;
     std::vector<MapObject> m_mapObjects;
     std::vector<AutonomousUnit> m_autonomousUnits;
+    std::uint32_t m_worldSeed = 0;
+    XPSystemState m_xpSystemState{};
     bool m_valid = false;
     std::string m_errorMessage;
 };

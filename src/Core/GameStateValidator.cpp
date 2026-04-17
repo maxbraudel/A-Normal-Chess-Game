@@ -274,6 +274,7 @@ bool GameStateValidator::validateRuntimeState(const Board& board,
                                              const std::vector<AutonomousUnit>& autonomousUnits,
                                              const TurnSystem& turnSystem,
                                              const GameSessionConfig& session,
+                                             const XPSystemState& xpSystemState,
                                              const InfernalSystemState& infernalSystemState,
                                              std::string* errorMessage) {
     if (!validateSessionConfig(session, errorMessage)) {
@@ -288,6 +289,8 @@ bool GameStateValidator::validateRuntimeState(const Board& board,
         writeError(errorMessage, "Runtime state contains an invalid turn number.");
         return false;
     }
+
+    (void)xpSystemState;
 
     std::set<int> pieceIds;
     std::set<int> buildingIds;

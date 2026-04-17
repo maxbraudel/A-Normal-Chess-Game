@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -8,6 +9,7 @@
 
 #include "AI/AIDirector.hpp"
 #include "Kingdom/KingdomId.hpp"
+#include "Systems/XPTypes.hpp"
 
 class Board;
 class AutonomousUnit;
@@ -33,6 +35,8 @@ public:
                const std::vector<AutonomousUnit>& autonomousUnits,
                KingdomId activeKingdom,
                int turnNumber,
+               std::uint32_t worldSeed,
+               XPSystemState xpSystemState,
                const GameConfig& config,
                const AIDirector& director);
     std::optional<CompletedTurn> poll();

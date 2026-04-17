@@ -11,6 +11,7 @@
 #include "Systems/ProductionSpawnRules.hpp"
 #include "Systems/StructureIntegrityRules.hpp"
 #include "Systems/TurnPointRules.hpp"
+#include "Systems/XPSystem.hpp"
 #include <cmath>
 #include <algorithm>
 
@@ -57,7 +58,7 @@ void processEnemyStructureOccupancy(GameSnapshot& snapshot,
         const StructureOccupancyResult result = StructureIntegrityRules::applyEnemyOccupancy(
             *building, localX, localY, config);
         if (result != StructureOccupancyResult::None) {
-            piece.xp += config.getDestroyBlockXP();
+            piece.xp += XPSystem::sampleBlockDestroyXP(snapshot.xpSystemState, snapshot.worldSeed, config);
         }
     }
 }
@@ -150,7 +151,9 @@ GameSnapshot ForwardModel::createSnapshot(const Board& board,
                                           const Kingdom& first,
                                           const Kingdom& second,
                                           const std::vector<Building>& publicBuildings,
-                                          int turnNumber) {
+                                          int turnNumber,
+                                          std::uint32_t worldSeed,
+                                          XPSystemState xpSystemState) {
     GameSnapshot s;
 
     // Build shared terrain grid
@@ -192,6 +195,8 @@ GameSnapshot ForwardModel::createSnapshot(const Board& board,
     for (auto& b : publicBuildings) s.publicBuildings.push_back(toSnapBuilding(b));
 
     s.turnNumber = turnNumber;
+    s.worldSeed = worldSeed;
+    s.xpSystemState = xpSystemState;
     return s;
 }
 
@@ -440,8 +445,7 @@ bool ForwardModel::applyMove(GameSnapshot& s, int pieceId, sf::Vector2i dest,
     SnapPiece* victim = enemyK.getPieceAt(dest);
     if (victim) {
         if (victim->type == PieceType::King) return false; // illegal
-        // Grant XP to attacker (simplified)
-        piece->xp += 20; // base XP for any capture
+        piece->xp += XPSystem::sampleKillXP(victim->type, s.xpSystemState, s.worldSeed, config);
         enemyK.removePiece(victim->id);
     }
 
@@ -559,7 +563,7 @@ sf::Vector2i ForwardModel::findSpawnCell(const GameSnapshot& s,
 
 void ForwardModel::advanceTurn(GameSnapshot& s, KingdomId k,
                                int mineIncomePerCell, int farmIncomePerCell,
-                               int arenaXP, const GameConfig& config) {
+                               const GameConfig& config) {
     (void)mineIncomePerCell;
     (void)farmIncomePerCell;
 
@@ -617,7 +621,9 @@ void ForwardModel::advanceTurn(GameSnapshot& s, KingdomId k,
         if (myPresence && !enemyPresence) {
             for (auto& c : cells) {
                 SnapPiece* p = myK.getPieceAt(c);
-                if (p) p->xp += arenaXP;
+                if (p) {
+                    p->xp += XPSystem::sampleArenaXP(s.xpSystemState, s.worldSeed, config);
+                }
             }
         }
     }

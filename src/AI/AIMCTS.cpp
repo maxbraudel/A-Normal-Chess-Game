@@ -167,7 +167,7 @@ float AIMCTS::simulation(const GameSnapshot& state, KingdomId aiKingdom,
         // Select a rollout action using heuristic
         MCTSAction action = selectRolloutAction(s, active, globalMaxRange);
         applyAction(s, action, active, config);
-        ForwardModel::advanceTurn(s, active, 10, 5, 2, config);
+        ForwardModel::advanceTurn(s, active, 10, 5, config);
     }
 
     return AIEvaluator::evaluate(s, aiKingdom, globalMaxRange, weights);

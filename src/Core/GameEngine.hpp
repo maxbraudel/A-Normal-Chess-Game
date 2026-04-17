@@ -19,6 +19,7 @@
 #include "Systems/InfernalSystem.hpp"
 #include "Systems/TurnSystem.hpp"
 #include "Systems/TurnValidationContext.hpp"
+#include "Systems/XPTypes.hpp"
 #include "Units/PieceFactory.hpp"
 
 class GameConfig;
@@ -90,6 +91,7 @@ public:
     const std::vector<AutonomousUnit>& autonomousUnits() const { return m_autonomousUnits; }
 
     const ChestSystemState& chestSystemState() const { return m_chestSystemState; }
+    const XPSystemState& xpSystemState() const { return m_xpSystemState; }
     const InfernalSystemState& infernalSystemState() const { return m_infernalSystemState; }
 
     TurnSystem& turnSystem() { return m_turnSystem; }
@@ -135,6 +137,7 @@ private:
     std::vector<MapObject> m_mapObjects;
     std::vector<AutonomousUnit> m_autonomousUnits;
     ChestSystemState m_chestSystemState{};
+    XPSystemState m_xpSystemState{};
     InfernalSystemState m_infernalSystemState{};
     TurnSystem m_turnSystem;
     EventLog m_eventLog;

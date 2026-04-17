@@ -8,10 +8,12 @@
 #include "Buildings/BuildingType.hpp"
 #include "Config/GameConfig.hpp"
 #include "Systems/EventLog.hpp"
+#include "Systems/XPSystem.hpp"
 
 CombatSystem::CombatResult CombatSystem::resolve(
     Piece& attacker, Board& board, sf::Vector2i target,
     Kingdom& attackerKingdom, Kingdom& defenderKingdom,
+    XPSystemState& xpSystemState, std::uint32_t worldSeed,
     const GameConfig& config, EventLog& log, int turnNumber) {
 
     CombatResult result{false, false, 0, PieceType::King};
@@ -27,9 +29,7 @@ CombatSystem::CombatResult CombatSystem::resolve(
         result.targetWasPiece = true;
         Piece* victim = targetCell.piece;
         result.capturedPieceType = victim->type;
-        int xp = config.getKillXP(victim->type);
-        attacker.xp += xp;
-        result.xpGained = xp;
+        result.xpGained = XPSystem::grantKillXP(attacker, victim->type, xpSystemState, worldSeed, config);
 
         log.log(turnNumber, attacker.kingdom, "Captured enemy piece!");
 

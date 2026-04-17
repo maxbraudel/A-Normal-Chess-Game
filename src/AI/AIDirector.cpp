@@ -349,7 +349,10 @@ static bool moveTowardTarget(AIDirectorPlan& plan,
 
 AIDirectorPlan AIDirector::computeTurn(Board& board, Kingdom& self, Kingdom& enemy,
                                          const std::vector<Building>& publicBuildings,
-                                         int turnNumber, const GameConfig& config) {
+                                         int turnNumber,
+                                         const GameConfig& config,
+                                         std::uint32_t worldSeed,
+                                         XPSystemState xpSystemState) {
     TimeBudget timer(m_config.maxTurnTimeMs);
 
     AIDirectorPlan plan;
@@ -363,7 +366,8 @@ AIDirectorPlan AIDirector::computeTurn(Board& board, Kingdom& self, Kingdom& ene
 
     // --- 2. Create snapshot for ForwardModel ---
     GameSnapshot snapshot = ForwardModel::createSnapshot(board, self, enemy,
-                                                          publicBuildings, turnNumber);
+                                                          publicBuildings, turnNumber,
+                                                          worldSeed, xpSystemState);
     // Determine if either player uses White or Black for the snapshot accessor
     // self = kingdom(aiKingdom), enemy = enemyKingdom(aiKingdom)
 

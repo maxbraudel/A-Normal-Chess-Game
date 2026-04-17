@@ -9,6 +9,7 @@
 #include "Objects/MapObject.hpp"
 #include "Systems/ChestSystem.hpp"
 #include "Systems/InfernalSystem.hpp"
+#include "Systems/XPTypes.hpp"
 
 #include "Systems/TurnCommand.hpp"
 #include "Systems/TurnValidationContext.hpp"
@@ -125,8 +126,10 @@ public:
                     std::vector<Building>& publicBuildings,
                     std::vector<MapObject>& mapObjects,
                     ChestSystemState& chestSystemState,
+                    XPSystemState& xpSystemState,
                     std::vector<AutonomousUnit>& autonomousUnits,
                     InfernalSystemState& infernalSystemState,
+                    std::uint32_t worldSeed,
                     const GameConfig& config, EventLog& log,
                     std::vector<GameplayNotification>& gameplayNotifications,
                     PieceFactory& pieceFactory, BuildingFactory& buildingFactory);
@@ -136,6 +139,7 @@ public:
                     PieceFactory& pieceFactory, BuildingFactory& buildingFactory) {
         std::vector<MapObject> mapObjects;
         ChestSystemState chestSystemState{};
+        XPSystemState xpSystemState{};
         std::vector<AutonomousUnit> autonomousUnits;
         InfernalSystemState infernalSystemState{};
         std::vector<GameplayNotification> gameplayNotifications;
@@ -145,8 +149,10 @@ public:
                    publicBuildings,
                    mapObjects,
                    chestSystemState,
-               autonomousUnits,
-               infernalSystemState,
+                   xpSystemState,
+                   autonomousUnits,
+                   infernalSystemState,
+                   0,
                    config,
                    log,
                    gameplayNotifications,

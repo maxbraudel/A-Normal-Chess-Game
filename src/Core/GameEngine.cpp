@@ -200,6 +200,7 @@ bool GameEngine::startNewSession(const GameSessionConfig& session,
     kingdom(KingdomId::Black).addPiece(blackKing);
 
     ChestSystem::initialize(m_chestSystemState, m_sessionConfig.worldSeed, 1, config);
+    m_xpSystemState = XPSystemState{};
     InfernalSystem::initialize(m_infernalSystemState, 0, config);
     relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
 
@@ -276,6 +277,7 @@ bool GameEngine::restoreFromSave(const SaveData& data,
     m_mapObjects = data.mapObjects;
     m_autonomousUnits = data.autonomousUnits;
     m_chestSystemState = data.chestSystemState;
+    m_xpSystemState = data.xpSystemState;
     m_infernalSystemState = data.infernalSystemState;
     normalizeLoadedBuildingVisuals(m_publicBuildings, m_sessionConfig.worldSeed);
 
@@ -340,6 +342,7 @@ SaveData GameEngine::createSaveData() const {
     data.mapObjects = m_mapObjects;
     data.autonomousUnits = m_autonomousUnits;
     data.chestSystemState = m_chestSystemState;
+    data.xpSystemState = m_xpSystemState;
     data.infernalSystemState = m_infernalSystemState;
     data.events = m_eventLog.getEvents();
     return data;
@@ -354,6 +357,7 @@ bool GameEngine::validate(std::string* errorMessage) const {
         m_autonomousUnits,
         m_turnSystem,
         m_sessionConfig,
+        m_xpSystemState,
         m_infernalSystemState,
         errorMessage);
 }
@@ -480,7 +484,9 @@ TurnValidationContext GameEngine::makeTurnValidationContext(const GameConfig& co
         enemyKingdom(),
         m_publicBuildings,
         m_turnSystem.getTurnNumber(),
-        config};
+    config,
+    m_sessionConfig.worldSeed,
+    m_xpSystemState};
 }
 
 CheckTurnValidation GameEngine::validatePendingTurn(const GameConfig& config) const {
@@ -510,8 +516,10 @@ PendingTurnCommitResult GameEngine::commitPendingTurn(const GameConfig& config) 
                             m_publicBuildings,
                             m_mapObjects,
                             m_chestSystemState,
+                            m_xpSystemState,
                             m_autonomousUnits,
                             m_infernalSystemState,
+                            m_sessionConfig.worldSeed,
                             config,
                             m_eventLog,
                             result.notifications,

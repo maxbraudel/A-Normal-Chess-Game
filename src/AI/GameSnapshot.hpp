@@ -11,6 +11,7 @@
 #include "Kingdom/KingdomId.hpp"
 #include "Board/CellType.hpp"
 #include "AI/ThreatMap.hpp"
+#include "Systems/XPTypes.hpp"
 
 // ---- Lightweight snapshot structs (no pointers, fully clonable) ----
 
@@ -283,6 +284,8 @@ struct GameSnapshot {
     SnapTurnBudget blackTurnBudget;
     std::vector<SnapBuilding> publicBuildings;  // neutral/public buildings
     int turnNumber = 1;
+    std::uint32_t worldSeed = 0;
+    XPSystemState xpSystemState{};
 
     // ---- Accessors ----
     SnapKingdom& kingdom(KingdomId id) {
@@ -344,6 +347,8 @@ struct GameSnapshot {
         s.blackTurnBudget = blackTurnBudget;
         s.publicBuildings = publicBuildings;
         s.turnNumber = turnNumber;
+        s.worldSeed = worldSeed;
+        s.xpSystemState = xpSystemState;
         return s;
     }
 };

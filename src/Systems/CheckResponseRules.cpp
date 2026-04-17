@@ -85,7 +85,6 @@ GameSnapshot simulateEndOfTurn(const GameSnapshot& snapshot,
                               activeKingdom,
                               config.getMineIncomePerCellPerTurn(),
                               config.getFarmIncomePerCellPerTurn(),
-                              config.getArenaXPPerTurn(),
                               config);
     return simulatedSnapshot;
 }
@@ -190,7 +189,9 @@ CheckTurnValidation CheckResponseRules::validatePendingTurn(const TurnValidation
         restoredActiveKingdom,
         restoredEnemyKingdom,
         context.publicBuildings,
-        context.turnNumber);
+        context.turnNumber,
+        context.worldSeed,
+        context.xpSystemState);
 
     validation.activeKingInCheck = ForwardModel::isInCheck(
         currentSnapshot, context.activeKingdom.id, context.config.getGlobalMaxRange());

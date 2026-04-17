@@ -10,6 +10,7 @@
 #include "Objects/MapObject.hpp"
 #include "Systems/ChestSystem.hpp"
 #include "Systems/InfernalSystem.hpp"
+#include "Systems/XPTypes.hpp"
 #include "Units/Piece.hpp"
 #include "Buildings/Building.hpp"
 #include "Systems/EventLog.hpp"
@@ -62,6 +63,7 @@ struct SaveData {
     // Map objects
     std::vector<MapObject> mapObjects;
     ChestSystemState chestSystemState{};
+    XPSystemState xpSystemState{};
 
     // Autonomous hostile units
     std::vector<AutonomousUnit> autonomousUnits;

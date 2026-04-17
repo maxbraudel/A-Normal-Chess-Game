@@ -1,6 +1,10 @@
 #pragma once
+
+#include <cstdint>
+
 #include <SFML/System/Vector2.hpp>
 
+#include "Systems/XPTypes.hpp"
 #include "Units/PieceType.hpp"
 
 class Piece;
@@ -21,5 +25,6 @@ public:
     static CombatResult resolve(
         Piece& attacker, Board& board, sf::Vector2i target,
         Kingdom& attackerKingdom, Kingdom& defenderKingdom,
+        XPSystemState& xpSystemState, std::uint32_t worldSeed,
         const GameConfig& config, EventLog& log, int turnNumber);
 };

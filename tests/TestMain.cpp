@@ -78,6 +78,7 @@
 #include "Systems/StructureIntegrityRules.hpp"
 #include "Systems/TurnCommand.hpp"
 #include "Systems/TurnSystem.hpp"
+#include "Systems/XPSystem.hpp"
 #include "UI/HUDLayout.hpp"
 #include "UI/InGameViewModelBuilder.hpp"
 #include "UI/MainMenuUI.hpp"
@@ -169,6 +170,27 @@ GameConfig makeInfernalTestConfig(const std::string& infernalJsonBody) {
     GameConfig config;
     expect(config.loadFromFile(tempPath.string()),
         "Infernal test config helper should load a temporary infernal override file.");
+    std::filesystem::remove(tempPath);
+    return config;
+}
+
+GameConfig makeXPTestConfig(const std::string& xpJsonBody) {
+    const std::filesystem::path tempPath =
+        std::filesystem::temp_directory_path() / "anormalchess_xp_test_config.json";
+    {
+        std::ofstream out(tempPath);
+        out << "{\n"
+            << "  \"game\": {\n"
+            << "    \"xp\": {\n"
+            << xpJsonBody << "\n"
+            << "    }\n"
+            << "  }\n"
+            << "}\n";
+    }
+
+    GameConfig config;
+    expect(config.loadFromFile(tempPath.string()),
+        "XP test config helper should load a temporary XP override file.");
     std::filesystem::remove(tempPath);
     return config;
 }
@@ -3771,7 +3793,8 @@ void testSaveManagerRoundTrip() {
     data.turnNumber = 7;
     data.activeKingdom = KingdomId::Black;
     data.mapRadius = 5;
-        data.worldSeed = 123456789u;
+    data.worldSeed = 123456789u;
+    data.xpSystemState.rngCounter = 17u;
     data.sessionKingdoms = defaultKingdomParticipants(GameMode::HumanVsHuman);
     data.sessionKingdoms[0].participantName = "Player \"Alpha\"";
     data.sessionKingdoms[1].participantName = "Player Beta";
@@ -3841,30 +3864,32 @@ void testSaveManagerRoundTrip() {
            "Event messages should preserve escaped characters.");
     expect(loaded.sessionKingdoms[0].participantName == data.sessionKingdoms[0].participantName,
            "Session participant names should round-trip through SaveManager.");
-        expect(loaded.worldSeed == data.worldSeed,
-            "World seed should round-trip through SaveManager.");
-        expect(loaded.controllers[0] == ControllerType::Human && loaded.controllers[1] == ControllerType::Human,
-           "Legacy controller metadata should stay aligned with session metadata.");
-        expect(loaded.multiplayer.enabled && loaded.multiplayer.port == data.multiplayer.port,
-            "Multiplayer metadata should round-trip through SaveManager.");
-        expect(loaded.multiplayer.passwordHash == data.multiplayer.passwordHash,
-            "Multiplayer password hash should round-trip through SaveManager.");
-        expect(loaded.kingdoms[0].buildings.size() == 2
-            && loaded.kingdoms[0].buildings[0].rotationQuarterTurns == ownedBarracks.rotationQuarterTurns,
-            "Owned building rotations should round-trip through SaveManager.");
-        expect(loaded.kingdoms[0].buildings[0].isUnderConstruction(),
-            "Building construction state should round-trip through SaveManager.");
-        expect(loaded.kingdoms[0].buildings[0].getCellHP(0, 0) == 0,
-            "Destroyed owned building cells should round-trip through SaveManager.");
-        expect(loaded.kingdoms[0].buildings[1].isCellBreached(0, 0),
-            "Stone wall breach state should round-trip through SaveManager.");
-        expect(loaded.kingdoms[0].hasSpawnedBishop
-            && loaded.kingdoms[0].lastBishopSpawnParity == data.kingdoms[0].lastBishopSpawnParity,
-            "Kingdom bishop spawn memory should round-trip through SaveManager.");
-        expect(loaded.publicBuildings.size() == 1
-            && loaded.publicBuildings[0].flipMask == publicMine.flipMask
-            && loaded.publicBuildings[0].rotationQuarterTurns == publicMine.rotationQuarterTurns,
-            "Public building transforms should round-trip through SaveManager.");
+    expect(loaded.worldSeed == data.worldSeed,
+        "World seed should round-trip through SaveManager.");
+    expect(loaded.xpSystemState.rngCounter == data.xpSystemState.rngCounter,
+        "XP RNG state should round-trip through SaveManager.");
+    expect(loaded.controllers[0] == ControllerType::Human && loaded.controllers[1] == ControllerType::Human,
+       "Legacy controller metadata should stay aligned with session metadata.");
+    expect(loaded.multiplayer.enabled && loaded.multiplayer.port == data.multiplayer.port,
+        "Multiplayer metadata should round-trip through SaveManager.");
+    expect(loaded.multiplayer.passwordHash == data.multiplayer.passwordHash,
+        "Multiplayer password hash should round-trip through SaveManager.");
+    expect(loaded.kingdoms[0].buildings.size() == 2
+        && loaded.kingdoms[0].buildings[0].rotationQuarterTurns == ownedBarracks.rotationQuarterTurns,
+        "Owned building rotations should round-trip through SaveManager.");
+    expect(loaded.kingdoms[0].buildings[0].isUnderConstruction(),
+        "Building construction state should round-trip through SaveManager.");
+    expect(loaded.kingdoms[0].buildings[0].getCellHP(0, 0) == 0,
+        "Destroyed owned building cells should round-trip through SaveManager.");
+    expect(loaded.kingdoms[0].buildings[1].isCellBreached(0, 0),
+        "Stone wall breach state should round-trip through SaveManager.");
+    expect(loaded.kingdoms[0].hasSpawnedBishop
+        && loaded.kingdoms[0].lastBishopSpawnParity == data.kingdoms[0].lastBishopSpawnParity,
+        "Kingdom bishop spawn memory should round-trip through SaveManager.");
+    expect(loaded.publicBuildings.size() == 1
+        && loaded.publicBuildings[0].flipMask == publicMine.flipMask
+        && loaded.publicBuildings[0].rotationQuarterTurns == publicMine.rotationQuarterTurns,
+        "Public building transforms should round-trip through SaveManager.");
 }
 
         void testSaveManagerStringRoundTrip() {
@@ -4672,7 +4697,6 @@ void testForwardModelMatchesRuntimeBishopSpawnRule() {
                               KingdomId::White,
                               config.getMineIncomePerCellPerTurn(),
                               config.getFarmIncomePerCellPerTurn(),
-                              config.getArenaXPPerTurn(),
                               config);
 
     expect(snapshot.white.pieces.size() == 1,
@@ -5532,6 +5556,8 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
         std::vector<GameplayNotification> gameplayNotifications;
         PieceFactory pieceFactory;
         BuildingFactory buildingFactory;
+        XPSystemState xpSystemState{};
+        const std::uint32_t worldSeed = 123456u;
 
         expect(turnSystem.queueCommand(makeMoveCommand(811, {4, 4}, {4, 7}),
                                        board,
@@ -5547,8 +5573,10 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
                               publicBuildings,
                               mapObjects,
                               chestSystemState,
+                              xpSystemState,
                               autonomousUnits,
                               infernalSystemState,
+                              worldSeed,
                               config,
                               eventLog,
                               gameplayNotifications,
@@ -5563,6 +5591,166 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             "The authoritative destination cell should no longer reference the captured autonomous unit.");
         expect(board.getCell(4, 7).piece != nullptr && board.getCell(4, 7).piece->id == 811,
             "The capturing piece should finish the committed move on the destination cell.");
+    }
+
+    void testXPConfigLoadsStructuredProfiles() {
+        GameConfig config = makeXPTestConfig(
+            "      \"thresholds\": {\n"
+            "        \"pawn_to_knight_or_bishop\": 33,\n"
+            "        \"to_rook\": 77\n"
+            "      },\n"
+            "      \"sources\": {\n"
+            "        \"kill_pawn\": {\n"
+            "          \"mean\": 41,\n"
+            "          \"sigma_multiplier_times_100\": 25,\n"
+            "          \"clamp_sigma_multiplier_times_100\": 150,\n"
+            "          \"minimum\": 9\n"
+            "        },\n"
+            "        \"destroy_block\": {\n"
+            "          \"mean\": 12,\n"
+            "          \"sigma_multiplier_times_100\": 5,\n"
+            "          \"clamp_sigma_multiplier_times_100\": 50,\n"
+            "          \"minimum\": 3\n"
+            "        }\n"
+            "      }");
+
+        const XPRewardProfile pawnProfile = config.getXPRewardProfile(XPRewardSource::KillPawn);
+        const XPRewardProfile blockProfile = config.getXPRewardProfile(XPRewardSource::DestroyBlock);
+        expect(config.getXPThresholdPawnToKnightOrBishop() == 33,
+            "Structured XP config should override the pawn promotion threshold.");
+        expect(config.getXPThresholdToRook() == 77,
+            "Structured XP config should override the rook promotion threshold.");
+        expect(pawnProfile.mean == 41
+            && pawnProfile.sigmaMultiplierTimes100 == 25
+            && pawnProfile.clampSigmaMultiplierTimes100 == 150
+            && pawnProfile.minimum == 9,
+            "Structured XP config should load the full per-source kill-pawn profile.");
+        expect(blockProfile.mean == 12
+            && blockProfile.sigmaMultiplierTimes100 == 5
+            && blockProfile.clampSigmaMultiplierTimes100 == 50
+            && blockProfile.minimum == 3,
+            "Structured XP config should load the full per-source destroy-block profile.");
+        expect(config.getKillXP(PieceType::Pawn) == 41,
+            "Legacy XP getter compatibility should expose the configured mean for kill-pawn rewards.");
+        expect(config.getDestroyBlockXP() == 12,
+            "Legacy destroy-block getter compatibility should expose the configured mean.");
+    }
+
+    void testXPSystemUsesDeterministicSerializedSequence() {
+        GameConfig config = makeXPTestConfig(
+            "      \"sources\": {\n"
+            "        \"kill_pawn\": {\n"
+            "          \"mean\": 20,\n"
+            "          \"sigma_multiplier_times_100\": 50,\n"
+            "          \"clamp_sigma_multiplier_times_100\": 175,\n"
+            "          \"minimum\": 4\n"
+            "        }\n"
+            "      }");
+
+        XPSystemState firstState{};
+        XPSystemState replayState{};
+        const std::uint32_t worldSeed = 424242u;
+
+        const int firstRollA = XPSystem::sampleKillXP(PieceType::Pawn, firstState, worldSeed, config);
+        const int secondRollA = XPSystem::sampleKillXP(PieceType::Pawn, firstState, worldSeed, config);
+        const int firstRollB = XPSystem::sampleKillXP(PieceType::Pawn, replayState, worldSeed, config);
+        const int secondRollB = XPSystem::sampleKillXP(PieceType::Pawn, replayState, worldSeed, config);
+
+        expect(firstRollA == firstRollB && secondRollA == secondRollB,
+            "XP sampling should be deterministic for the same world seed and serialized RNG state.");
+        expect(firstState.rngCounter == 2 && replayState.rngCounter == 2,
+            "XP sampling should advance the serialized RNG counter once per probabilistic reward.");
+        expect(firstRollA >= 4 && secondRollA >= 4,
+            "XP sampling should respect the configured minimum reward.");
+
+        XPSystemState resumedState = firstState;
+        const int resumedRoll = XPSystem::sampleKillXP(PieceType::Pawn, resumedState, worldSeed, config);
+        const int continuedRoll = XPSystem::sampleKillXP(PieceType::Pawn, firstState, worldSeed, config);
+        expect(resumedRoll == continuedRoll,
+            "Restoring the serialized XP RNG state should resume the exact same reward sequence.");
+    }
+
+    void testForwardModelCaptureXPMatchesCommittedTurn() {
+        GameConfig config = makeXPTestConfig(
+            "      \"sources\": {\n"
+            "        \"kill_pawn\": {\n"
+            "          \"mean\": 20,\n"
+            "          \"sigma_multiplier_times_100\": 50,\n"
+            "          \"clamp_sigma_multiplier_times_100\": 175,\n"
+            "          \"minimum\": 4\n"
+            "        }\n"
+            "      }");
+
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 101, PieceType::Rook, KingdomId::White, {4, 4});
+        addPieceToBoard(white, board, 102, PieceType::King, KingdomId::White, {1, 1});
+        addPieceToBoard(black, board, 201, PieceType::Pawn, KingdomId::Black, {4, 7});
+        addPieceToBoard(black, board, 202, PieceType::King, KingdomId::Black, {10, 10});
+
+        const std::uint32_t worldSeed = 919191u;
+        GameSnapshot snapshot = ForwardModel::createSnapshot(
+            board,
+            white,
+            black,
+            {},
+            1,
+            worldSeed,
+            XPSystemState{});
+        expect(ForwardModel::applyMove(snapshot, 101, {4, 7}, KingdomId::White, config),
+            "ForwardModel should accept the deterministic XP comparison capture move.");
+
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+        turnSystem.setTurnNumber(1);
+        EventLog eventLog;
+        PieceFactory pieceFactory;
+        BuildingFactory buildingFactory;
+        ChestSystemState chestSystemState{};
+        XPSystemState runtimeXPState{};
+        std::vector<MapObject> mapObjects;
+        std::vector<AutonomousUnit> autonomousUnits;
+        InfernalSystemState infernalSystemState{};
+        std::vector<Building> publicBuildings;
+        std::vector<GameplayNotification> gameplayNotifications;
+
+        expect(turnSystem.queueCommand(makeMoveCommand(101, {4, 4}, {4, 7}),
+                                       board,
+                                       white,
+                                       black,
+                                       publicBuildings,
+                                       config),
+            "Authoritative runtime should accept the deterministic XP comparison capture move.");
+
+        turnSystem.commitTurn(board,
+                              white,
+                              black,
+                              publicBuildings,
+                              mapObjects,
+                              chestSystemState,
+                              runtimeXPState,
+                              autonomousUnits,
+                              infernalSystemState,
+                              worldSeed,
+                              config,
+                              eventLog,
+                              gameplayNotifications,
+                              pieceFactory,
+                              buildingFactory);
+
+        const Piece* runtimeRook = white.getPieceById(101);
+        const SnapPiece* projectedRook = snapshot.kingdom(KingdomId::White).getPieceById(101);
+        expect(runtimeRook != nullptr && projectedRook != nullptr,
+            "Both authoritative and projected states should still contain the capturing piece.");
+        expect(runtimeRook->xp == projectedRook->xp,
+            "ForwardModel capture projection should grant the same deterministic XP as authoritative turn commit.");
+        expect(runtimeXPState.rngCounter == snapshot.xpSystemState.rngCounter,
+            "ForwardModel capture projection should consume the same XP RNG sequence as authoritative turn commit.");
+        expect(black.getPieceById(201) == nullptr,
+            "Authoritative turn commit should remove the captured victim after awarding XP.");
     }
 
     void testInfernalBloodDebtAccumulatesFromCommittedCaptures() {
@@ -5590,6 +5778,8 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
         std::vector<GameplayNotification> gameplayNotifications;
         PieceFactory pieceFactory;
         BuildingFactory buildingFactory;
+        XPSystemState xpSystemState{};
+        const std::uint32_t worldSeed = 789123u;
 
         expect(turnSystem.queueCommand(makeMoveCommand(821, {4, 4}, {4, 7}),
                                        board,
@@ -5605,8 +5795,10 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
                               publicBuildings,
                               mapObjects,
                               chestSystemState,
+                              xpSystemState,
                               autonomousUnits,
                               infernalSystemState,
+                              worldSeed,
                               config,
                               eventLog,
                               gameplayNotifications,
@@ -5963,7 +6155,6 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
                                   KingdomId::White,
                                   config.getMineIncomePerCellPerTurn(),
                                   config.getFarmIncomePerCellPerTurn(),
-                                  config.getArenaXPPerTurn(),
                                   config);
 
         SnapBuilding* barracks = snapshot.kingdom(KingdomId::White).getBuildingById(-43);
@@ -6569,6 +6760,9 @@ int main() {
         {"input coordinator gameplay shortcuts", testInputCoordinatorPlansGameplayShortcuts},
         {"input coordinator world routing", testInputCoordinatorRoutesWorldInputAfterGuiFiltering},
         {"render coordinator move overlay plan", testRenderCoordinatorBuildsSelectionAndMoveOverlayPlan},
+        {"xp config structured profiles", testXPConfigLoadsStructuredProfiles},
+        {"xp deterministic serialized sequence", testXPSystemUsesDeterministicSerializedSequence},
+        {"xp forward model matches runtime capture", testForwardModelCaptureXPMatchesCommittedTurn},
         {"infernal blood debt from captures", testInfernalBloodDebtAccumulatesFromCommittedCaptures},
         {"infernal spawn and hunt", testInfernalSystemSpawnsOnBorderAndStartsHunt},
         {"infernal capture return despawn", testInfernalSystemCapturesTargetReturnsAndDespawns},

@@ -6,6 +6,7 @@
 #include "Core/GameEngine.hpp"
 #include "Systems/StructureIntegrityRules.hpp"
 #include "Systems/TurnCommand.hpp"
+#include "Systems/XPSystem.hpp"
 
 namespace {
 
@@ -59,6 +60,8 @@ bool TurnDraft::rebuild(const GameEngine& engine,
     m_publicBuildings = engine.publicBuildings();
     m_mapObjects = engine.mapObjects();
     m_autonomousUnits = engine.autonomousUnits();
+    m_worldSeed = engine.sessionConfig().worldSeed;
+    m_xpSystemState = engine.xpSystemState();
     m_valid = true;
     m_errorMessage.clear();
     relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
@@ -67,7 +70,7 @@ bool TurnDraft::rebuild(const GameEngine& engine,
     for (const TurnCommand& command : commands) {
         switch (command.type) {
             case TurnCommand::Move:
-                if (!applyMoveCommand(command, activeKingdomId)) {
+                if (!applyMoveCommand(command, activeKingdomId, config)) {
                     setError("Unable to replay a queued move into the local turn draft.", errorMessage);
                     return false;
                 }
@@ -113,11 +116,15 @@ void TurnDraft::clear() {
     m_publicBuildings.clear();
     m_mapObjects.clear();
     m_autonomousUnits.clear();
+    m_worldSeed = 0;
+    m_xpSystemState = XPSystemState{};
     m_valid = false;
     m_errorMessage.clear();
 }
 
-bool TurnDraft::applyMoveCommand(const TurnCommand& command, KingdomId activeKingdomId) {
+bool TurnDraft::applyMoveCommand(const TurnCommand& command,
+                                 KingdomId activeKingdomId,
+                                 const GameConfig& config) {
     Kingdom& activeKingdom = kingdom(activeKingdomId);
     Kingdom& enemyKingdom = kingdom(opponent(activeKingdomId));
     Piece* piece = activeKingdom.getPieceById(command.pieceId);
@@ -137,6 +144,13 @@ bool TurnDraft::applyMoveCommand(const TurnCommand& command, KingdomId activeKin
 
     Cell& destinationCell = m_board.getCell(command.destination.x, command.destination.y);
     if (destinationCell.piece && destinationCell.piece->kingdom != piece->kingdom) {
+        if (destinationCell.piece->type != PieceType::King) {
+            piece->xp += XPSystem::sampleKillXP(
+                destinationCell.piece->type,
+                m_xpSystemState,
+                m_worldSeed,
+                config);
+        }
         enemyKingdom.removePiece(destinationCell.piece->id);
         destinationCell.piece = nullptr;
         relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);

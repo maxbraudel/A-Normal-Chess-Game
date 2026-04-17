@@ -43,6 +43,8 @@ GameSnapshot createProjectionBaseSnapshot(const Board& board,
                                           const Kingdom& enemyKingdom,
                                           const std::vector<Building>& publicBuildings,
                                           int turnNumber,
+                                          std::uint32_t worldSeed,
+                                          XPSystemState xpSystemState,
                                           const std::vector<TurnCommand>& commands,
                                           const GameConfig& config);
 
@@ -75,12 +77,22 @@ PendingTurnNormalizationResult normalizeSequentialCommands(
     const Kingdom& enemyKingdom,
     const std::vector<Building>& publicBuildings,
     int turnNumber,
+    std::uint32_t worldSeed,
+    XPSystemState xpSystemState,
     const std::vector<TurnCommand>& commands,
     const GameConfig& config,
     PendingTurnInvalidCommandPolicy invalidCommandPolicy) {
     PendingTurnNormalizationResult result;
     result.snapshot = createProjectionBaseSnapshot(
-        board, activeKingdom, enemyKingdom, publicBuildings, turnNumber, commands, config);
+        board,
+        activeKingdom,
+        enemyKingdom,
+        publicBuildings,
+        turnNumber,
+        worldSeed,
+        xpSystemState,
+        commands,
+        config);
     result.normalizedCommands.reserve(commands.size());
 
     for (std::size_t index = 0; index < commands.size(); ++index) {
@@ -303,6 +315,8 @@ GameSnapshot createProjectionBaseSnapshot(const Board& board,
                                           const Kingdom& enemyKingdom,
                                           const std::vector<Building>& publicBuildings,
                                           int turnNumber,
+                                          std::uint32_t worldSeed,
+                                          XPSystemState xpSystemState,
                                           const std::vector<TurnCommand>& commands,
                                           const GameConfig& config) {
     Kingdom restoredActiveKingdom = activeKingdom;
@@ -310,7 +324,13 @@ GameSnapshot createProjectionBaseSnapshot(const Board& board,
     restorePendingMoveOrigins(restoredActiveKingdom, commands);
 
     GameSnapshot snapshot = ForwardModel::createSnapshot(
-        board, restoredActiveKingdom, restoredEnemyKingdom, publicBuildings, turnNumber);
+        board,
+        restoredActiveKingdom,
+        restoredEnemyKingdom,
+        publicBuildings,
+        turnNumber,
+        worldSeed,
+        xpSystemState);
     PendingTurnProjection::initializeBudgets(snapshot, activeKingdom.id, config);
     return snapshot;
 }
@@ -368,6 +388,8 @@ PendingTurnNormalizationResult PendingTurnProjection::normalize(
         context.enemyKingdom,
         context.publicBuildings,
         context.turnNumber,
+        context.worldSeed,
+        context.xpSystemState,
         commands,
         context.config,
         invalidCommandPolicy);
@@ -392,6 +414,8 @@ PendingTurnNormalizationResult PendingTurnProjection::normalize(
         context.enemyKingdom,
         context.publicBuildings,
         context.turnNumber,
+        context.worldSeed,
+        context.xpSystemState,
         finalCoverageCommands,
         context.config,
         invalidCommandPolicy);

@@ -73,15 +73,54 @@
             "rook_turns": 6
         },
         "xp": {
-            "kill_pawn": 20,
-            "kill_knight": 50,
-            "kill_bishop": 50,
-            "kill_rook": 100,
-            "kill_queen": 300,
-            "destroy_block": 10,
-            "arena_per_turn": 10,
-            "threshold_pawn_to_knight_or_bishop": 100,
-            "threshold_to_rook": 300
+            "thresholds": {
+                "pawn_to_knight_or_bishop": 100,
+                "to_rook": 300
+            },
+            "sources": {
+                "kill_pawn": {
+                    "mean": 20,
+                    "sigma_multiplier_times_100": 18,
+                    "clamp_sigma_multiplier_times_100": 200,
+                    "minimum": 1
+                },
+                "kill_knight": {
+                    "mean": 50,
+                    "sigma_multiplier_times_100": 16,
+                    "clamp_sigma_multiplier_times_100": 200,
+                    "minimum": 1
+                },
+                "kill_bishop": {
+                    "mean": 50,
+                    "sigma_multiplier_times_100": 16,
+                    "clamp_sigma_multiplier_times_100": 200,
+                    "minimum": 1
+                },
+                "kill_rook": {
+                    "mean": 100,
+                    "sigma_multiplier_times_100": 12,
+                    "clamp_sigma_multiplier_times_100": 200,
+                    "minimum": 1
+                },
+                "kill_queen": {
+                    "mean": 300,
+                    "sigma_multiplier_times_100": 10,
+                    "clamp_sigma_multiplier_times_100": 200,
+                    "minimum": 1
+                },
+                "destroy_block": {
+                    "mean": 10,
+                    "sigma_multiplier_times_100": 15,
+                    "clamp_sigma_multiplier_times_100": 200,
+                    "minimum": 1
+                },
+                "arena_per_turn": {
+                    "mean": 10,
+                    "sigma_multiplier_times_100": 15,
+                    "clamp_sigma_multiplier_times_100": 200,
+                    "minimum": 1
+                }
+            }
         },
         "combat": {
             "wood_wall_hp": 1,

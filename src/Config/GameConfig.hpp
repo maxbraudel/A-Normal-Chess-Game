@@ -1,9 +1,11 @@
 #pragma once
+#include <array>
 #include <string>
 #include <fstream>
 #include <sstream>
 #include <map>
 #include "Buildings/BuildingType.hpp"
+#include "Systems/XPTypes.hpp"
 #include "Units/PieceType.hpp"
 
 class GameConfig {
@@ -52,6 +54,7 @@ public:
     int getProductionTurns(PieceType type) const;
 
     // XP
+    XPRewardProfile getXPRewardProfile(XPRewardSource source) const;
     int getKillXP(PieceType victim) const;
     int getDestroyBlockXP() const;
     int getArenaXPPerTurn() const;
@@ -169,13 +172,7 @@ private:
     int m_rookTurns;
 
     // XP
-    int m_killPawn;
-    int m_killKnight;
-    int m_killBishop;
-    int m_killRook;
-    int m_killQueen;
-    int m_destroyBlock;
-    int m_arenaPerTurn;
+    std::array<XPRewardProfile, kNumXPRewardSources> m_xpRewardProfiles;
     int m_thresholdPawnToKnightOrBishop;
     int m_thresholdToRook;
 

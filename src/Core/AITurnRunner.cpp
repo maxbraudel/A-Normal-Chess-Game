@@ -51,6 +51,8 @@ void AITurnRunner::start(const Board& board,
                          const std::vector<AutonomousUnit>& autonomousUnits,
                          KingdomId activeKingdom,
                          int turnNumber,
+                         std::uint32_t worldSeed,
+                         XPSystemState xpSystemState,
                          const GameConfig& config,
                          const AIDirector& director) {
     if (m_task) {
@@ -73,6 +75,8 @@ void AITurnRunner::start(const Board& board,
     std::thread([task,
                  snapshot = std::move(snapshot),
                  directorWorker = std::move(directorWorker),
+                 worldSeed,
+                 xpSystemState,
                  configCopy]() mutable {
         Kingdom& self = snapshot.kingdoms[kingdomIndex(task->activeKingdom)];
         Kingdom& enemy = snapshot.kingdoms[kingdomIndex(opponent(task->activeKingdom))];
@@ -81,7 +85,9 @@ void AITurnRunner::start(const Board& board,
                                                          enemy,
                                                          snapshot.publicBuildings,
                                                          task->turnNumber,
-                                                         configCopy);
+                                                         configCopy,
+                                                         worldSeed,
+                                                         xpSystemState);
 
         std::scoped_lock lock(task->mutex);
         task->plan = std::move(plan);
