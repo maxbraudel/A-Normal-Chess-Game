@@ -1,713 +1,1114 @@
-# Rapport d'analyse des processus aleatoires du jeu
+# Rapport d'analyse exhaustive des processus aleatoires du runtime
 
-## 1. Objet du rapport
+## 1. Objet, perimetre et methode
 
-Ce rapport recense, classe et explique tous les processus aleatoires et pseudo-aleatoires reperes dans la codebase du jeu.
+Ce rapport recense l'ensemble des lois de probabilite, variables aleatoires usuelles, tirages ponderes, permutations aleatoires et processus pseudo-aleatoires effectivement utilises par le runtime actuel du jeu.
 
 Perimetre analyse :
 
-- code runtime C++ sous src/
-- tests sous tests/ pour verifier le comportement attendu
-- configurations sous assets/config/
-- documents Markdown du depot pour distinguer ce qui est implemente de ce qui n'est encore qu'une intention
+- le runtime C++ sous src/
+- la chaine de chargement des configurations
+- la serialisation des etats aleatoires dans les sauvegardes
+- les tests qui verifient la reproductibilite de certains systemes
 
-Perimetre explicitement ecarte du coeur du rapport :
+Perimetre explicitement exclu du coeur du rapport :
 
 - build/ et build-msvc/, qui sont des artefacts de compilation
-- les generateurs d'assets HTML/JS du dossier generator/ : ils ont ete verifies, mais aucun usage effectif d'un generateur aleatoire n'y a ete trouve pour le runtime du jeu
+- les plans et notes de conception quand ils ne correspondent pas a du comportement runtime effectif
+- les generateurs d'assets du dossier generator/, qui ne pilotent pas le jeu en execution
 
-Conclusion generale en une phrase : le jeu utilise peu de lois aleatoires usuelles, et repose surtout sur une combinaison de loi uniforme discrete, de permutation aleatoire uniforme, et de bruit procedural seed-driven pour la generation du monde.
+Point de configuration important :
+
+- le jeu charge d'abord assets/config/master_config.json, puis retombe sur assets/config/game_params.json seulement si master_config.json est absent
+- l'IA charge d'abord assets/config/master_config.json, puis retombe sur assets/config/ai_params.json en secours
+- la configuration actuelle expose des parametres XP, infernal et meteo dans master_config.json
+- la configuration actuelle n'expose pas de section chest dans master_config.json ni dans game_params.json ; le systeme de coffres tourne donc avec les valeurs par defaut codees dans GameConfig::setDefaults()
+
+Point de reproductibilite important :
+
+- les systemes XP, coffres, infernal et meteo derivent tous leurs tirages d'un couple worldSeed + rngCounter serialize, ce qui permet une reprise deterministe apres sauvegarde si l'etat est restaure fidelement
+- la generation du monde est seed-driven a partir de worldSeed
+- le MCTS de l'IA n'est pas derive de worldSeed et reste non reproductible entre executions
+- la generation de sel multijoueur est egalement hors du schema worldSeed
 
 ## 2. Resume executif
 
-Familles effectivement implementees dans le runtime :
+### 2.1 Lois et familles effectivement presentes dans le runtime
 
-1. Loi uniforme discrete sur ensemble fini
-2. Loi uniforme discrete tronquee ou conditionnelle sur un sous-ensemble de candidats
-3. Permutation aleatoire uniforme
-4. Processus pseudo-aleatoire spatial continu discretise : value noise puis bruit fractal de type fBm
-5. Sortie brute de PRNG assimilable a une uniforme discrete 64 bits pour le sel multijoueur
+Lois ou familles standard explicitement echantillonnees via l'API C++ <random> :
 
-Familles non implementees dans le runtime actuel :
+1. loi uniforme discrete
+2. loi de Bernoulli
+3. loi categorielle / loi discrete generale ponderee
+4. loi de Poisson
+5. loi normale, mais tronquee et discretisee
+6. loi de Weibull, mais discretisee et bornee inferieurement
+7. loi Gamma, mais translatee, discretisee et utilisee comme delai
+8. loi log-normale, puis transformee par clamp pour l'opacite meteo
+9. loi Beta, echantillonnee via deux lois Gamma puis transformee
+10. loi lineaire par morceaux
+11. permutation aleatoire uniforme
 
-- Bernoulli
-- Binomiale
-- Geometrique
-- Hypergeometrique
-- Poisson
-- Normale / Gaussienne
-- Exponentielle
-- Beta
-- Gamma / Erlang
-- Khi-deux
-- Cauchy
-- Weibull
-- log-normale
-- discrete_distribution, piecewise distributions, uniform_real_distribution
+Processus pseudo-aleatoires importants mais non assimilables a une loi usuelle simple :
 
-Point important :
+1. bruit spatial de type value noise puis fBm pour le terrain
+2. champs pseudo-uniformes deterministes par hachage pour certains masques visuels et meteo
+3. sorties brutes de PRNG utilisees comme seeds internes
+4. tirages uniformes ou ponderes sur sous-ensembles dynamiques apres filtrage, top-k ou elimination
 
-- la generation de monde est reproductible a seed fixe
-- les tirs aleatoires du MCTS ne sont pas relies au worldSeed et peuvent donc faire varier les decisions de l'IA entre deux executions
-- le coeur des regles de jeu (combat, economie, mouvement, production, validation d'etat) reste deterministe une fois la carte et les decisions IA fixees
+### 2.2 Lois non trouvees dans le runtime actuel
 
-## 3. Inventaire synthetique
+Les familles suivantes n'ont pas ete trouvees dans le code runtime actuel :
 
-| Famille | Nature | Localisation principale | Feature servie | Reproductible a seed fixe ? |
-| --- | --- | --- | --- | --- |
-| Uniforme discrete finie | Loi usuelle | src/Core/GameEngine.cpp | generation du worldSeed | non, sauf si worldSeed fourni |
-| Uniforme discrete finie | Loi usuelle | src/AI/AIMCTS.cpp | exploration MCTS et rollouts | non |
-| Uniforme discrete finie | Loi usuelle | src/Board/BoardGenerator.cpp | rotations, flips, spawn cells, premiers choix de placement | oui |
-| Uniforme discrete tronquee | Variante maison | src/Board/BoardGenerator.cpp | dispersion des mines et fermes | oui |
-| Permutation uniforme | Loi usuelle | src/Board/BoardGenerator.cpp | ordre de pose des ressources publiques | oui |
-| Value noise + fBm | Processus stochastique spatial pseudo-aleatoire | src/Board/BoardGenerator.cpp | generation du terrain | oui |
-| Sortie brute de mt19937_64 | Assimilee a une uniforme discrete 64 bits | src/Multiplayer/PasswordUtils.hpp | generation du sel de mot de passe | non |
-| Hash pseudo-aleatoire deterministe | Pas une loi usuelle | src/Board/BoardGenerator.cpp, src/Core/GameEngine.cpp | flips de terrain et compatibilite legacy | oui |
-| Pseudo-randomness AI nommee mais non active | pas un alea effectif dans le runtime actuel | src/AI/AIStrategy.cpp, src/Config/AIConfig.cpp | variation strategique top-2 envisagee | non applicable |
+- loi binomiale
+- loi geometrique
+- loi hypergeometrique
+- loi exponentielle
+- loi du chi-deux
+- loi de Cauchy
+- loi de Student
+- loi de Fisher
+- loi binomiale negative
+- uniform_real_distribution
+- piecewise_constant_distribution
 
-## 4. Loi uniforme discrete sur ensemble fini
+Remarque : le runtime utilise bien gamma_distribution et piecewise_linear_distribution, mais pas les variantes ci-dessus.
 
-### 4.1 Definition mathematique
+## 3. Configuration effective au moment de l'analyse
 
-On parle ici d'une variable aleatoire X uniforme discrete sur un ensemble fini S lorsque :
+### 3.1 Monde et terrain
 
-- domaine : S = {x1, ..., xn}
-- probabilite : P(X = xi) = 1 / n pour tout element xi de S
+Configuration runtime actuelle lue dans master_config.json :
 
-Dans cette codebase, cette famille apparait sous deux formes :
+- rayon de carte : 25
+- nombre d'octaves du terrain : 3
+- couverture cible terre : 14 %
+- couverture cible eau : 4 %
+- nombre cible de taches de terre : 6
+- nombre cible de lacs : 3
+- zone de spawn joueur : 25 % de la largeur
+- zone de spawn IA : 25 % de la largeur
 
-- via std::uniform_int_distribution
-- via sortie brute de generateur pseudo-aleatoire lorsque le code assimile chaque entier d'un intervalle binaire a un resultat equiprobable
+### 3.2 XP
 
-### 4.2 Generation du worldSeed
+Configuration runtime actuelle lue dans master_config.json :
+
+- kill_pawn : moyenne 20, sigma multiplier 0.18, clamp multiplier 2.00, minimum 1
+- kill_knight : moyenne 50, sigma multiplier 0.16, clamp multiplier 2.00, minimum 1
+- kill_bishop : moyenne 50, sigma multiplier 0.16, clamp multiplier 2.00, minimum 1
+- kill_rook : moyenne 100, sigma multiplier 0.12, clamp multiplier 2.00, minimum 1
+- kill_queen : moyenne 300, sigma multiplier 0.10, clamp multiplier 2.00, minimum 1
+- destroy_block : moyenne 10, sigma multiplier 0.15, clamp multiplier 2.00, minimum 1
+- arena_per_turn : moyenne 10, sigma multiplier 0.15, clamp multiplier 2.00, minimum 1
+
+### 3.3 Pieces infernales
+
+Configuration runtime actuelle lue dans master_config.json :
+
+- tour minimal avant premier spawn : 3
+- cooldown de respawn : 4
+- retry si echec de spawn : 1
+- lambda Poisson de base : 0.020
+- lambda supplementaire par unite de dette sanguine totale : 0.012
+- lambda capee : 0.250
+- poids de type cible : Pawn 8, Knight 14, Bishop 14, Rook 26, Queen 38
+
+### 3.4 Meteo
+
+Configuration runtime actuelle lue dans master_config.json :
+
+- cooldown minimal entre fronts : 5 tours
+- Gamma d'arrivee : shape 2.40, scale 2.20
+- vitesse : 50 blocs par 100 tours
+- poids de direction : 1 pour chacune des 8 directions, donc uniforme de fait dans la config actuelle
+- poids de position d'entree sur bord : centre 1.80, coins 0.70, milieu exact 1.98
+- couverture tiree uniformement entre 10 % et 30 %
+- aspect ratio tire uniformement sur l'ensemble discret 1.80, 1.81, ..., 2.60
+- log-normale de densite : mu -0.12, sigma 0.35
+- alpha de base : 0.48, alpha min : 0.22, alpha max : 0.82
+- amplitude du bruit de front : 100 %
+- douceur de bord : 18 %
+
+### 3.5 Coffres
+
+Le runtime n'ayant pas de section chest active dans les fichiers de config actuels, les valeurs effectives sont celles par defaut de GameConfig::setDefaults() :
+
+- min_spawn_turn : 4
+- respawn_cooldown_turns : 4
+- spawn_retry_turns : 1
+- Weibull shape : 1.80
+- Weibull scale : 6 tours
+- distance minimale aux rois : 6
+- reward Gold : 35
+- reward Movement bonus : 1
+- reward Build bonus : 1
+- bascule late game : tour 10
+- poids early game : Gold 8, Movement 3, Build 3
+- poids late game : Gold 4, Movement 6, Build 6
+
+## 4. Inventaire detaille des lois et processus
+
+## 4.1 Loi uniforme discrete et variantes conditionnelles
+
+Definition mathematique de reference : une variable uniforme discrete sur un support fini S attribue a chaque element de S la meme probabilite.
+
+### 4.1.1 Generation du worldSeed
 
 Localisation : src/Core/GameEngine.cpp, fonction makeRandomWorldSeed.
 
 Definition dans le code :
 
-- source d'entropie : std::random_device
+- tirage uniforme sur l'intervalle entier ferme allant de 1 a 2147483647
 - PRNG : std::mt19937
-- distribution : uniforme discrete sur l'intervalle entier ferme {1, ..., 2147483647}
-
-Parametres :
-
-- borne basse : 1
-- borne haute : 0x7fffffff = 2147483647
+- source d'entropie initiale : std::random_device
 
 Domaine de definition :
 
-- ensemble des entiers strictement positifs sur 31 bits
+- tous les entiers positifs de l'intervalle [1, 2147483647]
 
-Modification par rapport a une uniforme entiere "naturelle" :
+Modification par rapport a une uniforme sur 32 bits non signes :
 
-- la valeur 0 est explicitement exclue, car elle sert de sentinelle interne pour "seed absente"
-- on n'echantillonne pas tout l'espace 32 bits non signe, seulement les 31 bits positifs
-
-Feature servie :
-
-- produire une seed de monde pour une nouvelle partie quand l'utilisateur n'en fournit pas
-- declencher ensuite toute la generation procedurale seed-driven
-
-Effet sur le jeu :
-
-- deux nouvelles parties sans seed explicite peuvent donner des mondes differents
-- une fois la seed fixee, la generation du monde devient deterministe
-
-### 4.3 Selection aleatoire d'un enfant lors de l'expansion MCTS
-
-Localisation : src/AI/AIMCTS.cpp, fonction expansion.
-
-Definition dans le code :
-
-- PRNG : std::mt19937 thread_local seedee une fois par thread via std::random_device
-- distribution : uniforme discrete sur l'ensemble des indices des enfants crees dans le noeud courant
-
-Parametres :
-
-- domaine : {0, ..., m - 1} ou m est le nombre d'enfants retenus
-- m est borne par MAX_CHILDREN_PER_NODE = 30
-
-Modification importante :
-
-- le tirage n'est pas fait sur l'ensemble total des actions legales
-- les actions sont d'abord filtrees par pertinence, avec seuil RELEVANCE_THRESHOLD = 5.0
-- puis tronquees aux 30 meilleures au maximum
-- la loi effectivement appliquee est donc uniforme seulement sur le sous-ensemble pre-filtre
+- la valeur 0 est explicitement exclue, car elle sert de sentinelle interne pour seed absente
 
 Feature servie :
 
-- introduire de la diversification dans l'exploration de l'arbre MCTS
-- eviter qu'un ordre fixe des actions candidates impose toujours le meme premier enfant explore
+- attribuer un seed de monde a une nouvelle partie quand l'utilisateur n'en fournit pas
 
-### 4.4 Tirage de piece pendant les rollouts MCTS
+Nature :
 
-Localisation : src/AI/AIMCTS.cpp, fonction selectRolloutAction.
+- loi usuelle stricte
+- hors gameplay strict, mais structurante pour tout le reste
 
-Definition dans le code :
+### 4.1.2 Rotations aleatoires des ressources publiques
 
-- distribution : uniforme discrete sur l'ensemble des pieces du royaume actif
-- domaine : {0, ..., n - 1} ou n est le nombre de pieces du royaume
-
-Modification importante :
-
-- le code n'effectue pas un tirage uniforme sur l'ensemble des coups legaux globaux
-- il effectue un tirage uniforme sur les pieces, puis un tirage uniforme sur les coups de la piece choisie
-- il y a au maximum 5 tentatives
-- si, pendant 5 tentatives, seules des pieces sans coup legal sont tirees, le rollout retourne END_TURN
-
-Loi effective :
-
-- uniforme sur les pieces tirees a chaque tentative
-- puis uniforme conditionnelle sur les coups de la piece retenue
-- ce n'est donc pas une uniforme sur l'ensemble de tous les coups legaux du plateau
-
-Feature servie :
-
-- produire des rollouts rapides et peu couteux pour le MCTS
-- conserver une part de variete sans calcul exhaustif d'une politique de simulation complexe
-
-### 4.5 Tirage de coup pendant les rollouts MCTS
-
-Localisation : src/AI/AIMCTS.cpp, fonction selectRolloutAction.
+Localisation : src/Board/BoardGenerator.cpp, buildPublicResourcePlacementRequests.
 
 Definition dans le code :
 
-- apres selection d'une piece ayant au moins un coup legal, le coup est tire uniformement parmi les coups legaux de cette piece
-
-Parametres :
-
-- domaine : {0, ..., k - 1} ou k est le nombre de coups legaux de la piece retenue
-
-Modification importante :
-
-- comme le tirage est conditionne par la piece choisie, les pieces ayant peu de coups donnent a chacun de leurs coups une probabilite individuelle plus forte qu'une piece ayant beaucoup de coups
-
-Feature servie :
-
-- finaliser la politique de simulation du rollout MCTS
-
-### 4.6 Rotations aleatoires des batiments publics ressources
-
-Localisation : src/Board/BoardGenerator.cpp, fonctions buildPublicResourcePlacementRequests et generate.
-
-Definition dans le code :
-
-- distribution : uniforme discrete sur {0, 1, 2, 3}
-- interpretation : 0, 1, 2, 3 quarts de tour, soit 0 degre, 90 degres, 180 degres, 270 degres
-
-Parametres :
-
-- borne basse : 0
-- borne haute : 3
-
-Modification et exceptions :
-
-- cette alea ne concerne que les mines et les fermes publiques generees
-- l'eglise centrale est explicitement fixee a rotation 0 et flipMask 0
-
-Feature servie :
-
-- varier l'apparence et l'orientation des ressources publiques
-- casser la regularite visuelle sans changer les regles fondamentales
-
-### 4.7 Flip masks aleatoires des batiments publics ressources
-
-Localisation : src/Board/BoardGenerator.cpp, fonctions buildPublicResourcePlacementRequests et generate.
-
-Definition dans le code :
-
-- distribution : uniforme discrete sur {0, 1, 2, 3}
-- interpretation des 2 bits : pas de flip, flip horizontal, flip vertical, flip horizontal + vertical
-
-Parametres :
-
-- borne basse : 0
-- borne haute : 3
-
-Feature servie :
-
-- diversification visuelle des ressources publiques
-
-### 4.8 Selection uniforme d'une case de spawn
-
-Localisation : src/Board/BoardGenerator.cpp, fonction findSpawnCell.
-
-Definition dans le code :
-
-- les cases candidates sont d'abord construites en filtrant : cellule dans le cercle, non eau, sans batiment, et dans la zone autorisee du camp
-- ensuite le spawn est tire uniformement parmi ces cases candidates
-
-Parametres :
-
-- joueur : x dans la zone gauche autorisee
-- IA : x dans la zone droite autorisee
-- les pourcentages de zone sont clamps entre 10% et 45% dans generate
-- dans la configuration fournie, player_spawn_zone_percent = 25 et ai_spawn_zone_percent = 25
-
-Modification importante :
-
-- la loi n'est pas uniforme sur tout le plateau
-- elle est uniforme sur un sous-ensemble admissible, lui-meme dependant de la carte generee, de l'eau et des batiments publics deja poses
-
-Feature servie :
-
-- varier le point de depart des royaumes tout en respectant des contraintes d'equite et de jouabilite
-
-## 5. Loi uniforme discrete tronquee ou conditionnelle sur un top-k
-
-### 5.1 Definition mathematique
-
-Il ne s'agit pas d'une loi usuelle standard de la bibliotheque C++, mais d'une variante maison :
-
-- on calcule un score pour chaque candidat
-- on trie les candidats par score decroissant
-- on ne conserve qu'un sous-ensemble top-k
-- on tire ensuite uniformement dans ce top-k
-
-Autrement dit, c'est une uniforme discrete conditionnelle a l'evenement "le candidat appartient au meilleur sous-ensemble autorise".
-
-### 5.2 Placement disperse des mines et fermes
-
-Localisation : src/Board/BoardGenerator.cpp, fonction selectDispersedCandidate.
-
-Definition dans le code :
-
-- si aucun batiment n'existe encore, tirage uniforme sur tous les candidats
-- sinon, on score chaque candidat selon son eloignement des batiments existants
-- puis on tire uniformement dans le meilleur sous-ensemble
-
-Score utilise :
-
-- 3.5 x distance au batiment le plus proche, quel que soit son type
-- 2.0 x distance au batiment le plus proche du meme type
-- 0.35 x distance moyenne a tous les batiments deja poses
-
-Parametres du sous-ensemble top-k :
-
-- si N est le nombre total de candidats, alors k = min(N, max(3, ceil(N / 6)))
+- tirage uniforme sur {0, 1, 2, 3}
+- interpretation : nombre de quarts de tour
 
 Domaine de definition :
 
-- ensemble des k meilleurs candidats selon le score de dispersion
+- 4 orientations discretes
 
-Modification importante :
+Modification :
 
-- ce n'est pas une alea purement uniforme dans l'espace de placement
-- le tirage est volontairement biaise vers les meilleures positions de dispersion
-- cette modification evite les clusters trop compacts tout en gardant de la variete
-- si aucun candidat espace n'existe, le code retombe sur un ensemble relache
-- si aucun candidat relache n'existe non plus, le placement final devient deterministe via un fallback central
+- l'eglise centrale est exclue de ce mecanisme et reste fixee a rotation 0
 
 Feature servie :
 
-- mieux repartir mines et fermes sur la carte
-- favoriser une proximite raisonnable entre types differents plutot que de regrouper systematiquement toutes les mines ensemble et toutes les fermes ensemble
+- varier visuellement mines et fermes sans changer leurs regles
 
-## 6. Permutation aleatoire uniforme
+Nature :
 
-### 6.1 Definition mathematique
+- loi usuelle stricte
 
-Pour une liste de taille n, une permutation aleatoire uniforme donne a chaque permutation possible la meme probabilite 1 / n!.
+### 4.1.3 Flip masks aleatoires des ressources publiques
 
-### 6.2 Ordre de pose des ressources publiques
-
-Localisation : src/Board/BoardGenerator.cpp, fonction buildPublicResourcePlacementRequests.
+Localisation : src/Board/BoardGenerator.cpp, buildPublicResourcePlacementRequests.
 
 Definition dans le code :
 
-- le generateur construit d'abord la liste des demandes de placement pour les mines et les fermes
-- puis la liste est melangee par std::shuffle avec le PRNG seed-driven du monde
-
-Parametres :
-
-- taille de la liste = num_mines + num_farms
-- dans la configuration fournie : 2 mines + 3 fermes, donc 5 requetes de placement
-
-Modification importante :
-
-- certaines requetes sont de meme type, donc plusieurs permutations differentes de la liste peuvent produire un ordre visuellement equivalent
-- du point de vue algorithmique, le melange reste un tirage uniforme sur les permutations de la liste interne
-
-Feature servie :
-
-- eviter un biais fixe de pose du style "toujours poser toutes les mines puis toutes les fermes"
-- rendre la carte moins previsible a seed differente
-
-## 7. Processus pseudo-aleatoires spatiaux continus discretises : value noise et bruit fractal
-
-Cette partie est le coeur de la generation du terrain. Ce n'est pas une loi de probabilite usuelle du type Poisson ou Gauss. C'est un processus pseudo-aleatoire spatial, continu dans sa definition d'echantillonnage, puis discretise au niveau des cellules du plateau.
-
-### 7.1 Source elementaire : hash pseudo-uniforme sur la grille
-
-Localisation : src/Board/BoardGenerator.cpp, fonctions mixSeed et hashValue.
-
-Definition dans le code :
-
-- pour chaque coin de grille entier (x, y), le code calcule un hash deterministe a partir de la seed et de la position
-- il conserve ensuite 24 bits de ce hash et les normalise dans l'intervalle [0, 1]
+- tirage uniforme sur {0, 1, 2, 3}
+- interpretation : aucun flip, horizontal, vertical, ou les deux
 
 Domaine de definition :
 
-- entree : (seed, x, y) avec x et y entiers
-- sortie : ensemble discret de 16777216 valeurs possibles entre 0 et 1
-
-Nature mathematique :
-
-- ce n'est pas une loi uniforme continue stricte
-- c'est une quasi-uniforme discrete 24 bits issue d'un hash deterministe
-- il n'y a pas de garantie mathematique stricte d'independance ou d'uniformite parfaite ; il s'agit d'une approximation pseudo-aleatoire adaptee au procedural
+- 4 etats discrets
 
 Feature servie :
 
-- fournir la matiere premiere aleatoire des champs de terrain
+- diversifier l'apparence des ressources publiques
 
-### 7.2 Value noise 2D
+Nature :
 
-Localisation : src/Board/BoardGenerator.cpp, fonction valueNoise.
+- loi usuelle stricte
+
+### 4.1.4 Placement uniforme parmi candidats ou parmi un top-k disperse
+
+Localisation : src/Board/BoardGenerator.cpp, selectDispersedCandidate et findValidBuildingPos.
 
 Definition dans le code :
 
-- on prend les 4 valeurs pseudo-aleatoires aux coins de la cellule de grille entourant le point reel (x, y)
-- on interpole ces 4 valeurs avec un smoothStep, puis deux lerp successifs
+- si aucune ressource publique n'est encore placee, le systeme choisit uniformement parmi toutes les cases candidates admissibles
+- sinon, il calcule un score de dispersion pour chaque candidat, trie les candidats par score decroissant, garde les meilleurs topCount, puis tire uniformement dans ce sous-ensemble
 
-Domaine de definition :
+Parametres et domaine :
 
-- entree : (x, y) dans R2
-- sortie : valeur reelle dans [0, 1]
+- support : ensemble dynamique des positions valides pour le batiment considere
+- topCount = min(nombre de candidats, max(3, (nombre de candidats + 5) / 6))
 
-Modification importante par rapport a des variables aleatoires independantes :
+Modification par rapport a une uniforme stricte :
 
-- les echantillons voisins sont fortement correles spatialement
-- la sortie est lisse, continue, et non i.i.d.
-- on est donc face a un champ pseudo-aleatoire spatial, pas a une suite de tirages independants
+- la loi n'est uniforme que sur le sous-ensemble de tete, pas sur l'ensemble complet des candidats
+- elle est donc conditionnelle et top-k, pas uniforme globale
 
 Feature servie :
 
-- produire des structures de terrain naturelles plutot que du "sel et poivre"
+- eviter le clustering des mines et fermes, tout en conservant de la variete entre parties partageant des contraintes proches
 
-### 7.3 Bruit fractal de type fBm
+Nature :
 
-Localisation : src/Board/BoardGenerator.cpp, fonction fractalNoise.
+- variante maison d'un tirage uniforme conditionnel
+
+### 4.1.5 Spawn joueur et spawn IA
+
+Localisation : src/Board/BoardGenerator.cpp, findSpawnCell.
 
 Definition dans le code :
 
-- somme normalisee de plusieurs octaves de value noise
-- a chaque octave, la frequence est multipliee par 2
-- l'amplitude est divisee par 2
-- les amplitudes commencent a 0.5 puis 0.25, 0.125, etc.
-
-Forme qualitative :
-
-- octave 0 : amplitude 0.5, frequence 1
-- octave 1 : amplitude 0.25, frequence 2
-- octave 2 : amplitude 0.125, frequence 4
-- le tout est renormalise par la somme des amplitudes
+- le systeme construit d'abord l'ensemble des cases admissibles : case dans le cercle, non eau, sans batiment, et dans la bande horizontale autorisee pour le camp
+- il tire ensuite uniformement parmi ces cases
 
 Domaine de definition :
 
-- entree : (x, y) dans R2, nombre d'octaves entier >= 1
-- sortie : valeur reelle normalisee, pratiquement dans [0, 1]
+- support fini dynamique dependant de la carte generee et des batiments publics deja poses
 
-Parametres effectifs dans la configuration courante :
+Modification :
 
-- terrain_noise_scale = 14, puis clamp runtime a au moins 5
-- terrain_octaves = 3, puis clamp runtime a au moins 1
-
-Nature mathematique :
-
-- processus spatial pseudo-aleatoire corrige par octaves
-- plus proche d'un bruit fractal ou d'une fBm pratique que d'une loi classique isolee
+- la loi est uniforme seulement sur l'ensemble admissible
+- en cas d'absence de candidat, le code retombe de facon deterministe sur la premiere case valide parcourue
 
 Feature servie :
 
-- former les grandes masses de terre et d'eau avec une texture multi-echelle
+- faire varier le point de depart tout en conservant une zone de depart equitable
 
-### 7.4 Derivation de deux seeds secondaires de bruit
+Nature :
 
-Localisation : src/Board/BoardGenerator.cpp, fonction generate.
+- uniforme discrete conditionnelle sur sous-ensemble dynamique
+
+### 4.1.6 Point d'entree diagonal du front meteo
+
+Localisation : src/Systems/WeatherSystem.cpp, randomElement et entryEdgeForDirection.
 
 Definition dans le code :
 
-- le PRNG std::mt19937 seed par worldSeed est interroge deux fois par sortie brute
-- cela produit dirtNoiseSeed et waterNoiseSeed
+- pour une direction diagonale, le front peut entrer par l'un des deux bords compatibles, avec equiprobabilite 1/2 - 1/2
+- pour une direction cardinale, le bord d'entree est deterministe
 
 Domaine de definition :
 
-- deux entiers 32 bits issus de la sortie du generateur
-
-Interpretation :
-
-- ce ne sont pas deux nouvelles lois visibles au gameplay
-- ce sont deux tirages pseudo-aleatoires internes servant a decorreler les champs de terre et d'eau
+- support de taille 2 pour les diagonales, support de taille 1 pour les cardinales
 
 Feature servie :
 
-- eviter que terre et eau reutilisent exactement la meme texture procedurale
+- varier geometriquement l'entree des fronts diagonaux
 
-### 7.5 Transformation des champs de bruit en scores de terrain
+Nature :
 
-Localisation : src/Board/BoardGenerator.cpp, fonction generate.
+- loi usuelle stricte, mais conditionnelle au fait que la direction choisie soit diagonale
 
-Pour la terre :
+### 4.1.7 Couverture du front meteo
 
-- score = 0.72 x bruit macro + 0.28 x bruit detail - edgePenalty
-- edgePenalty = max(0, radialDistance - 0.82) x 0.35
+Localisation : src/Systems/WeatherSystem.cpp, trySpawnFront.
 
-Pour l'eau :
+Definition dans le code :
 
-- score = 0.67 x bruit macro + 0.33 x bruit detail + 0.08 x waterRingBias
-- waterRingBias = max(0, 1 - abs(radialDistance - 0.58))
+- tirage uniforme entier entre 10 et 30 dans la configuration actuelle
+- cette valeur est interpretee comme un pourcentage de cellules visibles a couvrir approximativement
+
+Domaine de definition :
+
+- entiers de [10, 30]
+
+Modification :
+
+- la variable tiree est discrete, alors que la notion geometrique finale de surface couverte devient continue apres conversion en aire elliptique
+
+Feature servie :
+
+- faire varier la taille globale du front de brouillard
+
+Nature :
+
+- loi usuelle stricte, suivie d'une transformation geometrique
+
+### 4.1.8 Aspect ratio du front meteo
+
+Localisation : src/Systems/WeatherSystem.cpp, trySpawnFront.
+
+Definition dans le code :
+
+- tirage uniforme entier entre 180 et 260, puis division par 100
+- le support effectif est donc l'ensemble discret 1.80, 1.81, ..., 2.60
+
+Domaine de definition :
+
+- 81 valeurs reelles discretisees au centieme
+
+Modification :
+
+- ce n'est pas une uniforme continue sur [1.80, 2.60]
+- c'est une uniforme discrete sur un maillage de pas 0.01
+
+Feature servie :
+
+- varier l'allongement de l'ellipse qui modelise le front
+
+Nature :
+
+- uniforme discrete transformee
+
+### 4.1.9 Choix uniforme parmi les meilleurs retours de l'infernal
+
+Localisation : src/Systems/InfernalSystem.cpp, chooseReturnBorderCell.
+
+Definition dans le code :
+
+- le systeme calcule d'abord tous les bords de sortie atteignables
+- il conserve uniquement ceux dont la distance est minimale
+- il tire ensuite uniformement parmi ces ex aequo
+
+Domaine de definition :
+
+- support fini dynamique, compose des seules cases de bord optimales
+
+Modification :
+
+- tirage uniforme sur l'ensemble argmin, pas sur tous les retours possibles
+
+Feature servie :
+
+- casser les ex aequo quand plusieurs sorties de meme qualite existent
+
+Nature :
+
+- uniforme discrete conditionnelle sur un ensemble d'optimums
+
+### 4.1.10 Tirages aleatoires du MCTS
+
+Localisation : src/AI/AIMCTS.cpp.
+
+Trois usages distincts :
+
+1. expansion : choix uniforme d'un enfant parmi ceux qui viennent d'etre crees
+2. rollout : choix uniforme d'une piece du royaume actif
+3. rollout : choix uniforme d'un coup parmi les coups legaux de la piece retenue
+
+Domaine de definition :
+
+- expansion : indices des enfants du noeud, avec au plus 30 enfants car le code tronque aux MAX_CHILDREN_PER_NODE les plus pertinents
+- rollout piece : indices des pieces du royaume actif
+- rollout move : indices des coups legaux de la piece retenue
 
 Modifications importantes :
 
-- la loi de base n'est pas utilisee telle quelle
-- elle est combinee en macro + detail avec poids differents selon le type de terrain
-- si ce sous-ensemble est vide dans la zone preferee, le code degrade vers un fallback deterministe : d'abord la premiere case admissible trouvee sur le plateau, sinon le centre du board
-- elle est deformee radialement : penalite vers les bords pour la terre, bonus anneau pour l'eau
-- certaines colonnes proches des zones de spawn sont integralement protegees et exclues de la candidature terrain
+- l'expansion n'est uniforme que sur le sous-ensemble d'actions deja filtrees par pertinence puis tronquees au top 30
+- le rollout n'est pas uniforme sur l'ensemble global de tous les coups legaux du plateau ; il est uniforme sur les pieces, puis uniforme sur les coups de la piece choisie
+- le rollout abandonne apres 5 tentatives infructueuses de piece sans coup
 
 Feature servie :
 
-- obtenir des patches de terre et de petites etendues d'eau compatibles avec la jouabilite
+- explorer l'arbre et generer des simulations rapides
 
-### 7.6 Seuils, masques, elagage et contraintes topologiques
+Nature :
 
-Localisation : src/Board/BoardGenerator.cpp, fonctions selectThreshold, pruneSparseMask, extractComponents, selectComponents, isConnected.
+- uniforme discrete conditionnelle et non reproductible par worldSeed
+- PRNG initialisee par std::random_device dans un mt19937 thread_local
 
-Definition dans le code :
+## 4.2 Permutation aleatoire uniforme
 
-- les scores sont convertis en masques booleens par seuil quantile-like
-- couverture cible terre : clamp entre 0% et 40%
-- couverture cible eau : clamp entre 0% et 12%
-- dans la configuration fournie : 14% de terre, 4% d'eau
-
-Puis le code applique successivement :
-
-- suppression des cellules trop isolees
-- extraction de composantes connexes en voisinage 8
-- selection des meilleures composantes par score moyen
-- limitation du nombre et de la taille des regions selon les rayons configures
-- test de connectivite du plateau : une region d'eau candidate est annulee si elle coupe la connexion terre entre les deux camps
-
-Parametres effectifs de la configuration courante :
-
-- num_dirt_blobs = 6
-- dirt_blob_min_radius = 2
-- dirt_blob_max_radius = 5
-- num_lakes = 3
-- lake_min_radius = 2
-- lake_max_radius = 3
-
-Interpretation mathematique :
-
-- la carte finale n'est pas un simple echantillonnage direct d'un champ aleatoire
-- c'est un champ pseudo-aleatoire ensuite tronque, filtre, regularise morphologiquement, puis contraint topologiquement
-
-Feature servie :
-
-- garantir une carte esthetique, jouable et traversable
-
-### 7.7 Reproductibilite du systeme de terrain
-
-Les tests de tests/TestMain.cpp imposent explicitement que :
-
-- une meme worldSeed reproduit exactement le meme terrain, les memes batiments publics et les memes spawns
-- une worldSeed differente change le monde genere
-
-Conclusion :
-
-- le processus est aleatoire lors du choix initial de la seed, mais entierement deterministe ensuite
-
-## 8. Sortie brute de PRNG 64 bits pour le sel multijoueur
-
-### 8.1 Definition mathematique
-
-Le code n'utilise pas une distribution explicite de la bibliotheque standard. Il utilise directement la sortie d'un generateur std::mt19937_64. Sous le modele habituel d'usage, cela s'interprete comme un tirage pseudo-aleatoire sur l'ensemble des entiers 64 bits.
-
-### 8.2 Generation du sel de mot de passe
-
-Localisation : src/Multiplayer/PasswordUtils.hpp, fonction generateSalt.
+Localisation : src/Board/BoardGenerator.cpp, buildPublicResourcePlacementRequests.
 
 Definition dans le code :
 
-- source d'entropie : std::random_device
-- PRNG : std::mt19937_64
-- deux sorties brutes de 64 bits sont concatenees
-- le resultat final est une chaine hexadecimale de 32 caracteres + 32 caracteres = 128 bits representes en hexadecimal
+- une fois chaque requete de placement mine ou ferme preparee avec sa rotation et son flip, le vecteur des requetes est melange par std::shuffle
 
 Domaine de definition :
 
-- couple (X1, X2) avec X1 et X2 dans {0, ..., 2^64 - 1}
-- representation finale : chaine hexadecimale 128 bits
+- ensemble des permutations du vecteur des requetes de placement
 
-Modification importante :
+Modification :
 
-- ce n'est pas une loi uniforme continue ni meme une distribution objet C++
-- c'est une sortie brute de PRNG assimilee a une uniforme discrete sur 64 bits, repetee deux fois
+- aucune sur le mecanisme de permutation lui-meme
+- en revanche, la permutation agit sur des objets deja porteurs de tirages precedents de rotation et de flip
 
 Feature servie :
 
-- generer un sel pour le hachage de mot de passe LAN
-
-Note technique utile :
-
-- le mecanisme est pseudo-aleatoire et non cryptographique au sens strict, car il repose sur mt19937_64
-
-## 9. Pseudo-aleatoire deterministe non assimilable a une loi usuelle
-
-Ces mecanismes affectent le rendu ou la compatibilite, mais ne sont pas des tirages aleatoires effectifs au moment de l'execution une fois la seed connue.
-
-### 9.1 Flip du terrain par hash deterministe
-
-Localisation : src/Board/BoardGenerator.cpp, fonction terrainFlipMaskFor.
-
-Definition dans le code :
-
-- on melange worldSeed, type de cellule et position (x, y)
-- on extrait les 2 bits faibles du hash melange
-- support obtenu : {0, 1, 2, 3}
+- varier l'ordre de pose des ressources publiques, donc la configuration finale du plateau
 
 Nature :
 
-- aspect quasi-uniforme sur 2 bits
-- mais resultat completement deterministe pour une cellule donnee
+- permutation uniforme usuelle
 
-Feature servie :
+## 4.3 Loi de Bernoulli
 
-- varier l'orientation visuelle du terrain sans casser la reproductibilite
-
-### 9.2 Rotation et flips legacy des batiments publics charges depuis une sauvegarde
-
-Localisation : src/Core/GameEngine.cpp, fonctions deriveLegacyPublicBuildingRotation et deriveLegacyPublicBuildingFlipMask.
+Localisation : src/Systems/InfernalSystem.cpp, chooseTargetKingdom.
 
 Definition dans le code :
 
-- derivees par hash deterministe depuis worldSeed, type de batiment et position du batiment
-- rotation : extraction de 2 bits, donc support {0, 1, 2, 3}
-- flipMask : extraction de 2 bits, donc support {0, 1, 2, 3}
+- si les deux royaumes ont au moins une cible admissible, le systeme tire un booleen qui choisit White avec la probabilite p = dette_blanche / dette_totale, et Black avec la probabilite 1 - p
 
-Nature :
+Domaine de definition :
 
-- pas d'alea runtime au moment du chargement si les entrees sont identiques
-- usage pseudo-aleatoire uniquement pour reconstruire un rendu stable des anciennes sauvegardes
+- {White, Black}
+
+Parametres effectifs :
+
+- p varie dynamiquement avec la dette sanguine accumulee par chaque royaume
+- si la dette totale vaut 0, le code prend p = 0.5
+
+Modification :
+
+- le tirage Bernoulli n'a lieu que si les deux camps sont eligibles ; sinon la cible est choisie de maniere deterministe
 
 Feature servie :
 
-- compatibilite avec les anciennes saves ne stockant pas directement rotation et flip
+- orienter preferentiellement l'infernal vers le camp qui a accumule le plus de dette sanguine
 
-### 9.3 Seed legacy derivee par hash
+Nature :
 
-Localisation : src/Core/GameEngine.cpp, fonction deriveLegacyWorldSeed.
+- loi usuelle stricte, mais conditionnelle a l'eligibilite des deux royaumes
+
+## 4.4 Loi categorielle / loi discrete generale ponderee
+
+Definition mathematique de reference : variable discrete sur un support fini dont chaque categorie recoit un poids positif arbitraire, puis une probabilite proportionnelle a ce poids.
+
+### 4.4.1 Direction du front meteo
+
+Localisation : src/Systems/WeatherSystem.cpp, sampleDirection.
 
 Definition dans le code :
 
-- hash FNV-1a like sur gameName, turnNumber, mapRadius et activeKingdom
-- resultat masque sur 31 bits positifs, avec 0 remplace par 1
+- tirage parmi 8 directions : North, South, East, West, NorthEast, NorthWest, SouthEast, SouthWest
+- poids lus depuis la config meteo
 
-Nature :
+Parametres actuels :
 
-- totalement deterministe
-- ce n'est pas une variable aleatoire a l'execution ; c'est une reconstruction de seed a partir d'un etat legacy
+- tous les poids valent 1 dans master_config.json
+- dans la configuration actuelle, cette loi categorielle se reduit donc a une uniforme sur 8 directions, soit 12.5 % chacune
 
 Feature servie :
 
-- restaurer un comportement seed-driven meme pour d'anciennes sauvegardes qui ne stockaient pas explicitement la worldSeed
+- choisir l'orientation globale du prochain front
 
-## 10. Mecanisme nomme "randomness" mais non aleatoire dans le runtime actuel
+Nature :
 
-### 10.1 Variation strategique top-2 de l'IA
+- loi discrete generale, uniforme de fait dans la config actuelle
+
+### 4.4.2 Type de recompense du coffre
+
+Localisation : src/Systems/ChestSystem.cpp, sampleReward.
+
+Definition dans le code :
+
+- tirage parmi 3 categories : Gold, MovementPointsMaxBonus, BuildPointsMaxBonus
+- les poids changent selon le stade de la partie
+
+Parametres actuels effectifs :
+
+- early game, avant le tour 10 : poids 8, 3, 3
+- late game, a partir du tour 10 : poids 4, 6, 6
+
+Probabilites actuelles quand tous les poids sont actifs :
+
+- early game : Gold 57.14 %, Movement 21.43 %, Build 21.43 %
+- late game : Gold 25 %, Movement 37.5 %, Build 37.5 %
+
+Modification :
+
+- si la somme des poids est nulle ou negative, le code force un retour Gold, donc bascule sur une issue deterministe
+
+Feature servie :
+
+- faire evoluer la nature moyenne des coffres entre debut et fin de partie
+
+Nature :
+
+- loi categorielle usuelle avec changement de parametres selon la phase
+
+### 4.4.3 Case d'apparition du coffre
+
+Localisation : src/Systems/ChestSystem.cpp, trySpawnChest.
+
+Definition dans le code :
+
+- le support est l'ensemble des cases visibles, non eau, vides, sans batiment ni objet, et suffisamment eloignees des deux rois
+- chaque case recoit un poids egal a 1 + centralite + contestation
+
+Definition des poids :
+
+- centralite favorise les cases proches du centre de la carte
+- contestation favorise les cases dont les distances aux deux rois sont proches
+- la distance minimale aux rois vaut 6 dans la configuration effective actuelle
+
+Modification :
+
+- la loi est categorielle sur un support filtre dynamiquement par l'etat du plateau
+
+Feature servie :
+
+- faire apparaitre les coffres dans des zones a la fois accessibles, centrales et contestables
+
+Nature :
+
+- loi discrete generale ponderee sur support dynamique
+
+### 4.4.4 Type de cible de l'infernal au spawn initial
+
+Localisation : src/Systems/InfernalSystem.cpp, chooseSpawnOptionForKingdom.
+
+Definition dans le code :
+
+- tirage parmi Queen, Rook, Bishop, Knight, Pawn
+- un type absent du royaume cible recoit un poids nul
+
+Parametres actuels quand tous les types sont disponibles :
+
+- Queen 38 %
+- Rook 26 %
+- Bishop 14 %
+- Knight 14 %
+- Pawn 8 %
+
+Modification :
+
+- si le type tire ne donne aucune option de spawn atteignable depuis un bord, le type est retire, puis le tirage recommence parmi les types restants
+- la loi reelle est donc une categorielle avec elimination conditionnelle, pas une simple categorielle en une etape
+
+Feature servie :
+
+- faire emerger en priorite des proies de grande valeur, tout en respectant les contraintes de reachability depuis le bord
+
+Nature :
+
+- loi discrete generale modifiee par rejet et elimination
+
+### 4.4.5 Option de spawn initial de l'infernal
+
+Localisation : src/Systems/InfernalSystem.cpp, chooseSpawnOptionForKingdom.
+
+Definition dans le code :
+
+- une fois le type de cible choisi, le systeme construit toutes les paires atteignables (piece cible, case de bord de spawn)
+- chaque paire recoit un poids egal a max(1, 2 * diametre - distance + 1)
+
+Domaine de definition :
+
+- ensemble dynamique des couples atteignables piece cible / case de bord
+
+Modification :
+
+- la distribution est fortement biaisee vers les spawns qui donnent des trajets plus courts vers la cible
+
+Feature servie :
+
+- faire apparaitre l'infernal a un bord plausible et relativement proche de sa proie preferee
+
+Nature :
+
+- loi discrete generale ponderee sur support dynamique
+
+### 4.4.6 Reacquisition de cible par l'infernal
+
+Localisation : src/Systems/InfernalSystem.cpp, chooseReplacementTarget.
+
+Definition dans le code :
+
+- le type de cible est retire de la meme famille categorielle, mais avec un bonus de poids si le type correspond a preferredTargetType
+- si un type est prefere et disponible, son poids est double
+- une fois le type choisi, la piece cible precise est tiree parmi les cibles atteignables de ce type, avec un poids de proximite identique au spawn initial
+
+Modification :
+
+- doublement du poids de la categorie preferee
+- elimination conditionnelle des types sans cible atteignable
+
+Feature servie :
+
+- conserver une coherence de comportement chez l'infernal tout en lui permettant de retomber sur une autre cible atteignable quand sa cible initiale disparait
+
+Nature :
+
+- loi discrete generale ponderee, modifiee par un biais de preference et une elimination conditionnelle
+
+## 4.5 Loi de Poisson
+
+Localisation : src/Systems/InfernalSystem.cpp, trySpawnInfernal.
+
+Definition dans le code :
+
+- a chaque tentative eligible, le systeme tire un entier N suivant une loi de Poisson
+- le spawn a lieu si et seulement si N >= 1
+
+Parametres effectifs :
+
+- lambda de base : 0.020
+- augmentation par unite de dette totale : 0.012
+- plafond : 0.250
+
+Forme de la variable pilotee par le gameplay :
+
+- le jeu n'utilise pas la valeur exacte de N au-dela du seuil 1
+- au niveau gameplay, la Poisson est donc immediatement transformee en evenement boolen de probabilite 1 - exp(-lambda)
+
+Plage de probabilite dans la configuration actuelle :
+
+- au minimum, avec dette totale nulle : environ 1.98 % par tentative eligible
+- au maximum, au plafond lambda = 0.250 : environ 22.12 % par tentative eligible
+
+Modifications et garde-fous autour de la loi :
+
+- pas de tentative avant le tour minimal 3
+- pas de tentative si un infernal est deja actif
+- cooldown deterministe entre apparitions
+- retry deterministe d'un tour si aucun spawn valide n'a pu etre materialise
+
+Feature servie :
+
+- rendre l'apparition infernale rare mais de plus en plus probable quand la dette sanguine s'accumule
+
+Nature :
+
+- loi de Poisson usuelle, mais aussitot seuillee en evenement binaire
+
+## 4.6 Loi normale, tronquee et discretisee
+
+Localisation : src/Systems/XPSystem.cpp, sampleProfile.
+
+Definition dans le code :
+
+- pour chaque source d'XP, le systeme tire d'abord une loi normale de moyenne mean et d'ecart type sigma
+- sigma vaut max(1, mean * sigmaMultiplier)
+- l'echantillon continu est ensuite clamp dans l'intervalle [max(minimum, mean - delta), max(minimum, mean + delta)], avec delta = sigma * clampMultiplier
+- le resultat est enfin arrondi au plus proche entier
+
+Domaine de definition general :
+
+- une variable discrete a valeurs entieres, obtenue a partir d'une gaussienne continue puis tronquee et arrondie
+
+Conclusion mathematique :
+
+- la loi runtime n'est pas une gaussienne pure
+- c'est une gaussienne tronquee puis discretisee
+
+Sous-lois actuelles par source :
+
+- kill_pawn : moyenne 20, sigma 3.6, clamp continu [12.8, 27.2], support entier pratique 13 a 27
+- kill_knight : moyenne 50, sigma 8, clamp continu [34, 66], support entier 34 a 66
+- kill_bishop : moyenne 50, sigma 8, clamp continu [34, 66], support entier 34 a 66
+- kill_rook : moyenne 100, sigma 12, clamp continu [76, 124], support entier 76 a 124
+- kill_queen : moyenne 300, sigma 30, clamp continu [240, 360], support entier 240 a 360
+- destroy_block : moyenne 10, sigma 1.5, clamp continu [7, 13], support entier 7 a 13
+- arena_per_turn : moyenne 10, sigma 1.5, clamp continu [7, 13], support entier 7 a 13
+
+Feature servie :
+
+- faire varier les recompenses d'XP tout en gardant une plage lisible, equilibrable et facilement bornable
+
+Nature :
+
+- loi normale modifiee, bornee et discretisee
+
+## 4.7 Loi de Weibull, discretisee et bornee inferieurement
+
+Localisation : src/Systems/ChestSystem.cpp, sampleSpawnDelay.
+
+Definition dans le code :
+
+- le delai brut suit une loi de Weibull
+- le tirage est ensuite arrondi a l'entier le plus proche
+- le resultat final est force a etre au moins egal au cooldown de respawn
+
+Parametres effectifs actuels :
+
+- shape : 1.80
+- scale : 6 tours
+- cooldown minimum final : 4 tours
+
+Domaine de definition code :
+
+- entiers >= 4
+
+Modification par rapport a une Weibull usuelle :
+
+- discretisation par arrondi
+- troncature inferieure via un plancher deterministic a 4
+
+Feature servie :
+
+- espacer les apparitions de coffres avec une variabilite non purement uniforme, tout en garantissant un temps de repos minimal
+
+Nature :
+
+- loi de Weibull modifiee par arrondi et plancher
+
+## 4.8 Loi Gamma, translatee et discretisee
+
+Localisation : src/Systems/WeatherSystem.cpp, sampleGammaTurns et scheduleNextSpawn.
+
+Definition dans le code :
+
+- le systeme tire une loi Gamma continue
+- il applique ensuite un ceil
+- il ajoute enfin un minimumTurns fixe
+- le tout est converti en demi-tours car la meteo avance sur 2 steps par tour
+
+Parametres effectifs actuels :
+
+- shape : 2.40
+- scale : 2.20
+- minimumTurns ajoute : 5
+- kStepsPerTurn : 2
+
+Domaine de definition :
+
+- au niveau des tours, entiers >= 5, avec 6 comme premier resultat pratique attendu pour une Gamma strictement positive
+- au niveau du scheduler interne, multiples de 2 demi-tours
+
+Modification par rapport a une Gamma usuelle :
+
+- translation par un minimum fixe
+- discretisation par ceil
+- conversion ulterieure en demi-tours
+
+Feature servie :
+
+- piloter le delai entre deux fronts meteo
+
+Nature :
+
+- loi Gamma modifiee et discretisee
+
+Important :
+
+- les parametres weather.duration_gamma_shape_times_100 et weather.duration_gamma_scale_times_100 existent dans GameConfig et dans master_config.json, mais ils ne sont pas utilises par le code runtime actuel
+- la duree effective d'un front en jeu n'est donc pas tiree directement par une loi Gamma ; elle est deduite de la geometrie du front, de sa vitesse et des autres tirages de spawn
+
+## 4.9 Loi log-normale, puis clamp sur l'opacite meteo
+
+Localisation : src/Systems/WeatherSystem.cpp, sampleLogNormalCell et concealmentAlpha.
+
+Definition dans le code :
+
+- pour chaque cellule du front, le moteur tire un multiplicateur de densite suivant une loi log-normale
+- ce multiplicateur est applique a une alpha de base
+- le resultat est ensuite clamp entre alpha_min et alpha_max
+- l'alpha finale du pixel de brouillard est encore multipliee par edgeFade, qui depend de la distance au bord du front
+
+Parametres effectifs actuels :
+
+- mu : -0.12
+- sigma : 0.35
+- alpha_base : 0.48
+- alpha_min : 0.22
+- alpha_max : 0.82
+
+Domaine de definition :
+
+- multiplicateur log-normal brut : reel strictement positif
+- alpha locale apres clamp : reel de [0.22, 0.82]
+- alpha finale apres edgeFade : reel de [0, 1]
+
+Modification par rapport a une log-normale usuelle :
+
+- la quantite jouee n'est pas directement la sortie log-normale, mais une transformation clamp(alpha_base * densite)
+- la sortie est donc bornee et absorbe les grandes queues de la log-normale
+
+Feature servie :
+
+- varier localement l'opacite du brouillard, afin d'eviter un front visuellement trop homogene
+
+Nature :
+
+- loi log-normale modifiee par transformation affine partielle et clamp
+
+## 4.10 Loi Beta, echantillonnee via Gamma puis transformee
+
+Localisation : src/Board/BoardGenerator.cpp, sampleBeta et terrainBrightnessFor.
+
+Definition dans le code :
+
+- le moteur echantillonne une Beta(alpha, beta) par la methode classique Gamma / Gamma
+- cette Beta ne devient pas directement la luminosite finale
+- si l'echantillon est >= 0.90, la luminosite reste a 100 %
+- sinon l'echantillon est renormalise par 0.90, eleve a la puissance 1.8, puis remappe lineairement dans l'intervalle [0.68, 1.00]
+- la luminosite est enfin convertie en octet 0 a 255
+
+Parametres effectifs actuels :
+
+- alpha : 7.0
+- beta : 2.0
+- seuil de conservation pleine luminosite : 0.90
+- luminosite minimale : 0.68
+- exposant de contraste : 1.8
+
+Domaine de definition :
+
+- echantillon Beta brut : reel de [0, 1]
+- luminosite finale normalisee : reel de [0.68, 1.00]
+- luminosite stockee : entier 173 a 255 environ
+
+Modification par rapport a une Beta usuelle :
+
+- la Beta n'est qu'une variable intermediaire
+- la loi finale jouee sur la luminosite est une Beta transformee, censuree au-dessus de 0.90, puis non lineairement contrastree
+
+Feature servie :
+
+- introduire des variations fines de teinte sur l'herbe sans sortir d'une palette proche du vert standard
+
+Nature :
+
+- loi Beta modifiee de maniere substantielle
+
+## 4.11 Loi lineaire par morceaux
+
+Localisation : src/Systems/WeatherSystem.cpp, sampleEdgePosition.
+
+Definition dans le code :
+
+- le point d'entree du front sur le bord est tire selon une loi continue lineaire par morceaux sur l'intervalle [0, diametre - 1]
+- les noeuds sont 0 %, 25 %, 50 %, 75 %, 100 % du bord
+- les poids donnent plus de masse au centre qu'aux coins
+
+Parametres effectifs actuels :
+
+- coins : 0.70
+- quarts : 1.80
+- centre exact : 1.98
+
+Domaine de definition :
+
+- reel continu dans [0, diametre - 1]
+
+Modification :
+
+- aucune sur la loi lineaire par morceaux elle-meme
+- mais la variable n'est ensuite interpretee geometriquement qu'en position de bord, donc son effet passe par la projection du front sur la carte
+
+Feature servie :
+
+- faire entrer plus souvent les fronts par des zones laterales relativement centrales plutot que par les coins purs
+
+Nature :
+
+- loi standard explicite de la bibliotheque C++
+
+## 4.12 Processus pseudo-aleatoires spatiaux et autres mecanismes non standards
+
+### 4.12.1 Terrain : value noise puis fBm
+
+Localisation : src/Board/BoardGenerator.cpp, hashValue, valueNoise, fractalNoise, generate.
+
+Definition dans le code :
+
+- deux seeds internes sont d'abord tires depuis le mt19937 principal du monde : une pour la terre, une pour l'eau
+- hashValue produit un pseudo-uniforme discret a partir de la seed et de la position
+- valueNoise interpole bilineairement ces valeurs sur la grille
+- fractalNoise empile plusieurs octaves avec amplitude divisee par 2 et frequence multipliee par 2
+- le score de terre et le score d'eau sont ensuite combines, compares a des seuils choisis pour atteindre des couvertures cibles, puis filtres par pruning de composantes et test de connectivite
+
+Nature probabiliste :
+
+- ce n'est pas une suite de variables independantes identiquement distribuees
+- c'est un champ pseudo-aleatoire spatialement correle, seed-driven
+
+Domaines derives :
+
+- les scores sont reels
+- les types finaux de cellule sont des variables discretes parmi Grass, Dirt, Water, mais obtenues par seuillage et contraintes globales, pas par loi elementaire simple
+
+Feature servie :
+
+- generer un relief tactique coherent, varie et reproductible
+
+### 4.12.2 Bruit de forme du front meteo
+
+Localisation : src/Systems/WeatherSystem.cpp, valueNoise et concealmentAlpha.
+
+Definition dans le code :
+
+- le bord du front n'est pas une ellipse parfaite
+- un value noise deterministe, calibre par shapeSeed, cellSpan et amplitude, deforme la frontiere effective cellule par cellule
+
+Parametres effectifs actuels :
+
+- cellSpan : 6
+- amplitude : 100 %
+
+Nature probabiliste :
+
+- champ pseudo-aleatoire correle, deterministe a seed fixe
+
+Feature servie :
+
+- casser la regularite geometrique du front et rendre le brouillard plus organique
+
+### 4.12.3 Teinte locale du brouillard
+
+Localisation : src/Systems/WeatherSystem.cpp, concealmentShade.
+
+Definition dans le code :
+
+- un hash pseudo-uniforme par cellule module legerement la teinte de gris du brouillard
+- la teinte est ensuite assombrie selon l'alpha, puis clamp entre 160 et 225
+
+Domaine de definition :
+
+- niveau de gris entier dans [160, 225]
+
+Nature probabiliste :
+
+- pseudo-uniforme deterministe par hachage, pas loi usuelle explicite
+
+Feature servie :
+
+- eviter un voile de brouillard trop plat visuellement
+
+### 4.12.4 Variantes visuelles par hachage deterministe
 
 Localisation :
 
-- src/AI/AIStrategy.cpp, fonction computePlan
-- src/Config/AIConfig.cpp
-- assets/config/ai_params.json
+- src/Board/BoardGenerator.cpp, terrainFlipMaskFor
+- src/Core/GameEngine.cpp, deriveLegacyPublicBuildingRotation et deriveLegacyPublicBuildingFlipMask
 
 Definition dans le code :
 
-- si au moins deux objectifs existent et si randomness > 0
-- si l'ecart de score entre top-1 et top-2 est < 10
-- alors l'IA choisit top-2 uniquement quand turnNumber modulo 3 vaut 0
+- certaines variantes visuelles ne sont pas tirees par un PRNG a l'execution immediate, mais derivees deterministiquement d'un hash melangeant worldSeed, type, position ou metadonnees de batiment
 
-Pourquoi ce n'est pas une vraie variable aleatoire :
+Nature probabiliste :
 
-- aucun tirage aleatoire n'est effectue
-- la decision depend uniquement du numero de tour
-- a configuration courante, randomness vaut 0.0, donc le bloc ne s'active meme pas
+- pseudo-random deterministe, a support fini, mais pas echantillonnage explicite d'une loi standard
 
 Feature servie :
 
-- intention de creer une legere variete strategique sur les egalites ou quasi-egalites
+- donner de la variete visuelle stable et reproductible
+- reconstituer proprement l'apparence des anciennes sauvegardes
+
+### 4.12.5 Sorties brutes de PRNG utilisees comme seeds internes
+
+Localisation :
+
+- src/Board/BoardGenerator.cpp : dirtNoiseSeed et waterNoiseSeed
+- src/Systems/WeatherSystem.cpp : shapeSeed et densitySeed
+
+Definition dans le code :
+
+- le moteur reutilise parfois directement la sortie brute d'un mt19937 seed-driven pour fabriquer une nouvelle seed interne
+
+Domaine de definition :
+
+- entier 32 bits du generateur sous-jacent
+
+Nature probabiliste :
+
+- assimilable a une uniforme discrete sur l'espace de sortie du PRNG, mais employee ici comme mecanisme d'amorcage interne plutot que comme variable de gameplay visible
+
+Feature servie :
+
+- decorreler differents sous-processus aleatoires tout en restant deterministe a worldSeed fixe
+
+## 4.13 Hors gameplay strict : generation de sel multijoueur
+
+Localisation : src/Multiplayer/PasswordUtils.hpp, generateSalt.
+
+Definition dans le code :
+
+- le systeme instancie un mt19937_64 avec std::random_device
+- il prend deux sorties brutes successives du generateur
+- il les convertit en hexadecimal et les concatene
+
+Domaine de definition :
+
+- chaine hexadecimale sur 128 bits issus de deux sorties 64 bits
+
+Modification :
+
+- aucune loi standard explicite n'est echantillonnee ; il s'agit de sorties brutes de PRNG
+- le mecanisme n'est pas cryptographiquement robuste au sens d'un CSPRNG, puisqu'il repose sur mt19937_64
+
+Feature servie :
+
+- fournir un sel de session pour le digest de mot de passe multijoueur LAN
+
+Nature :
+
+- pseudo-uniforme 64 bits repete deux fois, hors gameplay
+
+## 4.14 Faux amis, parametres inutilises ou comportements nommes aleatoires mais non stochastiques
+
+### 4.14.1 Parametre ai.randomness
+
+Localisation :
+
+- src/AI/AIStrategy.cpp
+- src/Config/AIConfig.cpp
+- assets/config/master_config.json et assets/config/ai_params.json
+
+Etat actuel :
+
+- le parametre randomness est bien charge et borne dans [0, 1]
+- la configuration courante le fixe a 0.0
+- meme si sa valeur etait > 0, le comportement code n'utiliserait pas un tirage aleatoire : il choisirait parfois le second objectif sur la base deterministe de turnNumber % 3 quand l'ecart de score entre top 1 et top 2 est < 10
 
 Conclusion :
 
-- ce mecanisme ne doit pas etre classe parmi les lois aleatoires effectivement utilisees dans le jeu actuel
+- ce champ ne correspond pas, dans le runtime actuel, a une vraie loi aleatoire
+- c'est un gate de variation deterministe, pas une variable aleatoire usuelle
 
-## 11. Lois usuelles recherchees explicitement mais absentes du code runtime
+### 4.14.2 Parametres weather.duration_gamma_*
 
-La recherche exhaustive dans src/, tests/, assets/config/ et le balayage complementaire du depot n'ont revele aucun usage runtime de :
+Localisation :
 
-- loi de Bernoulli
-- loi binomiale
-- loi geometrique
-- loi hypergeometrique
-- loi de Poisson
-- loi normale / gaussienne
-- loi exponentielle
-- loi Beta
-- loi Gamma / Erlang
-- loi du khi-deux
-- loi de Cauchy
-- loi de Weibull
-- loi log-normale
-- loi uniforme reelle explicite via uniform_real_distribution
-- loi discrete generale via discrete_distribution
-- loi par morceaux via piecewise_constant_distribution ou piecewise_linear_distribution
-- API C historique rand / srand
+- exposes dans GameConfig
+- presents dans master_config.json
+- non utilises dans WeatherSystem.cpp
 
-## 12. Elements aleatoires mentionnes dans les documents mais non implementes dans le jeu actuel
+Conclusion :
 
-Les notes du depot contiennent plusieurs idees d'alea qui ne sont pas presentes dans le runtime execute au moment de cette analyse.
+- la duree du front meteo n'est pas echantillonnee par une Gamma dans le runtime actuel
+- la duree effective est une variable composee induite par direction, point d'entree, couverture, aspect ratio, vitesse et geometrie de sortie de carte
 
-### 12.1 Notes de aléatoire.md
+### 4.14.3 deriveLegacyWorldSeed
 
-Le fichier aléatoire.md mentionne notamment :
+Localisation : src/Core/GameEngine.cpp.
 
-- une piece rouge rogue qui spawnerait aleatoirement
-- des regles de deplacement aleatoires pour certaines pieces ou situations de brouillard
-- une probabilite de spawn decroissante selon le nombre deja present
-- une probabilite de mercenaire en fonction des kills
-- une probabilite de reparation spontanee d'une case de batiment cassee
-- une probabilite de trahison ou de ralliement a l'ennemi
-- des tresors qui spawneraient sur la carte
-- un assombrissement de l'herbe par gaussienne
+Etat actuel :
 
-Statut :
+- ce mecanisme derive de maniere deterministe une seed a partir du nom de partie, du numero de tour, du rayon de carte et du royaume actif pour les vieilles sauvegardes
 
-- idees de design uniquement
-- aucune implementation correspondante n'a ete trouvee dans le code runtime actuel
+Conclusion :
 
-### 12.2 Notes de PLAN_IA_IMPLEMENTATION.md
+- ce n'est pas une variable aleatoire
+- c'est un hash deterministe de retrocompatibilite
 
-Le plan d'IA evoque aussi une variation stochastique top-2 plus "vraie" avec un schema du type random() < 0.3 et un exemple de randomness = 0.15.
+## 5. Synthese par feature de jeu
 
-Statut :
+### 5.1 Generation de monde
 
-- le code reel n'emploie pas ce tirage
-- a la place, il utilise une regle deterministe basee sur turnNumber % 3, et encore uniquement si randomness > 0
+Le monde repose sur quatre grandes briques aleatoires :
 
-## 13. Conclusion finale
+- generation initiale du worldSeed par uniforme discrete si aucun seed n'est fourni
+- terrain seed-driven via value noise + fBm, seuils de couverture, pruning et contraintes de connectivite
+- variations visuelles de l'herbe via Beta transformee
+- placement des ressources publiques via rotations/flips uniformes, permutation aleatoire et choix uniforme sur un top-k disperse
 
-Si l'on se limite aux processus effectivement utilises par le jeu au runtime, les lois ou familles distinctes a retenir sont :
+### 5.2 Evenements de carte
 
-1. la loi uniforme discrete sur ensemble fini
-2. la loi uniforme discrete conditionnelle sur un top-k de candidats
-3. la permutation aleatoire uniforme
-4. un processus pseudo-aleatoire spatial de type value noise / bruit fractal fBm
-5. la sortie brute d'un PRNG 64 bits, assimilee a une uniforme discrete 64 bits, pour le sel multijoueur
+- les coffres utilisent une Weibull pour le delai entre apparitions et une loi categorielle pour le type de recompense
+- leur case d'apparition est tiree par loi categorielle ponderee privilegiante centralite et contestation
+- l'infernal utilise une Poisson seuillee pour declencher l'evenement, une Bernoulli pour choisir le royaume cible, puis plusieurs lois categorielles pour choisir le type de proie et la materialisation precise
+- la meteo utilise une Gamma pour l'intervalle entre fronts, une categorielle pour la direction, une lineaire par morceaux pour la position d'entree, des uniformes discretes pour la couverture et l'aspect ratio, une log-normale pour la densite locale, puis un bruit spatial pour casser la frontiere
 
-Le point le plus important du point de vue gameplay est le suivant :
+### 5.3 Progression des unites
 
-- la carte, les ressources publiques, les flips visuels et les spawns sont seed-driven et donc reproductibles a worldSeed fixe
-- l'IA MCTS reste partiellement non reproductible car son generateur aleatoire n'est pas derive du worldSeed
-- les autres aleas evoques dans les documents de design ne sont pas encore implementes
+- l'XP n'est pas deterministe point par point : elle suit une famille de gaussiennes tronquees et discretisees, avec un profil distinct selon la source de gain
+
+### 5.4 IA
+
+- le MCTS utilise des tirages uniformes pour explorer et simuler
+- ces tirages ne sont pas relies au worldSeed et introduisent une non reproductibilite gameplay residuelle meme a worldSeed fixe et a etat serialize identique
+- le champ ai.randomness, lui, ne declenche pas aujourd'hui de vraie stochasticite
+
+## 6. Conclusion generale
+
+Le runtime actuel du jeu utilise effectivement un ensemble riche de lois usuelles et de processus aleatoires : uniforme discrete, Bernoulli, categorielle ponderee, Poisson, normale, Weibull, Gamma, log-normale, Beta, piecewise linear et permutation uniforme. A cela s'ajoutent des processus seed-driven plus specifiques au jeu, surtout pour la generation spatiale du terrain et la forme du brouillard.
+
+Les deux points d'architecture les plus importants sont les suivants :
+
+- presque tout le gameplay aleatoire est replayable a worldSeed fixe grace a la serialisation des rngCounter
+- le MCTS de l'IA et le sel multijoueur sont en dehors de ce schema et restent non reproductibles entre executions
+
+En pratique, si l'objectif est d'auditer toutes les variables aleatoires du jeu, il faut retenir a la fois les lois explicites ci-dessus et les processus pseudo-aleatoires seed-driven qui transforment ces tirages en terrain, meteo, evenements et variations visuelles.
