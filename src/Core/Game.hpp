@@ -135,6 +135,8 @@ private:
     const std::vector<Building>& displayedPublicBuildings() const;
     std::vector<MapObject>& displayedMapObjects();
     const std::vector<MapObject>& displayedMapObjects() const;
+    std::vector<AutonomousUnit>& displayedAutonomousUnits();
+    const std::vector<AutonomousUnit>& displayedAutonomousUnits() const;
     Kingdom& displayedKingdom(KingdomId id);
     const Kingdom& displayedKingdom(KingdomId id) const;
 
@@ -155,6 +157,9 @@ private:
 
     std::vector<MapObject>& mapObjects() { return m_engine.mapObjects(); }
     const std::vector<MapObject>& mapObjects() const { return m_engine.mapObjects(); }
+
+    std::vector<AutonomousUnit>& autonomousUnits() { return m_engine.autonomousUnits(); }
+    const std::vector<AutonomousUnit>& autonomousUnits() const { return m_engine.autonomousUnits(); }
 
     TurnSystem& turnSystem() { return m_engine.turnSystem(); }
     const TurnSystem& turnSystem() const { return m_engine.turnSystem(); }

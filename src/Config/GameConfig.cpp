@@ -140,6 +140,24 @@ void GameConfig::setDefaults() {
     m_chestLateGoldWeight = 4;
     m_chestLateMovementBonusWeight = 6;
     m_chestLateBuildBonusWeight = 6;
+    m_infernalMinSpawnTurn = 3;
+    m_infernalRespawnCooldownTurns = 4;
+    m_infernalSpawnRetryTurns = 1;
+    m_infernalPoissonLambdaBaseTimes1000 = 20;
+    m_infernalPoissonLambdaPerDebtTimes1000 = 12;
+    m_infernalPoissonLambdaCapTimes1000 = 250;
+    m_infernalBloodDebtDecayPercent = 95;
+    m_infernalDebtPawn = 1;
+    m_infernalDebtKnight = 2;
+    m_infernalDebtBishop = 2;
+    m_infernalDebtRook = 3;
+    m_infernalDebtQueen = 5;
+    m_infernalDebtStructureDamage = 1;
+    m_infernalTargetWeightPawn = 8;
+    m_infernalTargetWeightKnight = 14;
+    m_infernalTargetWeightBishop = 14;
+    m_infernalTargetWeightRook = 26;
+    m_infernalTargetWeightQueen = 38;
 
     alignChunkedStructureDimensions("barracks", BuildingType::Barracks, m_barracksWidth, m_barracksHeight);
     alignChunkedStructureDimensions("church", BuildingType::Church, m_churchWidth, m_churchHeight);
@@ -447,6 +465,74 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
     m_chestLateBuildBonusWeight = clampNonNegativeConfigValue(
         "chests.late_build_bonus_weight", m_chestLateBuildBonusWeight);
 
+    std::string infernalSec = extractSection(root, "infernal");
+    if (!infernalSec.empty()) {
+        m_infernalMinSpawnTurn = extractInt(infernalSec, "min_spawn_turn", m_infernalMinSpawnTurn);
+        m_infernalRespawnCooldownTurns = extractInt(
+            infernalSec, "respawn_cooldown_turns", m_infernalRespawnCooldownTurns);
+        m_infernalSpawnRetryTurns = extractInt(
+            infernalSec, "spawn_retry_turns", m_infernalSpawnRetryTurns);
+        m_infernalPoissonLambdaBaseTimes1000 = extractInt(
+            infernalSec, "poisson_lambda_base_times_1000", m_infernalPoissonLambdaBaseTimes1000);
+        m_infernalPoissonLambdaPerDebtTimes1000 = extractInt(
+            infernalSec, "poisson_lambda_per_debt_times_1000", m_infernalPoissonLambdaPerDebtTimes1000);
+        m_infernalPoissonLambdaCapTimes1000 = extractInt(
+            infernalSec, "poisson_lambda_cap_times_1000", m_infernalPoissonLambdaCapTimes1000);
+        m_infernalBloodDebtDecayPercent = extractInt(
+            infernalSec, "blood_debt_decay_percent", m_infernalBloodDebtDecayPercent);
+        m_infernalDebtPawn = extractInt(infernalSec, "blood_debt_pawn", m_infernalDebtPawn);
+        m_infernalDebtKnight = extractInt(infernalSec, "blood_debt_knight", m_infernalDebtKnight);
+        m_infernalDebtBishop = extractInt(infernalSec, "blood_debt_bishop", m_infernalDebtBishop);
+        m_infernalDebtRook = extractInt(infernalSec, "blood_debt_rook", m_infernalDebtRook);
+        m_infernalDebtQueen = extractInt(infernalSec, "blood_debt_queen", m_infernalDebtQueen);
+        m_infernalDebtStructureDamage = extractInt(
+            infernalSec, "blood_debt_structure_damage", m_infernalDebtStructureDamage);
+        m_infernalTargetWeightPawn = extractInt(
+            infernalSec, "target_weight_pawn", m_infernalTargetWeightPawn);
+        m_infernalTargetWeightKnight = extractInt(
+            infernalSec, "target_weight_knight", m_infernalTargetWeightKnight);
+        m_infernalTargetWeightBishop = extractInt(
+            infernalSec, "target_weight_bishop", m_infernalTargetWeightBishop);
+        m_infernalTargetWeightRook = extractInt(
+            infernalSec, "target_weight_rook", m_infernalTargetWeightRook);
+        m_infernalTargetWeightQueen = extractInt(
+            infernalSec, "target_weight_queen", m_infernalTargetWeightQueen);
+    }
+
+    m_infernalMinSpawnTurn = clampNonNegativeConfigValue(
+        "infernal.min_spawn_turn", m_infernalMinSpawnTurn);
+    m_infernalRespawnCooldownTurns = clampNonNegativeConfigValue(
+        "infernal.respawn_cooldown_turns", m_infernalRespawnCooldownTurns);
+    m_infernalSpawnRetryTurns = clampNonNegativeConfigValue(
+        "infernal.spawn_retry_turns", m_infernalSpawnRetryTurns);
+    m_infernalPoissonLambdaBaseTimes1000 = clampNonNegativeConfigValue(
+        "infernal.poisson_lambda_base_times_1000", m_infernalPoissonLambdaBaseTimes1000);
+    m_infernalPoissonLambdaPerDebtTimes1000 = clampNonNegativeConfigValue(
+        "infernal.poisson_lambda_per_debt_times_1000", m_infernalPoissonLambdaPerDebtTimes1000);
+    m_infernalPoissonLambdaCapTimes1000 = clampNonNegativeConfigValue(
+        "infernal.poisson_lambda_cap_times_1000", m_infernalPoissonLambdaCapTimes1000);
+    m_infernalBloodDebtDecayPercent = std::clamp(
+        m_infernalBloodDebtDecayPercent,
+        0,
+        100);
+    m_infernalDebtPawn = clampNonNegativeConfigValue("infernal.blood_debt_pawn", m_infernalDebtPawn);
+    m_infernalDebtKnight = clampNonNegativeConfigValue("infernal.blood_debt_knight", m_infernalDebtKnight);
+    m_infernalDebtBishop = clampNonNegativeConfigValue("infernal.blood_debt_bishop", m_infernalDebtBishop);
+    m_infernalDebtRook = clampNonNegativeConfigValue("infernal.blood_debt_rook", m_infernalDebtRook);
+    m_infernalDebtQueen = clampNonNegativeConfigValue("infernal.blood_debt_queen", m_infernalDebtQueen);
+    m_infernalDebtStructureDamage = clampNonNegativeConfigValue(
+        "infernal.blood_debt_structure_damage", m_infernalDebtStructureDamage);
+    m_infernalTargetWeightPawn = clampNonNegativeConfigValue(
+        "infernal.target_weight_pawn", m_infernalTargetWeightPawn);
+    m_infernalTargetWeightKnight = clampNonNegativeConfigValue(
+        "infernal.target_weight_knight", m_infernalTargetWeightKnight);
+    m_infernalTargetWeightBishop = clampNonNegativeConfigValue(
+        "infernal.target_weight_bishop", m_infernalTargetWeightBishop);
+    m_infernalTargetWeightRook = clampNonNegativeConfigValue(
+        "infernal.target_weight_rook", m_infernalTargetWeightRook);
+    m_infernalTargetWeightQueen = clampNonNegativeConfigValue(
+        "infernal.target_weight_queen", m_infernalTargetWeightQueen);
+
     alignChunkedStructureDimensions("barracks", BuildingType::Barracks, m_barracksWidth, m_barracksHeight);
     alignChunkedStructureDimensions("church", BuildingType::Church, m_churchWidth, m_churchHeight);
     alignChunkedStructureDimensions("mine", BuildingType::Mine, m_mineWidth, m_mineHeight);
@@ -640,3 +726,53 @@ int GameConfig::getChestEarlyBuildBonusWeight() const { return m_chestEarlyBuild
 int GameConfig::getChestLateGoldWeight() const { return m_chestLateGoldWeight; }
 int GameConfig::getChestLateMovementBonusWeight() const { return m_chestLateMovementBonusWeight; }
 int GameConfig::getChestLateBuildBonusWeight() const { return m_chestLateBuildBonusWeight; }
+
+int GameConfig::getInfernalMinSpawnTurn() const { return m_infernalMinSpawnTurn; }
+int GameConfig::getInfernalRespawnCooldownTurns() const { return m_infernalRespawnCooldownTurns; }
+int GameConfig::getInfernalSpawnRetryTurns() const { return m_infernalSpawnRetryTurns; }
+int GameConfig::getInfernalPoissonLambdaBaseTimes1000() const { return m_infernalPoissonLambdaBaseTimes1000; }
+int GameConfig::getInfernalPoissonLambdaPerDebtTimes1000() const { return m_infernalPoissonLambdaPerDebtTimes1000; }
+int GameConfig::getInfernalPoissonLambdaCapTimes1000() const { return m_infernalPoissonLambdaCapTimes1000; }
+int GameConfig::getInfernalBloodDebtDecayPercent() const { return m_infernalBloodDebtDecayPercent; }
+
+int GameConfig::getInfernalBloodDebtForCapturedPiece(PieceType victim) const {
+    switch (victim) {
+        case PieceType::Pawn:
+            return m_infernalDebtPawn;
+        case PieceType::Knight:
+            return m_infernalDebtKnight;
+        case PieceType::Bishop:
+            return m_infernalDebtBishop;
+        case PieceType::Rook:
+            return m_infernalDebtRook;
+        case PieceType::Queen:
+            return m_infernalDebtQueen;
+        case PieceType::King:
+            return 0;
+    }
+
+    return 0;
+}
+
+int GameConfig::getInfernalBloodDebtForStructureDamage() const {
+    return m_infernalDebtStructureDamage;
+}
+
+int GameConfig::getInfernalTargetWeight(PieceType type) const {
+    switch (type) {
+        case PieceType::Pawn:
+            return m_infernalTargetWeightPawn;
+        case PieceType::Knight:
+            return m_infernalTargetWeightKnight;
+        case PieceType::Bishop:
+            return m_infernalTargetWeightBishop;
+        case PieceType::Rook:
+            return m_infernalTargetWeightRook;
+        case PieceType::Queen:
+            return m_infernalTargetWeightQueen;
+        case PieceType::King:
+            return 0;
+    }
+
+    return 0;
+}

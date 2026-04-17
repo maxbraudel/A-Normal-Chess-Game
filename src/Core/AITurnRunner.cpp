@@ -2,6 +2,7 @@
 
 #include <thread>
 
+#include "Autonomous/AutonomousUnit.hpp"
 #include "Board/Board.hpp"
 #include "Buildings/Building.hpp"
 #include "Config/GameConfig.hpp"
@@ -16,14 +17,20 @@ struct AIWorldSnapshot {
     std::array<Kingdom, kNumKingdoms> kingdoms;
     std::vector<Building> publicBuildings;
     std::vector<MapObject> mapObjects;
+    std::vector<AutonomousUnit> autonomousUnits;
 };
 
 AIWorldSnapshot makeAIWorldSnapshot(const Board& board,
                                     const std::array<Kingdom, kNumKingdoms>& kingdoms,
                                     const std::vector<Building>& publicBuildings,
-                                    const std::vector<MapObject>& mapObjects) {
-    AIWorldSnapshot snapshot{board, kingdoms, publicBuildings, mapObjects};
-    relinkBoardState(snapshot.board, snapshot.kingdoms, snapshot.publicBuildings, snapshot.mapObjects);
+                                    const std::vector<MapObject>& mapObjects,
+                                    const std::vector<AutonomousUnit>& autonomousUnits) {
+    AIWorldSnapshot snapshot{board, kingdoms, publicBuildings, mapObjects, autonomousUnits};
+    relinkBoardState(snapshot.board,
+                     snapshot.kingdoms,
+                     snapshot.publicBuildings,
+                     snapshot.mapObjects,
+                     snapshot.autonomousUnits);
     return snapshot;
 }
 
@@ -41,6 +48,7 @@ void AITurnRunner::start(const Board& board,
                          const std::array<Kingdom, kNumKingdoms>& kingdoms,
                          const std::vector<Building>& publicBuildings,
                          const std::vector<MapObject>& mapObjects,
+                         const std::vector<AutonomousUnit>& autonomousUnits,
                          KingdomId activeKingdom,
                          int turnNumber,
                          const GameConfig& config,
@@ -54,7 +62,11 @@ void AITurnRunner::start(const Board& board,
     task->turnNumber = turnNumber;
     m_task = task;
 
-    AIWorldSnapshot snapshot = makeAIWorldSnapshot(board, kingdoms, publicBuildings, mapObjects);
+    AIWorldSnapshot snapshot = makeAIWorldSnapshot(board,
+                                                   kingdoms,
+                                                   publicBuildings,
+                                                   mapObjects,
+                                                   autonomousUnits);
     GameConfig configCopy = config;
     AIDirector directorWorker = director;
 

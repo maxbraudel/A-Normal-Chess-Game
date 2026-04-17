@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "Autonomous/AutonomousUnit.hpp"
 #include "Board/Board.hpp"
 #include "Buildings/Building.hpp"
 #include "Core/GameSessionConfig.hpp"
@@ -37,6 +38,9 @@ public:
     std::vector<MapObject>& mapObjects() { return m_mapObjects; }
     const std::vector<MapObject>& mapObjects() const { return m_mapObjects; }
 
+    std::vector<AutonomousUnit>& autonomousUnits() { return m_autonomousUnits; }
+    const std::vector<AutonomousUnit>& autonomousUnits() const { return m_autonomousUnits; }
+
     Kingdom& kingdom(KingdomId id) { return m_kingdoms[kingdomIndex(id)]; }
     const Kingdom& kingdom(KingdomId id) const { return m_kingdoms[kingdomIndex(id)]; }
 
@@ -59,6 +63,7 @@ private:
     std::array<Kingdom, kNumKingdoms> m_kingdoms{Kingdom(KingdomId::White), Kingdom(KingdomId::Black)};
     std::vector<Building> m_publicBuildings;
     std::vector<MapObject> m_mapObjects;
+    std::vector<AutonomousUnit> m_autonomousUnits;
     bool m_valid = false;
     std::string m_errorMessage;
 };

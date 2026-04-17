@@ -1,6 +1,8 @@
 #pragma once
 #include <SFML/System/Vector2.hpp>
 
+#include "Units/PieceType.hpp"
+
 class Piece;
 class Board;
 class Kingdom;
@@ -13,6 +15,7 @@ public:
         bool occurred;
         bool targetWasPiece;
         int xpGained;
+        PieceType capturedPieceType;
     };
 
     static CombatResult resolve(

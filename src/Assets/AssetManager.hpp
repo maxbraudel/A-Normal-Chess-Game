@@ -18,6 +18,7 @@ public:
     const sf::Texture& getBuildingTexture(BuildingType type) const;
     const sf::Texture& getBuildingTexture(BuildingType type, int localX, int localY) const;
     const sf::Texture& getPieceTexture(PieceType type, KingdomId kingdom) const;
+    const sf::Texture& getInfernalPieceTexture(PieceType type) const;
     const sf::Texture& getMapObjectTexture(MapObjectType type) const;
     const sf::Texture& getUITexture(const std::string& name) const;
     const sf::Font& getFont() const;
@@ -31,6 +32,7 @@ private:
 
     void loadTexture(const std::string& key, const std::string& path);
     std::string pieceKey(PieceType type, KingdomId kingdom) const;
+    std::string infernalPieceKey(PieceType type) const;
     std::string cellKey(CellType type) const;
     std::string buildingKey(BuildingType type) const;
     std::string buildingChunkKey(BuildingType type, int localX, int localY) const;

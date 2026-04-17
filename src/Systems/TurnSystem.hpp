@@ -4,9 +4,11 @@
 #include <map>
 #include <vector>
 
+#include "Autonomous/AutonomousUnit.hpp"
 #include "Core/GameplayNotification.hpp"
 #include "Objects/MapObject.hpp"
 #include "Systems/ChestSystem.hpp"
+#include "Systems/InfernalSystem.hpp"
 
 #include "Systems/TurnCommand.hpp"
 #include "Systems/TurnValidationContext.hpp"
@@ -123,6 +125,8 @@ public:
                     std::vector<Building>& publicBuildings,
                     std::vector<MapObject>& mapObjects,
                     ChestSystemState& chestSystemState,
+                    std::vector<AutonomousUnit>& autonomousUnits,
+                    InfernalSystemState& infernalSystemState,
                     const GameConfig& config, EventLog& log,
                     std::vector<GameplayNotification>& gameplayNotifications,
                     PieceFactory& pieceFactory, BuildingFactory& buildingFactory);
@@ -132,6 +136,8 @@ public:
                     PieceFactory& pieceFactory, BuildingFactory& buildingFactory) {
         std::vector<MapObject> mapObjects;
         ChestSystemState chestSystemState{};
+        std::vector<AutonomousUnit> autonomousUnits;
+        InfernalSystemState infernalSystemState{};
         std::vector<GameplayNotification> gameplayNotifications;
         commitTurn(board,
                    activeKingdom,
@@ -139,6 +145,8 @@ public:
                    publicBuildings,
                    mapObjects,
                    chestSystemState,
+               autonomousUnits,
+               infernalSystemState,
                    config,
                    log,
                    gameplayNotifications,

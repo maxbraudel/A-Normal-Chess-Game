@@ -14,7 +14,7 @@ CombatSystem::CombatResult CombatSystem::resolve(
     Kingdom& attackerKingdom, Kingdom& defenderKingdom,
     const GameConfig& config, EventLog& log, int turnNumber) {
 
-    CombatResult result{false, false, 0};
+    CombatResult result{false, false, 0, PieceType::King};
     Cell& targetCell = board.getCell(target.x, target.y);
 
     // Check if target has an enemy piece
@@ -26,6 +26,7 @@ CombatSystem::CombatResult CombatSystem::resolve(
         result.occurred = true;
         result.targetWasPiece = true;
         Piece* victim = targetCell.piece;
+        result.capturedPieceType = victim->type;
         int xp = config.getKillXP(victim->type);
         attacker.xp += xp;
         result.xpGained = xp;

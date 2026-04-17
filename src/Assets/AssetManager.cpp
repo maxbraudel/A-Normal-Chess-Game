@@ -63,6 +63,13 @@ void AssetManager::loadAll(const std::string& assetsDir) {
     loadTexture("piece_queen_black", assetsDir + "/textures/pieces/black/queen.png");
     loadTexture("piece_king_black", assetsDir + "/textures/pieces/black/king.png");
 
+    // Piece textures - Infernal
+    loadTexture("piece_pawn_evil", assetsDir + "/textures/pieces/evil/pawn.png");
+    loadTexture("piece_knight_evil", assetsDir + "/textures/pieces/evil/knight.png");
+    loadTexture("piece_bishop_evil", assetsDir + "/textures/pieces/evil/bishop.png");
+    loadTexture("piece_rook_evil", assetsDir + "/textures/pieces/evil/rook.png");
+    loadTexture("piece_queen_evil", assetsDir + "/textures/pieces/evil/queen.png");
+
     // UI textures
     loadTexture("ui_crossed_swords", assetsDir + "/textures/ui/crossed_swords.png");
     loadTexture("ui_shield_white", assetsDir + "/textures/ui/shield_white.png");
@@ -92,6 +99,21 @@ std::string AssetManager::pieceKey(PieceType type, KingdomId kingdom) const {
     }
     prefix += (kingdom == KingdomId::White) ? "_white" : "_black";
     return prefix;
+}
+
+std::string AssetManager::infernalPieceKey(PieceType type) const {
+    std::string key = "piece_";
+    switch (type) {
+        case PieceType::Pawn: key += "pawn"; break;
+        case PieceType::Knight: key += "knight"; break;
+        case PieceType::Bishop: key += "bishop"; break;
+        case PieceType::Rook: key += "rook"; break;
+        case PieceType::Queen: key += "queen"; break;
+        case PieceType::King: return "";
+    }
+
+    key += "_evil";
+    return key;
 }
 
 std::string AssetManager::cellKey(CellType type) const {
@@ -160,6 +182,18 @@ const sf::Texture& AssetManager::getPieceTexture(PieceType type, KingdomId kingd
     auto key = pieceKey(type, kingdom);
     auto it = m_textures.find(key);
     if (it != m_textures.end()) return it->second;
+    return m_fallback;
+}
+
+const sf::Texture& AssetManager::getInfernalPieceTexture(PieceType type) const {
+    const std::string key = infernalPieceKey(type);
+    if (!key.empty()) {
+        auto it = m_textures.find(key);
+        if (it != m_textures.end()) {
+            return it->second;
+        }
+    }
+
     return m_fallback;
 }
 

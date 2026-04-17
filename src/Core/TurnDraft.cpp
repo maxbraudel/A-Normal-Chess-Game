@@ -58,9 +58,10 @@ bool TurnDraft::rebuild(const GameEngine& engine,
     m_kingdoms = engine.kingdoms();
     m_publicBuildings = engine.publicBuildings();
     m_mapObjects = engine.mapObjects();
+    m_autonomousUnits = engine.autonomousUnits();
     m_valid = true;
     m_errorMessage.clear();
-    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects);
+    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
 
     const KingdomId activeKingdomId = engine.turnSystem().getActiveKingdom();
     for (const TurnCommand& command : commands) {
@@ -102,7 +103,7 @@ bool TurnDraft::rebuild(const GameEngine& engine,
         }
     }
 
-    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects);
+    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
     return true;
 }
 
@@ -111,6 +112,7 @@ void TurnDraft::clear() {
     m_kingdoms = {Kingdom(KingdomId::White), Kingdom(KingdomId::Black)};
     m_publicBuildings.clear();
     m_mapObjects.clear();
+    m_autonomousUnits.clear();
     m_valid = false;
     m_errorMessage.clear();
 }
@@ -137,7 +139,19 @@ bool TurnDraft::applyMoveCommand(const TurnCommand& command, KingdomId activeKin
     if (destinationCell.piece && destinationCell.piece->kingdom != piece->kingdom) {
         enemyKingdom.removePiece(destinationCell.piece->id);
         destinationCell.piece = nullptr;
-        relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects);
+        relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
+    }
+
+    if (destinationCell.autonomousUnit != nullptr) {
+        const int capturedUnitId = destinationCell.autonomousUnit->id;
+        destinationCell.autonomousUnit = nullptr;
+        m_autonomousUnits.erase(
+            std::remove_if(m_autonomousUnits.begin(), m_autonomousUnits.end(),
+                [capturedUnitId](const AutonomousUnit& unit) {
+                    return unit.id == capturedUnitId;
+                }),
+            m_autonomousUnits.end());
+        relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
     }
 
     piece = activeKingdom.getPieceById(command.pieceId);
@@ -156,7 +170,7 @@ bool TurnDraft::applyBuildCommand(const TurnCommand& command,
     Kingdom& activeKingdom = kingdom(activeKingdomId);
     activeKingdom.gold = std::max(0, activeKingdom.gold - getBuildCost(command.buildingType, config));
     activeKingdom.addBuilding(makeUnderConstructionBuilding(command, activeKingdomId, config));
-    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects);
+    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
     return true;
 }
 
@@ -200,7 +214,7 @@ bool TurnDraft::applyDisbandCommand(const TurnCommand& command,
     }
 
     activeKingdom.removePiece(piece->id);
-    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects);
+    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
     return true;
 }
 

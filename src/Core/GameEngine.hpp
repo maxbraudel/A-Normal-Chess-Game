@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "Autonomous/AutonomousUnit.hpp"
 #include "Board/Board.hpp"
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingFactory.hpp"
@@ -15,12 +16,18 @@
 #include "Systems/ChestSystem.hpp"
 #include "Systems/CheckResponseRules.hpp"
 #include "Systems/EventLog.hpp"
+#include "Systems/InfernalSystem.hpp"
 #include "Systems/TurnSystem.hpp"
 #include "Systems/TurnValidationContext.hpp"
 #include "Units/PieceFactory.hpp"
 
 class GameConfig;
 
+void relinkBoardState(Board& board,
+                      std::array<Kingdom, kNumKingdoms>& kingdoms,
+                      std::vector<Building>& publicBuildings,
+                      std::vector<MapObject>& mapObjects,
+                      std::vector<AutonomousUnit>& autonomousUnits);
 void relinkBoardState(Board& board,
                       std::array<Kingdom, kNumKingdoms>& kingdoms,
                       std::vector<Building>& publicBuildings,
@@ -79,7 +86,11 @@ public:
     std::vector<MapObject>& mapObjects() { return m_mapObjects; }
     const std::vector<MapObject>& mapObjects() const { return m_mapObjects; }
 
+    std::vector<AutonomousUnit>& autonomousUnits() { return m_autonomousUnits; }
+    const std::vector<AutonomousUnit>& autonomousUnits() const { return m_autonomousUnits; }
+
     const ChestSystemState& chestSystemState() const { return m_chestSystemState; }
+    const InfernalSystemState& infernalSystemState() const { return m_infernalSystemState; }
 
     TurnSystem& turnSystem() { return m_turnSystem; }
     const TurnSystem& turnSystem() const { return m_turnSystem; }
@@ -122,10 +133,13 @@ private:
     std::array<Kingdom, kNumKingdoms> m_kingdoms;
     std::vector<Building> m_publicBuildings;
     std::vector<MapObject> m_mapObjects;
+    std::vector<AutonomousUnit> m_autonomousUnits;
     ChestSystemState m_chestSystemState{};
+    InfernalSystemState m_infernalSystemState{};
     TurnSystem m_turnSystem;
     EventLog m_eventLog;
     PieceFactory m_pieceFactory;
     BuildingFactory m_buildingFactory;
     int m_nextMapObjectId = 1;
+    int m_nextAutonomousUnitId = 1;
 };

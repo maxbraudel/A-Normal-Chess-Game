@@ -16,6 +16,7 @@
 #include "Systems/MarriageSystem.hpp"
 #include "Systems/PendingTurnProjection.hpp"
 #include "Systems/ChestSystem.hpp"
+#include "Systems/InfernalSystem.hpp"
 #include "Systems/TurnPointRules.hpp"
 #include "Units/PieceFactory.hpp"
 #include "Buildings/BuildingFactory.hpp"
@@ -88,11 +89,33 @@ void relinkAllBuildings(Board& board,
     relinkBuildingContainer(board, enemyKingdom.buildings);
 }
 
-void processEnemyStructureOccupancy(Board& board,
-                                    Kingdom& activeKingdom,
-                                    const GameConfig& config,
-                                    EventLog& log,
-                                    int turnNumber) {
+void removeAutonomousUnitAtCell(std::vector<AutonomousUnit>& autonomousUnits,
+                                InfernalSystemState& infernalSystemState,
+                                Cell& cell) {
+    if (cell.autonomousUnit == nullptr) {
+        return;
+    }
+
+    const int capturedUnitId = cell.autonomousUnit->id;
+    cell.autonomousUnit = nullptr;
+    autonomousUnits.erase(
+        std::remove_if(autonomousUnits.begin(), autonomousUnits.end(),
+            [capturedUnitId](const AutonomousUnit& unit) {
+                return unit.id == capturedUnitId;
+            }),
+        autonomousUnits.end());
+
+    if (infernalSystemState.activeInfernalUnitId == capturedUnitId) {
+        InfernalSystem::clearActiveInfernal(infernalSystemState);
+    }
+}
+
+int processEnemyStructureOccupancy(Board& board,
+                                   Kingdom& activeKingdom,
+                                   const GameConfig& config,
+                                   EventLog& log,
+                                   int turnNumber) {
+    int structureDamageEvents = 0;
     for (auto& piece : activeKingdom.pieces) {
         Cell& occupiedCell = board.getCell(piece.position.x, piece.position.y);
         Building* building = occupiedCell.building;
@@ -108,6 +131,7 @@ void processEnemyStructureOccupancy(Board& board,
             continue;
         }
 
+        ++structureDamageEvents;
         piece.xp += config.getDestroyBlockXP();
 
         switch (result) {
@@ -127,6 +151,8 @@ void processEnemyStructureOccupancy(Board& board,
                 break;
         }
     }
+
+    return structureDamageEvents;
 }
 
 void processFriendlyRepairs(Kingdom& activeKingdom,
@@ -648,10 +674,11 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                              std::vector<Building>& publicBuildings,
                              std::vector<MapObject>& mapObjects,
                              ChestSystemState& chestSystemState,
+                             std::vector<AutonomousUnit>& autonomousUnits,
+                             InfernalSystemState& infernalSystemState,
                              const GameConfig& config, EventLog& log,
                              std::vector<GameplayNotification>& gameplayNotifications,
                              PieceFactory& pieceFactory, BuildingFactory& buildingFactory) {
-    (void) chestSystemState;
     std::vector<TurnCommand> deferredUpgrades;
     deferredUpgrades.reserve(m_pendingCommands.size());
 
@@ -677,13 +704,37 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                 }
 
                 // Combat resolution
-                CombatSystem::resolve(*piece, board, cmd.destination,
-                                       activeKingdom, enemyKingdom, config, log, m_turnNumber);
+                const CombatSystem::CombatResult combatResult = CombatSystem::resolve(
+                    *piece,
+                    board,
+                    cmd.destination,
+                    activeKingdom,
+                    enemyKingdom,
+                    config,
+                    log,
+                    m_turnNumber);
+                if (combatResult.occurred && combatResult.targetWasPiece) {
+                    InfernalSystem::addBloodDebtForCapturedPiece(
+                        infernalSystemState,
+                        activeKingdom.id,
+                        combatResult.capturedPieceType,
+                        config.getInfernalBloodDebtForCapturedPiece(combatResult.capturedPieceType));
+                }
 
                 // Move
                 piece->position = cmd.destination;
                 Cell& newCell = board.getCell(cmd.destination.x, cmd.destination.y);
                 newCell.piece = piece;
+
+                if (newCell.autonomousUnit != nullptr) {
+                    const std::string capturedName = autonomousUnitTypeDisplayName(newCell.autonomousUnit->type);
+                    removeAutonomousUnitAtCell(autonomousUnits, infernalSystemState, newCell);
+                    log.log(m_turnNumber,
+                            m_activeKingdom,
+                            "Captured " + capturedName + " at ("
+                                + std::to_string(cmd.destination.x) + ","
+                                + std::to_string(cmd.destination.y) + ")");
+                }
 
                 if (std::optional<ChestClaimResult> chestClaim = ChestSystem::collectChestAtPosition(
                         mapObjects,
@@ -804,7 +855,18 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
 
     relinkAllBuildings(board, activeKingdom, enemyKingdom, publicBuildings);
 
-    processEnemyStructureOccupancy(board, activeKingdom, config, log, m_turnNumber);
+    const int structureDamageEvents = processEnemyStructureOccupancy(
+        board,
+        activeKingdom,
+        config,
+        log,
+        m_turnNumber);
+    if (structureDamageEvents > 0) {
+        InfernalSystem::addBloodDebtForStructureDamage(
+            infernalSystemState,
+            activeKingdom.id,
+            structureDamageEvents * config.getInfernalBloodDebtForStructureDamage());
+    }
 
     // Advance all barracks production
     for (auto& b : activeKingdom.buildings) {

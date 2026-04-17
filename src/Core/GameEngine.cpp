@@ -3,10 +3,12 @@
 #include <algorithm>
 #include <random>
 
+#include "Autonomous/AutonomousUnit.hpp"
 #include "Board/BoardGenerator.hpp"
 #include "Config/GameConfig.hpp"
 #include "Core/GameStateValidator.hpp"
 #include "Systems/ChestSystem.hpp"
+#include "Systems/InfernalSystem.hpp"
 
 namespace {
 
@@ -63,6 +65,11 @@ int deriveLegacyPublicBuildingFlipMask(std::uint32_t worldSeed, const Building& 
     return static_cast<int>(seed & (kFlipHorizontalMask | kFlipVerticalMask));
 }
 
+int infernalTurnStep(const TurnSystem& turnSystem) {
+    return ((turnSystem.getTurnNumber() - 1) * 2)
+        + kingdomIndex(turnSystem.getActiveKingdom());
+}
+
 void normalizeLoadedBuildingVisuals(std::vector<Building>& buildings, std::uint32_t worldSeed) {
     for (auto& building : buildings) {
         if (building.rotationQuarterTurns < 0) {
@@ -90,7 +97,8 @@ void normalizeLoadedBuildingVisuals(std::vector<Building>& buildings, std::uint3
 void relinkBoardState(Board& board,
                       std::array<Kingdom, kNumKingdoms>& kingdoms,
                       std::vector<Building>& publicBuildings,
-                      std::vector<MapObject>& mapObjects) {
+                      std::vector<MapObject>& mapObjects,
+                      std::vector<AutonomousUnit>& autonomousUnits) {
     const int diameter = board.getDiameter();
     for (int y = 0; y < diameter; ++y) {
         for (int x = 0; x < diameter; ++x) {
@@ -98,6 +106,7 @@ void relinkBoardState(Board& board,
             cell.piece = nullptr;
             cell.building = nullptr;
             cell.mapObject = nullptr;
+            cell.autonomousUnit = nullptr;
         }
     }
 
@@ -130,6 +139,21 @@ void relinkBoardState(Board& board,
             board.getCell(mapObject.position.x, mapObject.position.y).mapObject = &mapObject;
         }
     }
+
+    for (auto& autonomousUnit : autonomousUnits) {
+        if (board.isInBounds(autonomousUnit.position.x, autonomousUnit.position.y)) {
+            board.getCell(autonomousUnit.position.x, autonomousUnit.position.y).autonomousUnit = &autonomousUnit;
+        }
+    }
+}
+
+void relinkBoardState(Board& board,
+                      std::array<Kingdom, kNumKingdoms>& kingdoms,
+                      std::vector<Building>& publicBuildings,
+                      std::vector<MapObject>& mapObjects) {
+    static std::vector<AutonomousUnit> emptyAutonomousUnits;
+    emptyAutonomousUnits.clear();
+    relinkBoardState(board, kingdoms, publicBuildings, mapObjects, emptyAutonomousUnits);
 }
 
 void relinkBoardState(Board& board,
@@ -161,6 +185,7 @@ bool GameEngine::startNewSession(const GameSessionConfig& session,
     m_board.init(config.getMapRadius());
     m_publicBuildings.clear();
     m_mapObjects.clear();
+    m_autonomousUnits.clear();
     const auto generation = BoardGenerator::generate(m_board, config, m_publicBuildings, m_sessionConfig.worldSeed);
 
     for (int kingdomSlot = 0; kingdomSlot < kNumKingdoms; ++kingdomSlot) {
@@ -175,12 +200,14 @@ bool GameEngine::startNewSession(const GameSessionConfig& session,
     kingdom(KingdomId::Black).addPiece(blackKing);
 
     ChestSystem::initialize(m_chestSystemState, m_sessionConfig.worldSeed, 1, config);
-    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects);
+    InfernalSystem::initialize(m_infernalSystemState, 0, config);
+    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
 
     m_turnSystem = TurnSystem();
     m_turnSystem.setActiveKingdom(KingdomId::White);
     m_turnSystem.setTurnNumber(1);
     m_nextMapObjectId = 1;
+    m_nextAutonomousUnitId = 1;
 
     m_eventLog.clear();
     m_eventLog.log(1, KingdomId::White,
@@ -247,10 +274,12 @@ bool GameEngine::restoreFromSave(const SaveData& data,
 
     m_publicBuildings = data.publicBuildings;
     m_mapObjects = data.mapObjects;
+    m_autonomousUnits = data.autonomousUnits;
     m_chestSystemState = data.chestSystemState;
+    m_infernalSystemState = data.infernalSystemState;
     normalizeLoadedBuildingVisuals(m_publicBuildings, m_sessionConfig.worldSeed);
 
-    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects);
+    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
 
     m_turnSystem = TurnSystem();
     m_turnSystem.setActiveKingdom(data.activeKingdom);
@@ -258,6 +287,10 @@ bool GameEngine::restoreFromSave(const SaveData& data,
     m_nextMapObjectId = 1;
     for (const MapObject& object : m_mapObjects) {
         m_nextMapObjectId = std::max(m_nextMapObjectId, object.id + 1);
+    }
+    m_nextAutonomousUnitId = 1;
+    for (const AutonomousUnit& autonomousUnit : m_autonomousUnits) {
+        m_nextAutonomousUnitId = std::max(m_nextAutonomousUnitId, autonomousUnit.id + 1);
     }
 
     m_eventLog.clear();
@@ -305,14 +338,24 @@ SaveData GameEngine::createSaveData() const {
 
     data.publicBuildings = m_publicBuildings;
     data.mapObjects = m_mapObjects;
+    data.autonomousUnits = m_autonomousUnits;
     data.chestSystemState = m_chestSystemState;
+    data.infernalSystemState = m_infernalSystemState;
     data.events = m_eventLog.getEvents();
     return data;
 }
 
 bool GameEngine::validate(std::string* errorMessage) const {
     return GameStateValidator::validateRuntimeState(
-    m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_turnSystem, m_sessionConfig, errorMessage);
+        m_board,
+        m_kingdoms,
+        m_publicBuildings,
+        m_mapObjects,
+        m_autonomousUnits,
+        m_turnSystem,
+        m_sessionConfig,
+        m_infernalSystemState,
+        errorMessage);
 }
 
 void GameEngine::resetPendingTurn() {
@@ -450,6 +493,7 @@ PendingTurnCommitResult GameEngine::commitPendingTurn(const GameConfig& config) 
     PendingTurnCommitResult result;
     const KingdomId activeId = m_turnSystem.getActiveKingdom();
     const KingdomId enemyId = opponent(activeId);
+    const int activeInfernalBeforeCommit = m_infernalSystemState.activeInfernalUnitId;
 
     result.activeValidation = validatePendingTurn(config);
     if (!result.activeValidation.valid) {
@@ -466,12 +510,25 @@ PendingTurnCommitResult GameEngine::commitPendingTurn(const GameConfig& config) 
                             m_publicBuildings,
                             m_mapObjects,
                             m_chestSystemState,
+                            m_autonomousUnits,
+                            m_infernalSystemState,
                             config,
                             m_eventLog,
                             result.notifications,
                             m_pieceFactory,
                             m_buildingFactory);
     m_turnSystem.advanceTurn();
+    const int currentInfernalStep = infernalTurnStep(m_turnSystem);
+
+    if (activeInfernalBeforeCommit >= 0 && !InfernalSystem::hasActiveInfernal(m_infernalSystemState)) {
+        InfernalSystem::onInfernalRemoved(m_infernalSystemState, currentInfernalStep, config);
+    }
+
+    if (m_turnSystem.getActiveKingdom() == KingdomId::White) {
+        InfernalSystem::decayBloodDebt(
+            m_infernalSystemState,
+            config.getInfernalBloodDebtDecayPercent());
+    }
 
     const bool collectedChest = std::any_of(
         result.notifications.begin(),
@@ -488,6 +545,39 @@ PendingTurnCommitResult GameEngine::commitPendingTurn(const GameConfig& config) 
     }
 
     spawnChestIfDue(config);
+
+    bool infernalBoardChanged = false;
+    if (std::optional<AutonomousUnit> spawnedInfernal = InfernalSystem::trySpawnInfernal(
+            m_infernalSystemState,
+            m_board,
+            m_kingdoms,
+            m_sessionConfig.worldSeed,
+            currentInfernalStep,
+            m_turnSystem.getTurnNumber(),
+            m_nextAutonomousUnitId,
+            config)) {
+        m_nextAutonomousUnitId = std::max(m_nextAutonomousUnitId, spawnedInfernal->id + 1);
+        m_autonomousUnits.push_back(*spawnedInfernal);
+        infernalBoardChanged = true;
+    }
+
+    if (InfernalSystem::actAfterCommittedTurn(
+            m_infernalSystemState,
+            m_board,
+            m_kingdoms,
+            m_autonomousUnits,
+            m_sessionConfig.worldSeed,
+            currentInfernalStep,
+            m_turnSystem.getTurnNumber(),
+            activeId,
+            config)) {
+        infernalBoardChanged = true;
+    }
+
+    if (infernalBoardChanged) {
+        relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
+    }
+
     result.committed = true;
 
     result.nextTurnValidation = validatePendingTurn(config);
@@ -578,12 +668,12 @@ void GameEngine::spawnChestIfDue(const GameConfig& config) {
         m_nextMapObjectId,
         config);
     if (!spawnedChest.has_value()) {
-        relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects);
+        relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
         return;
     }
 
     m_nextMapObjectId = std::max(m_nextMapObjectId, spawnedChest->id + 1);
     m_mapObjects.push_back(*spawnedChest);
-    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects);
+    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
     m_eventLog.log(m_turnSystem.getTurnNumber(), m_turnSystem.getActiveKingdom(), "A chest appeared on the map.");
 }

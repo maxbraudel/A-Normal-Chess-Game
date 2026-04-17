@@ -487,6 +487,14 @@ const std::vector<MapObject>& Game::displayedMapObjects() const {
     return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.mapObjects() : mapObjects();
 }
 
+std::vector<AutonomousUnit>& Game::displayedAutonomousUnits() {
+    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.autonomousUnits() : autonomousUnits();
+}
+
+const std::vector<AutonomousUnit>& Game::displayedAutonomousUnits() const {
+    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.autonomousUnits() : autonomousUnits();
+}
+
 Kingdom& Game::displayedKingdom(KingdomId id) {
     return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.kingdom(id) : kingdom(id);
 }
@@ -810,6 +818,7 @@ void Game::render() {
             displayedKingdoms(),
             displayedPublicBuildings(),
             displayedMapObjects(),
+            displayedAutonomousUnits(),
             m_config
         };
         const WorldRenderPlan renderPlan = RenderCoordinator::buildWorldRenderPlan(

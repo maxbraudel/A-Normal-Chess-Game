@@ -4,12 +4,14 @@
 #include <string>
 #include <vector>
 
+#include "Autonomous/AutonomousUnit.hpp"
 #include "Buildings/Building.hpp"
 #include "Board/Board.hpp"
 #include "Core/GameSessionConfig.hpp"
 #include "Kingdom/Kingdom.hpp"
 #include "Objects/MapObject.hpp"
 #include "Save/SaveData.hpp"
+#include "Systems/InfernalSystem.hpp"
 #include "Systems/TurnSystem.hpp"
 
 class GameStateValidator {
@@ -20,8 +22,10 @@ public:
                                      const std::array<Kingdom, kNumKingdoms>& kingdoms,
                                      const std::vector<Building>& publicBuildings,
                                      const std::vector<MapObject>& mapObjects,
+                                     const std::vector<AutonomousUnit>& autonomousUnits,
                                      const TurnSystem& turnSystem,
                                      const GameSessionConfig& session,
+                                     const InfernalSystemState& infernalSystemState,
                                      std::string* errorMessage = nullptr);
 
 private:

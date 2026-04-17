@@ -209,7 +209,8 @@ void RenderCoordinator::renderWorldFrame(WorldRenderBindings& bindings,
                                     bindings.displayedBoard,
                                     bindings.displayedKingdoms,
                                     bindings.displayedPublicBuildings,
-                                    bindings.displayedMapObjects);
+                                    bindings.displayedMapObjects,
+                                    bindings.displayedAutonomousUnits);
 
     if (plan.showOrientationCheckerboard) {
         bindings.renderer.getOverlay().drawOrientationCheckerboard(
@@ -237,7 +238,10 @@ void RenderCoordinator::renderWorldFrame(WorldRenderBindings& bindings,
                                                        bindings.config.getCellSizePx());
     }
 
-    bindings.renderer.drawPiecesLayer(bindings.window, bindings.camera, bindings.displayedKingdoms);
+    bindings.renderer.drawPiecesLayer(bindings.window,
+                                      bindings.camera,
+                                      bindings.displayedKingdoms,
+                                      bindings.displayedAutonomousUnits);
 
     for (const SelectionFrameSpec& frame : plan.selectionFrames) {
         bindings.renderer.getOverlay().drawSelectionFrame(bindings.window,

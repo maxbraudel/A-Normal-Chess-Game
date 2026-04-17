@@ -1,12 +1,15 @@
 #pragma once
 #include <array>
-#include <vector>
 #include <string>
+#include <vector>
+
+#include "Autonomous/AutonomousUnit.hpp"
 #include "Core/GameSessionConfig.hpp"
 #include "Kingdom/KingdomId.hpp"
 #include "Board/Cell.hpp"
 #include "Objects/MapObject.hpp"
 #include "Systems/ChestSystem.hpp"
+#include "Systems/InfernalSystem.hpp"
 #include "Units/Piece.hpp"
 #include "Buildings/Building.hpp"
 #include "Systems/EventLog.hpp"
@@ -59,6 +62,10 @@ struct SaveData {
     // Map objects
     std::vector<MapObject> mapObjects;
     ChestSystemState chestSystemState{};
+
+    // Autonomous hostile units
+    std::vector<AutonomousUnit> autonomousUnits;
+    InfernalSystemState infernalSystemState{};
 
     // Events
     std::vector<EventLog::Event> events;

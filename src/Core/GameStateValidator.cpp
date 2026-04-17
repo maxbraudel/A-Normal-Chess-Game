@@ -1,5 +1,6 @@
 #include "Core/GameStateValidator.hpp"
 
+#include <algorithm>
 #include <set>
 
 namespace {
@@ -17,6 +18,31 @@ bool validateAuthoritativeBuildingState(const Building& building,
     if (errorMessage) {
         *errorMessage = scope + " contains an under-construction building in authoritative state.";
     }
+    return false;
+}
+
+bool isValidAutonomousUnitType(AutonomousUnitType type) {
+    switch (type) {
+        case AutonomousUnitType::InfernalPiece:
+            return true;
+    }
+
+    return false;
+}
+
+bool isValidInfernalManifestedPieceType(PieceType type) {
+    switch (type) {
+        case PieceType::Pawn:
+        case PieceType::Knight:
+        case PieceType::Bishop:
+        case PieceType::Rook:
+        case PieceType::Queen:
+            return true;
+
+        case PieceType::King:
+            return false;
+    }
+
     return false;
 }
 }
@@ -208,6 +234,36 @@ bool GameStateValidator::validateSaveData(const SaveData& data, std::string* err
         }
     }
 
+    std::set<int> autonomousUnitIds;
+    for (const auto& autonomousUnit : data.autonomousUnits) {
+        if (!isValidAutonomousUnitType(autonomousUnit.type)) {
+            writeError(errorMessage, "Save data contains an invalid autonomous unit type.");
+            return false;
+        }
+        if (!autonomousUnitIds.insert(autonomousUnit.id).second) {
+            writeError(errorMessage, "Save data contains duplicate autonomous unit IDs.");
+            return false;
+        }
+        if (!isValidKingdomId(autonomousUnit.infernal.targetKingdom)) {
+            writeError(errorMessage, "Save data contains an autonomous unit with an invalid target kingdom.");
+            return false;
+        }
+        if (!isValidInfernalManifestedPieceType(autonomousUnit.infernal.manifestedPieceType)) {
+            writeError(errorMessage, "Save data contains an infernal autonomous unit with an invalid manifested piece type.");
+            return false;
+        }
+    }
+
+    if (data.infernalSystemState.activeInfernalUnitId >= 0
+        && autonomousUnitIds.count(data.infernalSystemState.activeInfernalUnitId) == 0) {
+        writeError(errorMessage, "Save data infernal state references a missing active autonomous unit.");
+        return false;
+    }
+    if (data.infernalSystemState.whiteBloodDebt < 0 || data.infernalSystemState.blackBloodDebt < 0) {
+        writeError(errorMessage, "Save data contains negative infernal blood debt.");
+        return false;
+    }
+
     return true;
 }
 
@@ -215,8 +271,10 @@ bool GameStateValidator::validateRuntimeState(const Board& board,
                                              const std::array<Kingdom, kNumKingdoms>& kingdoms,
                                              const std::vector<Building>& publicBuildings,
                                              const std::vector<MapObject>& mapObjects,
+                                             const std::vector<AutonomousUnit>& autonomousUnits,
                                              const TurnSystem& turnSystem,
                                              const GameSessionConfig& session,
+                                             const InfernalSystemState& infernalSystemState,
                                              std::string* errorMessage) {
     if (!validateSessionConfig(session, errorMessage)) {
         return false;
@@ -331,6 +389,46 @@ bool GameStateValidator::validateRuntimeState(const Board& board,
             writeError(errorMessage, "Runtime board cell pointers are out of sync for a map object.");
             return false;
         }
+    }
+
+    std::set<int> autonomousUnitIds;
+    for (const auto& autonomousUnit : autonomousUnits) {
+        if (!isValidAutonomousUnitType(autonomousUnit.type)) {
+            writeError(errorMessage, "Runtime state contains an invalid autonomous unit type.");
+            return false;
+        }
+        if (!isValidKingdomId(autonomousUnit.infernal.targetKingdom)) {
+            writeError(errorMessage, "Runtime state contains an autonomous unit with an invalid target kingdom.");
+            return false;
+        }
+        if (!isValidInfernalManifestedPieceType(autonomousUnit.infernal.manifestedPieceType)) {
+            writeError(errorMessage, "Runtime state contains an infernal autonomous unit with an invalid manifested piece type.");
+            return false;
+        }
+        if (!board.isInBounds(autonomousUnit.position.x, autonomousUnit.position.y)) {
+            writeError(errorMessage, "Runtime state contains an autonomous unit outside board bounds.");
+            return false;
+        }
+        if (!autonomousUnitIds.insert(autonomousUnit.id).second) {
+            writeError(errorMessage, "Runtime state contains duplicate autonomous unit IDs.");
+            return false;
+        }
+
+        const Cell& cell = board.getCell(autonomousUnit.position.x, autonomousUnit.position.y);
+        if (cell.autonomousUnit == nullptr || cell.autonomousUnit->id != autonomousUnit.id) {
+            writeError(errorMessage, "Runtime board cell pointers are out of sync for an autonomous unit.");
+            return false;
+        }
+    }
+
+    if (infernalSystemState.activeInfernalUnitId >= 0
+        && autonomousUnitIds.count(infernalSystemState.activeInfernalUnitId) == 0) {
+        writeError(errorMessage, "Runtime infernal state references a missing active autonomous unit.");
+        return false;
+    }
+    if (infernalSystemState.whiteBloodDebt < 0 || infernalSystemState.blackBloodDebt < 0) {
+        writeError(errorMessage, "Runtime infernal state contains negative blood debt.");
+        return false;
     }
 
     return true;

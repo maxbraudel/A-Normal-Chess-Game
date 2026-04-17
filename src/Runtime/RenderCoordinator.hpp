@@ -15,6 +15,7 @@
 #include "Core/GameState.hpp"
 #include "Core/InteractionPermissions.hpp"
 #include "Core/ToolState.hpp"
+#include "Autonomous/AutonomousUnit.hpp"
 #include "Kingdom/KingdomId.hpp"
 #include "Objects/MapObject.hpp"
 
@@ -100,6 +101,7 @@ struct WorldRenderBindings {
     const std::array<Kingdom, kNumKingdoms>& displayedKingdoms;
     const std::vector<Building>& displayedPublicBuildings;
     const std::vector<MapObject>& displayedMapObjects;
+    const std::vector<AutonomousUnit>& displayedAutonomousUnits;
     const GameConfig& config;
 };
 

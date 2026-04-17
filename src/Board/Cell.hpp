@@ -6,6 +6,7 @@
 class Building;
 class MapObject;
 class Piece;
+class AutonomousUnit;
 
 struct Cell {
     CellType type = CellType::Void;
@@ -14,6 +15,7 @@ struct Cell {
     Building* building = nullptr;
     MapObject* mapObject = nullptr;
     Piece* piece = nullptr;
+    AutonomousUnit* autonomousUnit = nullptr;
     bool isInCircle = false;
     sf::Vector2i position{0, 0};
 };

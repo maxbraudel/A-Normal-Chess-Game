@@ -101,6 +101,7 @@ set(CORE_SOURCES
     src/Systems/EconomySystem.cpp
     src/Systems/EventLog.cpp
     src/Systems/FormationSystem.cpp
+    src/Systems/InfernalSystem.cpp
     src/Systems/MarriageSystem.cpp
     src/Systems/PendingTurnProjection.cpp
     src/Systems/ProductionSpawnRules.cpp

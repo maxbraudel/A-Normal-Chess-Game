@@ -10,6 +10,7 @@
 #include "Kingdom/KingdomId.hpp"
 
 class Board;
+class AutonomousUnit;
 class Building;
 class GameConfig;
 class Kingdom;
@@ -29,6 +30,7 @@ public:
                const std::array<Kingdom, kNumKingdoms>& kingdoms,
                const std::vector<Building>& publicBuildings,
                const std::vector<MapObject>& mapObjects,
+               const std::vector<AutonomousUnit>& autonomousUnits,
                KingdomId activeKingdom,
                int turnNumber,
                const GameConfig& config,

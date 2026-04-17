@@ -101,6 +101,26 @@
             "arena_size": 9,
             "arena_width": 4,
             "arena_height": 4
+        },
+        "infernal": {
+            "min_spawn_turn": 3,
+            "respawn_cooldown_turns": 4,
+            "spawn_retry_turns": 1,
+            "poisson_lambda_base_times_1000": 20,
+            "poisson_lambda_per_debt_times_1000": 12,
+            "poisson_lambda_cap_times_1000": 250,
+            "blood_debt_decay_percent": 95,
+            "blood_debt_pawn": 1,
+            "blood_debt_knight": 2,
+            "blood_debt_bishop": 2,
+            "blood_debt_rook": 3,
+            "blood_debt_queen": 5,
+            "blood_debt_structure_damage": 1,
+            "target_weight_pawn": 8,
+            "target_weight_knight": 14,
+            "target_weight_bishop": 14,
+            "target_weight_rook": 26,
+            "target_weight_queen": 38
         }
     },
     "ai": {

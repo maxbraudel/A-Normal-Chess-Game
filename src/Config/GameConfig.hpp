@@ -86,6 +86,18 @@ public:
     int getChestLateMovementBonusWeight() const;
     int getChestLateBuildBonusWeight() const;
 
+    // Infernal pieces
+    int getInfernalMinSpawnTurn() const;
+    int getInfernalRespawnCooldownTurns() const;
+    int getInfernalSpawnRetryTurns() const;
+    int getInfernalPoissonLambdaBaseTimes1000() const;
+    int getInfernalPoissonLambdaPerDebtTimes1000() const;
+    int getInfernalPoissonLambdaCapTimes1000() const;
+    int getInfernalBloodDebtDecayPercent() const;
+    int getInfernalBloodDebtForCapturedPiece(PieceType victim) const;
+    int getInfernalBloodDebtForStructureDamage() const;
+    int getInfernalTargetWeight(PieceType type) const;
+
 private:
     // Map params
     int m_mapRadius;
@@ -197,6 +209,26 @@ private:
     int m_chestLateGoldWeight;
     int m_chestLateMovementBonusWeight;
     int m_chestLateBuildBonusWeight;
+
+    // Infernal pieces
+    int m_infernalMinSpawnTurn;
+    int m_infernalRespawnCooldownTurns;
+    int m_infernalSpawnRetryTurns;
+    int m_infernalPoissonLambdaBaseTimes1000;
+    int m_infernalPoissonLambdaPerDebtTimes1000;
+    int m_infernalPoissonLambdaCapTimes1000;
+    int m_infernalBloodDebtDecayPercent;
+    int m_infernalDebtPawn;
+    int m_infernalDebtKnight;
+    int m_infernalDebtBishop;
+    int m_infernalDebtRook;
+    int m_infernalDebtQueen;
+    int m_infernalDebtStructureDamage;
+    int m_infernalTargetWeightPawn;
+    int m_infernalTargetWeightKnight;
+    int m_infernalTargetWeightBishop;
+    int m_infernalTargetWeightRook;
+    int m_infernalTargetWeightQueen;
 
     void setDefaults();
     

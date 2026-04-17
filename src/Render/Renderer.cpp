@@ -2,6 +2,7 @@
 #include "Render/Camera.hpp"
 #include "Render/OverlayRenderer.hpp"
 #include "Assets/AssetManager.hpp"
+#include "Autonomous/AutonomousUnit.hpp"
 #include "Board/Board.hpp"
 #include "Board/Cell.hpp"
 #include "Kingdom/Kingdom.hpp"
@@ -70,16 +71,19 @@ void Renderer::draw(sf::RenderWindow& window, const Camera& camera,
                      const Board& board, const std::array<Kingdom, kNumKingdoms>& kingdoms,
                      const std::vector<Building>& publicBuildings,
                      const std::vector<MapObject>& mapObjects,
+                     const std::vector<AutonomousUnit>& autonomousUnits,
                      const TurnSystem& turnSystem) {
     (void)turnSystem;
-    drawWorldBase(window, camera, board, kingdoms, publicBuildings, mapObjects);
-    drawPiecesLayer(window, camera, kingdoms);
+    drawWorldBase(window, camera, board, kingdoms, publicBuildings, mapObjects, autonomousUnits);
+    drawPiecesLayer(window, camera, kingdoms, autonomousUnits);
 }
 
 void Renderer::drawWorldBase(sf::RenderWindow& window, const Camera& camera,
                               const Board& board, const std::array<Kingdom, kNumKingdoms>& kingdoms,
                               const std::vector<Building>& publicBuildings,
-                              const std::vector<MapObject>& mapObjects) {
+                              const std::vector<MapObject>& mapObjects,
+                              const std::vector<AutonomousUnit>& autonomousUnits) {
+    (void) autonomousUnits;
     camera.applyTo(window);
     drawBoard(window, camera, board);
     drawBuildings(window, camera, kingdoms, publicBuildings);
@@ -87,9 +91,11 @@ void Renderer::drawWorldBase(sf::RenderWindow& window, const Camera& camera,
 }
 
 void Renderer::drawPiecesLayer(sf::RenderWindow& window, const Camera& camera,
-                                const std::array<Kingdom, kNumKingdoms>& kingdoms) {
+                                const std::array<Kingdom, kNumKingdoms>& kingdoms,
+                                const std::vector<AutonomousUnit>& autonomousUnits) {
     camera.applyTo(window);
     drawPieces(window, camera, kingdoms);
+    drawAutonomousUnits(window, autonomousUnits);
 }
 
 void Renderer::drawBoard(sf::RenderWindow& window, const Camera& camera, const Board& board) {
@@ -220,5 +226,28 @@ void Renderer::drawPieces(sf::RenderWindow& window, const Camera& camera,
 
             window.draw(sprite);
         }
+    }
+}
+
+void Renderer::drawAutonomousUnits(sf::RenderWindow& window, const std::vector<AutonomousUnit>& autonomousUnits) {
+    if (!m_assets) return;
+
+    sf::Sprite sprite;
+    for (const AutonomousUnit& unit : autonomousUnits) {
+        sprite.setTexture(m_assets->getInfernalPieceTexture(unit.infernal.manifestedPieceType));
+        configureSpriteForCell(sprite,
+                               m_cellSize,
+                               static_cast<float>(unit.position.x * m_cellSize),
+                               static_cast<float>(unit.position.y * m_cellSize),
+                               0,
+                               0);
+
+        if (unit.infernal.phase == InfernalPhase::Returning) {
+            sprite.setColor(sf::Color(255, 220, 220, 220));
+        } else {
+            sprite.setColor(sf::Color::White);
+        }
+
+        window.draw(sprite);
     }
 }

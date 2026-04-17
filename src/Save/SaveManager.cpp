@@ -179,10 +179,25 @@ void SaveManager::writeJson(std::ostream& output, const SaveData& data) {
     }
     output << "],\n";
 
+    output << "  \"autonomousUnits\": [";
+    for (std::size_t i = 0; i < normalized.autonomousUnits.size(); ++i) {
+        if (i > 0) output << ", ";
+        output << SaveManager::serializeAutonomousUnit(normalized.autonomousUnits[i]);
+    }
+    output << "],\n";
+
     output << "  \"chestState\": {"
            << "\"activeChestObjectId\":" << normalized.chestSystemState.activeChestObjectId << ","
            << "\"nextSpawnTurn\":" << normalized.chestSystemState.nextSpawnTurn << ","
            << "\"rngCounter\":" << normalized.chestSystemState.rngCounter
+           << "},\n";
+
+    output << "  \"infernalState\": {"
+           << "\"activeInfernalUnitId\":" << normalized.infernalSystemState.activeInfernalUnitId << ","
+           << "\"nextSpawnTurn\":" << normalized.infernalSystemState.nextSpawnTurn << ","
+           << "\"whiteBloodDebt\":" << normalized.infernalSystemState.whiteBloodDebt << ","
+           << "\"blackBloodDebt\":" << normalized.infernalSystemState.blackBloodDebt << ","
+           << "\"rngCounter\":" << normalized.infernalSystemState.rngCounter
            << "},\n";
 
     output << "  \"events\": [";
@@ -413,6 +428,24 @@ std::string SaveManager::serializeMapObject(const MapObject& object) {
     return ss.str();
 }
 
+std::string SaveManager::serializeAutonomousUnit(const AutonomousUnit& unit) {
+    std::ostringstream ss;
+    ss << "{ \"id\": " << unit.id
+       << ", \"type\": " << static_cast<int>(unit.type)
+       << ", \"x\": " << unit.position.x
+       << ", \"y\": " << unit.position.y
+       << ", \"targetKingdom\": " << static_cast<int>(unit.infernal.targetKingdom)
+       << ", \"targetPieceId\": " << unit.infernal.targetPieceId
+    << ", \"manifestedPieceType\": " << static_cast<int>(unit.infernal.manifestedPieceType)
+       << ", \"preferredTargetType\": " << static_cast<int>(unit.infernal.preferredTargetType)
+       << ", \"phase\": " << static_cast<int>(unit.infernal.phase)
+       << ", \"returnX\": " << unit.infernal.returnBorderCell.x
+       << ", \"returnY\": " << unit.infernal.returnBorderCell.y
+       << ", \"spawnTurn\": " << unit.infernal.spawnTurn
+       << " }";
+    return ss.str();
+}
+
 std::string SaveManager::serializeEvent(const EventLog::Event& e) {
     std::ostringstream ss;
     ss << "{ \"turn\": " << e.turnNumber
@@ -534,6 +567,29 @@ MapObject SaveManager::parseMapObject(const std::string& json) {
     return object;
 }
 
+AutonomousUnit SaveManager::parseAutonomousUnit(const std::string& json) {
+    AutonomousUnit unit;
+    unit.id = extractInt(json, "id", -1);
+    unit.type = static_cast<AutonomousUnitType>(extractInt(json, "type", 0));
+    unit.position.x = extractInt(json, "x", 0);
+    unit.position.y = extractInt(json, "y", 0);
+    unit.infernal.targetKingdom = static_cast<KingdomId>(extractInt(json, "targetKingdom", 0));
+    unit.infernal.targetPieceId = extractInt(json, "targetPieceId", -1);
+    unit.infernal.manifestedPieceType = static_cast<PieceType>(extractInt(
+        json,
+        "manifestedPieceType",
+        static_cast<int>(PieceType::Queen)));
+    unit.infernal.preferredTargetType = static_cast<PieceType>(extractInt(
+        json,
+        "preferredTargetType",
+        static_cast<int>(PieceType::Queen)));
+    unit.infernal.phase = static_cast<InfernalPhase>(extractInt(json, "phase", 0));
+    unit.infernal.returnBorderCell.x = extractInt(json, "returnX", -1);
+    unit.infernal.returnBorderCell.y = extractInt(json, "returnY", -1);
+    unit.infernal.spawnTurn = extractInt(json, "spawnTurn", 0);
+    return unit;
+}
+
 // --- Save / Load ---
 
 bool SaveManager::save(const std::string& filepath, const SaveData& data) {
@@ -642,6 +698,12 @@ bool SaveManager::deserialize(const std::string& json, SaveData& outData) {
         outData.mapObjects.push_back(parseMapObject(elem));
     }
 
+    std::string autonomousUnitsArray = extractArray(json, "autonomousUnits");
+    outData.autonomousUnits.clear();
+    for (const auto& elem : splitArrayElements(autonomousUnitsArray)) {
+        outData.autonomousUnits.push_back(parseAutonomousUnit(elem));
+    }
+
     const std::string chestStateSection = extractSection(json, "chestState");
     outData.chestSystemState.activeChestObjectId = extractInt(
         chestStateSection, "activeChestObjectId", -1);
@@ -649,6 +711,16 @@ bool SaveManager::deserialize(const std::string& json, SaveData& outData) {
     outData.chestSystemState.rngCounter = static_cast<std::uint32_t>(std::max(
         0,
         extractInt(chestStateSection, "rngCounter", 0)));
+
+    const std::string infernalStateSection = extractSection(json, "infernalState");
+    outData.infernalSystemState.activeInfernalUnitId = extractInt(
+        infernalStateSection, "activeInfernalUnitId", -1);
+    outData.infernalSystemState.nextSpawnTurn = extractInt(infernalStateSection, "nextSpawnTurn", 0);
+    outData.infernalSystemState.whiteBloodDebt = extractInt(infernalStateSection, "whiteBloodDebt", 0);
+    outData.infernalSystemState.blackBloodDebt = extractInt(infernalStateSection, "blackBloodDebt", 0);
+    outData.infernalSystemState.rngCounter = static_cast<std::uint32_t>(std::max(
+        0,
+        extractInt(infernalStateSection, "rngCounter", 0)));
 
     std::string gridArray = extractArray(json, "grid");
     outData.grid.clear();

@@ -69,7 +69,7 @@ std::vector<sf::Vector2i> MovementRules::getPawnMoves(const Piece& piece, const 
         }
 
         const Cell& cell = board.getCell(nx, ny);
-        if (cell.piece) {
+        if (cell.piece || cell.autonomousUnit) {
             continue;
         }
         if (isEnemyCapturableBuildingCell(cell, piece.kingdom)) {
@@ -90,6 +90,10 @@ std::vector<sf::Vector2i> MovementRules::getPawnMoves(const Piece& piece, const 
 
         const Cell& cell = board.getCell(nx, ny);
         if (cell.piece && cell.piece->kingdom != piece.kingdom) {
+            moves.push_back({nx, ny});
+            continue;
+        }
+        if (cell.autonomousUnit) {
             moves.push_back({nx, ny});
             continue;
         }
@@ -136,6 +140,10 @@ std::vector<sf::Vector2i> MovementRules::getKnightMoves(const Piece& piece, cons
             continue;
         }
         if (cell.piece && cell.piece->kingdom == piece.kingdom) continue;
+        if (cell.autonomousUnit) {
+            moves.push_back({nx, ny});
+            continue;
+        }
         moves.push_back({nx, ny});
     }
     return moves;
@@ -194,6 +202,10 @@ std::vector<sf::Vector2i> MovementRules::getKingMoves(const Piece& piece, const 
                 continue;
             }
             if (cell.piece && cell.piece->kingdom == piece.kingdom) continue;
+            if (cell.autonomousUnit) {
+                moves.push_back({nx, ny});
+                continue;
+            }
             moves.push_back({nx, ny});
         }
     }
@@ -217,6 +229,7 @@ std::vector<sf::Vector2i> MovementRules::traceDirection(
         }
         if (cell.piece && cell.piece->kingdom == piece.kingdom) break;
         moves.push_back({nx, ny});
+        if (cell.autonomousUnit) break;
         if (cell.piece && cell.piece->kingdom != piece.kingdom) break;
     }
     return moves;

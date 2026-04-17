@@ -11,6 +11,7 @@
 
 #include <SFML/System/Time.hpp>
 
+#include "Autonomous/AutonomousUnit.hpp"
 #include "AI/AIBrain.hpp"
 #include "AI/ForwardModel.hpp"
 #include "AI/AIStrategySpecial.hpp"
@@ -68,6 +69,7 @@
 #include "Systems/CheckSystem.hpp"
 #include "Systems/EconomySystem.hpp"
 #include "Systems/EventLog.hpp"
+#include "Systems/InfernalSystem.hpp"
 #include "Systems/PendingTurnProjection.hpp"
 #include "Systems/ProductionSpawnRules.hpp"
 #include "Systems/ProductionSystem.hpp"
@@ -133,6 +135,44 @@ Building makeTestPublicBuilding(BuildingType type, const sf::Vector2i& origin, i
     return building;
 }
 
+bool isBoardBorderCell(const Board& board, const sf::Vector2i& position) {
+    if (!board.isInBounds(position.x, position.y) || !board.getCell(position.x, position.y).isInCircle) {
+        return false;
+    }
+
+    static const int directions[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+    for (const auto& direction : directions) {
+        const int nx = position.x + direction[0];
+        const int ny = position.y + direction[1];
+        if (!board.isInBounds(nx, ny) || !board.getCell(nx, ny).isInCircle) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+GameConfig makeInfernalTestConfig(const std::string& infernalJsonBody) {
+    const std::filesystem::path tempPath =
+        std::filesystem::temp_directory_path() / "anormalchess_infernal_test_config.json";
+    {
+        std::ofstream out(tempPath);
+        out << "{\n"
+            << "  \"game\": {\n"
+            << "    \"infernal\": {\n"
+            << infernalJsonBody << "\n"
+            << "    }\n"
+            << "  }\n"
+            << "}\n";
+    }
+
+    GameConfig config;
+    expect(config.loadFromFile(tempPath.string()),
+        "Infernal test config helper should load a temporary infernal override file.");
+    std::filesystem::remove(tempPath);
+    return config;
+}
+
 Piece& addPieceToBoard(Kingdom& kingdom,
                        Board& board,
                        int id,
@@ -143,6 +183,24 @@ Piece& addPieceToBoard(Kingdom& kingdom,
     Piece& piece = kingdom.pieces.back();
     board.getCell(position.x, position.y).piece = &piece;
     return piece;
+}
+
+AutonomousUnit makeTestInfernalUnit(int id,
+                                    KingdomId targetKingdom,
+                                    const sf::Vector2i& position,
+                                    PieceType manifestedPieceType = PieceType::Queen) {
+    AutonomousUnit unit;
+    unit.id = id;
+    unit.type = AutonomousUnitType::InfernalPiece;
+    unit.position = position;
+    unit.infernal.targetKingdom = targetKingdom;
+    unit.infernal.targetPieceId = -1;
+    unit.infernal.manifestedPieceType = manifestedPieceType;
+    unit.infernal.preferredTargetType = PieceType::Queen;
+    unit.infernal.phase = InfernalPhase::Hunting;
+    unit.infernal.returnBorderCell = {0, position.y};
+    unit.infernal.spawnTurn = 1;
+    return unit;
 }
 
 Building* findBuildingById(Kingdom& kingdom, int buildingId) {
@@ -5398,6 +5456,326 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             "Replaying a queued build into the turn draft should reserve the building cost from the displayed gold.");
     }
 
+    void testTurnDraftCapturesAutonomousUnitOnQueuedMove() {
+        GameConfig config;
+        GameEngine engine;
+        engine.board().init(12);
+        engine.kingdom(KingdomId::White) = Kingdom(KingdomId::White);
+        engine.kingdom(KingdomId::Black) = Kingdom(KingdomId::Black);
+        engine.publicBuildings().clear();
+        engine.mapObjects().clear();
+        engine.autonomousUnits().clear();
+
+        addPieceToBoard(engine.kingdom(KingdomId::White),
+                        engine.board(),
+                        801,
+                        PieceType::Rook,
+                        KingdomId::White,
+                        {4, 4});
+        addPieceToBoard(engine.kingdom(KingdomId::White),
+                        engine.board(),
+                        802,
+                        PieceType::King,
+                        KingdomId::White,
+                        {1, 1});
+        addPieceToBoard(engine.kingdom(KingdomId::Black),
+                        engine.board(),
+                        901,
+                        PieceType::King,
+                        KingdomId::Black,
+                        {10, 10});
+
+        engine.autonomousUnits().push_back(makeTestInfernalUnit(5001, KingdomId::Black, {4, 7}));
+        relinkBoardState(engine.board(),
+                         engine.kingdoms(),
+                         engine.publicBuildings(),
+                         engine.mapObjects(),
+                         engine.autonomousUnits());
+
+        TurnDraft draft;
+        expect(draft.rebuild(engine, config, {makeMoveCommand(801, {4, 4}, {4, 7})}),
+            "TurnDraft should rebuild successfully when a queued move captures an autonomous unit.");
+        expect(draft.autonomousUnits().empty(),
+            "The projected draft should remove an autonomous unit that is captured by a queued move.");
+        expect(draft.board().getCell(4, 7).autonomousUnit == nullptr,
+            "The projected destination cell should clear autonomous occupancy after the capture is replayed.");
+        expect(draft.board().getCell(4, 7).piece != nullptr
+               && draft.board().getCell(4, 7).piece->id == 801,
+            "The projected moving piece should occupy the destination cell after capturing the autonomous unit.");
+    }
+
+    void testTurnSystemCapturesAutonomousUnitAndClearsInfernalState() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 811, PieceType::Rook, KingdomId::White, {4, 4});
+        addPieceToBoard(white, board, 812, PieceType::King, KingdomId::White, {1, 1});
+        addPieceToBoard(black, board, 911, PieceType::King, KingdomId::Black, {10, 10});
+
+        std::vector<Building> publicBuildings;
+        std::vector<MapObject> mapObjects;
+        ChestSystemState chestSystemState{};
+        std::vector<AutonomousUnit> autonomousUnits;
+        autonomousUnits.push_back(makeTestInfernalUnit(5002, KingdomId::Black, {4, 7}));
+        board.getCell(4, 7).autonomousUnit = &autonomousUnits.front();
+
+        InfernalSystemState infernalSystemState{};
+        infernalSystemState.activeInfernalUnitId = 5002;
+
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+        turnSystem.setTurnNumber(1);
+        EventLog eventLog;
+        std::vector<GameplayNotification> gameplayNotifications;
+        PieceFactory pieceFactory;
+        BuildingFactory buildingFactory;
+
+        expect(turnSystem.queueCommand(makeMoveCommand(811, {4, 4}, {4, 7}),
+                                       board,
+                                       white,
+                                       black,
+                                       publicBuildings,
+                                       config),
+            "A kingdom piece should be allowed to queue a move that captures an autonomous unit.");
+
+        turnSystem.commitTurn(board,
+                              white,
+                              black,
+                              publicBuildings,
+                              mapObjects,
+                              chestSystemState,
+                              autonomousUnits,
+                              infernalSystemState,
+                              config,
+                              eventLog,
+                              gameplayNotifications,
+                              pieceFactory,
+                              buildingFactory);
+
+        expect(autonomousUnits.empty(),
+            "Authoritative turn commit should remove an autonomous unit captured by a kingdom piece.");
+        expect(infernalSystemState.activeInfernalUnitId == -1,
+            "Capturing the active infernal unit should clear the active infernal id from system state.");
+        expect(board.getCell(4, 7).autonomousUnit == nullptr,
+            "The authoritative destination cell should no longer reference the captured autonomous unit.");
+        expect(board.getCell(4, 7).piece != nullptr && board.getCell(4, 7).piece->id == 811,
+            "The capturing piece should finish the committed move on the destination cell.");
+    }
+
+    void testInfernalBloodDebtAccumulatesFromCommittedCaptures() {
+        GameConfig config = makeInfernalTestConfig("      \"blood_debt_pawn\": 7");
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 821, PieceType::Rook, KingdomId::White, {4, 4});
+        addPieceToBoard(white, board, 822, PieceType::King, KingdomId::White, {1, 1});
+        addPieceToBoard(black, board, 921, PieceType::Pawn, KingdomId::Black, {4, 7});
+        addPieceToBoard(black, board, 922, PieceType::King, KingdomId::Black, {10, 10});
+
+        std::vector<Building> publicBuildings;
+        std::vector<MapObject> mapObjects;
+        ChestSystemState chestSystemState{};
+        std::vector<AutonomousUnit> autonomousUnits;
+        InfernalSystemState infernalSystemState{};
+
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+        turnSystem.setTurnNumber(1);
+        EventLog eventLog;
+        std::vector<GameplayNotification> gameplayNotifications;
+        PieceFactory pieceFactory;
+        BuildingFactory buildingFactory;
+
+        expect(turnSystem.queueCommand(makeMoveCommand(821, {4, 4}, {4, 7}),
+                                       board,
+                                       white,
+                                       black,
+                                       publicBuildings,
+                                       config),
+            "The debt accumulation test should queue a legal capture move.");
+
+        turnSystem.commitTurn(board,
+                              white,
+                              black,
+                              publicBuildings,
+                              mapObjects,
+                              chestSystemState,
+                              autonomousUnits,
+                              infernalSystemState,
+                              config,
+                              eventLog,
+                              gameplayNotifications,
+                              pieceFactory,
+                              buildingFactory);
+
+        expect(infernalSystemState.whiteBloodDebt == 7,
+            "Capturing an enemy piece during authoritative turn commit should add infernal blood debt to the attacking kingdom.");
+    }
+
+    void testInfernalSystemSpawnsOnBorderAndStartsHunt() {
+        GameConfig config = makeInfernalTestConfig(
+            "      \"min_spawn_turn\": 0,\n"
+            "      \"poisson_lambda_base_times_1000\": 100000,\n"
+            "      \"poisson_lambda_per_debt_times_1000\": 0,\n"
+            "      \"poisson_lambda_cap_times_1000\": 100000");
+        Board board;
+        board.init(12);
+
+        std::array<Kingdom, kNumKingdoms> kingdoms{Kingdom(KingdomId::White), Kingdom(KingdomId::Black)};
+        addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::White)],
+                        board,
+                        831,
+                        PieceType::King,
+                        KingdomId::White,
+                        {1, 1});
+        addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::White)],
+                        board,
+                        832,
+                        PieceType::Rook,
+                        KingdomId::White,
+                        {5, 5});
+        addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::Black)],
+                        board,
+                        931,
+                        PieceType::King,
+                        KingdomId::Black,
+                        {10, 10});
+
+        InfernalSystemState infernalSystemState{};
+        InfernalSystem::initialize(infernalSystemState, 0, config);
+        infernalSystemState.nextSpawnTurn = 0;
+
+        std::optional<AutonomousUnit> spawnedInfernal = InfernalSystem::trySpawnInfernal(
+            infernalSystemState,
+            board,
+            kingdoms,
+            123456u,
+            0,
+            1,
+            7001,
+            config);
+
+        expect(spawnedInfernal.has_value(),
+            "An infernal unit should spawn deterministically for the fixed test seed when the Poisson lambda is forced extremely high.");
+        expect(spawnedInfernal->infernal.targetKingdom == KingdomId::White,
+            "The spawned infernal should target the only kingdom that currently exposes a non-king piece.");
+        expect(spawnedInfernal->infernal.targetPieceId == 832,
+            "The spawned infernal should bind to the available non-king target piece.");
+        expect(isBoardBorderCell(board, spawnedInfernal->position),
+            "Infernal spawning should place the unit on a valid border cell.");
+
+        std::vector<Building> publicBuildings;
+        std::vector<MapObject> mapObjects;
+        std::vector<AutonomousUnit> autonomousUnits{*spawnedInfernal};
+        relinkBoardState(board, kingdoms, publicBuildings, mapObjects, autonomousUnits);
+
+        const sf::Vector2i originalPosition = autonomousUnits.front().position;
+        expect(InfernalSystem::actAfterCommittedTurn(infernalSystemState,
+                                                     board,
+                                                     kingdoms,
+                                                     autonomousUnits,
+                                                     123456u,
+                                                     1,
+                                                     1,
+                                                     KingdomId::Black,
+                                                     config),
+            "An infernal that targets White should act immediately after Black ends a committed turn.");
+        expect(!autonomousUnits.empty(),
+            "The infernal should remain alive after starting its hunt.");
+        expect(autonomousUnits.front().position != originalPosition,
+            "The infernal should advance away from its border spawn when it begins hunting.");
+        expect(autonomousUnits.front().infernal.phase == InfernalPhase::Hunting,
+            "The infernal should remain in the hunting phase until it reaches or loses its target.");
+    }
+
+    void testInfernalSystemCapturesTargetReturnsAndDespawns() {
+        GameConfig config = makeInfernalTestConfig(
+            "      \"min_spawn_turn\": 0,\n"
+            "      \"respawn_cooldown_turns\": 2,\n"
+            "      \"spawn_retry_turns\": 1");
+        Board board;
+        board.init(12);
+
+        std::array<Kingdom, kNumKingdoms> kingdoms{Kingdom(KingdomId::White), Kingdom(KingdomId::Black)};
+        addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::White)],
+                        board,
+                        841,
+                        PieceType::Pawn,
+                        KingdomId::White,
+                        {2, 1});
+        addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::White)],
+                        board,
+                        842,
+                        PieceType::King,
+                        KingdomId::White,
+                        {1, 3});
+        addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::Black)],
+                        board,
+                        941,
+                        PieceType::King,
+                        KingdomId::Black,
+                        {10, 10});
+
+        std::vector<Building> publicBuildings;
+        std::vector<MapObject> mapObjects;
+        std::vector<AutonomousUnit> autonomousUnits;
+        autonomousUnits.push_back(makeTestInfernalUnit(8001, KingdomId::White, {0, 1}, PieceType::Rook));
+        autonomousUnits.front().infernal.targetPieceId = 841;
+        autonomousUnits.front().infernal.preferredTargetType = PieceType::Pawn;
+        autonomousUnits.front().infernal.phase = InfernalPhase::Hunting;
+
+        InfernalSystemState infernalSystemState{};
+        infernalSystemState.activeInfernalUnitId = 8001;
+        relinkBoardState(board, kingdoms, publicBuildings, mapObjects, autonomousUnits);
+
+        expect(InfernalSystem::actAfterCommittedTurn(infernalSystemState,
+                                                     board,
+                                                     kingdoms,
+                                                     autonomousUnits,
+                                                     424242u,
+                                                     1,
+                                                     1,
+                                                     KingdomId::Black,
+                                                     config),
+            "The infernal should capture its target when a legal hunting path exists.");
+        relinkBoardState(board, kingdoms, publicBuildings, mapObjects, autonomousUnits);
+
+        expect(kingdoms[static_cast<std::size_t>(KingdomId::White)].getPieceById(841) == nullptr,
+            "A hunted target should be removed from its kingdom once the infernal reaches it.");
+        expect(!autonomousUnits.empty() && autonomousUnits.front().infernal.phase == InfernalPhase::Returning,
+            "After capturing its target with no replacement available, the infernal should switch to the return phase.");
+
+        int currentTurnStep = 3;
+        for (int iteration = 0; iteration < 4 && !autonomousUnits.empty(); ++iteration) {
+            expect(InfernalSystem::actAfterCommittedTurn(infernalSystemState,
+                                                         board,
+                                                         kingdoms,
+                                                         autonomousUnits,
+                                                         424242u,
+                                                         currentTurnStep,
+                                                         2 + iteration,
+                                                         KingdomId::Black,
+                                                         config),
+                "A returning infernal should keep progressing toward the border until it disappears.");
+            if (!autonomousUnits.empty()) {
+                relinkBoardState(board, kingdoms, publicBuildings, mapObjects, autonomousUnits);
+            }
+            currentTurnStep += 2;
+        }
+
+        expect(autonomousUnits.empty(),
+            "A returning infernal should disappear after reaching a legal border exit cell.");
+        expect(infernalSystemState.activeInfernalUnitId == -1,
+            "Despawning the infernal should clear the active infernal unit id.");
+        expect(infernalSystemState.nextSpawnTurn >= currentTurnStep - 2 + 4,
+            "Despawning the infernal should schedule a later respawn using the configured cooldown.");
+    }
+
     void testTurnDraftCoordinatorSynchronizesAndClearsProjectedDraft() {
         GameConfig config;
         GameEngine engine;
@@ -5896,6 +6274,47 @@ void testGameStateValidatorRejectsUnderConstructionRuntimeBuilding() {
     expect(!error.empty(), "Runtime validation should explain under-construction building failures.");
 }
 
+    void testInfernalAutonomousUnitManifestedTypePersistsAcrossSaveLoad() {
+        GameConfig config;
+        GameEngine engine;
+        GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, "infernal_manifested_piece_save_test");
+
+        std::string error;
+        expect(engine.startNewSession(session, config, &error), error);
+
+        engine.autonomousUnits().push_back(makeTestInfernalUnit(6601, KingdomId::Black, {3, 5}, PieceType::Bishop));
+        relinkBoardState(engine.board(),
+                engine.kingdoms(),
+                engine.publicBuildings(),
+                engine.mapObjects(),
+                engine.autonomousUnits());
+
+        SaveManager saveManager;
+        SaveData saved = engine.createSaveData();
+        saved.infernalSystemState.activeInfernalUnitId = 6601;
+        const std::filesystem::path tempPath =
+         std::filesystem::temp_directory_path() / "anormalchess_infernal_manifested_piece_test.json";
+        expect(saveManager.save(tempPath.string(), saved),
+            "SaveManager should serialize infernal autonomous units with their manifested piece type.");
+
+        SaveData loaded;
+        expect(saveManager.load(tempPath.string(), loaded),
+            "SaveManager should load infernal autonomous units from a serialized save file.");
+        std::filesystem::remove(tempPath);
+
+        expect(loaded.autonomousUnits.size() == 1,
+            "The serialized save should preserve the infernal autonomous unit entry.");
+        expect(loaded.autonomousUnits.front().infernal.manifestedPieceType == PieceType::Bishop,
+            "The infernal autonomous unit should preserve its manifested piece archetype across save/load.");
+
+        GameEngine restored;
+        expect(restored.restoreFromSave(loaded, config, &error), error);
+        expect(restored.autonomousUnits().size() == 1,
+            "Restoring a save should rebuild the persisted infernal autonomous unit.");
+        expect(restored.autonomousUnits().front().infernal.manifestedPieceType == PieceType::Bishop,
+            "Restoring a save should keep the infernal autonomous unit manifested piece type intact.");
+    }
+
 void testGameConfigClampsNegativeEconomyValues() {
     const std::filesystem::path tempPath =
         std::filesystem::temp_directory_path() / "anormalchess_negative_economy_test.json";
@@ -6150,6 +6569,9 @@ int main() {
         {"input coordinator gameplay shortcuts", testInputCoordinatorPlansGameplayShortcuts},
         {"input coordinator world routing", testInputCoordinatorRoutesWorldInputAfterGuiFiltering},
         {"render coordinator move overlay plan", testRenderCoordinatorBuildsSelectionAndMoveOverlayPlan},
+        {"infernal blood debt from captures", testInfernalBloodDebtAccumulatesFromCommittedCaptures},
+        {"infernal spawn and hunt", testInfernalSystemSpawnsOnBorderAndStartsHunt},
+        {"infernal capture return despawn", testInfernalSystemCapturesTargetReturnsAndDespawns},
         {"render coordinator anchored piece selection frame", testRenderCoordinatorPrefersAnchoredSelectionCellForPieceFrame},
         {"render coordinator build overlay plan", testRenderCoordinatorBuildsBuildPreviewAndPendingBuildPlan},
         {"update coordinator playing tick", testUpdateCoordinatorPlansPlayingTick},
@@ -6256,6 +6678,8 @@ int main() {
         {"turn system stable pending build ids", testTurnSystemAssignsStablePendingBuildIds},
         {"turn system commit preserves reserved build id", testTurnSystemCommitPreservesReservedBuildId},
         {"turn draft materializes under construction build", testTurnDraftMaterializesQueuedBuildingAsUnderConstruction},
+        {"turn draft captures autonomous unit", testTurnDraftCapturesAutonomousUnitOnQueuedMove},
+        {"turn system captures autonomous unit", testTurnSystemCapturesAutonomousUnitAndClearsInfernalState},
         {"turn draft coordinator sync and clear", testTurnDraftCoordinatorSynchronizesAndClearsProjectedDraft},
         {"pending turn projection stable build id", testPendingTurnProjectionMaterializesQueuedBuildWithStableId},
         {"pending turn projection rejects under construction produce", testPendingTurnProjectionRejectsProductionFromUnderConstructionBarracks},
@@ -6269,6 +6693,7 @@ int main() {
         {"runtime validator negative gold", testGameStateValidatorRejectsNegativeRuntimeGold},
         {"save validator under construction building", testGameStateValidatorRejectsUnderConstructionSaveBuilding},
         {"runtime validator under construction building", testGameStateValidatorRejectsUnderConstructionRuntimeBuilding},
+        {"infernal save roundtrip manifested piece type", testInfernalAutonomousUnitManifestedTypePersistsAcrossSaveLoad},
         {"game config clamps negative economy", testGameConfigClampsNegativeEconomyValues},
         {"projected income helper", testProjectedIncomeHelper},
         {"resource income helper resource types", testResourceIncomeHelperSupportsBothResourceTypes},
