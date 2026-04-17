@@ -192,6 +192,25 @@ void SaveManager::writeJson(std::ostream& output, const SaveData& data) {
            << "\"rngCounter\":" << normalized.chestSystemState.rngCounter
            << "},\n";
 
+        output << "  \"weatherState\": {"
+            << "\"nextSpawnTurnStep\":" << normalized.weatherSystemState.nextSpawnTurnStep << ","
+            << "\"hasActiveFront\":" << (normalized.weatherSystemState.hasActiveFront ? 1 : 0) << ","
+            << "\"rngCounter\":" << normalized.weatherSystemState.rngCounter << ","
+            << "\"activeFront\": {"
+            << "\"direction\":" << static_cast<int>(normalized.weatherSystemState.activeFront.direction) << ","
+            << "\"currentTurnStep\":" << normalized.weatherSystemState.activeFront.currentTurnStep << ","
+            << "\"totalTurnSteps\":" << normalized.weatherSystemState.activeFront.totalTurnSteps << ","
+            << "\"centerStartXTimes1000\":" << normalized.weatherSystemState.activeFront.centerStartXTimes1000 << ","
+            << "\"centerStartYTimes1000\":" << normalized.weatherSystemState.activeFront.centerStartYTimes1000 << ","
+            << "\"stepXTimes1000\":" << normalized.weatherSystemState.activeFront.stepXTimes1000 << ","
+            << "\"stepYTimes1000\":" << normalized.weatherSystemState.activeFront.stepYTimes1000 << ","
+            << "\"radiusAlongTimes1000\":" << normalized.weatherSystemState.activeFront.radiusAlongTimes1000 << ","
+            << "\"radiusAcrossTimes1000\":" << normalized.weatherSystemState.activeFront.radiusAcrossTimes1000 << ","
+            << "\"shapeSeed\":" << normalized.weatherSystemState.activeFront.shapeSeed << ","
+            << "\"densitySeed\":" << normalized.weatherSystemState.activeFront.densitySeed
+            << "}"
+            << "},\n";
+
         output << "  \"xpState\": {"
             << "\"rngCounter\":" << normalized.xpSystemState.rngCounter
             << "},\n";
@@ -715,6 +734,42 @@ bool SaveManager::deserialize(const std::string& json, SaveData& outData) {
     outData.chestSystemState.rngCounter = static_cast<std::uint32_t>(std::max(
         0,
         extractInt(chestStateSection, "rngCounter", 0)));
+
+    const std::string weatherStateSection = extractSection(json, "weatherState");
+    outData.weatherSystemState.nextSpawnTurnStep = extractInt(
+        weatherStateSection, "nextSpawnTurnStep", 0);
+    outData.weatherSystemState.hasActiveFront = extractInt(
+        weatherStateSection, "hasActiveFront", 0) != 0;
+    outData.weatherSystemState.rngCounter = static_cast<std::uint32_t>(std::max(
+        0,
+        extractInt(weatherStateSection, "rngCounter", 0)));
+    const std::string weatherFrontSection = extractSection(weatherStateSection, "activeFront");
+    outData.weatherSystemState.activeFront.direction = static_cast<WeatherDirection>(std::clamp(
+        extractInt(weatherFrontSection, "direction", static_cast<int>(WeatherDirection::East)),
+        0,
+        static_cast<int>(WeatherDirection::Count) - 1));
+    outData.weatherSystemState.activeFront.currentTurnStep = extractInt(
+        weatherFrontSection, "currentTurnStep", 0);
+    outData.weatherSystemState.activeFront.totalTurnSteps = extractInt(
+        weatherFrontSection, "totalTurnSteps", 0);
+    outData.weatherSystemState.activeFront.centerStartXTimes1000 = extractInt(
+        weatherFrontSection, "centerStartXTimes1000", 0);
+    outData.weatherSystemState.activeFront.centerStartYTimes1000 = extractInt(
+        weatherFrontSection, "centerStartYTimes1000", 0);
+    outData.weatherSystemState.activeFront.stepXTimes1000 = extractInt(
+        weatherFrontSection, "stepXTimes1000", 0);
+    outData.weatherSystemState.activeFront.stepYTimes1000 = extractInt(
+        weatherFrontSection, "stepYTimes1000", 0);
+    outData.weatherSystemState.activeFront.radiusAlongTimes1000 = extractInt(
+        weatherFrontSection, "radiusAlongTimes1000", 0);
+    outData.weatherSystemState.activeFront.radiusAcrossTimes1000 = extractInt(
+        weatherFrontSection, "radiusAcrossTimes1000", 0);
+    outData.weatherSystemState.activeFront.shapeSeed = static_cast<std::uint32_t>(std::max(
+        0,
+        extractInt(weatherFrontSection, "shapeSeed", 0)));
+    outData.weatherSystemState.activeFront.densitySeed = static_cast<std::uint32_t>(std::max(
+        0,
+        extractInt(weatherFrontSection, "densitySeed", 0)));
 
     const std::string xpStateSection = extractSection(json, "xpState");
     outData.xpSystemState.rngCounter = static_cast<std::uint32_t>(std::max(

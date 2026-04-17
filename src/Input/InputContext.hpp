@@ -5,6 +5,8 @@
 #include <vector>
 
 #include "Core/InteractionPermissions.hpp"
+#include "Kingdom/KingdomId.hpp"
+#include "Systems/WeatherTypes.hpp"
 #include "Systems/TurnValidationContext.hpp"
 
 class Camera;
@@ -32,6 +34,8 @@ struct InputContext {
     TurnValidationContext authoritativeTurnContext;
     UIManager& uiManager;
     const GameConfig& config;
+    const WeatherMaskCache* weatherMaskCache = nullptr;
+    KingdomId localPerspectiveKingdom = KingdomId::White;
     InteractionPermissions permissions;
     bool materializePendingStateLocally = false;
     bool useConcretePendingState = false;

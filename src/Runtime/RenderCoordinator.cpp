@@ -12,6 +12,7 @@
 #include "Render/Camera.hpp"
 #include "Render/Renderer.hpp"
 #include "Render/StructureOverlay.hpp"
+#include "Runtime/WeatherVisibility.hpp"
 #include "Systems/TurnCommand.hpp"
 
 namespace {
@@ -26,8 +27,14 @@ void drawStructureOverlaysForBuildings(sf::RenderWindow& window,
                                        const GameConfig& config,
                                        const AssetManager& assets,
                                        const StructureOverlayPolicy& overlayPolicy,
-                                       const Building* selectedBuilding) {
+                                       const Building* selectedBuilding,
+                                       KingdomId localPerspective,
+                                       bool drawOccludable) {
     for (const Building& building : buildings) {
+        if (WeatherVisibility::isOccludableBuilding(building, localPerspective) != drawOccludable) {
+            continue;
+        }
+
         StructureOverlayContext overlayContext;
         overlayContext.isSelected = selectedBuilding == &building;
 
@@ -204,13 +211,18 @@ void RenderCoordinator::renderWorldFrame(WorldRenderBindings& bindings,
 
     bindings.camera.applyTo(bindings.window);
     bindings.renderer.setSkipPieceIds(plan.capturePreviewPieceIds);
-    bindings.renderer.drawWorldBase(bindings.window,
-                                    bindings.camera,
-                                    bindings.displayedBoard,
-                                    bindings.displayedKingdoms,
-                                    bindings.displayedPublicBuildings,
-                                    bindings.displayedMapObjects,
-                                    bindings.displayedAutonomousUnits);
+    bindings.renderer.drawTerrainLayer(bindings.window,
+                                       bindings.camera,
+                                       bindings.displayedBoard);
+
+    bindings.renderer.drawOccludableBuildings(bindings.window,
+                                              bindings.camera,
+                                              bindings.displayedKingdoms,
+                                              bindings.localPerspectiveKingdom);
+
+    bindings.renderer.drawMapObjectsLayer(bindings.window,
+                                          bindings.camera,
+                                          bindings.displayedMapObjects);
 
     if (plan.showOrientationCheckerboard) {
         bindings.renderer.getOverlay().drawOrientationCheckerboard(
@@ -238,10 +250,71 @@ void RenderCoordinator::renderWorldFrame(WorldRenderBindings& bindings,
                                                        bindings.config.getCellSizePx());
     }
 
-    bindings.renderer.drawPiecesLayer(bindings.window,
+    const StructureOverlayPolicy overlayPolicy = makeWorldStructureOverlayPolicy();
+    for (const Kingdom& kingdomState : bindings.displayedKingdoms) {
+        drawStructureOverlaysForBuildings(bindings.window,
+                                          bindings.renderer,
+                                          bindings.camera,
+                                          bindings.hudView,
+                                          bindings.windowSize,
+                                          kingdomState.buildings,
+                                          bindings.displayedBoard,
+                                          bindings.config,
+                                          bindings.assets,
+                                          overlayPolicy,
+                                          plan.selectedBuilding,
+                                          bindings.localPerspectiveKingdom,
+                                          true);
+    }
+
+    bindings.renderer.drawOccludablePieces(bindings.window,
+                                           bindings.camera,
+                                           bindings.displayedKingdoms,
+                                           bindings.localPerspectiveKingdom);
+    bindings.renderer.drawAutonomousUnitsLayer(bindings.window,
+                                               bindings.camera,
+                                               bindings.displayedAutonomousUnits);
+    bindings.renderer.drawWeatherLayer(bindings.window,
+                                       bindings.camera,
+                                       bindings.displayedBoard,
+                                       bindings.weatherMaskCache);
+    bindings.renderer.drawVisibleBuildings(bindings.window,
+                                           bindings.camera,
+                                           bindings.displayedKingdoms,
+                                           bindings.displayedPublicBuildings,
+                                           bindings.localPerspectiveKingdom);
+    drawStructureOverlaysForBuildings(bindings.window,
+                                      bindings.renderer,
                                       bindings.camera,
-                                      bindings.displayedKingdoms,
-                                      bindings.displayedAutonomousUnits);
+                                      bindings.hudView,
+                                      bindings.windowSize,
+                                      bindings.displayedPublicBuildings,
+                                      bindings.displayedBoard,
+                                      bindings.config,
+                                      bindings.assets,
+                                      overlayPolicy,
+                                      plan.selectedBuilding,
+                                      bindings.localPerspectiveKingdom,
+                                      false);
+    for (const Kingdom& kingdomState : bindings.displayedKingdoms) {
+        drawStructureOverlaysForBuildings(bindings.window,
+                                          bindings.renderer,
+                                          bindings.camera,
+                                          bindings.hudView,
+                                          bindings.windowSize,
+                                          kingdomState.buildings,
+                                          bindings.displayedBoard,
+                                          bindings.config,
+                                          bindings.assets,
+                                          overlayPolicy,
+                                          plan.selectedBuilding,
+                                          bindings.localPerspectiveKingdom,
+                                          false);
+    }
+    bindings.renderer.drawVisiblePieces(bindings.window,
+                                        bindings.camera,
+                                        bindings.displayedKingdoms,
+                                        bindings.localPerspectiveKingdom);
 
     for (const SelectionFrameSpec& frame : plan.selectionFrames) {
         bindings.renderer.getOverlay().drawSelectionFrame(bindings.window,
@@ -297,31 +370,5 @@ void RenderCoordinator::renderWorldFrame(WorldRenderBindings& bindings,
                                                         marker.iconName,
                                                         bindings.config.getCellSizePx(),
                                                         bindings.assets);
-    }
-
-    const StructureOverlayPolicy overlayPolicy = makeWorldStructureOverlayPolicy();
-    drawStructureOverlaysForBuildings(bindings.window,
-                                      bindings.renderer,
-                                      bindings.camera,
-                                      bindings.hudView,
-                                      bindings.windowSize,
-                                      bindings.displayedPublicBuildings,
-                                      bindings.displayedBoard,
-                                      bindings.config,
-                                      bindings.assets,
-                                      overlayPolicy,
-                                      plan.selectedBuilding);
-    for (const Kingdom& kingdomState : bindings.displayedKingdoms) {
-        drawStructureOverlaysForBuildings(bindings.window,
-                                          bindings.renderer,
-                                          bindings.camera,
-                                          bindings.hudView,
-                                          bindings.windowSize,
-                                          kingdomState.buildings,
-                                          bindings.displayedBoard,
-                                          bindings.config,
-                                          bindings.assets,
-                                          overlayPolicy,
-                                          plan.selectedBuilding);
     }
 }

@@ -53,6 +53,15 @@ public:
         int currentTurnNumber,
         int nextUnitId,
         const GameConfig& config);
+    static std::optional<AutonomousUnit> forceSpawnInfernal(
+        InfernalSystemState& state,
+        const Board& board,
+        const std::array<Kingdom, kNumKingdoms>& kingdoms,
+        std::uint32_t worldSeed,
+        int currentTurnStep,
+        int currentTurnNumber,
+        int nextUnitId,
+        const GameConfig& config);
     static bool actAfterCommittedTurn(InfernalSystemState& state,
                                       Board& board,
                                       std::array<Kingdom, kNumKingdoms>& kingdoms,

@@ -10,6 +10,8 @@
 #include "Runtime/UpdateCoordinator.hpp"
 #include "Input/InputContext.hpp"
 #include "Multiplayer/PasswordUtils.hpp"
+#include "Runtime/WeatherVisibility.hpp"
+#include "Systems/WeatherSystem.hpp"
 #include <algorithm>
 #include <iostream>
 #include <optional>
@@ -346,6 +348,47 @@ void Game::refreshBuildableCellsOverlay(const InteractionPermissions& permission
                                      m_buildOverlayCache);
 }
 
+void Game::ensureWeatherMaskUpToDate() {
+    WeatherSystem::rebuildMask(board(), m_engine.weatherSystemState(), m_config, m_weatherMaskCache);
+}
+
+void Game::triggerCheatcodeWeatherFront() {
+    const InputSelectionBookmark bookmark = captureSelectionBookmark();
+    if (!m_engine.triggerCheatcodeWeatherFront(m_config)) {
+        return;
+    }
+
+    m_weatherMaskCache.clear();
+    invalidateTurnDraft();
+    invalidatePendingTurnValidation();
+    reconcileSelectionBookmark(bookmark);
+    updateUIState();
+}
+
+void Game::triggerCheatcodeChestSpawn() {
+    const InputSelectionBookmark bookmark = captureSelectionBookmark();
+    if (!m_engine.triggerCheatcodeChestSpawn(m_config)) {
+        return;
+    }
+
+    invalidateTurnDraft();
+    invalidatePendingTurnValidation();
+    reconcileSelectionBookmark(bookmark);
+    updateUIState();
+}
+
+void Game::triggerCheatcodeInfernalSpawn() {
+    const InputSelectionBookmark bookmark = captureSelectionBookmark();
+    if (!m_engine.triggerCheatcodeInfernalSpawn(m_config)) {
+        return;
+    }
+
+    invalidateTurnDraft();
+    invalidatePendingTurnValidation();
+    reconcileSelectionBookmark(bookmark);
+    updateUIState();
+}
+
 bool Game::shouldUseTurnDraft() const {
     return TurnDraftCoordinator::shouldUseTurnDraft(makeTurnDraftRuntimeState());
 }
@@ -395,6 +438,7 @@ InteractionPermissions Game::currentInteractionPermissions(const CheckTurnValida
 }
 
 InputContext Game::buildInputContext(const InteractionPermissions& permissions) {
+    ensureWeatherMaskUpToDate();
     FrontendDisplayBindings bindings{
         m_window,
         m_camera,
@@ -408,7 +452,9 @@ InputContext Game::buildInputContext(const InteractionPermissions& permissions) 
         turnSystem(),
         buildingFactory(),
         authoritativeTurnContext(),
-        m_config
+        m_config,
+        m_weatherMaskCache,
+        localPerspectiveKingdom()
     };
     return FrontendCoordinator::buildInputContext(
         makeFrontendRuntimeState(),
@@ -426,12 +472,39 @@ InputSelectionBookmark Game::captureSelectionBookmark() const {
 }
 
 Piece* Game::selectedDisplayedPiece() {
-    return SelectionQueryCoordinator::findPieceById(makeSelectionQueryView(), m_input.getSelectedPieceId());
+    Piece* piece = SelectionQueryCoordinator::findPieceById(makeSelectionQueryView(), m_input.getSelectedPieceId());
+    if (!piece) {
+        return nullptr;
+    }
+
+    ensureWeatherMaskUpToDate();
+    if (WeatherVisibility::shouldHidePiece(*piece, localPerspectiveKingdom(), m_weatherMaskCache)) {
+        return nullptr;
+    }
+
+    return piece;
 }
 
 Building* Game::selectedDisplayedBuilding() {
-    return SelectionQueryCoordinator::findBuildingById(makeSelectionQueryView(),
-                                                       m_input.getSelectedBuildingId());
+    Building* building = SelectionQueryCoordinator::findBuildingById(makeSelectionQueryView(),
+                                                                     m_input.getSelectedBuildingId());
+    if (!building) {
+        return nullptr;
+    }
+
+    ensureWeatherMaskUpToDate();
+    const sf::Vector2i selectionCell = m_input.hasSelectionAnchorCell()
+        ? m_input.getSelectionAnchorCell()
+        : building->origin;
+    if (WeatherVisibility::shouldHideBuildingSelection(
+            *building,
+            selectionCell,
+            localPerspectiveKingdom(),
+            m_weatherMaskCache)) {
+        return nullptr;
+    }
+
+    return building;
 }
 
 MapObject* Game::selectedDisplayedMapObject() {
@@ -443,9 +516,32 @@ void Game::reconcileSelectionBookmark(const InputSelectionBookmark& bookmark) {
     const InteractionPermissions permissions = currentInteractionPermissions();
     InputContext inputContext = buildInputContext(permissions);
     const SelectionQueryView queryView = makeSelectionQueryView();
+    Piece* bookmarkedPiece = SelectionQueryCoordinator::findPieceById(queryView, bookmark.pieceId);
+    if (bookmarkedPiece != nullptr) {
+        ensureWeatherMaskUpToDate();
+        if (WeatherVisibility::shouldHidePiece(
+                *bookmarkedPiece,
+                localPerspectiveKingdom(),
+                m_weatherMaskCache)) {
+            bookmarkedPiece = nullptr;
+        }
+    }
+
+    Building* bookmarkedBuilding = SelectionQueryCoordinator::findBuildingForBookmark(queryView, bookmark);
+    if (bookmarkedBuilding != nullptr && bookmark.selectedCell.has_value()) {
+        ensureWeatherMaskUpToDate();
+        if (WeatherVisibility::shouldHideBuildingSelection(
+                *bookmarkedBuilding,
+                *bookmark.selectedCell,
+                localPerspectiveKingdom(),
+                m_weatherMaskCache)) {
+            bookmarkedBuilding = nullptr;
+        }
+    }
+
     m_input.reconcileSelection(bookmark,
-                               SelectionQueryCoordinator::findPieceById(queryView, bookmark.pieceId),
-                               SelectionQueryCoordinator::findBuildingForBookmark(queryView, bookmark),
+                               bookmarkedPiece,
+                               bookmarkedBuilding,
                                SelectionQueryCoordinator::findMapObjectForBookmark(queryView, bookmark),
                                inputContext);
 }
@@ -675,6 +771,10 @@ void Game::handleInput() {
             m_state,
             m_uiManager.isMultiplayerAlertVisible() || m_uiManager.isMultiplayerWaitingOverlayVisible(),
             isInGameMenuOpen(),
+            m_config.isCheatcodeEnabled(),
+            m_config.getCheatcodeWeatherShortcut(),
+            m_config.getCheatcodeChestShortcut(),
+            m_config.getCheatcodeInfernalShortcut(),
             permissions
         };
 
@@ -706,6 +806,21 @@ void Game::handleInput() {
 
             case InputPreGuiActionKind::CenterCameraOnPerspective:
                 centerCameraOnKingdom(localPerspectiveKingdom());
+                continue;
+
+            case InputPreGuiActionKind::TriggerCheatcodeWeather:
+                triggerCheatcodeWeatherFront();
+                permissionsCache.invalidate();
+                continue;
+
+            case InputPreGuiActionKind::TriggerCheatcodeChest:
+                triggerCheatcodeChestSpawn();
+                permissionsCache.invalidate();
+                continue;
+
+            case InputPreGuiActionKind::TriggerCheatcodeInfernal:
+                triggerCheatcodeInfernalSpawn();
+                permissionsCache.invalidate();
                 continue;
 
             case InputPreGuiActionKind::ActivateSelectTool:
@@ -783,6 +898,7 @@ void Game::render() {
 
     if (RenderCoordinator::shouldRenderWorld(m_state)) {
         ensureTurnDraftUpToDate();
+        ensureWeatherMaskUpToDate();
         const bool usingConcretePendingState = shouldUseTurnDraft() && m_turnDraft.isValid();
         const InteractionPermissions renderPermissions = currentInteractionPermissions();
         refreshBuildableCellsOverlay(renderPermissions);
@@ -819,7 +935,9 @@ void Game::render() {
             displayedPublicBuildings(),
             displayedMapObjects(),
             displayedAutonomousUnits(),
-            m_config
+            m_config,
+            m_weatherMaskCache,
+            localPerspectiveKingdom()
         };
         const WorldRenderPlan renderPlan = RenderCoordinator::buildWorldRenderPlan(
             renderState,

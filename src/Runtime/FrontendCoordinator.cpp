@@ -295,6 +295,8 @@ InputContext FrontendCoordinator::buildInputContext(FrontendRuntimeState state,
         bindings.authoritativeTurnContext,
         bindings.uiManager,
         bindings.config,
+        &bindings.weatherMaskCache,
+        perspectiveKingdom,
         permissions,
         materializePendingStateLocally,
         useConcretePendingState

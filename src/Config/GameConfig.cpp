@@ -4,6 +4,8 @@
 
 #include <iostream>
 #include <algorithm>
+#include <cctype>
+#include <optional>
 
 namespace {
 
@@ -54,6 +56,121 @@ int clampRangedConfigValue(const std::string& label, int value, int minValue, in
     std::cerr << "GameConfig: Clamping " << label << " value "
               << value << " to range [" << minValue << ", " << maxValue << "].\n";
     return clampedValue;
+}
+
+std::string trimAsciiWhitespace(std::string value) {
+    const auto first = std::find_if_not(value.begin(), value.end(), [](unsigned char current) {
+        return std::isspace(current) != 0;
+    });
+    const auto last = std::find_if_not(value.rbegin(), value.rend(), [](unsigned char current) {
+        return std::isspace(current) != 0;
+    }).base();
+    if (first >= last) {
+        return "";
+    }
+
+    return std::string(first, last);
+}
+
+std::string toUpperAscii(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char current) {
+        return static_cast<char>(std::toupper(current));
+    });
+    return value;
+}
+
+bool isReservedGameplayShortcut(sf::Keyboard::Key key) {
+    return key == sf::Keyboard::Escape
+        || key == sf::Keyboard::P
+        || key == sf::Keyboard::K
+        || key == sf::Keyboard::Space;
+}
+
+std::optional<sf::Keyboard::Key> parseShortcutKeyToken(const std::string& rawToken) {
+    const std::string token = toUpperAscii(trimAsciiWhitespace(rawToken));
+    if (token.empty()) {
+        return std::nullopt;
+    }
+
+    if (token == "1" || token == "NUM1") return sf::Keyboard::Num1;
+    if (token == "2" || token == "NUM2") return sf::Keyboard::Num2;
+    if (token == "3" || token == "NUM3") return sf::Keyboard::Num3;
+    if (token == "4" || token == "NUM4") return sf::Keyboard::Num4;
+    if (token == "5" || token == "NUM5") return sf::Keyboard::Num5;
+    if (token == "6" || token == "NUM6") return sf::Keyboard::Num6;
+    if (token == "7" || token == "NUM7") return sf::Keyboard::Num7;
+    if (token == "8" || token == "NUM8") return sf::Keyboard::Num8;
+    if (token == "9" || token == "NUM9") return sf::Keyboard::Num9;
+    if (token == "0" || token == "NUM0") return sf::Keyboard::Num0;
+    if (token == "NUMPAD1") return sf::Keyboard::Numpad1;
+    if (token == "NUMPAD2") return sf::Keyboard::Numpad2;
+    if (token == "NUMPAD3") return sf::Keyboard::Numpad3;
+    if (token == "NUMPAD4") return sf::Keyboard::Numpad4;
+    if (token == "NUMPAD5") return sf::Keyboard::Numpad5;
+    if (token == "NUMPAD6") return sf::Keyboard::Numpad6;
+    if (token == "NUMPAD7") return sf::Keyboard::Numpad7;
+    if (token == "NUMPAD8") return sf::Keyboard::Numpad8;
+    if (token == "NUMPAD9") return sf::Keyboard::Numpad9;
+    if (token == "NUMPAD0") return sf::Keyboard::Numpad0;
+    if (token == "SPACE") return sf::Keyboard::Space;
+    if (token == "ESCAPE") return sf::Keyboard::Escape;
+    if (token == "TAB") return sf::Keyboard::Tab;
+    if (token == "TILDE" || token == "GRAVE") return sf::Keyboard::Tilde;
+    if (token == "F1") return sf::Keyboard::F1;
+    if (token == "F2") return sf::Keyboard::F2;
+    if (token == "F3") return sf::Keyboard::F3;
+    if (token == "F4") return sf::Keyboard::F4;
+    if (token == "F5") return sf::Keyboard::F5;
+    if (token == "F6") return sf::Keyboard::F6;
+    if (token == "F7") return sf::Keyboard::F7;
+    if (token == "F8") return sf::Keyboard::F8;
+    if (token == "F9") return sf::Keyboard::F9;
+    if (token == "F10") return sf::Keyboard::F10;
+    if (token == "F11") return sf::Keyboard::F11;
+    if (token == "F12") return sf::Keyboard::F12;
+
+    if (token.size() == 1 && token[0] >= 'A' && token[0] <= 'Z') {
+        return static_cast<sf::Keyboard::Key>(sf::Keyboard::A + (token[0] - 'A'));
+    }
+
+    return std::nullopt;
+}
+
+void sanitizeCheatcodeShortcut(const char* label,
+                               sf::Keyboard::Key defaultKey,
+                               sf::Keyboard::Key& key) {
+    if (key == sf::Keyboard::Unknown) {
+        std::cerr << "GameConfig: Invalid cheatcode shortcut for " << label
+                  << ", falling back to default.\n";
+        key = defaultKey;
+    }
+
+    if (isReservedGameplayShortcut(key)) {
+        std::cerr << "GameConfig: Cheatcode shortcut for " << label
+                  << " conflicts with a reserved gameplay shortcut, falling back to default.\n";
+        key = defaultKey;
+    }
+}
+
+void sanitizeCheatcodeShortcutSet(sf::Keyboard::Key& weatherKey,
+                                  sf::Keyboard::Key& chestKey,
+                                  sf::Keyboard::Key& infernalKey) {
+    if (weatherKey == chestKey) {
+        std::cerr << "GameConfig: Cheatcode shortcuts weather_fog and chest_loot conflict, resetting chest_loot to default.\n";
+        chestKey = sf::Keyboard::Num2;
+    }
+
+    if (weatherKey == infernalKey || chestKey == infernalKey) {
+        std::cerr << "GameConfig: Cheatcode shortcut infernal_piece conflicts with another cheat shortcut, resetting infernal_piece to default.\n";
+        infernalKey = sf::Keyboard::Num3;
+    }
+
+    if (weatherKey == chestKey) {
+        chestKey = sf::Keyboard::F2;
+    }
+    if (weatherKey == infernalKey || chestKey == infernalKey) {
+        infernalKey = sf::Keyboard::F3;
+    }
 }
 
 }
@@ -182,6 +299,33 @@ void GameConfig::setDefaults() {
     m_infernalTargetWeightRook = 26;
     m_infernalTargetWeightQueen = 38;
 
+    m_weatherCooldownMinTurns = 5;
+    m_weatherArrivalGammaShapeTimes100 = 240;
+    m_weatherArrivalGammaScaleTimes100 = 220;
+    m_weatherDurationGammaShapeTimes100 = 260;
+    m_weatherDurationGammaScaleTimes100 = 180;
+    m_weatherSpeedBlocksPer100Turns = 50;
+    m_weatherDirectionWeights.fill(1);
+    m_weatherEntryCenterWeightTimes100 = 180;
+    m_weatherEntryCornerWeightTimes100 = 70;
+    m_weatherCoverageMinPercent = 25;
+    m_weatherCoverageMaxPercent = 35;
+    m_weatherAspectRatioMinTimes100 = 180;
+    m_weatherAspectRatioMaxTimes100 = 260;
+    m_weatherShapeNoiseCellSpan = 6;
+    m_weatherShapeNoiseAmplitudePercent = 18;
+    m_weatherEdgeSoftnessPercent = 18;
+    m_weatherAlphaBasePercent = 48;
+    m_weatherAlphaMinPercent = 22;
+    m_weatherAlphaMaxPercent = 82;
+    m_weatherDensityMuTimes100 = -12;
+    m_weatherDensitySigmaTimes100 = 35;
+
+    m_cheatcodeEnabled = false;
+    m_cheatcodeWeatherShortcut = sf::Keyboard::Num1;
+    m_cheatcodeChestShortcut = sf::Keyboard::Num2;
+    m_cheatcodeInfernalShortcut = sf::Keyboard::Num3;
+
     alignChunkedStructureDimensions("barracks", BuildingType::Barracks, m_barracksWidth, m_barracksHeight);
     alignChunkedStructureDimensions("church", BuildingType::Church, m_churchWidth, m_churchHeight);
     alignChunkedStructureDimensions("mine", BuildingType::Mine, m_mineWidth, m_mineHeight);
@@ -230,6 +374,44 @@ int GameConfig::extractInt(const std::string& json, const std::string& key, int 
         ++pos;
     }
     return negative ? -val : val;
+}
+
+bool GameConfig::extractBool(const std::string& json, const std::string& key, bool defaultVal) {
+    std::string search = "\"" + key + "\"";
+    auto pos = json.find(search);
+    if (pos == std::string::npos) return defaultVal;
+    pos = json.find(':', pos);
+    if (pos == std::string::npos) return defaultVal;
+    ++pos;
+    while (pos < json.size() && std::isspace(static_cast<unsigned char>(json[pos])) != 0) ++pos;
+
+    if (json.compare(pos, 4, "true") == 0) return true;
+    if (json.compare(pos, 5, "false") == 0) return false;
+    if (pos < json.size() && json[pos] == '1') return true;
+    if (pos < json.size() && json[pos] == '0') return false;
+    return defaultVal;
+}
+
+std::string GameConfig::extractString(const std::string& json, const std::string& key, const std::string& defaultVal) {
+    std::string search = "\"" + key + "\"";
+    auto pos = json.find(search);
+    if (pos == std::string::npos) return defaultVal;
+    pos = json.find(':', pos);
+    if (pos == std::string::npos) return defaultVal;
+    ++pos;
+    while (pos < json.size() && std::isspace(static_cast<unsigned char>(json[pos])) != 0) ++pos;
+    if (pos >= json.size() || json[pos] != '"') return defaultVal;
+
+    ++pos;
+    const std::size_t start = pos;
+    while (pos < json.size()) {
+        if (json[pos] == '"' && (pos == start || json[pos - 1] != '\\')) {
+            return json.substr(start, pos - start);
+        }
+        ++pos;
+    }
+
+    return defaultVal;
 }
 
 bool GameConfig::loadFromFile(const std::string& filepath) {
@@ -630,6 +812,194 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
     m_infernalTargetWeightQueen = clampNonNegativeConfigValue(
         "infernal.target_weight_queen", m_infernalTargetWeightQueen);
 
+    std::string weatherSec = extractSection(root, "weather");
+    if (!weatherSec.empty()) {
+        m_weatherCooldownMinTurns = extractInt(
+            weatherSec, "cooldown_min_turns", m_weatherCooldownMinTurns);
+        m_weatherArrivalGammaShapeTimes100 = extractInt(
+            weatherSec,
+            "arrival_gamma_shape_times_100",
+            m_weatherArrivalGammaShapeTimes100);
+        m_weatherArrivalGammaScaleTimes100 = extractInt(
+            weatherSec,
+            "arrival_gamma_scale_times_100",
+            m_weatherArrivalGammaScaleTimes100);
+        m_weatherDurationGammaShapeTimes100 = extractInt(
+            weatherSec,
+            "duration_gamma_shape_times_100",
+            m_weatherDurationGammaShapeTimes100);
+        m_weatherDurationGammaScaleTimes100 = extractInt(
+            weatherSec,
+            "duration_gamma_scale_times_100",
+            m_weatherDurationGammaScaleTimes100);
+        m_weatherSpeedBlocksPer100Turns = extractInt(
+            weatherSec,
+            "speed_blocks_per_100_turns",
+            m_weatherSpeedBlocksPer100Turns);
+        m_weatherEntryCenterWeightTimes100 = extractInt(
+            weatherSec,
+            "entry_center_weight_times_100",
+            m_weatherEntryCenterWeightTimes100);
+        m_weatherEntryCornerWeightTimes100 = extractInt(
+            weatherSec,
+            "entry_corner_weight_times_100",
+            m_weatherEntryCornerWeightTimes100);
+        m_weatherCoverageMinPercent = extractInt(
+            weatherSec, "coverage_min_percent", m_weatherCoverageMinPercent);
+        m_weatherCoverageMaxPercent = extractInt(
+            weatherSec, "coverage_max_percent", m_weatherCoverageMaxPercent);
+        m_weatherAspectRatioMinTimes100 = extractInt(
+            weatherSec,
+            "aspect_ratio_min_times_100",
+            m_weatherAspectRatioMinTimes100);
+        m_weatherAspectRatioMaxTimes100 = extractInt(
+            weatherSec,
+            "aspect_ratio_max_times_100",
+            m_weatherAspectRatioMaxTimes100);
+        m_weatherShapeNoiseCellSpan = extractInt(
+            weatherSec, "shape_noise_cell_span", m_weatherShapeNoiseCellSpan);
+        m_weatherShapeNoiseAmplitudePercent = extractInt(
+            weatherSec,
+            "shape_noise_amplitude_percent",
+            m_weatherShapeNoiseAmplitudePercent);
+        m_weatherEdgeSoftnessPercent = extractInt(
+            weatherSec, "edge_softness_percent", m_weatherEdgeSoftnessPercent);
+        m_weatherAlphaBasePercent = extractInt(
+            weatherSec, "alpha_base_percent", m_weatherAlphaBasePercent);
+        m_weatherAlphaMinPercent = extractInt(
+            weatherSec, "alpha_min_percent", m_weatherAlphaMinPercent);
+        m_weatherAlphaMaxPercent = extractInt(
+            weatherSec, "alpha_max_percent", m_weatherAlphaMaxPercent);
+        m_weatherDensityMuTimes100 = extractInt(
+            weatherSec, "density_mu_times_100", m_weatherDensityMuTimes100);
+        m_weatherDensitySigmaTimes100 = extractInt(
+            weatherSec, "density_sigma_times_100", m_weatherDensitySigmaTimes100);
+
+        const std::string directionSec = extractSection(weatherSec, "direction_weights");
+        if (!directionSec.empty()) {
+            m_weatherDirectionWeights[weatherDirectionIndex(WeatherDirection::North)] = extractInt(
+                directionSec,
+                "north",
+                m_weatherDirectionWeights[weatherDirectionIndex(WeatherDirection::North)]);
+            m_weatherDirectionWeights[weatherDirectionIndex(WeatherDirection::South)] = extractInt(
+                directionSec,
+                "south",
+                m_weatherDirectionWeights[weatherDirectionIndex(WeatherDirection::South)]);
+            m_weatherDirectionWeights[weatherDirectionIndex(WeatherDirection::East)] = extractInt(
+                directionSec,
+                "east",
+                m_weatherDirectionWeights[weatherDirectionIndex(WeatherDirection::East)]);
+            m_weatherDirectionWeights[weatherDirectionIndex(WeatherDirection::West)] = extractInt(
+                directionSec,
+                "west",
+                m_weatherDirectionWeights[weatherDirectionIndex(WeatherDirection::West)]);
+            m_weatherDirectionWeights[weatherDirectionIndex(WeatherDirection::NorthEast)] = extractInt(
+                directionSec,
+                "north_east",
+                m_weatherDirectionWeights[weatherDirectionIndex(WeatherDirection::NorthEast)]);
+            m_weatherDirectionWeights[weatherDirectionIndex(WeatherDirection::NorthWest)] = extractInt(
+                directionSec,
+                "north_west",
+                m_weatherDirectionWeights[weatherDirectionIndex(WeatherDirection::NorthWest)]);
+            m_weatherDirectionWeights[weatherDirectionIndex(WeatherDirection::SouthEast)] = extractInt(
+                directionSec,
+                "south_east",
+                m_weatherDirectionWeights[weatherDirectionIndex(WeatherDirection::SouthEast)]);
+            m_weatherDirectionWeights[weatherDirectionIndex(WeatherDirection::SouthWest)] = extractInt(
+                directionSec,
+                "south_west",
+                m_weatherDirectionWeights[weatherDirectionIndex(WeatherDirection::SouthWest)]);
+        }
+    }
+
+    m_weatherCooldownMinTurns = clampNonNegativeConfigValue(
+        "weather.cooldown_min_turns", m_weatherCooldownMinTurns);
+    m_weatherArrivalGammaShapeTimes100 = clampNonNegativeConfigValue(
+        "weather.arrival_gamma_shape_times_100", m_weatherArrivalGammaShapeTimes100);
+    m_weatherArrivalGammaScaleTimes100 = clampNonNegativeConfigValue(
+        "weather.arrival_gamma_scale_times_100", m_weatherArrivalGammaScaleTimes100);
+    m_weatherDurationGammaShapeTimes100 = clampNonNegativeConfigValue(
+        "weather.duration_gamma_shape_times_100", m_weatherDurationGammaShapeTimes100);
+    m_weatherDurationGammaScaleTimes100 = clampNonNegativeConfigValue(
+        "weather.duration_gamma_scale_times_100", m_weatherDurationGammaScaleTimes100);
+    m_weatherSpeedBlocksPer100Turns = clampRangedConfigValue(
+        "weather.speed_blocks_per_100_turns", m_weatherSpeedBlocksPer100Turns, 1, 100000);
+    for (std::size_t directionIndex = 0; directionIndex < m_weatherDirectionWeights.size(); ++directionIndex) {
+        m_weatherDirectionWeights[directionIndex] = clampNonNegativeConfigValue(
+            (std::string("weather.direction_weights[") + std::to_string(directionIndex) + "]").c_str(),
+            m_weatherDirectionWeights[directionIndex]);
+    }
+    if (std::all_of(m_weatherDirectionWeights.begin(), m_weatherDirectionWeights.end(), [](int weight) {
+            return weight <= 0;
+        })) {
+        m_weatherDirectionWeights.fill(1);
+    }
+    m_weatherEntryCenterWeightTimes100 = clampNonNegativeConfigValue(
+        "weather.entry_center_weight_times_100", m_weatherEntryCenterWeightTimes100);
+    m_weatherEntryCornerWeightTimes100 = clampNonNegativeConfigValue(
+        "weather.entry_corner_weight_times_100", m_weatherEntryCornerWeightTimes100);
+    m_weatherCoverageMinPercent = clampRangedConfigValue(
+        "weather.coverage_min_percent", m_weatherCoverageMinPercent, 1, 95);
+    m_weatherCoverageMaxPercent = clampRangedConfigValue(
+        "weather.coverage_max_percent", m_weatherCoverageMaxPercent, 1, 95);
+    if (m_weatherCoverageMaxPercent < m_weatherCoverageMinPercent) {
+        std::swap(m_weatherCoverageMinPercent, m_weatherCoverageMaxPercent);
+    }
+    m_weatherAspectRatioMinTimes100 = clampRangedConfigValue(
+        "weather.aspect_ratio_min_times_100", m_weatherAspectRatioMinTimes100, 100, 600);
+    m_weatherAspectRatioMaxTimes100 = clampRangedConfigValue(
+        "weather.aspect_ratio_max_times_100", m_weatherAspectRatioMaxTimes100, 100, 600);
+    if (m_weatherAspectRatioMaxTimes100 < m_weatherAspectRatioMinTimes100) {
+        std::swap(m_weatherAspectRatioMinTimes100, m_weatherAspectRatioMaxTimes100);
+    }
+    m_weatherShapeNoiseCellSpan = clampRangedConfigValue(
+        "weather.shape_noise_cell_span", m_weatherShapeNoiseCellSpan, 1, 32);
+    m_weatherShapeNoiseAmplitudePercent = clampRangedConfigValue(
+        "weather.shape_noise_amplitude_percent", m_weatherShapeNoiseAmplitudePercent, 0, 100);
+    m_weatherEdgeSoftnessPercent = clampRangedConfigValue(
+        "weather.edge_softness_percent", m_weatherEdgeSoftnessPercent, 1, 100);
+    m_weatherAlphaBasePercent = clampRangedConfigValue(
+        "weather.alpha_base_percent", m_weatherAlphaBasePercent, 1, 100);
+    m_weatherAlphaMinPercent = clampRangedConfigValue(
+        "weather.alpha_min_percent", m_weatherAlphaMinPercent, 0, 100);
+    m_weatherAlphaMaxPercent = clampRangedConfigValue(
+        "weather.alpha_max_percent", m_weatherAlphaMaxPercent, 1, 100);
+    if (m_weatherAlphaMaxPercent < m_weatherAlphaMinPercent) {
+        std::swap(m_weatherAlphaMinPercent, m_weatherAlphaMaxPercent);
+    }
+    m_weatherDensitySigmaTimes100 = clampRangedConfigValue(
+        "weather.density_sigma_times_100", m_weatherDensitySigmaTimes100, 1, 200);
+
+    std::string cheatcodeSec = extractSection(root, "cheatcode");
+    if (!cheatcodeSec.empty()) {
+        m_cheatcodeEnabled = extractBool(cheatcodeSec, "enabled", m_cheatcodeEnabled);
+
+        const std::string shortcutsSec = extractSection(cheatcodeSec, "shortcuts");
+        if (!shortcutsSec.empty()) {
+            const std::string weatherShortcut = extractString(shortcutsSec, "weather_fog", "");
+            const std::string chestShortcut = extractString(shortcutsSec, "chest_loot", "");
+            const std::string infernalShortcut = extractString(shortcutsSec, "infernal_piece", "");
+
+            if (!weatherShortcut.empty()) {
+                m_cheatcodeWeatherShortcut = parseShortcutKeyToken(weatherShortcut).value_or(sf::Keyboard::Unknown);
+            }
+            if (!chestShortcut.empty()) {
+                m_cheatcodeChestShortcut = parseShortcutKeyToken(chestShortcut).value_or(sf::Keyboard::Unknown);
+            }
+            if (!infernalShortcut.empty()) {
+                m_cheatcodeInfernalShortcut = parseShortcutKeyToken(infernalShortcut).value_or(sf::Keyboard::Unknown);
+            }
+        }
+    }
+
+    sanitizeCheatcodeShortcut("weather_fog", sf::Keyboard::Num1, m_cheatcodeWeatherShortcut);
+    sanitizeCheatcodeShortcut("chest_loot", sf::Keyboard::Num2, m_cheatcodeChestShortcut);
+    sanitizeCheatcodeShortcut("infernal_piece", sf::Keyboard::Num3, m_cheatcodeInfernalShortcut);
+    sanitizeCheatcodeShortcutSet(
+        m_cheatcodeWeatherShortcut,
+        m_cheatcodeChestShortcut,
+        m_cheatcodeInfernalShortcut);
+
     alignChunkedStructureDimensions("barracks", BuildingType::Barracks, m_barracksWidth, m_barracksHeight);
     alignChunkedStructureDimensions("church", BuildingType::Church, m_churchWidth, m_churchHeight);
     alignChunkedStructureDimensions("mine", BuildingType::Mine, m_mineWidth, m_mineHeight);
@@ -877,3 +1247,32 @@ int GameConfig::getInfernalTargetWeight(PieceType type) const {
 
     return 0;
 }
+
+int GameConfig::getWeatherCooldownMinTurns() const { return m_weatherCooldownMinTurns; }
+int GameConfig::getWeatherArrivalGammaShapeTimes100() const { return m_weatherArrivalGammaShapeTimes100; }
+int GameConfig::getWeatherArrivalGammaScaleTimes100() const { return m_weatherArrivalGammaScaleTimes100; }
+int GameConfig::getWeatherDurationGammaShapeTimes100() const { return m_weatherDurationGammaShapeTimes100; }
+int GameConfig::getWeatherDurationGammaScaleTimes100() const { return m_weatherDurationGammaScaleTimes100; }
+int GameConfig::getWeatherSpeedBlocksPer100Turns() const { return m_weatherSpeedBlocksPer100Turns; }
+std::array<int, kNumWeatherDirections> GameConfig::getWeatherDirectionWeights() const {
+    return m_weatherDirectionWeights;
+}
+int GameConfig::getWeatherEntryCenterWeightTimes100() const { return m_weatherEntryCenterWeightTimes100; }
+int GameConfig::getWeatherEntryCornerWeightTimes100() const { return m_weatherEntryCornerWeightTimes100; }
+int GameConfig::getWeatherCoverageMinPercent() const { return m_weatherCoverageMinPercent; }
+int GameConfig::getWeatherCoverageMaxPercent() const { return m_weatherCoverageMaxPercent; }
+int GameConfig::getWeatherAspectRatioMinTimes100() const { return m_weatherAspectRatioMinTimes100; }
+int GameConfig::getWeatherAspectRatioMaxTimes100() const { return m_weatherAspectRatioMaxTimes100; }
+int GameConfig::getWeatherShapeNoiseCellSpan() const { return m_weatherShapeNoiseCellSpan; }
+int GameConfig::getWeatherShapeNoiseAmplitudePercent() const { return m_weatherShapeNoiseAmplitudePercent; }
+int GameConfig::getWeatherEdgeSoftnessPercent() const { return m_weatherEdgeSoftnessPercent; }
+int GameConfig::getWeatherAlphaBasePercent() const { return m_weatherAlphaBasePercent; }
+int GameConfig::getWeatherAlphaMinPercent() const { return m_weatherAlphaMinPercent; }
+int GameConfig::getWeatherAlphaMaxPercent() const { return m_weatherAlphaMaxPercent; }
+int GameConfig::getWeatherDensityMuTimes100() const { return m_weatherDensityMuTimes100; }
+int GameConfig::getWeatherDensitySigmaTimes100() const { return m_weatherDensitySigmaTimes100; }
+
+bool GameConfig::isCheatcodeEnabled() const { return m_cheatcodeEnabled; }
+sf::Keyboard::Key GameConfig::getCheatcodeWeatherShortcut() const { return m_cheatcodeWeatherShortcut; }
+sf::Keyboard::Key GameConfig::getCheatcodeChestShortcut() const { return m_cheatcodeChestShortcut; }
+sf::Keyboard::Key GameConfig::getCheatcodeInfernalShortcut() const { return m_cheatcodeInfernalShortcut; }

@@ -4,7 +4,9 @@
 #include <fstream>
 #include <sstream>
 #include <map>
+#include <SFML/Window/Keyboard.hpp>
 #include "Buildings/BuildingType.hpp"
+#include "Systems/WeatherTypes.hpp"
 #include "Systems/XPTypes.hpp"
 #include "Units/PieceType.hpp"
 
@@ -100,6 +102,35 @@ public:
     int getInfernalBloodDebtForCapturedPiece(PieceType victim) const;
     int getInfernalBloodDebtForStructureDamage() const;
     int getInfernalTargetWeight(PieceType type) const;
+
+    // Weather
+    int getWeatherCooldownMinTurns() const;
+    int getWeatherArrivalGammaShapeTimes100() const;
+    int getWeatherArrivalGammaScaleTimes100() const;
+    int getWeatherDurationGammaShapeTimes100() const;
+    int getWeatherDurationGammaScaleTimes100() const;
+    int getWeatherSpeedBlocksPer100Turns() const;
+    std::array<int, kNumWeatherDirections> getWeatherDirectionWeights() const;
+    int getWeatherEntryCenterWeightTimes100() const;
+    int getWeatherEntryCornerWeightTimes100() const;
+    int getWeatherCoverageMinPercent() const;
+    int getWeatherCoverageMaxPercent() const;
+    int getWeatherAspectRatioMinTimes100() const;
+    int getWeatherAspectRatioMaxTimes100() const;
+    int getWeatherShapeNoiseCellSpan() const;
+    int getWeatherShapeNoiseAmplitudePercent() const;
+    int getWeatherEdgeSoftnessPercent() const;
+    int getWeatherAlphaBasePercent() const;
+    int getWeatherAlphaMinPercent() const;
+    int getWeatherAlphaMaxPercent() const;
+    int getWeatherDensityMuTimes100() const;
+    int getWeatherDensitySigmaTimes100() const;
+
+    // Cheatcode
+    bool isCheatcodeEnabled() const;
+    sf::Keyboard::Key getCheatcodeWeatherShortcut() const;
+    sf::Keyboard::Key getCheatcodeChestShortcut() const;
+    sf::Keyboard::Key getCheatcodeInfernalShortcut() const;
 
 private:
     // Map params
@@ -227,10 +258,41 @@ private:
     int m_infernalTargetWeightRook;
     int m_infernalTargetWeightQueen;
 
+    // Weather
+    int m_weatherCooldownMinTurns;
+    int m_weatherArrivalGammaShapeTimes100;
+    int m_weatherArrivalGammaScaleTimes100;
+    int m_weatherDurationGammaShapeTimes100;
+    int m_weatherDurationGammaScaleTimes100;
+    int m_weatherSpeedBlocksPer100Turns;
+    std::array<int, kNumWeatherDirections> m_weatherDirectionWeights;
+    int m_weatherEntryCenterWeightTimes100;
+    int m_weatherEntryCornerWeightTimes100;
+    int m_weatherCoverageMinPercent;
+    int m_weatherCoverageMaxPercent;
+    int m_weatherAspectRatioMinTimes100;
+    int m_weatherAspectRatioMaxTimes100;
+    int m_weatherShapeNoiseCellSpan;
+    int m_weatherShapeNoiseAmplitudePercent;
+    int m_weatherEdgeSoftnessPercent;
+    int m_weatherAlphaBasePercent;
+    int m_weatherAlphaMinPercent;
+    int m_weatherAlphaMaxPercent;
+    int m_weatherDensityMuTimes100;
+    int m_weatherDensitySigmaTimes100;
+
+    // Cheatcode
+    bool m_cheatcodeEnabled;
+    sf::Keyboard::Key m_cheatcodeWeatherShortcut;
+    sf::Keyboard::Key m_cheatcodeChestShortcut;
+    sf::Keyboard::Key m_cheatcodeInfernalShortcut;
+
     void setDefaults();
     
     // Simple JSON parsing helpers
     static std::string readFile(const std::string& path);
     static int extractInt(const std::string& json, const std::string& key, int defaultVal);
+    static bool extractBool(const std::string& json, const std::string& key, bool defaultVal);
+    static std::string extractString(const std::string& json, const std::string& key, const std::string& defaultVal);
     static std::string extractSection(const std::string& json, const std::string& key);
 };

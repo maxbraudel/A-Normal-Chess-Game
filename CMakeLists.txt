@@ -91,6 +91,7 @@ set(CORE_SOURCES
     src/Runtime/UICallbackBinder.cpp
     src/Runtime/UICallbackCoordinator.cpp
     src/Runtime/UpdateCoordinator.cpp
+    src/Runtime/WeatherVisibility.cpp
     src/Save/SaveManager.cpp
     src/Systems/BuildReachRules.cpp
     src/Systems/BuildSystem.cpp
@@ -111,6 +112,7 @@ set(CORE_SOURCES
     src/Systems/StructureIntegrityRules.cpp
     src/Systems/TurnPointRules.cpp
     src/Systems/TurnSystem.cpp
+    src/Systems/WeatherSystem.cpp
     src/Systems/XPSystem.cpp
     src/UI/BarracksPanel.cpp
     src/UI/BuildingPanel.cpp

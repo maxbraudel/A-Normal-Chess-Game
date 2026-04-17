@@ -17,6 +17,7 @@
 #include "Systems/PendingTurnProjection.hpp"
 #include "Systems/SelectionMoveRules.hpp"
 #include "Config/GameConfig.hpp"
+#include "Runtime/WeatherVisibility.hpp"
 #include "UI/UIManager.hpp"
 
 #include <algorithm>
@@ -27,6 +28,29 @@ namespace {
 
 constexpr float kKeyboardPanSpeed = 900.f;
 const auto kSelectionCycleThreshold = std::chrono::milliseconds(350);
+
+void rebuildLayerOrder(LayeredSelectionStack& stack) {
+    stack.count = 0;
+    if (stack.piece) {
+        stack.layers[stack.count++] = SelectionLayer::Piece;
+    }
+    if (stack.building) {
+        stack.layers[stack.count++] = SelectionLayer::Building;
+    }
+    if (stack.mapObject) {
+        stack.layers[stack.count++] = SelectionLayer::Object;
+    }
+    if (stack.hasTerrain) {
+        stack.layers[stack.count++] = SelectionLayer::Terrain;
+    }
+    while (stack.count < static_cast<int>(stack.layers.size())) {
+        stack.layers[stack.count++] = SelectionLayer::None;
+    }
+    stack.count = std::min(stack.count, static_cast<int>(stack.layers.size()));
+    while (stack.count > 0 && stack.layers[stack.count - 1] == SelectionLayer::None) {
+        --stack.count;
+    }
+}
 
 } // namespace
 
@@ -402,7 +426,24 @@ LayeredSelectionStack InputHandler::resolveSelectionStackAtCell(const InputConte
                                                                 sf::Vector2i cellPos) const {
     const Cell& cell = context.board.getCell(cellPos.x, cellPos.y);
     if (context.useConcretePendingState) {
-        return resolveCellSelectionStack(cell, cellPos, nullptr, false);
+        LayeredSelectionStack stack = resolveCellSelectionStack(cell, cellPos, nullptr, false);
+        if (context.weatherMaskCache != nullptr) {
+            if (stack.piece != nullptr && WeatherVisibility::shouldHidePiece(
+                    *stack.piece,
+                    context.localPerspectiveKingdom,
+                    *context.weatherMaskCache)) {
+                stack.piece = nullptr;
+            }
+            if (stack.building != nullptr && WeatherVisibility::shouldHideBuildingSelection(
+                    *stack.building,
+                    cellPos,
+                    context.localPerspectiveKingdom,
+                    *context.weatherMaskCache)) {
+                stack.building = nullptr;
+            }
+            rebuildLayerOrder(stack);
+        }
+        return stack;
     }
 
     Piece* pieceOverride = nullptr;
@@ -425,7 +466,24 @@ LayeredSelectionStack InputHandler::resolveSelectionStackAtCell(const InputConte
         }
     }
 
-    return resolveCellSelectionStack(cell, cellPos, pieceOverride, suppressCellPiece);
+    LayeredSelectionStack stack = resolveCellSelectionStack(cell, cellPos, pieceOverride, suppressCellPiece);
+    if (context.weatherMaskCache != nullptr) {
+        if (stack.piece != nullptr && WeatherVisibility::shouldHidePiece(
+                *stack.piece,
+                context.localPerspectiveKingdom,
+                *context.weatherMaskCache)) {
+            stack.piece = nullptr;
+        }
+        if (stack.building != nullptr && WeatherVisibility::shouldHideBuildingSelection(
+                *stack.building,
+                cellPos,
+                context.localPerspectiveKingdom,
+                *context.weatherMaskCache)) {
+            stack.building = nullptr;
+        }
+        rebuildLayerOrder(stack);
+    }
+    return stack;
 }
 
 void InputHandler::applyResolvedSelection(const LayeredSelectionStack& stack,

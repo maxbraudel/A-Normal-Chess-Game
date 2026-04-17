@@ -160,6 +160,46 @@
             "target_weight_bishop": 14,
             "target_weight_rook": 26,
             "target_weight_queen": 38
+        },
+        "weather": {
+            "cooldown_min_turns": 5,
+            "arrival_gamma_shape_times_100": 240,
+            "arrival_gamma_scale_times_100": 220,
+            "duration_gamma_shape_times_100": 260,
+            "duration_gamma_scale_times_100": 180,
+            "speed_blocks_per_100_turns": 50,
+            "direction_weights": {
+                "north": 1,
+                "south": 1,
+                "east": 1,
+                "west": 1,
+                "north_east": 1,
+                "north_west": 1,
+                "south_east": 1,
+                "south_west": 1
+            },
+            "entry_center_weight_times_100": 180,
+            "entry_corner_weight_times_100": 70,
+            "coverage_min_percent": 10,
+            "coverage_max_percent": 30,
+            "aspect_ratio_min_times_100": 180,
+            "aspect_ratio_max_times_100": 260,
+            "shape_noise_cell_span": 6,
+            "shape_noise_amplitude_percent": 100,
+            "edge_softness_percent": 18,
+            "alpha_base_percent": 48,
+            "alpha_min_percent": 22,
+            "alpha_max_percent": 82,
+            "density_mu_times_100": -12,
+            "density_sigma_times_100": 35
+        },
+        "cheatcode": {
+            "enabled": true,
+            "shortcuts": {
+                "weather_fog": "Num1",
+                "chest_loot": "Num2",
+                "infernal_piece": "Num3"
+            }
         }
     },
     "ai": {

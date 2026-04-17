@@ -16,6 +16,7 @@
 #include "Systems/CheckResponseRules.hpp"
 #include "Systems/EconomySystem.hpp"
 #include "Systems/PublicBuildingOccupation.hpp"
+#include "Systems/WeatherTypes.hpp"
 #include "UI/InGameViewModel.hpp"
 
 class Board;
@@ -60,6 +61,8 @@ struct FrontendDisplayBindings {
     BuildingFactory& buildingFactory;
     TurnValidationContext authoritativeTurnContext;
     const GameConfig& config;
+    const WeatherMaskCache& weatherMaskCache;
+    KingdomId localPerspectiveKingdom = KingdomId::White;
 };
 
 struct FrontendDashboardBindings {

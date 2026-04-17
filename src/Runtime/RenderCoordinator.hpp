@@ -18,6 +18,7 @@
 #include "Autonomous/AutonomousUnit.hpp"
 #include "Kingdom/KingdomId.hpp"
 #include "Objects/MapObject.hpp"
+#include "Systems/WeatherTypes.hpp"
 
 class AssetManager;
 class Board;
@@ -103,6 +104,8 @@ struct WorldRenderBindings {
     const std::vector<MapObject>& displayedMapObjects;
     const std::vector<AutonomousUnit>& displayedAutonomousUnits;
     const GameConfig& config;
+    const WeatherMaskCache& weatherMaskCache;
+    KingdomId localPerspectiveKingdom = KingdomId::White;
 };
 
 class RenderCoordinator {

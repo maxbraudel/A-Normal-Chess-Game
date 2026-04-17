@@ -10,6 +10,8 @@
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingType.hpp"
 #include "Objects/MapObject.hpp"
+#include "Runtime/WeatherVisibility.hpp"
+#include "Systems/WeatherSystem.hpp"
 #include "Units/Piece.hpp"
 #include "Systems/TurnSystem.hpp"
 #include <algorithm>
@@ -96,6 +98,94 @@ void Renderer::drawPiecesLayer(sf::RenderWindow& window, const Camera& camera,
     camera.applyTo(window);
     drawPieces(window, camera, kingdoms);
     drawAutonomousUnits(window, autonomousUnits);
+}
+
+void Renderer::drawTerrainLayer(sf::RenderWindow& window, const Camera& camera, const Board& board) {
+    camera.applyTo(window);
+    drawBoard(window, camera, board);
+}
+
+void Renderer::drawOccludableBuildings(sf::RenderWindow& window,
+                                       const Camera& camera,
+                                       const std::array<Kingdom, kNumKingdoms>& kingdoms,
+                                       KingdomId localPerspective) {
+    camera.applyTo(window);
+    drawBuildingsByOcclusion(window, kingdoms, localPerspective, true);
+}
+
+void Renderer::drawVisibleBuildings(sf::RenderWindow& window,
+                                    const Camera& camera,
+                                    const std::array<Kingdom, kNumKingdoms>& kingdoms,
+                                    const std::vector<Building>& publicBuildings,
+                                    KingdomId localPerspective) {
+    camera.applyTo(window);
+    for (const Building& building : publicBuildings) {
+        drawSingleBuilding(window, building);
+    }
+    drawBuildingsByOcclusion(window, kingdoms, localPerspective, false);
+}
+
+void Renderer::drawMapObjectsLayer(sf::RenderWindow& window,
+                                   const Camera& camera,
+                                   const std::vector<MapObject>& mapObjects) {
+    camera.applyTo(window);
+    drawMapObjects(window, mapObjects);
+}
+
+void Renderer::drawOccludablePieces(sf::RenderWindow& window,
+                                    const Camera& camera,
+                                    const std::array<Kingdom, kNumKingdoms>& kingdoms,
+                                    KingdomId localPerspective) {
+    camera.applyTo(window);
+    drawPiecesByOcclusion(window, kingdoms, localPerspective, true);
+}
+
+void Renderer::drawVisiblePieces(sf::RenderWindow& window,
+                                 const Camera& camera,
+                                 const std::array<Kingdom, kNumKingdoms>& kingdoms,
+                                 KingdomId localPerspective) {
+    camera.applyTo(window);
+    drawPiecesByOcclusion(window, kingdoms, localPerspective, false);
+}
+
+void Renderer::drawAutonomousUnitsLayer(sf::RenderWindow& window,
+                                        const Camera& camera,
+                                        const std::vector<AutonomousUnit>& autonomousUnits) {
+    camera.applyTo(window);
+    drawAutonomousUnits(window, autonomousUnits);
+}
+
+void Renderer::drawWeatherLayer(sf::RenderWindow& window,
+                                const Camera& camera,
+                                const Board& board,
+                                const WeatherMaskCache& weatherMaskCache) {
+    if (!weatherMaskCache.hasActiveFront) {
+        return;
+    }
+
+    camera.applyTo(window);
+    const sf::FloatRect viewBounds = camera.getViewBounds();
+    const int diameter = board.getDiameter();
+    const int minCol = std::max(0, static_cast<int>(viewBounds.left / m_cellSize) - 1);
+    const int maxCol = std::min(diameter - 1, static_cast<int>((viewBounds.left + viewBounds.width) / m_cellSize) + 1);
+    const int minRow = std::max(0, static_cast<int>(viewBounds.top / m_cellSize) - 1);
+    const int maxRow = std::min(diameter - 1, static_cast<int>((viewBounds.top + viewBounds.height) / m_cellSize) + 1);
+
+    sf::RectangleShape cellFog(sf::Vector2f(static_cast<float>(m_cellSize) + 1.0f,
+                                            static_cast<float>(m_cellSize) + 1.0f));
+    for (int y = minRow; y <= maxRow; ++y) {
+        for (int x = minCol; x <= maxCol; ++x) {
+            const std::uint8_t alpha = WeatherSystem::alphaAtCell(weatherMaskCache, x, y);
+            if (alpha == 0) {
+                continue;
+            }
+
+            const std::uint8_t shade = WeatherSystem::shadeAtCell(weatherMaskCache, x, y);
+            cellFog.setPosition(static_cast<float>(x * m_cellSize), static_cast<float>(y * m_cellSize));
+            cellFog.setFillColor(sf::Color(shade, shade, shade, alpha));
+            window.draw(cellFog);
+        }
+    }
 }
 
 void Renderer::drawBoard(sf::RenderWindow& window, const Camera& camera, const Board& board) {
@@ -249,5 +339,54 @@ void Renderer::drawAutonomousUnits(sf::RenderWindow& window, const std::vector<A
         }
 
         window.draw(sprite);
+    }
+}
+
+void Renderer::drawBuildingsByOcclusion(sf::RenderWindow& window,
+                                        const std::array<Kingdom, kNumKingdoms>& kingdoms,
+                                        KingdomId localPerspective,
+                                        bool drawOccludable) {
+    if (!m_assets) return;
+
+    for (const Kingdom& kingdom : kingdoms) {
+        for (const Building& building : kingdom.buildings) {
+            if (WeatherVisibility::isOccludableBuilding(building, localPerspective) != drawOccludable) {
+                continue;
+            }
+
+            drawSingleBuilding(window, building);
+        }
+    }
+}
+
+void Renderer::drawPiecesByOcclusion(sf::RenderWindow& window,
+                                     const std::array<Kingdom, kNumKingdoms>& kingdoms,
+                                     KingdomId localPerspective,
+                                     bool drawOccludable) {
+    if (!m_assets) return;
+
+    for (const Kingdom& kingdom : kingdoms) {
+        for (const Piece& piece : kingdom.pieces) {
+            if (m_skipPieceIds.count(piece.id) != 0) {
+                continue;
+            }
+            if (WeatherVisibility::isOccludablePiece(piece, localPerspective) != drawOccludable) {
+                continue;
+            }
+
+            sf::Sprite sprite;
+            sprite.setTexture(m_assets->getPieceTexture(piece.type, piece.kingdom));
+            sprite.setPosition(static_cast<float>(piece.position.x * m_cellSize),
+                               static_cast<float>(piece.position.y * m_cellSize));
+
+            const sf::Vector2u texSize = sprite.getTexture()->getSize();
+            if (texSize.x > 0 && texSize.y > 0) {
+                sprite.setScale(
+                    static_cast<float>(m_cellSize) / static_cast<float>(texSize.x),
+                    static_cast<float>(m_cellSize) / static_cast<float>(texSize.y));
+            }
+
+            window.draw(sprite);
+        }
     }
 }

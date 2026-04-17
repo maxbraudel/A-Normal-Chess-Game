@@ -51,6 +51,7 @@
 #include "Multiplayer/MultiplayerRuntime.hpp"
 #include "Save/SaveManager.hpp"
 #include "Systems/CheckResponseRules.hpp"
+#include "Systems/WeatherTypes.hpp"
 
 #include <cstdint>
 
@@ -127,6 +128,10 @@ private:
     MapObject* selectedDisplayedMapObject();
     void activateSelectTool();
     void refreshBuildableCellsOverlay(const InteractionPermissions& permissions);
+    void ensureWeatherMaskUpToDate();
+    void triggerCheatcodeWeatherFront();
+    void triggerCheatcodeChestSpawn();
+    void triggerCheatcodeInfernalSpawn();
     Board& displayedBoard();
     const Board& displayedBoard() const;
     std::array<Kingdom, kNumKingdoms>& displayedKingdoms();
@@ -224,6 +229,7 @@ private:
     PanelActionCoordinator m_panelActionCoordinator;
     MultiplayerRuntimeCoordinator m_multiplayerRuntimeCoordinator;
     BuildOverlayCache m_buildOverlayCache;
+    WeatherMaskCache m_weatherMaskCache;
     mutable PendingTurnValidationCache m_pendingTurnValidationCache;
 
 #ifdef _WIN32

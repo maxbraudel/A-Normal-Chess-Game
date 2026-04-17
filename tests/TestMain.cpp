@@ -62,6 +62,7 @@
 #include "Runtime/TurnLifecycleCoordinator.hpp"
 #include "Runtime/UICallbackCoordinator.hpp"
 #include "Runtime/UpdateCoordinator.hpp"
+#include "Runtime/WeatherVisibility.hpp"
 #include "Save/SaveManager.hpp"
 #include "Systems/BuildOverlayRules.hpp"
 #include "Systems/BuildSystem.hpp"
@@ -78,6 +79,7 @@
 #include "Systems/StructureIntegrityRules.hpp"
 #include "Systems/TurnCommand.hpp"
 #include "Systems/TurnSystem.hpp"
+#include "Systems/WeatherSystem.hpp"
 #include "Systems/XPSystem.hpp"
 #include "UI/HUDLayout.hpp"
 #include "UI/InGameViewModelBuilder.hpp"
@@ -191,6 +193,27 @@ GameConfig makeXPTestConfig(const std::string& xpJsonBody) {
     GameConfig config;
     expect(config.loadFromFile(tempPath.string()),
         "XP test config helper should load a temporary XP override file.");
+    std::filesystem::remove(tempPath);
+    return config;
+}
+
+GameConfig makeWeatherTestConfig(const std::string& weatherJsonBody) {
+    const std::filesystem::path tempPath =
+        std::filesystem::temp_directory_path() / "anormalchess_weather_test_config.json";
+    {
+        std::ofstream out(tempPath);
+        out << "{\n"
+            << "  \"game\": {\n"
+            << "    \"weather\": {\n"
+            << weatherJsonBody << "\n"
+            << "    }\n"
+            << "  }\n"
+            << "}\n";
+    }
+
+    GameConfig config;
+    expect(config.loadFromFile(tempPath.string()),
+        "Weather test config helper should load a temporary weather override file.");
     std::filesystem::remove(tempPath);
     return config;
 }
@@ -382,6 +405,8 @@ InputContext makePassiveInputContext(sf::RenderWindow& window,
                               config},
         uiManager,
         config,
+                    nullptr,
+                    controlledKingdom.id,
         InteractionPermissions{},
         false,
         false};
@@ -2552,6 +2577,49 @@ void testSessionValidatorRejectsInvalidOrdering() {
                "InputCoordinator should block GUI navigation keys before they leak into the gameplay loop.");
     }
 
+    void testInputCoordinatorPlansCheatcodeShortcuts() {
+        InputFrameState state;
+        state.gameState = GameState::Playing;
+        state.cheatcodeEnabled = true;
+        state.cheatcodeWeatherShortcut = sf::Keyboard::Num1;
+        state.cheatcodeChestShortcut = sf::Keyboard::Num2;
+        state.cheatcodeInfernalShortcut = sf::Keyboard::Num3;
+        state.permissions.canIssueCommands = true;
+        state.permissions.canInspectWorld = true;
+
+        sf::Event weatherEvent{};
+        weatherEvent.type = sf::Event::KeyPressed;
+        weatherEvent.key.code = sf::Keyboard::Num1;
+        expect(InputCoordinator::planPreGuiAction(weatherEvent, state).kind
+                   == InputPreGuiActionKind::TriggerCheatcodeWeather,
+               "InputCoordinator should route the configured weather cheat shortcut when cheatcode mode is enabled.");
+
+        sf::Event chestEvent{};
+        chestEvent.type = sf::Event::KeyPressed;
+        chestEvent.key.code = sf::Keyboard::Num2;
+        expect(InputCoordinator::planPreGuiAction(chestEvent, state).kind
+                   == InputPreGuiActionKind::TriggerCheatcodeChest,
+               "InputCoordinator should route the configured chest cheat shortcut when cheatcode mode is enabled.");
+
+        sf::Event infernalEvent{};
+        infernalEvent.type = sf::Event::KeyPressed;
+        infernalEvent.key.code = sf::Keyboard::Num3;
+        expect(InputCoordinator::planPreGuiAction(infernalEvent, state).kind
+                   == InputPreGuiActionKind::TriggerCheatcodeInfernal,
+               "InputCoordinator should route the configured infernal cheat shortcut when cheatcode mode is enabled.");
+
+        state.permissions.canIssueCommands = false;
+        expect(InputCoordinator::planPreGuiAction(weatherEvent, state).kind
+                   == InputPreGuiActionKind::SkipEvent,
+               "InputCoordinator should swallow cheat shortcuts when authoritative commands are locked.");
+
+        state.permissions.canIssueCommands = true;
+        state.inGameMenuOpen = true;
+        expect(InputCoordinator::planPreGuiAction(chestEvent, state).kind
+                   == InputPreGuiActionKind::SkipEvent,
+               "InputCoordinator should swallow cheat shortcuts while the in-game menu is open.");
+    }
+
     void testInputCoordinatorRoutesWorldInputAfterGuiFiltering() {
         InputFrameState state;
         state.gameState = GameState::Playing;
@@ -3794,6 +3862,20 @@ void testSaveManagerRoundTrip() {
     data.activeKingdom = KingdomId::Black;
     data.mapRadius = 5;
     data.worldSeed = 123456789u;
+    data.weatherSystemState.nextSpawnTurnStep = 19;
+    data.weatherSystemState.hasActiveFront = true;
+    data.weatherSystemState.rngCounter = 6u;
+    data.weatherSystemState.activeFront.direction = WeatherDirection::SouthWest;
+    data.weatherSystemState.activeFront.currentTurnStep = 3;
+    data.weatherSystemState.activeFront.totalTurnSteps = 11;
+    data.weatherSystemState.activeFront.centerStartXTimes1000 = -1750;
+    data.weatherSystemState.activeFront.centerStartYTimes1000 = 24500;
+    data.weatherSystemState.activeFront.stepXTimes1000 = -610;
+    data.weatherSystemState.activeFront.stepYTimes1000 = 610;
+    data.weatherSystemState.activeFront.radiusAlongTimes1000 = 5400;
+    data.weatherSystemState.activeFront.radiusAcrossTimes1000 = 11200;
+    data.weatherSystemState.activeFront.shapeSeed = 101u;
+    data.weatherSystemState.activeFront.densitySeed = 202u;
     data.xpSystemState.rngCounter = 17u;
     data.sessionKingdoms = defaultKingdomParticipants(GameMode::HumanVsHuman);
     data.sessionKingdoms[0].participantName = "Player \"Alpha\"";
@@ -3868,6 +3950,15 @@ void testSaveManagerRoundTrip() {
         "World seed should round-trip through SaveManager.");
     expect(loaded.xpSystemState.rngCounter == data.xpSystemState.rngCounter,
         "XP RNG state should round-trip through SaveManager.");
+    expect(loaded.weatherSystemState.nextSpawnTurnStep == data.weatherSystemState.nextSpawnTurnStep
+        && loaded.weatherSystemState.hasActiveFront == data.weatherSystemState.hasActiveFront
+        && loaded.weatherSystemState.rngCounter == data.weatherSystemState.rngCounter,
+        "Weather scheduler state should round-trip through SaveManager.");
+    expect(loaded.weatherSystemState.activeFront.direction == data.weatherSystemState.activeFront.direction
+        && loaded.weatherSystemState.activeFront.currentTurnStep == data.weatherSystemState.activeFront.currentTurnStep
+        && loaded.weatherSystemState.activeFront.totalTurnSteps == data.weatherSystemState.activeFront.totalTurnSteps
+        && loaded.weatherSystemState.activeFront.radiusAcrossTimes1000 == data.weatherSystemState.activeFront.radiusAcrossTimes1000,
+        "Active weather front geometry should round-trip through SaveManager.");
     expect(loaded.controllers[0] == ControllerType::Human && loaded.controllers[1] == ControllerType::Human,
        "Legacy controller metadata should stay aligned with session metadata.");
     expect(loaded.multiplayer.enabled && loaded.multiplayer.port == data.multiplayer.port,
@@ -5636,6 +5727,315 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             "Legacy destroy-block getter compatibility should expose the configured mean.");
     }
 
+    void testCheatcodeConfigLoadsBooleanAndShortcuts() {
+        const std::filesystem::path tempPath =
+            std::filesystem::temp_directory_path() / "anormalchess_cheatcode_test_config.json";
+        {
+            std::ofstream out(tempPath);
+            out << "{\n"
+                << "  \"game\": {\n"
+                << "    \"cheatcode\": {\n"
+                << "      \"enabled\": true,\n"
+                << "      \"shortcuts\": {\n"
+                << "        \"weather_fog\": \"F1\",\n"
+                << "        \"chest_loot\": \"F2\",\n"
+                << "        \"infernal_piece\": \"F3\"\n"
+                << "      }\n"
+                << "    }\n"
+                << "  }\n"
+                << "}\n";
+        }
+
+        GameConfig config;
+        expect(config.loadFromFile(tempPath.string()),
+            "GameConfig should load cheatcode settings from a temporary override file.");
+        std::filesystem::remove(tempPath);
+
+        expect(config.isCheatcodeEnabled(),
+            "Cheatcode config should enable the feature when the JSON boolean is true.");
+        expect(config.getCheatcodeWeatherShortcut() == sf::Keyboard::F1,
+            "Cheatcode config should load the configured weather shortcut.");
+        expect(config.getCheatcodeChestShortcut() == sf::Keyboard::F2,
+            "Cheatcode config should load the configured chest shortcut.");
+        expect(config.getCheatcodeInfernalShortcut() == sf::Keyboard::F3,
+            "Cheatcode config should load the configured infernal shortcut.");
+    }
+
+    void testWeatherConfigLoadsStructuredParameters() {
+        GameConfig config = makeWeatherTestConfig(
+            "      \"cooldown_min_turns\": 2,\n"
+            "      \"arrival_gamma_shape_times_100\": 150,\n"
+            "      \"arrival_gamma_scale_times_100\": 125,\n"
+            "      \"duration_gamma_shape_times_100\": 310,\n"
+            "      \"duration_gamma_scale_times_100\": 90,\n"
+            "      \"speed_blocks_per_100_turns\": 37,\n"
+            "      \"direction_weights\": {\n"
+            "        \"north\": 7,\n"
+            "        \"south\": 1,\n"
+            "        \"east\": 3,\n"
+            "        \"west\": 5,\n"
+            "        \"north_east\": 9,\n"
+            "        \"north_west\": 11,\n"
+            "        \"south_east\": 13,\n"
+            "        \"south_west\": 15\n"
+            "      },\n"
+            "      \"entry_center_weight_times_100\": 220,\n"
+            "      \"entry_corner_weight_times_100\": 40,\n"
+            "      \"coverage_min_percent\": 28,\n"
+            "      \"coverage_max_percent\": 34,\n"
+            "      \"aspect_ratio_min_times_100\": 190,\n"
+            "      \"aspect_ratio_max_times_100\": 275,\n"
+            "      \"shape_noise_cell_span\": 8,\n"
+            "      \"shape_noise_amplitude_percent\": 26,\n"
+            "      \"edge_softness_percent\": 21,\n"
+            "      \"alpha_base_percent\": 55,\n"
+            "      \"alpha_min_percent\": 25,\n"
+            "      \"alpha_max_percent\": 88,\n"
+            "      \"density_mu_times_100\": -20,\n"
+            "      \"density_sigma_times_100\": 42");
+
+        const std::array<int, kNumWeatherDirections> weights = config.getWeatherDirectionWeights();
+        expect(config.getWeatherCooldownMinTurns() == 2,
+            "Structured weather config should override the minimum cooldown between fog fronts.");
+        expect(config.getWeatherArrivalGammaShapeTimes100() == 150
+            && config.getWeatherArrivalGammaScaleTimes100() == 125,
+            "Structured weather config should override the arrival gamma parameters.");
+        expect(config.getWeatherDurationGammaShapeTimes100() == 310
+            && config.getWeatherDurationGammaScaleTimes100() == 90,
+            "Structured weather config should override the duration gamma parameters.");
+        expect(config.getWeatherSpeedBlocksPer100Turns() == 37,
+            "Structured weather config should load the configured front speed measured in blocks per 100 turns.");
+        expect(weights[weatherDirectionIndex(WeatherDirection::North)] == 7
+            && weights[weatherDirectionIndex(WeatherDirection::SouthWest)] == 15,
+            "Structured weather config should load the full per-direction weight table.");
+        expect(config.getWeatherCoverageMinPercent() == 28
+            && config.getWeatherCoverageMaxPercent() == 34,
+            "Structured weather config should load the configured fog coverage band.");
+        expect(config.getWeatherAlphaBasePercent() == 55
+            && config.getWeatherAlphaMinPercent() == 25
+            && config.getWeatherAlphaMaxPercent() == 88,
+            "Structured weather config should load the configured opacity controls.");
+        expect(config.getWeatherDensityMuTimes100() == -20
+            && config.getWeatherDensitySigmaTimes100() == 42,
+            "Structured weather config should load the configured log-normal density parameters.");
+    }
+
+    void testWeatherSystemUsesDeterministicSerializedSequence() {
+        GameConfig config = makeWeatherTestConfig(
+            "      \"cooldown_min_turns\": 0,\n"
+            "      \"arrival_gamma_shape_times_100\": 1,\n"
+            "      \"arrival_gamma_scale_times_100\": 1,\n"
+            "      \"duration_gamma_shape_times_100\": 180,\n"
+            "      \"duration_gamma_scale_times_100\": 90,\n"
+            "      \"coverage_min_percent\": 30,\n"
+            "      \"coverage_max_percent\": 30,\n"
+            "      \"aspect_ratio_min_times_100\": 220,\n"
+            "      \"aspect_ratio_max_times_100\": 220,\n"
+            "      \"alpha_base_percent\": 60,\n"
+            "      \"alpha_min_percent\": 30,\n"
+            "      \"alpha_max_percent\": 80");
+
+        Board board;
+        board.init(12);
+
+        WeatherSystemState firstState{};
+        WeatherSystemState replayState{};
+        firstState.nextSpawnTurnStep = 0;
+        replayState.nextSpawnTurnStep = 0;
+        const std::uint32_t worldSeed = 515151u;
+
+        expect(WeatherSystem::trySpawnFront(firstState, board, worldSeed, 0, config),
+            "WeatherSystem should spawn a fog front when the serialized schedule says it is due.");
+        expect(WeatherSystem::trySpawnFront(replayState, board, worldSeed, 0, config),
+            "WeatherSystem replay should spawn the same fog front from the same serialized state.");
+
+        expect(firstState.hasActiveFront && replayState.hasActiveFront,
+            "Deterministic weather replay should leave both states with an active front.");
+        expect(firstState.activeFront.direction == replayState.activeFront.direction
+            && firstState.activeFront.totalTurnSteps == replayState.activeFront.totalTurnSteps
+            && firstState.activeFront.centerStartXTimes1000 == replayState.activeFront.centerStartXTimes1000
+            && firstState.activeFront.centerStartYTimes1000 == replayState.activeFront.centerStartYTimes1000
+            && firstState.activeFront.stepXTimes1000 == replayState.activeFront.stepXTimes1000
+            && firstState.activeFront.stepYTimes1000 == replayState.activeFront.stepYTimes1000
+            && firstState.activeFront.radiusAlongTimes1000 == replayState.activeFront.radiusAlongTimes1000
+            && firstState.activeFront.radiusAcrossTimes1000 == replayState.activeFront.radiusAcrossTimes1000
+            && firstState.activeFront.shapeSeed == replayState.activeFront.shapeSeed
+            && firstState.activeFront.densitySeed == replayState.activeFront.densitySeed,
+            "Weather spawning should be deterministic for the same world seed and serialized RNG state.");
+
+        WeatherMaskCache firstMask;
+        WeatherMaskCache replayMask;
+        WeatherSystem::rebuildMask(board, firstState, config, firstMask);
+        WeatherSystem::rebuildMask(board, replayState, config, replayMask);
+        expect(firstMask.alphaByCell == replayMask.alphaByCell,
+            "Rebuilding the fog mask from equivalent serialized weather states should yield the same concealment map.");
+
+        WeatherSystem::advanceFront(firstState, worldSeed, 1, config);
+        WeatherSystemState resumedState = replayState;
+        WeatherSystem::advanceFront(replayState, worldSeed, 1, config);
+        WeatherSystem::advanceFront(resumedState, worldSeed, 1, config);
+        expect(replayState.activeFront.currentTurnStep == resumedState.activeFront.currentTurnStep,
+            "Restoring the serialized weather state should resume the exact same front progression step.");
+
+        WeatherMaskCache resumedMask;
+        WeatherSystem::rebuildMask(board, replayState, config, replayMask);
+        WeatherSystem::rebuildMask(board, resumedState, config, resumedMask);
+        expect(replayMask.alphaByCell == resumedMask.alphaByCell,
+            "Restored weather fronts should rebuild the exact same concealment mask after advancing.");
+    }
+
+    void testWeatherSystemUsesConfiguredSpeedBlocksPer100Turns() {
+        GameConfig config = makeWeatherTestConfig(
+            "      \"cooldown_min_turns\": 0,\n"
+            "      \"speed_blocks_per_100_turns\": 50,\n"
+            "      \"direction_weights\": {\n"
+            "        \"north\": 0,\n"
+            "        \"south\": 0,\n"
+            "        \"east\": 1,\n"
+            "        \"west\": 0,\n"
+            "        \"north_east\": 0,\n"
+            "        \"north_west\": 0,\n"
+            "        \"south_east\": 0,\n"
+            "        \"south_west\": 0\n"
+            "      },\n"
+            "      \"coverage_min_percent\": 30,\n"
+            "      \"coverage_max_percent\": 30");
+
+        Board board;
+        board.init(12);
+
+        WeatherSystemState state{};
+        state.nextSpawnTurnStep = 0;
+        expect(WeatherSystem::trySpawnFront(state, board, 919191u, 0, config),
+            "WeatherSystem should spawn a front for speed validation when the schedule is due.");
+
+        const float stepMagnitude = std::sqrt(
+            static_cast<float>(state.activeFront.stepXTimes1000 * state.activeFront.stepXTimes1000
+                + state.activeFront.stepYTimes1000 * state.activeFront.stepYTimes1000)) / 1000.0f;
+        expect(std::abs(stepMagnitude - 0.25f) <= 0.01f,
+            "A speed of 50 blocks per 100 turns should move the front center by about 0.25 blocks per half-turn.");
+
+        const float travelAfterTwoTurns = stepMagnitude * 4.0f;
+        expect(std::abs(travelAfterTwoTurns - 1.0f) <= 0.05f,
+            "A speed of 50 blocks per 100 turns should move the front center by about 1 block every 2 turns.");
+    }
+
+    void testGameEngineCheatcodeTriggersSpawnEvents() {
+        GameConfig config;
+        GameEngine engine;
+        GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, "cheatcode_event_test");
+
+        std::string error;
+        expect(engine.startNewSession(session, config, &error), error);
+
+        const sf::Vector2i boardCenter{engine.board().getRadius(), engine.board().getRadius()};
+        sf::Vector2i infernalTargetCell = findEmptyTraversableCell(engine);
+        int bestCenterDistance = std::numeric_limits<int>::max();
+        for (const sf::Vector2i& cellPos : engine.board().getAllValidCells()) {
+            const Cell& cell = engine.board().getCell(cellPos.x, cellPos.y);
+            if (cell.type == CellType::Water || cell.type == CellType::Void) {
+                continue;
+            }
+            if (cell.piece != nullptr || cell.building != nullptr || cell.autonomousUnit != nullptr) {
+                continue;
+            }
+
+            const int centerDistance = std::abs(cellPos.x - boardCenter.x) + std::abs(cellPos.y - boardCenter.y);
+            if (centerDistance < bestCenterDistance) {
+                bestCenterDistance = centerDistance;
+                infernalTargetCell = cellPos;
+            }
+        }
+
+        addPieceToBoard(engine.kingdom(KingdomId::White),
+                        engine.board(),
+                        9100,
+                        PieceType::Queen,
+                        KingdomId::White,
+                        infernalTargetCell);
+        relinkBoardState(engine.board(),
+                         engine.kingdoms(),
+                         engine.publicBuildings(),
+                         engine.mapObjects(),
+                         engine.autonomousUnits());
+
+        expect(engine.triggerCheatcodeWeatherFront(config),
+            "GameEngine should spawn a weather front immediately when the weather cheatcode is triggered.");
+        expect(engine.weatherSystemState().hasActiveFront,
+            "Triggering the weather cheatcode should leave an active weather front in authoritative state.");
+
+        expect(engine.triggerCheatcodeChestSpawn(config),
+            "GameEngine should spawn a chest immediately when the chest cheatcode is triggered and no chest is active.");
+        expect(engine.chestSystemState().activeChestObjectId >= 0,
+            "Triggering the chest cheatcode should leave an active chest object tracked in authoritative state.");
+
+        expect(engine.triggerCheatcodeInfernalSpawn(config),
+            "GameEngine should spawn an infernal unit immediately when the infernal cheatcode is triggered and a valid target exists.");
+        expect(engine.infernalSystemState().activeInfernalUnitId >= 0,
+            "Triggering the infernal cheatcode should leave an active infernal unit tracked in authoritative state.");
+        expect(!engine.autonomousUnits().empty(),
+            "Triggering the infernal cheatcode should materialize an autonomous infernal unit on the board.");
+    }
+
+    void testInputHandlerReconcileSelectionDemotesFoggedEnemyPieceToTerrain() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 1300, PieceType::King, KingdomId::White, {1, 1});
+        Piece& hiddenEnemyPawn = addPieceToBoard(black,
+                                                 board,
+                                                 2300,
+                                                 PieceType::Pawn,
+                                                 KingdomId::Black,
+                                                 {5, 5});
+        addPieceToBoard(black, board, 2301, PieceType::King, KingdomId::Black, {9, 9});
+
+        WeatherMaskCache weatherMaskCache;
+        weatherMaskCache.diameter = board.getDiameter();
+        weatherMaskCache.hasActiveFront = true;
+        weatherMaskCache.alphaByCell.assign(
+            static_cast<std::size_t>(weatherMaskCache.diameter * weatherMaskCache.diameter),
+            0);
+        weatherMaskCache.alphaByCell[static_cast<std::size_t>((5 * weatherMaskCache.diameter) + 5)] = 255;
+
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+        turnSystem.setTurnNumber(1);
+        BuildingFactory buildingFactory;
+        std::vector<Building> publicBuildings;
+        sf::RenderWindow window;
+        Camera camera;
+        UIManager uiManager;
+        InputContext context = makePassiveInputContext(window,
+                                                       camera,
+                                                       board,
+                                                       turnSystem,
+                                                       buildingFactory,
+                                                       white,
+                                                       black,
+                                                       publicBuildings,
+                                                       uiManager,
+                                                       config);
+        context.weatherMaskCache = &weatherMaskCache;
+        context.localPerspectiveKingdom = KingdomId::White;
+        context.permissions.canIssueCommands = false;
+
+        InputSelectionBookmark bookmark;
+        bookmark.pieceId = hiddenEnemyPawn.id;
+        bookmark.selectedCell = hiddenEnemyPawn.position;
+
+        InputHandler input;
+        input.reconcileSelection(bookmark, &hiddenEnemyPawn, nullptr, context);
+
+        expect(input.getSelectedPieceId() == -1,
+            "Reconciling a hidden enemy piece selection should demote the selection instead of restoring the concealed piece.");
+        expect(input.hasSelectedCell() && input.getSelectedCell() == hiddenEnemyPawn.position,
+            "When fog hides the enemy piece, InputHandler should preserve the clicked terrain cell as the fallback selection.");
+    }
+
     void testXPSystemUsesDeterministicSerializedSequence() {
         GameConfig config = makeXPTestConfig(
             "      \"sources\": {\n"
@@ -6758,9 +7158,15 @@ int main() {
         {"multiplayer event coordinator restore and cleanup", testMultiplayerEventCoordinatorRestoresSnapshotsAndClientState},
         {"multiplayer runtime coordinator dialog actions", testMultiplayerRuntimeCoordinatorBuildsDialogActions},
         {"input coordinator gameplay shortcuts", testInputCoordinatorPlansGameplayShortcuts},
+        {"input coordinator cheatcode shortcuts", testInputCoordinatorPlansCheatcodeShortcuts},
         {"input coordinator world routing", testInputCoordinatorRoutesWorldInputAfterGuiFiltering},
         {"render coordinator move overlay plan", testRenderCoordinatorBuildsSelectionAndMoveOverlayPlan},
+        {"weather config structured parameters", testWeatherConfigLoadsStructuredParameters},
+        {"cheatcode config boolean and shortcuts", testCheatcodeConfigLoadsBooleanAndShortcuts},
         {"xp config structured profiles", testXPConfigLoadsStructuredProfiles},
+        {"weather deterministic serialized sequence", testWeatherSystemUsesDeterministicSerializedSequence},
+        {"weather configured speed blocks per 100 turns", testWeatherSystemUsesConfiguredSpeedBlocksPer100Turns},
+        {"game engine cheatcode event triggers", testGameEngineCheatcodeTriggersSpawnEvents},
         {"xp deterministic serialized sequence", testXPSystemUsesDeterministicSerializedSequence},
         {"xp forward model matches runtime capture", testForwardModelCaptureXPMatchesCommittedTurn},
         {"infernal blood debt from captures", testInfernalBloodDebtAccumulatesFromCommittedCaptures},
@@ -6794,6 +7200,7 @@ int main() {
         {"layered selection under construction building", testLayeredSelectionStackTreatsUnderConstructionBuildingAsNormalBuilding},
         {"input bookmarks active piece cell", testInputHandlerBookmarksActivePieceSelectionCell},
         {"input reconcile avoids distant piece jump", testInputHandlerReconcileSelectionDoesNotJumpToMismatchedPieceElsewhere},
+        {"input reconcile fogged enemy piece", testInputHandlerReconcileSelectionDemotesFoggedEnemyPieceToTerrain},
         {"input reconcile prefers visible piece over pending override", testInputHandlerReconcileSelectionPrefersVisiblePieceOverPendingMoveOverride},
         {"public building occupation state", testPublicBuildingOccupationStateResolvesAllOutcomes},
         {"cell traversal water blocked", testCellTraversalTreatsWaterAsNotTraversable},

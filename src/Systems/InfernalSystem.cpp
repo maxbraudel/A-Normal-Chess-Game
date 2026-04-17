@@ -412,6 +412,65 @@ std::optional<TargetCandidate> chooseReplacementTarget(InfernalSystemState& stat
     return std::nullopt;
 }
 
+std::optional<AutonomousUnit> spawnInfernalFromResolvedTarget(InfernalSystemState& state,
+                                                              const Board& board,
+                                                              const std::array<Kingdom, kNumKingdoms>& kingdoms,
+                                                              std::uint32_t worldSeed,
+                                                              int currentTurnStep,
+                                                              int currentTurnNumber,
+                                                              int nextUnitId,
+                                                              const GameConfig& config) {
+    const std::optional<KingdomId> primaryTargetKingdom = chooseTargetKingdom(state, kingdoms, worldSeed);
+    if (!primaryTargetKingdom.has_value()) {
+        state.nextSpawnTurn = currentTurnStep + cadenceStepsFromTurns(config.getInfernalSpawnRetryTurns());
+        return std::nullopt;
+    }
+
+    const Kingdom& chosenKingdom = kingdoms[kingdomIndex(*primaryTargetKingdom)];
+    std::optional<SpawnOption> option = chooseSpawnOptionForKingdom(
+        state,
+        board,
+        chosenKingdom,
+        *primaryTargetKingdom,
+        worldSeed,
+        config);
+
+    KingdomId finalTargetKingdom = *primaryTargetKingdom;
+    if (!option.has_value()) {
+        const KingdomId fallbackKingdom = opponent(*primaryTargetKingdom);
+        option = chooseSpawnOptionForKingdom(
+            state,
+            board,
+            kingdoms[kingdomIndex(fallbackKingdom)],
+            fallbackKingdom,
+            worldSeed,
+            config);
+        if (option.has_value()) {
+            finalTargetKingdom = fallbackKingdom;
+        }
+    }
+
+    if (!option.has_value()) {
+        state.nextSpawnTurn = currentTurnStep + cadenceStepsFromTurns(config.getInfernalSpawnRetryTurns());
+        return std::nullopt;
+    }
+
+    AutonomousUnit unit;
+    unit.id = nextUnitId;
+    unit.type = AutonomousUnitType::InfernalPiece;
+    unit.position = option->spawnCell;
+    unit.infernal.targetKingdom = finalTargetKingdom;
+    unit.infernal.targetPieceId = option->targetPieceId;
+    unit.infernal.manifestedPieceType = option->targetType;
+    unit.infernal.preferredTargetType = option->targetType;
+    unit.infernal.phase = InfernalPhase::Hunting;
+    unit.infernal.returnBorderCell = option->spawnCell;
+    unit.infernal.spawnTurn = currentTurnNumber;
+
+    state.activeInfernalUnitId = unit.id;
+    return unit;
+}
+
 std::optional<sf::Vector2i> chooseReturnBorderCell(InfernalSystemState& state,
                                                    const Board& board,
                                                    const AutonomousUnit& unit,
@@ -423,6 +482,7 @@ std::optional<sf::Vector2i> chooseReturnBorderCell(InfernalSystemState& state,
     }
 
     std::vector<sf::Vector2i> bestCells;
+
     int bestDistance = std::numeric_limits<int>::max();
     for (const sf::Vector2i& borderCell : borderCells) {
         const int distance = shortestPathSteps(
@@ -645,55 +705,40 @@ std::optional<AutonomousUnit> InfernalSystem::trySpawnInfernal(
         return std::nullopt;
     }
 
-    const std::optional<KingdomId> primaryTargetKingdom = chooseTargetKingdom(state, kingdoms, worldSeed);
-    if (!primaryTargetKingdom.has_value()) {
-        state.nextSpawnTurn = currentTurnStep + cadenceStepsFromTurns(config.getInfernalSpawnRetryTurns());
-        return std::nullopt;
-    }
-
-    const Kingdom& chosenKingdom = kingdoms[kingdomIndex(*primaryTargetKingdom)];
-    std::optional<SpawnOption> option = chooseSpawnOptionForKingdom(
+    return spawnInfernalFromResolvedTarget(
         state,
         board,
-        chosenKingdom,
-        *primaryTargetKingdom,
+        kingdoms,
         worldSeed,
+        currentTurnStep,
+        currentTurnNumber,
+        nextUnitId,
         config);
+}
 
-    KingdomId finalTargetKingdom = *primaryTargetKingdom;
-    if (!option.has_value()) {
-        const KingdomId fallbackKingdom = opponent(*primaryTargetKingdom);
-        option = chooseSpawnOptionForKingdom(
-            state,
-            board,
-            kingdoms[kingdomIndex(fallbackKingdom)],
-            fallbackKingdom,
-            worldSeed,
-            config);
-        if (option.has_value()) {
-            finalTargetKingdom = fallbackKingdom;
-        }
-    }
-
-    if (!option.has_value()) {
-        state.nextSpawnTurn = currentTurnStep + cadenceStepsFromTurns(config.getInfernalSpawnRetryTurns());
+std::optional<AutonomousUnit> InfernalSystem::forceSpawnInfernal(
+    InfernalSystemState& state,
+    const Board& board,
+    const std::array<Kingdom, kNumKingdoms>& kingdoms,
+    std::uint32_t worldSeed,
+    int currentTurnStep,
+    int currentTurnNumber,
+    int nextUnitId,
+    const GameConfig& config) {
+    if (hasActiveInfernal(state)) {
         return std::nullopt;
     }
 
-    AutonomousUnit unit;
-    unit.id = nextUnitId;
-    unit.type = AutonomousUnitType::InfernalPiece;
-    unit.position = option->spawnCell;
-    unit.infernal.targetKingdom = finalTargetKingdom;
-    unit.infernal.targetPieceId = option->targetPieceId;
-    unit.infernal.manifestedPieceType = option->targetType;
-    unit.infernal.preferredTargetType = option->targetType;
-    unit.infernal.phase = InfernalPhase::Hunting;
-    unit.infernal.returnBorderCell = option->spawnCell;
-    unit.infernal.spawnTurn = currentTurnNumber;
-
-    state.activeInfernalUnitId = unit.id;
-    return unit;
+    state.nextSpawnTurn = currentTurnStep + 1;
+    return spawnInfernalFromResolvedTarget(
+        state,
+        board,
+        kingdoms,
+        worldSeed,
+        currentTurnStep,
+        currentTurnNumber,
+        nextUnitId,
+        config);
 }
 
 bool InfernalSystem::actAfterCommittedTurn(InfernalSystemState& state,

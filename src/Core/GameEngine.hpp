@@ -19,6 +19,7 @@
 #include "Systems/InfernalSystem.hpp"
 #include "Systems/TurnSystem.hpp"
 #include "Systems/TurnValidationContext.hpp"
+#include "Systems/WeatherTypes.hpp"
 #include "Systems/XPTypes.hpp"
 #include "Units/PieceFactory.hpp"
 
@@ -74,6 +75,9 @@ public:
     TurnValidationContext makeTurnValidationContext(const GameConfig& config) const;
     CheckTurnValidation validatePendingTurn(const GameConfig& config) const;
     PendingTurnCommitResult commitPendingTurn(const GameConfig& config);
+    bool triggerCheatcodeWeatherFront(const GameConfig& config);
+    bool triggerCheatcodeChestSpawn(const GameConfig& config);
+    bool triggerCheatcodeInfernalSpawn(const GameConfig& config);
 
     Board& board() { return m_board; }
     const Board& board() const { return m_board; }
@@ -91,6 +95,7 @@ public:
     const std::vector<AutonomousUnit>& autonomousUnits() const { return m_autonomousUnits; }
 
     const ChestSystemState& chestSystemState() const { return m_chestSystemState; }
+    const WeatherSystemState& weatherSystemState() const { return m_weatherSystemState; }
     const XPSystemState& xpSystemState() const { return m_xpSystemState; }
     const InfernalSystemState& infernalSystemState() const { return m_infernalSystemState; }
 
@@ -128,7 +133,8 @@ public:
 
 private:
     void syncFactoryIds();
-    void spawnChestIfDue(const GameConfig& config);
+    bool spawnChestIfDue(const GameConfig& config);
+    bool spawnInfernalIfDue(const GameConfig& config, int currentTurnStep);
 
     GameSessionConfig m_sessionConfig = makeDefaultGameSessionConfig(GameMode::HumanVsAI);
     Board m_board;
@@ -137,6 +143,7 @@ private:
     std::vector<MapObject> m_mapObjects;
     std::vector<AutonomousUnit> m_autonomousUnits;
     ChestSystemState m_chestSystemState{};
+    WeatherSystemState m_weatherSystemState{};
     XPSystemState m_xpSystemState{};
     InfernalSystemState m_infernalSystemState{};
     TurnSystem m_turnSystem;

@@ -12,6 +12,13 @@ bool isBlockedGameplayShortcutKey(sf::Keyboard::Key key) {
         || key == sf::Keyboard::Space;
 }
 
+bool isCheatcodeShortcutKey(sf::Keyboard::Key key, const InputFrameState& state) {
+    return state.cheatcodeEnabled
+        && (key == state.cheatcodeWeatherShortcut
+            || key == state.cheatcodeChestShortcut
+            || key == state.cheatcodeInfernalShortcut);
+}
+
 } // namespace
 
 bool InputCoordinator::isInteractiveGameState(const InputFrameState& state) {
@@ -60,6 +67,27 @@ InputPreGuiAction InputCoordinator::planPreGuiAction(const sf::Event& event,
 
         if (event.key.code == sf::Keyboard::K) {
             return {InputPreGuiActionKind::CenterCameraOnPerspective, {0u, 0u}};
+        }
+    }
+
+    if (isInteractiveGameState(state)
+        && !state.overlaysVisible
+        && event.type == sf::Event::KeyPressed
+        && isCheatcodeShortcutKey(event.key.code, state)) {
+        if (state.inGameMenuOpen || !state.permissions.canIssueCommands) {
+            return {InputPreGuiActionKind::SkipEvent, {0u, 0u}};
+        }
+
+        if (event.key.code == state.cheatcodeWeatherShortcut) {
+            return {InputPreGuiActionKind::TriggerCheatcodeWeather, {0u, 0u}};
+        }
+
+        if (event.key.code == state.cheatcodeChestShortcut) {
+            return {InputPreGuiActionKind::TriggerCheatcodeChest, {0u, 0u}};
+        }
+
+        if (event.key.code == state.cheatcodeInfernalShortcut) {
+            return {InputPreGuiActionKind::TriggerCheatcodeInfernal, {0u, 0u}};
         }
     }
 
