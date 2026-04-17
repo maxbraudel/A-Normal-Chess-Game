@@ -104,6 +104,10 @@ private:
     // Camera dragging
     bool m_isDragging;
     sf::Vector2i m_lastMousePos;
+    bool m_panUpHeld;
+    bool m_panDownHeld;
+    bool m_panLeftHeld;
+    bool m_panRightHeld;
 
     void handleSelectTool(const sf::Event& event, const InputContext& context);
     void handleBuildTool(const sf::Event& event, const InputContext& context);

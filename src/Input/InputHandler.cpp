@@ -69,7 +69,11 @@ InputHandler::InputHandler()
     m_activeSelectionLayer(SelectionLayer::None), m_hasActiveSelectionCell(false),
     m_activeSelectionCell({0, 0}), m_isSelectionCycleArmed(false),
     m_selectionCycleCell({0, 0}),
-    m_isDragging(false) {}
+    m_isDragging(false),
+    m_panUpHeld(false),
+    m_panDownHeld(false),
+    m_panLeftHeld(false),
+    m_panRightHeld(false) {}
 
 ToolState InputHandler::getCurrentTool() const { return m_currentTool; }
 void InputHandler::setTool(ToolState tool) {
@@ -668,16 +672,16 @@ void InputHandler::updateCameraMovement(float deltaTime, Camera& camera) {
     }
 
     sf::Vector2f direction{0.f, 0.f};
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Z)) {
+    if (m_panUpHeld) {
         direction.y -= 1.f;
     }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::S)) {
+    if (m_panDownHeld) {
         direction.y += 1.f;
     }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Q)) {
+    if (m_panLeftHeld) {
         direction.x -= 1.f;
     }
-    if (sf::Keyboard::isKeyPressed(sf::Keyboard::D)) {
+    if (m_panRightHeld) {
         direction.x += 1.f;
     }
 
@@ -882,6 +886,34 @@ void InputHandler::handleBuildTool(const sf::Event& event, const InputContext& c
 }
 
 void InputHandler::handleCameraInput(const sf::Event& event, sf::RenderWindow& window, Camera& camera) {
+    if (event.type == sf::Event::KeyPressed || event.type == sf::Event::KeyReleased) {
+        const bool pressed = event.type == sf::Event::KeyPressed;
+        switch (event.key.code) {
+            case sf::Keyboard::Z:
+                m_panUpHeld = pressed;
+                break;
+            case sf::Keyboard::S:
+                m_panDownHeld = pressed;
+                break;
+            case sf::Keyboard::Q:
+                m_panLeftHeld = pressed;
+                break;
+            case sf::Keyboard::D:
+                m_panRightHeld = pressed;
+                break;
+            default:
+                break;
+        }
+    }
+
+    if (event.type == sf::Event::LostFocus) {
+        m_panUpHeld = false;
+        m_panDownHeld = false;
+        m_panLeftHeld = false;
+        m_panRightHeld = false;
+        m_isDragging = false;
+    }
+
     // Mouse wheel zoom
     if (event.type == sf::Event::MouseWheelScrolled) {
         float factor = (event.mouseWheelScroll.delta > 0) ? 0.9f : 1.1f;

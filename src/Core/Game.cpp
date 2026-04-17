@@ -873,7 +873,7 @@ void Game::update() {
         m_engine.isActiveAI()
     });
 
-    if (updatePlan.updateCamera) {
+    if (updatePlan.updateCamera && m_window.hasFocus()) {
         m_input.updateCameraMovement(m_clock.getDeltaTime(), m_camera);
     }
 
