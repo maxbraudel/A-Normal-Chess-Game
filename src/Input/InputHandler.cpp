@@ -916,6 +916,10 @@ void InputHandler::handleCameraInput(const sf::Event& event, sf::RenderWindow& w
 
     // Mouse wheel zoom
     if (event.type == sf::Event::MouseWheelScrolled) {
+        if (std::abs(event.mouseWheelScroll.delta) <= 0.001f) {
+            return;
+        }
+
         float factor = (event.mouseWheelScroll.delta > 0) ? 0.9f : 1.1f;
         camera.zoom(factor);
     }

@@ -9,6 +9,29 @@
 
 namespace {
 
+constexpr float kTrackpadDeltaEpsilon = 0.01f;
+constexpr float kTrackpadInitialPanDelta = 1.0f;
+
+bool hasPhase(NSEventPhase phase, NSEventPhase flag) {
+    return (phase & flag) != 0;
+}
+
+float resolveTrackpadPanDelta(CGFloat preciseDelta,
+                              CGFloat legacyDelta,
+                              bool isGestureStart) {
+    float delta = static_cast<float>(preciseDelta);
+    if (std::abs(delta) < kTrackpadDeltaEpsilon) {
+        delta = static_cast<float>(legacyDelta);
+    }
+
+    if (isGestureStart && std::abs(delta) >= kTrackpadDeltaEpsilon
+        && std::abs(delta) < kTrackpadInitialPanDelta) {
+        delta = std::copysign(kTrackpadInitialPanDelta, delta);
+    }
+
+    return delta;
+}
+
 float trackpadZoomFactor(CGFloat magnification) {
     return std::exp(-static_cast<float>(magnification));
 }
@@ -19,6 +42,7 @@ struct MacOSTrackpadAdapter::Impl {
     id eventMonitor = nil;
     NSWindow* window = nil;
     Camera* camera = nullptr;
+    bool scrollGestureActive = false;
 };
 
 MacOSTrackpadAdapter::MacOSTrackpadAdapter()
@@ -59,15 +83,44 @@ void MacOSTrackpadAdapter::install(LiveResizeRenderWindow& window, Camera& camer
             return event;
         }
 
+        const NSEventPhase phase = event.phase;
+        const NSEventPhase momentumPhase = event.momentumPhase;
+        if (hasPhase(phase, NSEventPhaseMayBegin)) {
+            return event;
+        }
+
+        const bool phaseActive = hasPhase(phase, NSEventPhaseBegan)
+            || hasPhase(phase, NSEventPhaseChanged);
+        const bool momentumActive = hasPhase(momentumPhase, NSEventPhaseBegan)
+            || hasPhase(momentumPhase, NSEventPhaseChanged);
+        const bool isGestureStart = !impl->scrollGestureActive && phaseActive && !momentumActive;
+        impl->scrollGestureActive = phaseActive || momentumActive;
+
         const float directionScale = event.isDirectionInvertedFromDevice ? -1.0f : 1.0f;
         const float zoomLevel = impl->camera->getZoomLevel();
-        const float deltaX = static_cast<float>(event.scrollingDeltaX) * directionScale * zoomLevel;
-        const float deltaY = static_cast<float>(event.scrollingDeltaY) * directionScale * zoomLevel;
-        if (std::abs(deltaX) <= 0.001f && std::abs(deltaY) <= 0.001f) {
-            return nil;
+        const float deltaX = resolveTrackpadPanDelta(event.scrollingDeltaX,
+                                                     event.deltaX,
+                                                     isGestureStart)
+            * directionScale * zoomLevel;
+        const float deltaY = resolveTrackpadPanDelta(event.scrollingDeltaY,
+                                                     event.deltaY,
+                                                     isGestureStart)
+            * directionScale * zoomLevel;
+
+        if (std::abs(deltaX) < kTrackpadDeltaEpsilon && std::abs(deltaY) < kTrackpadDeltaEpsilon) {
+            if (hasPhase(phase, NSEventPhaseEnded) || hasPhase(phase, NSEventPhaseCancelled)
+                || (phase == NSEventPhaseNone && momentumPhase == NSEventPhaseNone)) {
+                impl->scrollGestureActive = false;
+            }
+            return impl->scrollGestureActive ? nil : event;
         }
 
         impl->camera->pan({deltaX, deltaY});
+
+        if (hasPhase(phase, NSEventPhaseEnded) || hasPhase(phase, NSEventPhaseCancelled)) {
+            impl->scrollGestureActive = false;
+        }
+
         return nil;
     }];
 }
