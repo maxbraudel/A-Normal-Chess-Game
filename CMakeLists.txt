@@ -4,8 +4,16 @@ project(ANormalChessGame LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Point CMake at the MSYS2 ucrt64 libraries (SFML 2.6)
-list(PREPEND CMAKE_PREFIX_PATH "C:/msys64/ucrt64")
+# Point CMake at platform-specific SFML 2.6 locations when needed.
+if(WIN32)
+    list(PREPEND CMAKE_PREFIX_PATH "C:/msys64/ucrt64")
+elseif(APPLE)
+    if(EXISTS "/opt/homebrew/opt/sfml@2")
+        list(PREPEND CMAKE_PREFIX_PATH "/opt/homebrew/opt/sfml@2")
+    elseif(EXISTS "/usr/local/opt/sfml@2")
+        list(PREPEND CMAKE_PREFIX_PATH "/usr/local/opt/sfml@2")
+    endif()
+endif()
 
 # Find SFML first (needed by TGUI)
 find_package(SFML 2.6 COMPONENTS graphics window system network REQUIRED)
@@ -149,8 +157,11 @@ target_link_libraries(${PROJECT_NAME}Core PUBLIC
     sfml-window
     sfml-system
     TGUI::TGUI
-    "C:/msys64/ucrt64/lib/libpthread.dll.a"
 )
+
+if(WIN32)
+    target_link_libraries(${PROJECT_NAME}Core PUBLIC "C:/msys64/ucrt64/lib/libpthread.dll.a")
+endif()
 
 if(MSVC)
     target_compile_options(${PROJECT_NAME}Core PRIVATE /W4 /permissive-)
@@ -195,40 +206,42 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     $<TARGET_FILE_DIR:${PROJECT_NAME}>/saves
 )
 
-# Copy ALL required MSYS2 ucrt64 runtime DLLs (recursively resolved via objdump)
-# This is the complete transitive dependency list — no more missing DLL errors.
-set(MSYS2_BIN "C:/msys64/ucrt64/bin")
-set(RUNTIME_DLLS
-    # SFML core
-    "${MSYS2_BIN}/libsfml-graphics-2.dll"
-    "${MSYS2_BIN}/libsfml-network-2.dll"
-    "${MSYS2_BIN}/libsfml-system-2.dll"
-    "${MSYS2_BIN}/libsfml-window-2.dll"
-    # C++ / MinGW runtime
-    "${MSYS2_BIN}/libgcc_s_seh-1.dll"
-    "${MSYS2_BIN}/libstdc++-6.dll"
-    "${MSYS2_BIN}/libwinpthread-1.dll"
-    # FreeType and its transitive deps
-    "${MSYS2_BIN}/libfreetype-6.dll"
-    "${MSYS2_BIN}/libbz2-1.dll"
-    "${MSYS2_BIN}/libpng16-16.dll"
-    "${MSYS2_BIN}/zlib1.dll"
-    "${MSYS2_BIN}/libbrotlidec.dll"
-    "${MSYS2_BIN}/libbrotlicommon.dll"
-    "${MSYS2_BIN}/libharfbuzz-0.dll"
-    "${MSYS2_BIN}/libgraphite2.dll"
-    "${MSYS2_BIN}/libglib-2.0-0.dll"
-    "${MSYS2_BIN}/libintl-8.dll"
-    "${MSYS2_BIN}/libiconv-2.dll"
-    "${MSYS2_BIN}/libpcre2-8-0.dll"
-)
-foreach(DLL ${RUNTIME_DLLS})
-    if(EXISTS "${DLL}")
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DLL}" $<TARGET_FILE_DIR:${PROJECT_NAME}>
-        )
-    endif()
-endforeach()
+if(WIN32)
+    # Copy ALL required MSYS2 ucrt64 runtime DLLs (recursively resolved via objdump)
+    # This is the complete transitive dependency list -- no more missing DLL errors.
+    set(MSYS2_BIN "C:/msys64/ucrt64/bin")
+    set(RUNTIME_DLLS
+        # SFML core
+        "${MSYS2_BIN}/libsfml-graphics-2.dll"
+        "${MSYS2_BIN}/libsfml-network-2.dll"
+        "${MSYS2_BIN}/libsfml-system-2.dll"
+        "${MSYS2_BIN}/libsfml-window-2.dll"
+        # C++ / MinGW runtime
+        "${MSYS2_BIN}/libgcc_s_seh-1.dll"
+        "${MSYS2_BIN}/libstdc++-6.dll"
+        "${MSYS2_BIN}/libwinpthread-1.dll"
+        # FreeType and its transitive deps
+        "${MSYS2_BIN}/libfreetype-6.dll"
+        "${MSYS2_BIN}/libbz2-1.dll"
+        "${MSYS2_BIN}/libpng16-16.dll"
+        "${MSYS2_BIN}/zlib1.dll"
+        "${MSYS2_BIN}/libbrotlidec.dll"
+        "${MSYS2_BIN}/libbrotlicommon.dll"
+        "${MSYS2_BIN}/libharfbuzz-0.dll"
+        "${MSYS2_BIN}/libgraphite2.dll"
+        "${MSYS2_BIN}/libglib-2.0-0.dll"
+        "${MSYS2_BIN}/libintl-8.dll"
+        "${MSYS2_BIN}/libiconv-2.dll"
+        "${MSYS2_BIN}/libpcre2-8-0.dll"
+    )
+    foreach(DLL ${RUNTIME_DLLS})
+        if(EXISTS "${DLL}")
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different "${DLL}" $<TARGET_FILE_DIR:${PROJECT_NAME}>
+            )
+        endif()
+    endforeach()
+endif()
 
 enable_testing()
 

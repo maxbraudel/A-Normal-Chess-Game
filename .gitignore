@@ -9,3 +9,4 @@ debug_game_state/
 build/saves/
 *.log
 *.tmp
+.DS_Store
