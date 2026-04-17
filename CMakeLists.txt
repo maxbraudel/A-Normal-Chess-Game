@@ -22,6 +22,10 @@ endif()
 # Find SFML first (needed by TGUI)
 find_package(SFML 2.6 COMPONENTS graphics window system network REQUIRED)
 
+if(APPLE)
+    find_library(COCOA_FRAMEWORK Cocoa REQUIRED)
+endif()
+
 # Build TGUI from source with SFML_GRAPHICS backend
 include(FetchContent)
 FetchContent_Declare(
@@ -169,6 +173,10 @@ target_link_libraries(${PROJECT_NAME}Core PUBLIC
     sfml-system
     TGUI::TGUI
 )
+
+if(APPLE)
+    target_link_libraries(${PROJECT_NAME}Core PUBLIC ${COCOA_FRAMEWORK})
+endif()
 
 if(WIN32)
     target_link_libraries(${PROJECT_NAME}Core PUBLIC "C:/msys64/ucrt64/lib/libpthread.dll.a")
