@@ -40,7 +40,8 @@ public:
     void drawOccludableBuildings(sf::RenderWindow& window,
                                  const Camera& camera,
                                  const std::array<Kingdom, kNumKingdoms>& kingdoms,
-                                 KingdomId localPerspective);
+                                 KingdomId localPerspective,
+                                 const WeatherMaskCache& weatherMaskCache);
     void drawVisibleBuildings(sf::RenderWindow& window,
                               const Camera& camera,
                               const std::array<Kingdom, kNumKingdoms>& kingdoms,
@@ -52,14 +53,16 @@ public:
     void drawOccludablePieces(sf::RenderWindow& window,
                               const Camera& camera,
                               const std::array<Kingdom, kNumKingdoms>& kingdoms,
-                              KingdomId localPerspective);
+                              KingdomId localPerspective,
+                              const WeatherMaskCache& weatherMaskCache);
     void drawVisiblePieces(sf::RenderWindow& window,
                            const Camera& camera,
                            const std::array<Kingdom, kNumKingdoms>& kingdoms,
                            KingdomId localPerspective);
     void drawAutonomousUnitsLayer(sf::RenderWindow& window,
                                   const Camera& camera,
-                                  const std::vector<AutonomousUnit>& autonomousUnits);
+                                  const std::vector<AutonomousUnit>& autonomousUnits,
+                                  const WeatherMaskCache& weatherMaskCache);
     void drawWeatherLayer(sf::RenderWindow& window,
                           const Camera& camera,
                           const Board& board,
@@ -71,22 +74,29 @@ public:
 private:
     void drawBoard(sf::RenderWindow& window, const Camera& camera, const Board& board);
     void drawBuildings(sf::RenderWindow& window, const Camera& camera,
-                        const std::array<Kingdom, kNumKingdoms>& kingdoms,
-                        const std::vector<Building>& publicBuildings);
+                       const std::array<Kingdom, kNumKingdoms>& kingdoms,
+                       const std::vector<Building>& publicBuildings);
     void drawMapObjects(sf::RenderWindow& window, const std::vector<MapObject>& mapObjects);
     void drawPieces(sf::RenderWindow& window, const Camera& camera,
                     const std::array<Kingdom, kNumKingdoms>& kingdoms);
-    void drawAutonomousUnits(sf::RenderWindow& window, const std::vector<AutonomousUnit>& autonomousUnits);
     void drawBuildingsByOcclusion(sf::RenderWindow& window,
                                   const std::array<Kingdom, kNumKingdoms>& kingdoms,
                                   KingdomId localPerspective,
-                                  bool drawOccludable);
+                                  bool drawOccludable,
+                                  const WeatherMaskCache* weatherMaskCache = nullptr);
     void drawPiecesByOcclusion(sf::RenderWindow& window,
                                const std::array<Kingdom, kNumKingdoms>& kingdoms,
                                KingdomId localPerspective,
-                               bool drawOccludable);
-    void drawSingleBuilding(sf::RenderWindow& window, const Building& building);
+                               bool drawOccludable,
+                               const WeatherMaskCache* weatherMaskCache = nullptr);
+    void drawSingleBuilding(sf::RenderWindow& window,
+                            const Building& building,
+                            const WeatherMaskCache* weatherMaskCache = nullptr,
+                            KingdomId localPerspective = KingdomId::White);
     void drawSingleMapObject(sf::RenderWindow& window, const MapObject& mapObject);
+    void drawAutonomousUnits(sf::RenderWindow& window,
+                             const std::vector<AutonomousUnit>& autonomousUnits,
+                             const WeatherMaskCache* weatherMaskCache = nullptr);
 
     const AssetManager* m_assets;
     int m_cellSize;

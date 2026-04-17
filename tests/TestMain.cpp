@@ -988,6 +988,53 @@ void testInputHandlerReconcileSelectionPrefersVisiblePieceOverPendingMoveOverrid
             "Water cells inside the map radius should still be reported as non-traversable.");
     }
 
+    void testWeatherVisibilityKeepsAlliesVisibleAndConcealsEnemies() {
+        GameConfig config;
+
+        WeatherMaskCache weatherMaskCache;
+        weatherMaskCache.hasActiveFront = true;
+        weatherMaskCache.diameter = 8;
+        weatherMaskCache.alphaByCell.assign(
+            static_cast<std::size_t>(weatherMaskCache.diameter * weatherMaskCache.diameter),
+            0);
+        weatherMaskCache.shadeByCell.assign(
+            static_cast<std::size_t>(weatherMaskCache.diameter * weatherMaskCache.diameter),
+            0);
+        weatherMaskCache.alphaByCell[static_cast<std::size_t>((3 * weatherMaskCache.diameter) + 3)] = 255;
+
+        const Building alliedBarracks = makeTestBarracks(90, KingdomId::White, {3, 3}, config);
+        const Building enemyBarracks = makeTestBarracks(91, KingdomId::Black, {3, 3}, config);
+        const Piece alliedPawn(92, PieceType::Pawn, KingdomId::White, {3, 3});
+        const Piece enemyPawn(93, PieceType::Pawn, KingdomId::Black, {3, 3});
+
+        expect(!WeatherVisibility::shouldHideBuildingCell(alliedBarracks,
+                                                          {3, 3},
+                                                          KingdomId::White,
+                                                          weatherMaskCache),
+            "Fog should not hide allied building cells for the local kingdom.");
+        expect(WeatherVisibility::shouldHideBuildingCell(enemyBarracks,
+                                                         {3, 3},
+                                                         KingdomId::White,
+                                                         weatherMaskCache),
+            "Fog should fully hide enemy building cells for the local kingdom.");
+        expect(!WeatherVisibility::shouldHideBuildingOverlay(alliedBarracks,
+                                                             KingdomId::White,
+                                                             weatherMaskCache),
+            "Fog should not suppress allied building overlays for the local kingdom.");
+        expect(WeatherVisibility::shouldHideBuildingOverlay(enemyBarracks,
+                                                            KingdomId::White,
+                                                            weatherMaskCache),
+            "Fog should suppress enemy building overlays when any covered enemy cell would leak their presence.");
+        expect(!WeatherVisibility::shouldHidePiece(alliedPawn,
+                                                   KingdomId::White,
+                                                   weatherMaskCache),
+            "Fog should not hide allied pieces for the local kingdom.");
+        expect(WeatherVisibility::shouldHidePiece(enemyPawn,
+                                                  KingdomId::White,
+                                                  weatherMaskCache),
+            "Fog should hide enemy pieces when their cell is covered.");
+    }
+
     void testSelectedStructureOverlayPrivateBuildingsUseOwnerShield() {
         GameConfig config;
         Board board;
@@ -7204,6 +7251,7 @@ int main() {
         {"input reconcile prefers visible piece over pending override", testInputHandlerReconcileSelectionPrefersVisiblePieceOverPendingMoveOverride},
         {"public building occupation state", testPublicBuildingOccupationStateResolvesAllOutcomes},
         {"cell traversal water blocked", testCellTraversalTreatsWaterAsNotTraversable},
+        {"weather visibility allies visible enemies concealed", testWeatherVisibilityKeepsAlliesVisibleAndConcealsEnemies},
         {"private building overlay owner shield", testSelectedStructureOverlayPrivateBuildingsUseOwnerShield},
         {"under construction overlay status row stacks icons", testUnderConstructionStructureOverlayStacksConstructionIconInPrimaryRow},
         {"public building overlay occupation", testSelectedStructureOverlayPublicBuildingsUseOccupationIndicator},

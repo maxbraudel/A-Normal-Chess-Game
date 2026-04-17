@@ -97,7 +97,7 @@ void Renderer::drawPiecesLayer(sf::RenderWindow& window, const Camera& camera,
                                 const std::vector<AutonomousUnit>& autonomousUnits) {
     camera.applyTo(window);
     drawPieces(window, camera, kingdoms);
-    drawAutonomousUnits(window, autonomousUnits);
+    this->drawAutonomousUnits(window, autonomousUnits, nullptr);
 }
 
 void Renderer::drawTerrainLayer(sf::RenderWindow& window, const Camera& camera, const Board& board) {
@@ -108,9 +108,10 @@ void Renderer::drawTerrainLayer(sf::RenderWindow& window, const Camera& camera, 
 void Renderer::drawOccludableBuildings(sf::RenderWindow& window,
                                        const Camera& camera,
                                        const std::array<Kingdom, kNumKingdoms>& kingdoms,
-                                       KingdomId localPerspective) {
+                                       KingdomId localPerspective,
+                                       const WeatherMaskCache& weatherMaskCache) {
     camera.applyTo(window);
-    drawBuildingsByOcclusion(window, kingdoms, localPerspective, true);
+    drawBuildingsByOcclusion(window, kingdoms, localPerspective, true, &weatherMaskCache);
 }
 
 void Renderer::drawVisibleBuildings(sf::RenderWindow& window,
@@ -135,9 +136,10 @@ void Renderer::drawMapObjectsLayer(sf::RenderWindow& window,
 void Renderer::drawOccludablePieces(sf::RenderWindow& window,
                                     const Camera& camera,
                                     const std::array<Kingdom, kNumKingdoms>& kingdoms,
-                                    KingdomId localPerspective) {
+                                    KingdomId localPerspective,
+                                    const WeatherMaskCache& weatherMaskCache) {
     camera.applyTo(window);
-    drawPiecesByOcclusion(window, kingdoms, localPerspective, true);
+    drawPiecesByOcclusion(window, kingdoms, localPerspective, true, &weatherMaskCache);
 }
 
 void Renderer::drawVisiblePieces(sf::RenderWindow& window,
@@ -150,9 +152,10 @@ void Renderer::drawVisiblePieces(sf::RenderWindow& window,
 
 void Renderer::drawAutonomousUnitsLayer(sf::RenderWindow& window,
                                         const Camera& camera,
-                                        const std::vector<AutonomousUnit>& autonomousUnits) {
+                                        const std::vector<AutonomousUnit>& autonomousUnits,
+                                        const WeatherMaskCache& weatherMaskCache) {
     camera.applyTo(window);
-    drawAutonomousUnits(window, autonomousUnits);
+    drawAutonomousUnits(window, autonomousUnits, &weatherMaskCache);
 }
 
 void Renderer::drawWeatherLayer(sf::RenderWindow& window,
@@ -222,6 +225,7 @@ void Renderer::drawBuildings(sf::RenderWindow& window, const Camera& camera,
                                const std::array<Kingdom, kNumKingdoms>& kingdoms,
                                const std::vector<Building>& publicBuildings) {
     if (!m_assets) return;
+    (void) camera;
 
     // Draw public buildings
     for (const auto& b : publicBuildings) {
@@ -236,7 +240,10 @@ void Renderer::drawBuildings(sf::RenderWindow& window, const Camera& camera,
     }
 }
 
-void Renderer::drawSingleBuilding(sf::RenderWindow& window, const Building& building) {
+void Renderer::drawSingleBuilding(sf::RenderWindow& window,
+                                  const Building& building,
+                                  const WeatherMaskCache* weatherMaskCache,
+                                  KingdomId localPerspective) {
     sf::Sprite sprite;
     const int footprintWidth = building.getFootprintWidth();
     const int footprintHeight = building.getFootprintHeight();
@@ -252,6 +259,13 @@ void Renderer::drawSingleBuilding(sf::RenderWindow& window, const Building& buil
 
             int x = building.origin.x + dx;
             int y = building.origin.y + dy;
+            if (weatherMaskCache != nullptr
+                && WeatherVisibility::shouldHideBuildingCell(building,
+                                                            {x, y},
+                                                            localPerspective,
+                                                            *weatherMaskCache)) {
+                continue;
+            }
 
             configureSpriteForCell(sprite, m_cellSize,
                                    static_cast<float>(x * m_cellSize),
@@ -297,6 +311,7 @@ void Renderer::setSkipPieceIds(const std::set<int>& ids) { m_skipPieceIds = ids;
 void Renderer::drawPieces(sf::RenderWindow& window, const Camera& camera,
                             const std::array<Kingdom, kNumKingdoms>& kingdoms) {
     if (!m_assets) return;
+    (void) camera;
 
     for (const auto& k : kingdoms) {
         for (const auto& piece : k.pieces) {
@@ -319,11 +334,18 @@ void Renderer::drawPieces(sf::RenderWindow& window, const Camera& camera,
     }
 }
 
-void Renderer::drawAutonomousUnits(sf::RenderWindow& window, const std::vector<AutonomousUnit>& autonomousUnits) {
+void Renderer::drawAutonomousUnits(sf::RenderWindow& window,
+                                   const std::vector<AutonomousUnit>& autonomousUnits,
+                                   const WeatherMaskCache* weatherMaskCache) {
     if (!m_assets) return;
 
     sf::Sprite sprite;
     for (const AutonomousUnit& unit : autonomousUnits) {
+        if (weatherMaskCache != nullptr
+            && WeatherVisibility::shouldHideAutonomousUnit(unit, *weatherMaskCache)) {
+            continue;
+        }
+
         sprite.setTexture(m_assets->getInfernalPieceTexture(unit.infernal.manifestedPieceType));
         configureSpriteForCell(sprite,
                                m_cellSize,
@@ -345,7 +367,8 @@ void Renderer::drawAutonomousUnits(sf::RenderWindow& window, const std::vector<A
 void Renderer::drawBuildingsByOcclusion(sf::RenderWindow& window,
                                         const std::array<Kingdom, kNumKingdoms>& kingdoms,
                                         KingdomId localPerspective,
-                                        bool drawOccludable) {
+                                        bool drawOccludable,
+                                        const WeatherMaskCache* weatherMaskCache) {
     if (!m_assets) return;
 
     for (const Kingdom& kingdom : kingdoms) {
@@ -354,7 +377,10 @@ void Renderer::drawBuildingsByOcclusion(sf::RenderWindow& window,
                 continue;
             }
 
-            drawSingleBuilding(window, building);
+            drawSingleBuilding(window,
+                               building,
+                               drawOccludable ? weatherMaskCache : nullptr,
+                               localPerspective);
         }
     }
 }
@@ -362,7 +388,8 @@ void Renderer::drawBuildingsByOcclusion(sf::RenderWindow& window,
 void Renderer::drawPiecesByOcclusion(sf::RenderWindow& window,
                                      const std::array<Kingdom, kNumKingdoms>& kingdoms,
                                      KingdomId localPerspective,
-                                     bool drawOccludable) {
+                                     bool drawOccludable,
+                                     const WeatherMaskCache* weatherMaskCache) {
     if (!m_assets) return;
 
     for (const Kingdom& kingdom : kingdoms) {
@@ -371,6 +398,11 @@ void Renderer::drawPiecesByOcclusion(sf::RenderWindow& window,
                 continue;
             }
             if (WeatherVisibility::isOccludablePiece(piece, localPerspective) != drawOccludable) {
+                continue;
+            }
+            if (drawOccludable
+                && weatherMaskCache != nullptr
+                && WeatherVisibility::shouldHidePiece(piece, localPerspective, *weatherMaskCache)) {
                 continue;
             }
 

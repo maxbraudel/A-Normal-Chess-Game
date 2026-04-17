@@ -15,6 +15,13 @@ public:
     static bool isOccludableBuilding(const Building& building, KingdomId localPerspective);
     static bool isOccludablePiece(const Piece& piece, KingdomId localPerspective);
     static bool isOccludableAutonomousUnit(const AutonomousUnit& unit);
+    static bool shouldHideBuildingCell(const Building& building,
+                                       sf::Vector2i cellPos,
+                                       KingdomId localPerspective,
+                                       const WeatherMaskCache& cache);
+    static bool shouldHideBuildingOverlay(const Building& building,
+                                          KingdomId localPerspective,
+                                          const WeatherMaskCache& cache);
     static bool shouldHidePiece(const Piece& piece,
                                 KingdomId localPerspective,
                                 const WeatherMaskCache& cache);

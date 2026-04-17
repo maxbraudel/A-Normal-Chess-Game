@@ -28,6 +28,31 @@ bool WeatherVisibility::isOccludableAutonomousUnit(const AutonomousUnit& unit) {
     return true;
 }
 
+bool WeatherVisibility::shouldHideBuildingCell(const Building& building,
+                                              sf::Vector2i cellPos,
+                                              KingdomId localPerspective,
+                                              const WeatherMaskCache& cache) {
+    return isOccludableBuilding(building, localPerspective)
+        && cellHasConcealingFog(cache, cellPos);
+}
+
+bool WeatherVisibility::shouldHideBuildingOverlay(const Building& building,
+                                                  KingdomId localPerspective,
+                                                  const WeatherMaskCache& cache) {
+    if (!isOccludableBuilding(building, localPerspective)) {
+        return false;
+    }
+
+    const std::vector<sf::Vector2i> occupiedCells = building.getOccupiedCells();
+    for (const sf::Vector2i& occupiedCell : occupiedCells) {
+        if (cellHasConcealingFog(cache, occupiedCell)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 bool WeatherVisibility::shouldHidePiece(const Piece& piece,
                                         KingdomId localPerspective,
                                         const WeatherMaskCache& cache) {

@@ -28,10 +28,17 @@ void drawStructureOverlaysForBuildings(sf::RenderWindow& window,
                                        const AssetManager& assets,
                                        const StructureOverlayPolicy& overlayPolicy,
                                        const Building* selectedBuilding,
+                                       const WeatherMaskCache& weatherMaskCache,
                                        KingdomId localPerspective,
                                        bool drawOccludable) {
     for (const Building& building : buildings) {
         if (WeatherVisibility::isOccludableBuilding(building, localPerspective) != drawOccludable) {
+            continue;
+        }
+        if (drawOccludable
+            && WeatherVisibility::shouldHideBuildingOverlay(building,
+                                                            localPerspective,
+                                                            weatherMaskCache)) {
             continue;
         }
 
@@ -218,7 +225,14 @@ void RenderCoordinator::renderWorldFrame(WorldRenderBindings& bindings,
     bindings.renderer.drawOccludableBuildings(bindings.window,
                                               bindings.camera,
                                               bindings.displayedKingdoms,
-                                              bindings.localPerspectiveKingdom);
+                                              bindings.localPerspectiveKingdom,
+                                              bindings.weatherMaskCache);
+
+    bindings.renderer.drawVisibleBuildings(bindings.window,
+                                           bindings.camera,
+                                           bindings.displayedKingdoms,
+                                           bindings.displayedPublicBuildings,
+                                           bindings.localPerspectiveKingdom);
 
     bindings.renderer.drawMapObjectsLayer(bindings.window,
                                           bindings.camera,
@@ -263,6 +277,7 @@ void RenderCoordinator::renderWorldFrame(WorldRenderBindings& bindings,
                                           bindings.assets,
                                           overlayPolicy,
                                           plan.selectedBuilding,
+                                          bindings.weatherMaskCache,
                                           bindings.localPerspectiveKingdom,
                                           true);
     }
@@ -270,19 +285,16 @@ void RenderCoordinator::renderWorldFrame(WorldRenderBindings& bindings,
     bindings.renderer.drawOccludablePieces(bindings.window,
                                            bindings.camera,
                                            bindings.displayedKingdoms,
-                                           bindings.localPerspectiveKingdom);
+                                           bindings.localPerspectiveKingdom,
+                                           bindings.weatherMaskCache);
     bindings.renderer.drawAutonomousUnitsLayer(bindings.window,
                                                bindings.camera,
-                                               bindings.displayedAutonomousUnits);
-    bindings.renderer.drawWeatherLayer(bindings.window,
-                                       bindings.camera,
-                                       bindings.displayedBoard,
-                                       bindings.weatherMaskCache);
-    bindings.renderer.drawVisibleBuildings(bindings.window,
-                                           bindings.camera,
-                                           bindings.displayedKingdoms,
-                                           bindings.displayedPublicBuildings,
-                                           bindings.localPerspectiveKingdom);
+                                               bindings.displayedAutonomousUnits,
+                                               bindings.weatherMaskCache);
+    bindings.renderer.drawVisiblePieces(bindings.window,
+                                        bindings.camera,
+                                        bindings.displayedKingdoms,
+                                        bindings.localPerspectiveKingdom);
     drawStructureOverlaysForBuildings(bindings.window,
                                       bindings.renderer,
                                       bindings.camera,
@@ -294,6 +306,7 @@ void RenderCoordinator::renderWorldFrame(WorldRenderBindings& bindings,
                                       bindings.assets,
                                       overlayPolicy,
                                       plan.selectedBuilding,
+                                      bindings.weatherMaskCache,
                                       bindings.localPerspectiveKingdom,
                                       false);
     for (const Kingdom& kingdomState : bindings.displayedKingdoms) {
@@ -308,13 +321,14 @@ void RenderCoordinator::renderWorldFrame(WorldRenderBindings& bindings,
                                           bindings.assets,
                                           overlayPolicy,
                                           plan.selectedBuilding,
+                                          bindings.weatherMaskCache,
                                           bindings.localPerspectiveKingdom,
                                           false);
     }
-    bindings.renderer.drawVisiblePieces(bindings.window,
-                                        bindings.camera,
-                                        bindings.displayedKingdoms,
-                                        bindings.localPerspectiveKingdom);
+    bindings.renderer.drawWeatherLayer(bindings.window,
+                                       bindings.camera,
+                                       bindings.displayedBoard,
+                                       bindings.weatherMaskCache);
 
     for (const SelectionFrameSpec& frame : plan.selectionFrames) {
         bindings.renderer.getOverlay().drawSelectionFrame(bindings.window,
