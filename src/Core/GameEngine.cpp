@@ -423,93 +423,6 @@ bool GameEngine::replacePendingCommands(const std::vector<TurnCommand>& commands
     return true;
 }
 
-PendingTurnStagingResult GameEngine::stageAITurnPlan(const std::vector<TurnCommand>& commands,
-                                                     const GameConfig& config) {
-    PendingTurnStagingResult result;
-
-    resetPendingTurn();
-    const TurnValidationContext turnContext = makeTurnValidationContext(config);
-    const bool restrictToResponseMove = CheckResponseRules::isActiveKingInCheck(
-        turnContext,
-        m_turnSystem.getPendingCommands());
-
-    for (const auto& command : commands) {
-        if (restrictToResponseMove && command.type != TurnCommand::Move) {
-            continue;
-        }
-
-        m_turnSystem.queueCommand(command, turnContext, &m_buildingFactory);
-    }
-
-    result.validation = validatePendingTurn(config);
-    if (!result.validation.valid && result.validation.hasAnyLegalResponse) {
-        resetPendingTurn();
-
-        if (result.validation.activeKingInCheck) {
-            for (Piece& piece : activeKingdom().pieces) {
-                const std::vector<sf::Vector2i> legalMoves = CheckResponseRules::filterLegalMovesForPiece(
-                    piece,
-                    m_board,
-                    config);
-                if (legalMoves.empty()) {
-                    continue;
-                }
-
-                TurnCommand fallbackMove;
-                fallbackMove.type = TurnCommand::Move;
-                fallbackMove.pieceId = piece.id;
-                fallbackMove.origin = piece.position;
-                fallbackMove.destination = legalMoves.front();
-                m_turnSystem.queueCommand(fallbackMove, turnContext, &m_buildingFactory);
-                result.usedFallbackResponseMove = true;
-                break;
-            }
-        }
-
-        result.validation = validatePendingTurn(config);
-        if (result.validation.bankrupt) {
-            std::vector<int> disbandCandidates;
-            disbandCandidates.reserve(activeKingdom().pieces.size());
-            for (const Piece& piece : activeKingdom().pieces) {
-                if (piece.type == PieceType::King) {
-                    continue;
-                }
-
-                disbandCandidates.push_back(piece.id);
-            }
-
-            std::sort(disbandCandidates.begin(), disbandCandidates.end(), [this, &config](int lhsId, int rhsId) {
-                const Piece* lhs = activeKingdom().getPieceById(lhsId);
-                const Piece* rhs = activeKingdom().getPieceById(rhsId);
-                const int lhsUpkeep = lhs ? config.getPieceUpkeepCost(lhs->type) : 0;
-                const int rhsUpkeep = rhs ? config.getPieceUpkeepCost(rhs->type) : 0;
-                if (lhsUpkeep != rhsUpkeep) {
-                    return lhsUpkeep > rhsUpkeep;
-                }
-
-                return lhsId < rhsId;
-            });
-
-            for (const int pieceId : disbandCandidates) {
-                TurnCommand disbandCommand;
-                disbandCommand.type = TurnCommand::Disband;
-                disbandCommand.pieceId = pieceId;
-                if (!m_turnSystem.queueCommand(disbandCommand, turnContext, &m_buildingFactory)) {
-                    continue;
-                }
-
-                result.usedBankruptcyDisbands = true;
-                result.validation = validatePendingTurn(config);
-                if (result.validation.valid) {
-                    break;
-                }
-            }
-        }
-    }
-
-    return result;
-}
-
 bool GameEngine::triggerCheatcodeWeatherFront(const GameConfig& config) {
     const int currentTurnStep = halfTurnStep(m_turnSystem);
     if (WeatherSystem::hasActiveFront(m_weatherSystemState)) {
@@ -689,21 +602,6 @@ bool GameEngine::isActiveHuman() const {
     return isHumanControlled(m_turnSystem.getActiveKingdom());
 }
 
-bool GameEngine::isActiveAI() const {
-    return !isActiveHuman();
-}
-
-KingdomId GameEngine::humanKingdomId() const {
-    for (int kingdomSlot = 0; kingdomSlot < kNumKingdoms; ++kingdomSlot) {
-        const auto kingdomId = static_cast<KingdomId>(kingdomSlot);
-        if (isHumanControlled(kingdomId)) {
-            return kingdomId;
-        }
-    }
-
-    return KingdomId::White;
-}
-
 std::array<ControllerType, kNumKingdoms> GameEngine::controllers() const {
     return controllersFromParticipants(m_sessionConfig.kingdoms);
 }
@@ -724,7 +622,7 @@ std::string GameEngine::participantName(KingdomId id) const {
 std::string GameEngine::activeTurnLabel() const {
     const KingdomId activeId = m_turnSystem.getActiveKingdom();
     return participantName(activeId) + " - " + kingdomLabel(activeId)
-        + " (" + controllerTypeLabel(controller(activeId)) + ")";
+        + " (Human)";
 }
 
 void GameEngine::syncFactoryIds() {

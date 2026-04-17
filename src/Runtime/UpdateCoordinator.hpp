@@ -7,14 +7,12 @@ struct FrameUpdateState {
     bool canMoveCamera = false;
     bool lanHost = false;
     bool lanClient = false;
-    bool activeAI = false;
 };
 
 struct FrameUpdatePlan {
     bool syncTurnDraft = true;
     bool updateCamera = false;
     bool updateMultiplayer = false;
-    bool runAITurn = false;
     bool updateUI = false;
     bool updateUIManager = false;
 };

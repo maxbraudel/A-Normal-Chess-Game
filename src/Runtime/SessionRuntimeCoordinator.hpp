@@ -17,7 +17,6 @@ class SessionFlow;
 
 struct SessionRuntimeCallbacks {
     std::function<void()> stopMultiplayer;
-    std::function<void()> discardPendingAiTurn;
     std::function<void()> clearMovePreview;
     std::function<void()> activateSelectTool;
     std::function<void()> resetPendingTurn;

@@ -154,48 +154,40 @@ std::vector<std::uint8_t> parseUInt8Array(const std::string& arrayText) {
 }
 
 void SaveManager::writeJson(std::ostream& output, const SaveData& data) {
-    SaveData normalized = data;
-    normalized.refreshLegacyMetadataFromSession();
-
     output << "{\n";
-    output << "  \"gameName\": \"" << SaveManager::escapeJsonString(normalized.gameName) << "\",\n";
-    output << "  \"turnNumber\": " << normalized.turnNumber << ",\n";
-    output << "  \"activeKingdom\": " << static_cast<int>(normalized.activeKingdom) << ",\n";
-    output << "  \"mapRadius\": " << normalized.mapRadius << ",\n";
-    output << "  \"worldSeed\": " << normalized.worldSeed << ",\n";
-    output << "  \"gameMode\": " << static_cast<int>(normalized.mode) << ",\n";
-    output << "  \"whiteController\": " << static_cast<int>(normalized.controllers[0]) << ",\n";
-    output << "  \"blackController\": " << static_cast<int>(normalized.controllers[1]) << ",\n";
-    output << "  \"whiteName\": \"" << SaveManager::escapeJsonString(normalized.participantNames[0]) << "\",\n";
-    output << "  \"blackName\": \"" << SaveManager::escapeJsonString(normalized.participantNames[1]) << "\",\n";
+    output << "  \"gameName\": \"" << SaveManager::escapeJsonString(data.gameName) << "\",\n";
+    output << "  \"turnNumber\": " << data.turnNumber << ",\n";
+    output << "  \"activeKingdom\": " << static_cast<int>(data.activeKingdom) << ",\n";
+    output << "  \"mapRadius\": " << data.mapRadius << ",\n";
+    output << "  \"worldSeed\": " << data.worldSeed << ",\n";
     output << "  \"sessionKingdoms\": [";
     for (int kingdomSlot = 0; kingdomSlot < kNumKingdoms; ++kingdomSlot) {
         if (kingdomSlot > 0) output << ", ";
-        output << SaveManager::serializeParticipant(normalized.sessionKingdoms[kingdomSlot]);
+        output << SaveManager::serializeParticipant(data.sessionKingdoms[kingdomSlot]);
     }
     output << "],\n";
-    output << "  \"multiplayer\": " << SaveManager::serializeMultiplayerConfig(normalized.multiplayer) << ",\n";
+    output << "  \"multiplayer\": " << SaveManager::serializeMultiplayerConfig(data.multiplayer) << ",\n";
 
     output << "  \"grid\": [\n";
-    for (std::size_t y = 0; y < normalized.grid.size(); ++y) {
+    for (std::size_t y = 0; y < data.grid.size(); ++y) {
         output << "    [";
-        for (std::size_t x = 0; x < normalized.grid[y].size(); ++x) {
-            output << "{\"t\":" << static_cast<int>(normalized.grid[y][x].type)
-                   << ",\"c\":" << (normalized.grid[y][x].isInCircle ? 1 : 0)
-                   << ",\"f\":" << normalized.grid[y][x].terrainFlipMask
-                   << ",\"b\":" << static_cast<int>(normalized.grid[y][x].terrainBrightness)
+        for (std::size_t x = 0; x < data.grid[y].size(); ++x) {
+            output << "{\"t\":" << static_cast<int>(data.grid[y][x].type)
+                   << ",\"c\":" << (data.grid[y][x].isInCircle ? 1 : 0)
+                   << ",\"f\":" << data.grid[y][x].terrainFlipMask
+                   << ",\"b\":" << static_cast<int>(data.grid[y][x].terrainBrightness)
                    << "}";
-            if (x + 1 < normalized.grid[y].size()) output << ",";
+            if (x + 1 < data.grid[y].size()) output << ",";
         }
         output << "]";
-        if (y + 1 < normalized.grid.size()) output << ",";
+        if (y + 1 < data.grid.size()) output << ",";
         output << "\n";
     }
     output << "  ],\n";
 
     static const char* kingdomKeys[] = {"whiteKingdom", "blackKingdom"};
     for (int k = 0; k < kNumKingdoms; ++k) {
-        const auto& kd = normalized.kingdoms[k];
+        const auto& kd = data.kingdoms[k];
         output << "  \"" << kingdomKeys[k] << "\": {\n";
         output << "    \"gold\": " << kd.gold << ",\n";
         output << "    \"movementPointsMaxBonus\": " << kd.movementPointsMaxBonus << ",\n";
@@ -218,77 +210,77 @@ void SaveManager::writeJson(std::ostream& output, const SaveData& data) {
     }
 
     output << "  \"publicBuildings\": [";
-    for (std::size_t i = 0; i < normalized.publicBuildings.size(); ++i) {
+    for (std::size_t i = 0; i < data.publicBuildings.size(); ++i) {
         if (i > 0) output << ", ";
-        output << SaveManager::serializeBuilding(normalized.publicBuildings[i]);
+        output << SaveManager::serializeBuilding(data.publicBuildings[i]);
     }
     output << "],\n";
 
     output << "  \"mapObjects\": [";
-    for (std::size_t i = 0; i < normalized.mapObjects.size(); ++i) {
+    for (std::size_t i = 0; i < data.mapObjects.size(); ++i) {
         if (i > 0) output << ", ";
-        output << SaveManager::serializeMapObject(normalized.mapObjects[i]);
+        output << SaveManager::serializeMapObject(data.mapObjects[i]);
     }
     output << "],\n";
 
     output << "  \"autonomousUnits\": [";
-    for (std::size_t i = 0; i < normalized.autonomousUnits.size(); ++i) {
+    for (std::size_t i = 0; i < data.autonomousUnits.size(); ++i) {
         if (i > 0) output << ", ";
-        output << SaveManager::serializeAutonomousUnit(normalized.autonomousUnits[i]);
+        output << SaveManager::serializeAutonomousUnit(data.autonomousUnits[i]);
     }
     output << "],\n";
 
     output << "  \"chestState\": {"
-           << "\"activeChestObjectId\":" << normalized.chestSystemState.activeChestObjectId << ","
-           << "\"nextSpawnTurn\":" << normalized.chestSystemState.nextSpawnTurn << ","
-           << "\"rngCounter\":" << normalized.chestSystemState.rngCounter
+           << "\"activeChestObjectId\":" << data.chestSystemState.activeChestObjectId << ","
+           << "\"nextSpawnTurn\":" << data.chestSystemState.nextSpawnTurn << ","
+           << "\"rngCounter\":" << data.chestSystemState.rngCounter
            << "},\n";
 
         output << "  \"weatherState\": {"
-            << "\"nextSpawnTurnStep\":" << normalized.weatherSystemState.nextSpawnTurnStep << ","
-            << "\"hasActiveFront\":" << (normalized.weatherSystemState.hasActiveFront ? 1 : 0) << ","
-            << "\"rngCounter\":" << normalized.weatherSystemState.rngCounter << ","
-            << "\"revision\":" << normalized.weatherSystemState.revision << ","
+            << "\"nextSpawnTurnStep\":" << data.weatherSystemState.nextSpawnTurnStep << ","
+            << "\"hasActiveFront\":" << (data.weatherSystemState.hasActiveFront ? 1 : 0) << ","
+            << "\"rngCounter\":" << data.weatherSystemState.rngCounter << ","
+            << "\"revision\":" << data.weatherSystemState.revision << ","
             << "\"activeFront\": {"
-            << "\"direction\":" << static_cast<int>(normalized.weatherSystemState.activeFront.direction) << ","
-            << "\"currentTurnStep\":" << normalized.weatherSystemState.activeFront.currentTurnStep << ","
-            << "\"totalTurnSteps\":" << normalized.weatherSystemState.activeFront.totalTurnSteps << ","
-            << "\"centerStartXTimes1000\":" << normalized.weatherSystemState.activeFront.centerStartXTimes1000 << ","
-            << "\"centerStartYTimes1000\":" << normalized.weatherSystemState.activeFront.centerStartYTimes1000 << ","
-            << "\"stepXTimes1000\":" << normalized.weatherSystemState.activeFront.stepXTimes1000 << ","
-            << "\"stepYTimes1000\":" << normalized.weatherSystemState.activeFront.stepYTimes1000 << ","
-            << "\"radiusAlongTimes1000\":" << normalized.weatherSystemState.activeFront.radiusAlongTimes1000 << ","
-            << "\"radiusAcrossTimes1000\":" << normalized.weatherSystemState.activeFront.radiusAcrossTimes1000 << ","
-            << "\"shapeSeed\":" << normalized.weatherSystemState.activeFront.shapeSeed << ","
-            << "\"densitySeed\":" << normalized.weatherSystemState.activeFront.densitySeed
+            << "\"direction\":" << static_cast<int>(data.weatherSystemState.activeFront.direction) << ","
+            << "\"currentTurnStep\":" << data.weatherSystemState.activeFront.currentTurnStep << ","
+            << "\"totalTurnSteps\":" << data.weatherSystemState.activeFront.totalTurnSteps << ","
+            << "\"centerStartXTimes1000\":" << data.weatherSystemState.activeFront.centerStartXTimes1000 << ","
+            << "\"centerStartYTimes1000\":" << data.weatherSystemState.activeFront.centerStartYTimes1000 << ","
+            << "\"stepXTimes1000\":" << data.weatherSystemState.activeFront.stepXTimes1000 << ","
+            << "\"stepYTimes1000\":" << data.weatherSystemState.activeFront.stepYTimes1000 << ","
+            << "\"radiusAlongTimes1000\":" << data.weatherSystemState.activeFront.radiusAlongTimes1000 << ","
+            << "\"radiusAcrossTimes1000\":" << data.weatherSystemState.activeFront.radiusAcrossTimes1000 << ","
+            << "\"shapeSeed\":" << data.weatherSystemState.activeFront.shapeSeed << ","
+            << "\"densitySeed\":" << data.weatherSystemState.activeFront.densitySeed
             << "},"
             << "\"mask\": {"
-            << "\"revision\":" << normalized.weatherMaskCache.revision << ","
-            << "\"diameter\":" << normalized.weatherMaskCache.diameter << ","
-            << "\"hasActiveFront\":" << (normalized.weatherMaskCache.hasActiveFront ? 1 : 0) << ","
+            << "\"revision\":" << data.weatherMaskCache.revision << ","
+            << "\"diameter\":" << data.weatherMaskCache.diameter << ","
+            << "\"hasActiveFront\":" << (data.weatherMaskCache.hasActiveFront ? 1 : 0) << ","
             << "\"alphaByCell\":";
-        writeUInt8Array(output, normalized.weatherMaskCache.alphaByCell);
+        writeUInt8Array(output, data.weatherMaskCache.alphaByCell);
         output << ",\"shadeByCell\":";
-        writeUInt8Array(output, normalized.weatherMaskCache.shadeByCell);
+        writeUInt8Array(output, data.weatherMaskCache.shadeByCell);
         output << "}"
             << "},\n";
 
         output << "  \"xpState\": {"
-            << "\"rngCounter\":" << normalized.xpSystemState.rngCounter
+            << "\"rngCounter\":" << data.xpSystemState.rngCounter
             << "},\n";
 
     output << "  \"infernalState\": {"
-           << "\"activeInfernalUnitId\":" << normalized.infernalSystemState.activeInfernalUnitId << ","
-           << "\"nextSpawnTurn\":" << normalized.infernalSystemState.nextSpawnTurn << ","
-           << "\"whiteBloodDebt\":" << normalized.infernalSystemState.whiteBloodDebt << ","
-           << "\"blackBloodDebt\":" << normalized.infernalSystemState.blackBloodDebt << ","
-           << "\"rngCounter\":" << normalized.infernalSystemState.rngCounter
+           << "\"activeInfernalUnitId\":" << data.infernalSystemState.activeInfernalUnitId << ","
+           << "\"nextSpawnTurn\":" << data.infernalSystemState.nextSpawnTurn << ","
+           << "\"whiteBloodDebt\":" << data.infernalSystemState.whiteBloodDebt << ","
+           << "\"blackBloodDebt\":" << data.infernalSystemState.blackBloodDebt << ","
+           << "\"rngCounter\":" << data.infernalSystemState.rngCounter
            << "},\n";
 
     output << "  \"events\": [";
-    for (std::size_t i = 0; i < normalized.events.size(); ++i) {
+    for (std::size_t i = 0; i < data.events.size(); ++i) {
         if (i > 0) output << ", ";
-        output << SaveManager::serializeEvent(normalized.events[i]);
+        output << SaveManager::serializeEvent(data.events[i]);
     }
     output << "]\n";
 
@@ -719,30 +711,23 @@ bool SaveManager::deserialize(const std::string& json, SaveData& outData) {
     outData.activeKingdom = static_cast<KingdomId>(extractInt(json, "activeKingdom", 0));
     outData.mapRadius = extractInt(json, "mapRadius", 50);
     outData.worldSeed = static_cast<std::uint32_t>(std::max(0, extractInt(json, "worldSeed", 0)));
-    outData.mode = static_cast<GameMode>(extractInt(json, "gameMode", static_cast<int>(outData.mode)));
-
-    const auto defaultControllers = controllersForGameMode(outData.mode);
-    outData.controllers[0] = static_cast<ControllerType>(
-        extractInt(json, "whiteController", static_cast<int>(defaultControllers[0])));
-    outData.controllers[1] = static_cast<ControllerType>(
-        extractInt(json, "blackController", static_cast<int>(defaultControllers[1])));
-
-    const auto defaultNames = defaultParticipantNames(outData.mode);
-    outData.participantNames[0] = extractString(json, "whiteName");
-    outData.participantNames[1] = extractString(json, "blackName");
-    if (outData.participantNames[0].empty()) outData.participantNames[0] = defaultNames[0];
-    if (outData.participantNames[1].empty()) outData.participantNames[1] = defaultNames[1];
-
-    outData.refreshSessionFromLegacyMetadata();
+    outData.sessionKingdoms = defaultKingdomParticipants(GameMode::HumanVsHuman);
     const std::string participantsArray = extractArray(json, "sessionKingdoms");
     const auto participantElements = splitArrayElements(participantsArray);
     if (participantElements.size() == kNumKingdoms) {
         for (int kingdomSlot = 0; kingdomSlot < kNumKingdoms; ++kingdomSlot) {
             outData.sessionKingdoms[kingdomSlot] = parseParticipant(participantElements[kingdomSlot]);
         }
+    } else {
+        const auto defaultNames = defaultParticipantNames(GameMode::HumanVsHuman);
+        const std::string whiteName = extractString(json, "whiteName");
+        const std::string blackName = extractString(json, "blackName");
+        outData.sessionKingdoms[kingdomIndex(KingdomId::White)].participantName =
+            whiteName.empty() ? defaultNames[0] : whiteName;
+        outData.sessionKingdoms[kingdomIndex(KingdomId::Black)].participantName =
+            blackName.empty() ? defaultNames[1] : blackName;
     }
     outData.multiplayer = parseMultiplayerConfig(extractSection(json, "multiplayer"));
-    outData.refreshLegacyMetadataFromSession();
 
     // Parse kingdoms
     // Parse kingdoms (JSON keys kept for backward compatibility)

@@ -10,7 +10,7 @@
 #include "Buildings/BuildingType.hpp"
 #include "Kingdom/KingdomId.hpp"
 #include "Board/CellType.hpp"
-#include "AI/ThreatMap.hpp"
+#include "Projection/ThreatMap.hpp"
 #include "Systems/XPTypes.hpp"
 
 // ---- Lightweight snapshot structs (no pointers, fully clonable) ----
@@ -275,7 +275,7 @@ struct TerrainGrid {
     }
 };
 
-/// Full lightweight game-state snapshot for AI simulation
+/// Full lightweight game-state snapshot for projection and rule simulation
 struct GameSnapshot {
     std::shared_ptr<const TerrainGrid> terrain; // shared across clones
     SnapKingdom white;

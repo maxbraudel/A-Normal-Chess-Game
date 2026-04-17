@@ -8,7 +8,6 @@
 #include "Core/GameState.hpp"
 #include "Input/InputSelectionBookmark.hpp"
 
-class AITurnCoordinator;
 class GameEngine;
 class InputHandler;
 class TurnCoordinator;
@@ -50,8 +49,7 @@ public:
                              GameEngine& engine,
                              TurnCoordinator& turnCoordinator,
                              InputHandler& input,
-                             UIManager& uiManager,
-                             AITurnCoordinator& aiTurnCoordinator);
+                             UIManager& uiManager);
 
     static CommitPlayerTurnDispatchPlan buildCommitPlayerTurnDispatchPlan(bool lanClient);
     static ClientTurnSubmissionFailurePlan buildClientTurnSubmissionFailurePlan(
@@ -81,5 +79,4 @@ private:
     TurnCoordinator& m_turnCoordinator;
     InputHandler& m_input;
     UIManager& m_uiManager;
-    AITurnCoordinator& m_aiTurnCoordinator;
 };

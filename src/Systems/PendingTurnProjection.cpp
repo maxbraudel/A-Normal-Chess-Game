@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <utility>
 
-#include "AI/ForwardModel.hpp"
+#include "Projection/ForwardModel.hpp"
 #include "Board/Board.hpp"
 #include "Buildings/Building.hpp"
 #include "Config/GameConfig.hpp"

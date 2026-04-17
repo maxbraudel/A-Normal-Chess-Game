@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 
-#include "AI/GameSnapshot.hpp"
+#include "Projection/GameSnapshot.hpp"
 #include "Systems/TurnCommand.hpp"
 #include "Systems/TurnValidationContext.hpp"
 

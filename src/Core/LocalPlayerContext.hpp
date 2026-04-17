@@ -35,16 +35,8 @@ inline LocalPlayerContext makeLocalPlayerContextForSession(const GameSessionConf
         return context;
     }
 
-    for (int kingdomSlot = 0; kingdomSlot < kNumKingdoms; ++kingdomSlot) {
-        const KingdomId kingdomId = static_cast<KingdomId>(kingdomSlot);
-        context.localControl[kingdomSlot] = controllerFor(session, kingdomId) == ControllerType::Human;
-    }
-
-    if (context.localControl[kingdomIndex(KingdomId::White)]) {
-        context.perspectiveKingdom = KingdomId::White;
-    } else if (context.localControl[kingdomIndex(KingdomId::Black)]) {
-        context.perspectiveKingdom = KingdomId::Black;
-    }
+    context.localControl = {true, true};
+    context.perspectiveKingdom = KingdomId::White;
 
     return context;
 }

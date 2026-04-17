@@ -2,8 +2,8 @@
 #include <cstdint>
 #include <optional>
 #include <vector>
-#include "AI/GameSnapshot.hpp"
-#include "AI/ThreatMap.hpp"
+#include "Projection/GameSnapshot.hpp"
+#include "Projection/ThreatMap.hpp"
 #include "Systems/XPTypes.hpp"
 
 class Board;
@@ -11,9 +11,9 @@ class Kingdom;
 class Building;
 class GameConfig;
 
-/// The ForwardModel lets the AI simulate the game state cheaply.
+/// The ForwardModel simulates the game state cheaply for validation and projection.
 /// It creates snapshots from the real game, applies actions on snapshots,
-/// and evaluates the resulting states — all without touching the real Board.
+/// and evaluates the resulting states without touching the real Board.
 class ForwardModel {
 public:
     // ---- Snapshot creation ----
@@ -30,8 +30,8 @@ public:
                                                          const SnapPiece& piece,
                                                          int globalMaxRange);
     static std::vector<sf::Vector2i> getLegalMoves(const GameSnapshot& s,
-                                                    const SnapPiece& piece,
-                                                    int globalMaxRange);
+                                                   const SnapPiece& piece,
+                                                   int globalMaxRange);
 
     // ---- Atomic actions ----
     static bool applyMove(GameSnapshot& s, int pieceId, sf::Vector2i dest,
@@ -60,16 +60,16 @@ public:
 private:
     // Movement helpers
     static std::vector<sf::Vector2i> getPawnMoves(const SnapPiece& piece,
-                                                   const GameSnapshot& s);
+                                                  const GameSnapshot& s);
     static std::vector<sf::Vector2i> getPawnThreatenedSquares(const SnapPiece& piece,
-                                                               const GameSnapshot& s);
+                                                              const GameSnapshot& s);
     static std::vector<sf::Vector2i> getKnightMoves(const SnapPiece& piece,
-                                                     const GameSnapshot& s);
+                                                    const GameSnapshot& s);
     static std::vector<sf::Vector2i> getDirectionalMoves(const SnapPiece& piece,
-                                                          const GameSnapshot& s,
-                                                          int dx, int dy, int maxRange);
+                                                         const GameSnapshot& s,
+                                                         int dx, int dy, int maxRange);
     static std::vector<sf::Vector2i> getKingMoves(const SnapPiece& piece,
-                                                   const GameSnapshot& s);
+                                                  const GameSnapshot& s);
 
     static bool canLandOn(const GameSnapshot& s, sf::Vector2i pos, KingdomId mover);
     static sf::Vector2i findSpawnCell(const GameSnapshot& s,

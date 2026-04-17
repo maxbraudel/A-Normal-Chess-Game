@@ -47,12 +47,6 @@ struct PendingTurnCommitResult {
     std::vector<GameplayNotification> notifications;
 };
 
-struct PendingTurnStagingResult {
-    CheckTurnValidation validation;
-    bool usedFallbackResponseMove = false;
-    bool usedBankruptcyDisbands = false;
-};
-
 class GameEngine {
 public:
     GameEngine();
@@ -70,8 +64,6 @@ public:
                                const GameConfig& config,
                                bool assignAuthoritativeBuildIds = false,
                                std::string* errorMessage = nullptr);
-    PendingTurnStagingResult stageAITurnPlan(const std::vector<TurnCommand>& commands,
-                                             const GameConfig& config);
     TurnValidationContext makeTurnValidationContext(const GameConfig& config) const;
     CheckTurnValidation validatePendingTurn(const GameConfig& config) const;
     PendingTurnCommitResult commitPendingTurn(const GameConfig& config);
@@ -129,8 +121,6 @@ public:
     ControllerType controller(KingdomId id) const;
     bool isHumanControlled(KingdomId id) const;
     bool isActiveHuman() const;
-    bool isActiveAI() const;
-    KingdomId humanKingdomId() const;
     std::array<ControllerType, kNumKingdoms> controllers() const;
     std::array<std::string, kNumKingdoms> participantNames() const;
     std::string participantName(KingdomId id) const;
@@ -141,7 +131,7 @@ private:
     bool spawnChestIfDue(const GameConfig& config);
     bool spawnInfernalIfDue(const GameConfig& config, int currentTurnStep);
 
-    GameSessionConfig m_sessionConfig = makeDefaultGameSessionConfig(GameMode::HumanVsAI);
+    GameSessionConfig m_sessionConfig = makeDefaultGameSessionConfig(GameMode::HumanVsHuman);
     Board m_board;
     std::array<Kingdom, kNumKingdoms> m_kingdoms;
     std::vector<Building> m_publicBuildings;

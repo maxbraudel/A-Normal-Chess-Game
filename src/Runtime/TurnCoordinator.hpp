@@ -32,7 +32,6 @@ struct AuthoritativeCommitPlan {
     bool reconcileSelection = false;
     bool updateUI = false;
     bool persistLanHostSnapshot = false;
-    bool startAITurn = false;
     std::optional<GameState> nextGameState;
     std::optional<std::pair<KingdomId, std::string>> eventLogEntry;
 };

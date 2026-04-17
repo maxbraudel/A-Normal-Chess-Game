@@ -1,6 +1,5 @@
 #pragma once
 #include "Core/LiveResizeRenderWindow.hpp"
-#include "Core/AITurnRunner.hpp"
 #include <TGUI/Backend/SFML-Graphics.hpp>
 #include <TGUI/AllWidgets.hpp>
 #include <array>
@@ -24,12 +23,10 @@
 #include "Config/GameConfig.hpp"
 #include "Debug/GameStateDebugRecorder.hpp"
 #include "Systems/CheckSystem.hpp"
-#include "AI/AIDirector.hpp"
 #include "Input/InputHandler.hpp"
 #include "Input/InputSelectionBookmark.hpp"
 #include "Render/Camera.hpp"
 #include "Render/Renderer.hpp"
-#include "Runtime/AITurnCoordinator.hpp"
 #include "Runtime/BuildOverlayCoordinator.hpp"
 #include "Runtime/FrontendCoordinator.hpp"
 #include "Runtime/InGamePresentationCoordinator.hpp"
@@ -77,7 +74,6 @@ private:
     bool saveGame();
     void commitPlayerTurn();
     void resetPlayerTurn();
-    void discardPendingAITurn();
     void refreshTurnPhase();
     void stopMultiplayer();
     bool joinMultiplayer(const JoinMultiplayerRequest& request, std::string* errorMessage = nullptr);
@@ -206,11 +202,6 @@ private:
     TurnDraft m_turnDraft;
     std::uint64_t m_lastTurnDraftRevision = 0;
     GameStateDebugRecorder m_debugRecorder;
-
-    // AI
-    AIDirector m_aiDirector;
-    AITurnRunner m_aiTurnRunner;
-    AITurnCoordinator m_aiTurnCoordinator;
 
     // Input/Render/UI
     InputHandler m_input;

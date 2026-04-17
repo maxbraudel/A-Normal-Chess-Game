@@ -75,7 +75,6 @@ AuthoritativeCommitPlan TurnCoordinator::buildAuthoritativeCommitPlan(
     }
 
     plan.persistLanHostSnapshot = lanHost;
-    plan.startAITurn = true;
     return plan;
 }
 

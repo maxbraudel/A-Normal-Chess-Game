@@ -68,7 +68,6 @@ LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 
 Game::Game()
     : m_state(GameState::MainMenu)
-    , m_aiTurnCoordinator(m_engine, m_aiTurnRunner, m_aiDirector, m_config)
     , m_sessionFlow(m_engine, m_saveManager, m_multiplayer, m_debugRecorder, m_config)
     , m_multiplayerJoinCoordinator(m_engine, m_multiplayer, m_saveManager, m_input, m_config)
     , m_turnCoordinator(m_engine, m_multiplayer, m_debugRecorder, m_config)
@@ -86,8 +85,7 @@ Game::Game()
           m_engine,
           m_turnCoordinator,
           m_input,
-          m_uiManager,
-          m_aiTurnCoordinator)
+            m_uiManager)
     , m_panelActionCoordinator(m_engine, m_input, m_config)
     , m_multiplayerRuntimeCoordinator(
           m_multiplayer,
@@ -202,9 +200,6 @@ SessionRuntimeCallbacks Game::makeSessionRuntimeCallbacks() {
     return SessionRuntimeCallbacks{
         [this]() {
             stopMultiplayer();
-        },
-        [this]() {
-            discardPendingAITurn();
         },
         [this]() {
             m_input.clearMovePreview();
@@ -688,10 +683,6 @@ void Game::init() {
         m_config.loadFromFile("assets/config/game_params.json");
     }
 
-    if (!m_aiDirector.loadConfig("assets/config/master_config.json")) {
-        m_aiDirector.loadConfig("assets/config/ai_params.json");
-    }
-
     // Create window
     m_window.create(sf::VideoMode(1280, 720), "A Normal Chess Game", sf::Style::Default);
     m_window.setFramerateLimit(60);
@@ -873,8 +864,7 @@ void Game::update() {
         m_state,
         currentInteractionPermissions().canMoveCamera,
         isLanHost(),
-        isLanClient(),
-        m_engine.isActiveAI()
+        isLanClient()
     });
 
     if (updatePlan.updateCamera && m_window.hasFocus()) {
@@ -883,13 +873,6 @@ void Game::update() {
 
     if (updatePlan.updateMultiplayer) {
         updateMultiplayer();
-    }
-
-    if (updatePlan.runAITurn) {
-        m_aiTurnCoordinator.startTurnIfNeeded(m_state);
-        if (m_aiTurnCoordinator.pollCompletedTurn(m_state)) {
-            commitAuthoritativeTurn();
-        }
     }
     if (updatePlan.updateUI) {
         updateUIState();
@@ -1124,6 +1107,3 @@ void Game::refreshTurnPhase() {
         : TurnPhase::BlackTurn;
 }
 
-void Game::discardPendingAITurn() {
-    m_aiTurnCoordinator.cancelPendingTurn();
-}

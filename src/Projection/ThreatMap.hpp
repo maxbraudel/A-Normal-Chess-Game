@@ -2,7 +2,7 @@
 #include <cstring>
 #include <SFML/System/Vector2.hpp>
 
-// O(1) lookup threat grid — replaces std::set<Vector2i> for massive speedup.
+// O(1) lookup threat grid used by projection and runtime rules.
 // 10KB footprint, fits in L1 cache.
 static constexpr int THREAT_MAP_SIZE = 100;
 

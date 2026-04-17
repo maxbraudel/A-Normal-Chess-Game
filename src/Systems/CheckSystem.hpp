@@ -2,7 +2,7 @@
 #include <set>
 #include <SFML/System/Vector2.hpp>
 #include "Kingdom/KingdomId.hpp"
-#include "AI/ThreatMap.hpp"
+#include "Projection/ThreatMap.hpp"
 
 class Board;
 class Kingdom;

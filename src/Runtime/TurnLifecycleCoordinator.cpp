@@ -4,7 +4,6 @@
 
 #include "Core/GameEngine.hpp"
 #include "Input/InputHandler.hpp"
-#include "Runtime/AITurnCoordinator.hpp"
 #include "Runtime/TurnCoordinator.hpp"
 #include "UI/UIManager.hpp"
 
@@ -13,15 +12,13 @@ TurnLifecycleCoordinator::TurnLifecycleCoordinator(GameState& gameState,
                                                    GameEngine& engine,
                                                    TurnCoordinator& turnCoordinator,
                                                    InputHandler& input,
-                                                   UIManager& uiManager,
-                                                   AITurnCoordinator& aiTurnCoordinator)
+                                                   UIManager& uiManager)
     : m_gameState(gameState)
     , m_waitingForRemoteTurnResult(waitingForRemoteTurnResult)
     , m_engine(engine)
     , m_turnCoordinator(turnCoordinator)
     , m_input(input)
-    , m_uiManager(uiManager)
-    , m_aiTurnCoordinator(aiTurnCoordinator) {}
+    , m_uiManager(uiManager) {}
 
 CommitPlayerTurnDispatchPlan TurnLifecycleCoordinator::buildCommitPlayerTurnDispatchPlan(bool lanClient) {
     CommitPlayerTurnDispatchPlan plan;
@@ -122,9 +119,6 @@ void TurnLifecycleCoordinator::commitAuthoritativeTurn(bool lanHost,
         if (callbacks.showGameplayNotification) {
             callbacks.showGameplayNotification(notification);
         }
-    }
-    if (plan.startAITurn) {
-        m_aiTurnCoordinator.startTurnIfNeeded(m_gameState);
     }
 }
 

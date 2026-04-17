@@ -5,7 +5,7 @@
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingType.hpp"
 #include "Config/GameConfig.hpp"
-#include "AI/GameSnapshot.hpp"
+#include "Projection/GameSnapshot.hpp"
 #include "Systems/EventLog.hpp"
 
 #include <algorithm>

@@ -6,7 +6,6 @@
 
 struct SessionResetPlan {
     bool stopMultiplayer = false;
-    bool discardPendingAiTurn = false;
     bool clearMovePreview = false;
     bool activateSelectTool = false;
     bool resetPendingTurn = false;
@@ -26,7 +25,6 @@ struct SessionPresentationPlan {
 
 struct MainMenuPresentationPlan {
     bool stopMultiplayer = false;
-    bool discardPendingAiTurn = false;
     bool clearMovePreview = false;
     bool activateSelectTool = false;
     bool resetPendingTurn = false;

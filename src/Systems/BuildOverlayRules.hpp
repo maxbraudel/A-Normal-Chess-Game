@@ -6,7 +6,7 @@
 
 #include <vector>
 
-#include "AI/GameSnapshot.hpp"
+#include "Projection/GameSnapshot.hpp"
 #include "Board/Board.hpp"
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingType.hpp"

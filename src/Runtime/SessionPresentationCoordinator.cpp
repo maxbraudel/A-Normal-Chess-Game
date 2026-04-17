@@ -3,7 +3,6 @@
 SessionResetPlan SessionPresentationCoordinator::buildAuthoritativeSessionResetPlan() {
     SessionResetPlan plan;
     plan.stopMultiplayer = true;
-    plan.discardPendingAiTurn = true;
     plan.clearMovePreview = true;
     plan.activateSelectTool = true;
     plan.resetPendingTurn = true;
@@ -29,7 +28,6 @@ SessionPresentationPlan SessionPresentationCoordinator::buildSessionPresentation
 MainMenuPresentationPlan SessionPresentationCoordinator::buildReturnToMainMenuPlan() {
     MainMenuPresentationPlan plan;
     plan.stopMultiplayer = true;
-    plan.discardPendingAiTurn = true;
     plan.clearMovePreview = true;
     plan.activateSelectTool = true;
     plan.resetPendingTurn = true;

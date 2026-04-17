@@ -76,9 +76,6 @@ void SessionRuntimeCoordinator::returnToMainMenu(const SessionRuntimeCallbacks& 
     if (plan.stopMultiplayer && callbacks.stopMultiplayer) {
         callbacks.stopMultiplayer();
     }
-    if (plan.discardPendingAiTurn && callbacks.discardPendingAiTurn) {
-        callbacks.discardPendingAiTurn();
-    }
     if (plan.clearMovePreview && callbacks.clearMovePreview) {
         callbacks.clearMovePreview();
     }
@@ -104,9 +101,6 @@ void SessionRuntimeCoordinator::applySessionResetPlan(const SessionResetPlan& pl
                                                       const SessionRuntimeCallbacks& callbacks) {
     if (plan.stopMultiplayer && callbacks.stopMultiplayer) {
         callbacks.stopMultiplayer();
-    }
-    if (plan.discardPendingAiTurn && callbacks.discardPendingAiTurn) {
-        callbacks.discardPendingAiTurn();
     }
     if (plan.clearMovePreview && callbacks.clearMovePreview) {
         callbacks.clearMovePreview();
@@ -153,9 +147,6 @@ bool SessionRuntimeCoordinator::joinMultiplayerInternal(const JoinMultiplayerReq
     const InputSelectionBookmark selectionBookmark = callbacks.captureSelectionBookmark
         ? callbacks.captureSelectionBookmark()
         : InputSelectionBookmark{};
-    if (callbacks.discardPendingAiTurn) {
-        callbacks.discardPendingAiTurn();
-    }
 
     const MultiplayerJoinPreparationPlan preparationPlan =
         m_multiplayerJoinCoordinator.prepareForClientConnectionAttempt(

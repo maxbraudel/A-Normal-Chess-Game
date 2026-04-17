@@ -1,4 +1,4 @@
-#include "AI/ForwardModel.hpp"
+#include "Projection/ForwardModel.hpp"
 #include "Board/Board.hpp"
 #include "Board/Cell.hpp"
 #include "Kingdom/Kingdom.hpp"
@@ -216,7 +216,7 @@ bool ForwardModel::canLandOn(const GameSnapshot& s, sf::Vector2i pos, KingdomId 
 }
 
 std::vector<sf::Vector2i> ForwardModel::getPawnMoves(const SnapPiece& piece,
-                                                      const GameSnapshot& s) {
+                                                     const GameSnapshot& s) {
     std::vector<sf::Vector2i> moves;
     static const int orthogonalDirs[4][2] = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}};
     static const int diagonalDirs[4][2] = {{-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
@@ -260,7 +260,7 @@ std::vector<sf::Vector2i> ForwardModel::getPawnMoves(const SnapPiece& piece,
 }
 
 std::vector<sf::Vector2i> ForwardModel::getPawnThreatenedSquares(const SnapPiece& piece,
-                                                                  const GameSnapshot& s) {
+                                                                 const GameSnapshot& s) {
     std::vector<sf::Vector2i> moves;
     static const int diagonalDirs[4][2] = {{-1, -1}, {-1, 1}, {1, -1}, {1, 1}};
     for (const auto& direction : diagonalDirs) {
@@ -273,7 +273,7 @@ std::vector<sf::Vector2i> ForwardModel::getPawnThreatenedSquares(const SnapPiece
 }
 
 std::vector<sf::Vector2i> ForwardModel::getKnightMoves(const SnapPiece& piece,
-                                                         const GameSnapshot& s) {
+                                                       const GameSnapshot& s) {
     std::vector<sf::Vector2i> moves;
     static const int offsets[8][2] = {
         {-2,-1},{-2,1},{-1,-2},{-1,2},{1,-2},{1,2},{2,-1},{2,1}
@@ -287,8 +287,8 @@ std::vector<sf::Vector2i> ForwardModel::getKnightMoves(const SnapPiece& piece,
 }
 
 std::vector<sf::Vector2i> ForwardModel::getDirectionalMoves(const SnapPiece& piece,
-                                                              const GameSnapshot& s,
-                                                              int dx, int dy, int maxRange) {
+                                                            const GameSnapshot& s,
+                                                            int dx, int dy, int maxRange) {
     std::vector<sf::Vector2i> moves;
     for (int i = 1; i <= maxRange; ++i) {
         sf::Vector2i dest{piece.position.x + dx * i, piece.position.y + dy * i};
@@ -308,28 +308,24 @@ std::vector<sf::Vector2i> ForwardModel::getDirectionalMoves(const SnapPiece& pie
                 moves.push_back(dest); // capture
             break; // blocked
         }
-        // Check for wall/building blocking (non-piece occupant)
-        // Buildings don't physically block movement on a cell basis for sliding pieces
-        // — only pieces do. Wall cells are traversable unless a piece is there.
         moves.push_back(dest);
     }
     return moves;
 }
 
 std::vector<sf::Vector2i> ForwardModel::getKingMoves(const SnapPiece& piece,
-                                                       const GameSnapshot& s) {
+                                                     const GameSnapshot& s) {
     std::vector<sf::Vector2i> moves;
     for (int dy = -1; dy <= 1; ++dy) {
         for (int dx = -1; dx <= 1; ++dx) {
             if (dx == 0 && dy == 0) continue;
             sf::Vector2i dest{piece.position.x + dx, piece.position.y + dy};
             if (canLandOn(s, dest, piece.kingdom)) {
-                // Don't let king move adjacent to enemy king
                 const SnapPiece* enemyKing = s.enemyKingdom(piece.kingdom).getKing();
                 if (enemyKing) {
                     int ekdx = std::abs(dest.x - enemyKing->position.x);
                     int ekdy = std::abs(dest.y - enemyKing->position.y);
-                    if (ekdx <= 1 && ekdy <= 1) continue; // too close to enemy king
+                    if (ekdx <= 1 && ekdy <= 1) continue;
                 }
                 moves.push_back(dest);
             }
@@ -387,8 +383,8 @@ std::vector<sf::Vector2i> ForwardModel::getPseudoLegalMoves(const GameSnapshot& 
 }
 
 std::vector<sf::Vector2i> ForwardModel::getLegalMoves(const GameSnapshot& s,
-                                                       const SnapPiece& piece,
-                                                       int globalMaxRange) {
+                                                      const SnapPiece& piece,
+                                                      int globalMaxRange) {
     std::vector<sf::Vector2i> legalMoves;
     const std::vector<sf::Vector2i> pseudoLegalMoves = getPseudoLegalMoves(s, piece, globalMaxRange);
     for (const sf::Vector2i& destination : pseudoLegalMoves) {
@@ -440,11 +436,10 @@ bool ForwardModel::applyMove(GameSnapshot& s, int pieceId, sf::Vector2i dest,
     const int moveCost = TurnPointRules::movementCost(piece->type, config);
     if (budget.movementPointsRemaining < moveCost) return false;
 
-    // Capture enemy piece at destination
     SnapKingdom& enemyK = s.enemyKingdom(mover);
     SnapPiece* victim = enemyK.getPieceAt(dest);
     if (victim) {
-        if (victim->type == PieceType::King) return false; // illegal
+        if (victim->type == PieceType::King) return false;
         piece->xp += XPSystem::sampleKillXP(victim->type, s.xpSystemState, s.worldSeed, config);
         enemyK.removePiece(victim->id);
     }
@@ -478,7 +473,6 @@ bool ForwardModel::applyBuild(GameSnapshot& s, KingdomId k, BuildingType type,
     const int footprintHeight = Building::getFootprintHeightFor(
         sourceWidth, sourceHeight, rotationQuarterTurns);
 
-    // Validate space
     for (int dy = 0; dy < footprintHeight; ++dy) {
         for (int dx = 0; dx < footprintWidth; ++dx) {
             int cx = pos.x + dx, cy = pos.y + dy;
@@ -515,7 +509,7 @@ bool ForwardModel::applyBuild(GameSnapshot& s, KingdomId k, BuildingType type,
 }
 
 bool ForwardModel::applyProduce(GameSnapshot& s, int barracksId, PieceType type,
-                                 int cost, int productionTurns, KingdomId k) {
+                                int cost, int productionTurns, KingdomId k) {
     SnapKingdom& myK = s.kingdom(k);
     SnapBuilding* barracks = myK.getBuildingById(barracksId);
     if (!barracks || !barracks->isUsable() || barracks->isProducing) return false;
@@ -572,7 +566,6 @@ void ForwardModel::advanceTurn(GameSnapshot& s, KingdomId k,
     processEnemyStructureOccupancy(s, k, config);
     applyAutomaticChurchCoronation(s, k);
 
-    // 1. Advance production timers and spawn
     for (auto& b : myK.buildings) {
         if (!b.isProducing || b.isDestroyed()) continue;
         b.turnsRemaining--;
@@ -594,7 +587,6 @@ void ForwardModel::advanceTurn(GameSnapshot& s, KingdomId k,
                 }
                 b.isProducing = false;
             }
-            // If no space, stays at turnsRemaining=0 and retries next turn
         }
     }
 
@@ -608,7 +600,6 @@ void ForwardModel::advanceTurn(GameSnapshot& s, KingdomId k,
 
     SnapKingdom& enemyK = s.enemyKingdom(k);
 
-    // 3. Arena XP
     for (auto& b : s.publicBuildings) {
         if (b.type != BuildingType::Arena) continue;
         auto cells = b.getOccupiedCells();
@@ -641,7 +632,7 @@ void ForwardModel::advanceTurn(GameSnapshot& s, KingdomId k,
 // ========================================================================
 
 ThreatMap ForwardModel::buildThreatMap(const GameSnapshot& s, KingdomId attacker,
-                                        int globalMaxRange) {
+                                       int globalMaxRange) {
     ThreatMap tm;
     const SnapKingdom& atk = s.kingdom(attacker);
     auto getAttackSquares = [&](const SnapPiece& piece) {
@@ -719,27 +710,24 @@ bool ForwardModel::isCheckmate(const GameSnapshot& s, KingdomId k, int globalMax
     if (!isInCheck(s, k, globalMaxRange)) return false;
 
     const SnapKingdom& myK = s.kingdom(k);
-    // Try every piece's every move — if any removes check, not checkmate
     for (auto& piece : myK.pieces) {
         auto moves = getLegalMoves(s, piece, globalMaxRange);
         for (auto& dest : moves) {
             GameSnapshot sim = s.clone();
-            // Apply move in simulation
             SnapPiece* simPiece = sim.kingdom(k).getPieceById(piece.id);
             if (!simPiece) continue;
 
-            // Capture enemy if present
             SnapKingdom& simEnemy = sim.enemyKingdom(k);
             SnapPiece* victim = simEnemy.getPieceAt(dest);
             if (victim) {
-                if (victim->type == PieceType::King) continue; // can't capture king
+                if (victim->type == PieceType::King) continue;
                 simEnemy.removePiece(victim->id);
             }
             simPiece->position = dest;
 
             if (!isInCheck(sim, k, globalMaxRange))
-                return false; // found an escape
+                return false;
         }
     }
-    return true; // no escape = checkmate
+    return true;
 }

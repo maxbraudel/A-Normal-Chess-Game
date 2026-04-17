@@ -40,23 +40,7 @@ FetchContent_MakeAvailable(TGUI)
 
 # Explicit source list keeps module membership intentional and avoids silent build drift.
 set(CORE_SOURCES
-    src/AI/AIBrain.cpp
-    src/AI/AIBuildModule.cpp
-    src/AI/AIController.cpp
-    src/AI/AIDirector.cpp
-    src/AI/AIEconomyModule.cpp
-    src/AI/AIEvaluator.cpp
-    src/AI/AIMCTS.cpp
-    src/AI/AISpecialModule.cpp
-    src/AI/AIStrategy.cpp
-    src/AI/AIStrategyBuild.cpp
-    src/AI/AIStrategyEcon.cpp
-    src/AI/AIStrategyMove.cpp
-    src/AI/AIStrategySpecial.cpp
-    src/AI/AITacticalEngine.cpp
-    src/AI/AITurnContext.cpp
-    src/AI/CheckmateSolver.cpp
-    src/AI/ForwardModel.cpp
+    src/Projection/ForwardModel.cpp
     src/Assets/AssetManager.cpp
     src/Board/Board.cpp
     src/Board/BoardGenerator.cpp
@@ -65,9 +49,7 @@ set(CORE_SOURCES
     src/Buildings/BuildingFactory.cpp
     src/Buildings/StructureChunkRegistry.cpp
     src/Buildings/StructurePlacementProfile.cpp
-    src/Config/AIConfig.cpp
     src/Config/GameConfig.cpp
-    src/Core/AITurnRunner.cpp
     src/Core/Game.cpp
     src/Core/GameClock.cpp
     src/Core/GameEngine.cpp
@@ -88,7 +70,6 @@ set(CORE_SOURCES
     src/Render/OverlayRenderer.cpp
     src/Render/Renderer.cpp
     src/Render/StructureOverlay.cpp
-    src/Runtime/AITurnCoordinator.cpp
     src/Runtime/BuildOverlayCoordinator.cpp
     src/Runtime/FrontendCoordinator.cpp
     src/Runtime/InGamePresentationCoordinator.cpp
@@ -261,18 +242,3 @@ if(WIN32)
         endif()
     endforeach()
 endif()
-
-enable_testing()
-
-add_executable(${PROJECT_NAME}Tests tests/TestMain.cpp)
-target_link_libraries(${PROJECT_NAME}Tests PRIVATE ${PROJECT_NAME}Core)
-target_include_directories(${PROJECT_NAME}Tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
-add_dependencies(${PROJECT_NAME}Tests ${PROJECT_NAME}Assets)
-
-if(MSVC)
-    target_compile_options(${PROJECT_NAME}Tests PRIVATE /W4 /permissive-)
-else()
-    target_compile_options(${PROJECT_NAME}Tests PRIVATE -Wall -Wextra -Wpedantic)
-endif()
-
-add_test(NAME ${PROJECT_NAME}Tests COMMAND ${PROJECT_NAME}Tests)

@@ -10,7 +10,6 @@ FrameUpdatePlan UpdateCoordinator::planFrameUpdate(const FrameUpdateState& state
 
     switch (state.gameState) {
         case GameState::Playing:
-            plan.runAITurn = state.activeAI;
             plan.updateUI = true;
             plan.updateUIManager = true;
             break;

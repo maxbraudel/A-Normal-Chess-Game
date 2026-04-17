@@ -40,7 +40,6 @@ private:
     void updateSaveButtons();
     void updateCreateDialogLabels();
     void updateMultiplayerControlsVisibility();
-    void applyPresetToCreateDialog(GameMode mode);
     void openCreateDialog();
     void closeCreateDialog();
     void openJoinDialog();
@@ -51,8 +50,6 @@ private:
     static bool isValidSaveName(const std::string& value);
     static bool isValidParticipantName(const std::string& value);
     static bool tryParsePort(const std::string& value, int& port);
-    static GameMode parseGameModeId(const tgui::String& id);
-    static ControllerType parseControllerId(const tgui::String& id);
 
     tgui::Panel::Ptr m_panel;
     tgui::Panel::Ptr m_mainBox;
@@ -64,7 +61,6 @@ private:
     tgui::Button::Ptr m_playButton;
     tgui::Label::Ptr m_emptyLabel;
     tgui::EditBox::Ptr m_saveNameEdit;
-    tgui::ComboBox::Ptr m_modeCombo;
     tgui::Label::Ptr m_whiteRoleLabel;
     tgui::CheckBox::Ptr m_multiplayerCheckBox;
     tgui::Label::Ptr m_multiplayerHintLabel;
@@ -77,8 +73,6 @@ private:
     tgui::EditBox::Ptr m_joinPortEdit;
     tgui::EditBox::Ptr m_joinPasswordEdit;
     tgui::Label::Ptr m_joinErrorLabel;
-    tgui::ComboBox::Ptr m_whiteControllerCombo;
-    tgui::ComboBox::Ptr m_blackControllerCombo;
     tgui::Label::Ptr m_whiteNameLabel;
     tgui::Label::Ptr m_blackNameLabel;
     tgui::EditBox::Ptr m_whiteNameEdit;

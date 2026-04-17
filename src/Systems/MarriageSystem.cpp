@@ -1,6 +1,6 @@
 #include "Systems/MarriageSystem.hpp"
 
-#include "AI/GameSnapshot.hpp"
+#include "Projection/GameSnapshot.hpp"
 #include "Kingdom/Kingdom.hpp"
 #include "Board/Board.hpp"
 #include "Board/Cell.hpp"

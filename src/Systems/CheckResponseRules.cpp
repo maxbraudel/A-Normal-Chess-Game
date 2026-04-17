@@ -4,7 +4,7 @@
 
 #include "Board/Board.hpp"
 #include "Buildings/Building.hpp"
-#include "AI/ForwardModel.hpp"
+#include "Projection/ForwardModel.hpp"
 #include "Config/GameConfig.hpp"
 #include "Kingdom/Kingdom.hpp"
 #include "Systems/MarriageSystem.hpp"
