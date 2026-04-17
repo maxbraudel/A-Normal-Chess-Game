@@ -99,6 +99,58 @@ std::string unescapeJsonString(const std::string& value) {
     return result;
 }
 
+void writeUInt8Array(std::ostream& output, const std::vector<std::uint8_t>& values) {
+    output << "[";
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        if (i > 0) {
+            output << ",";
+        }
+        output << static_cast<int>(values[i]);
+    }
+    output << "]";
+}
+
+std::vector<std::uint8_t> parseUInt8Array(const std::string& arrayText) {
+    std::vector<std::uint8_t> values;
+    if (arrayText.size() < 2 || arrayText.front() != '[' || arrayText.back() != ']') {
+        return values;
+    }
+
+    std::size_t pos = 1;
+    while (pos < arrayText.size()) {
+        while (pos < arrayText.size()
+               && (std::isspace(static_cast<unsigned char>(arrayText[pos])) != 0
+                   || arrayText[pos] == ',')) {
+            ++pos;
+        }
+
+        if (pos >= arrayText.size() || arrayText[pos] == ']') {
+            break;
+        }
+
+        std::size_t end = pos;
+        if (arrayText[end] == '-' || arrayText[end] == '+') {
+            ++end;
+        }
+        while (end < arrayText.size()
+               && std::isdigit(static_cast<unsigned char>(arrayText[end])) != 0) {
+            ++end;
+        }
+
+        try {
+            values.push_back(static_cast<std::uint8_t>(std::clamp(
+                std::stoi(arrayText.substr(pos, end - pos)),
+                0,
+                255)));
+        } catch (...) {
+            break;
+        }
+        pos = end;
+    }
+
+    return values;
+}
+
 }
 
 void SaveManager::writeJson(std::ostream& output, const SaveData& data) {
@@ -196,6 +248,7 @@ void SaveManager::writeJson(std::ostream& output, const SaveData& data) {
             << "\"nextSpawnTurnStep\":" << normalized.weatherSystemState.nextSpawnTurnStep << ","
             << "\"hasActiveFront\":" << (normalized.weatherSystemState.hasActiveFront ? 1 : 0) << ","
             << "\"rngCounter\":" << normalized.weatherSystemState.rngCounter << ","
+            << "\"revision\":" << normalized.weatherSystemState.revision << ","
             << "\"activeFront\": {"
             << "\"direction\":" << static_cast<int>(normalized.weatherSystemState.activeFront.direction) << ","
             << "\"currentTurnStep\":" << normalized.weatherSystemState.activeFront.currentTurnStep << ","
@@ -208,7 +261,16 @@ void SaveManager::writeJson(std::ostream& output, const SaveData& data) {
             << "\"radiusAcrossTimes1000\":" << normalized.weatherSystemState.activeFront.radiusAcrossTimes1000 << ","
             << "\"shapeSeed\":" << normalized.weatherSystemState.activeFront.shapeSeed << ","
             << "\"densitySeed\":" << normalized.weatherSystemState.activeFront.densitySeed
-            << "}"
+            << "},"
+            << "\"mask\": {"
+            << "\"revision\":" << normalized.weatherMaskCache.revision << ","
+            << "\"diameter\":" << normalized.weatherMaskCache.diameter << ","
+            << "\"hasActiveFront\":" << (normalized.weatherMaskCache.hasActiveFront ? 1 : 0) << ","
+            << "\"alphaByCell\":";
+        writeUInt8Array(output, normalized.weatherMaskCache.alphaByCell);
+        output << ",\"shadeByCell\":";
+        writeUInt8Array(output, normalized.weatherMaskCache.shadeByCell);
+        output << "}"
             << "},\n";
 
         output << "  \"xpState\": {"
@@ -743,6 +805,9 @@ bool SaveManager::deserialize(const std::string& json, SaveData& outData) {
     outData.weatherSystemState.rngCounter = static_cast<std::uint32_t>(std::max(
         0,
         extractInt(weatherStateSection, "rngCounter", 0)));
+    outData.weatherSystemState.revision = static_cast<std::uint32_t>(std::max(
+        0,
+        extractInt(weatherStateSection, "revision", 0)));
     const std::string weatherFrontSection = extractSection(weatherStateSection, "activeFront");
     outData.weatherSystemState.activeFront.direction = static_cast<WeatherDirection>(std::clamp(
         extractInt(weatherFrontSection, "direction", static_cast<int>(WeatherDirection::East)),
@@ -770,6 +835,14 @@ bool SaveManager::deserialize(const std::string& json, SaveData& outData) {
     outData.weatherSystemState.activeFront.densitySeed = static_cast<std::uint32_t>(std::max(
         0,
         extractInt(weatherFrontSection, "densitySeed", 0)));
+    const std::string weatherMaskSection = extractSection(weatherStateSection, "mask");
+    outData.weatherMaskCache.revision = static_cast<std::uint32_t>(std::max(
+        0,
+        extractInt(weatherMaskSection, "revision", 0)));
+    outData.weatherMaskCache.diameter = std::max(0, extractInt(weatherMaskSection, "diameter", 0));
+    outData.weatherMaskCache.hasActiveFront = extractInt(weatherMaskSection, "hasActiveFront", 0) != 0;
+    outData.weatherMaskCache.alphaByCell = parseUInt8Array(extractArray(weatherMaskSection, "alphaByCell"));
+    outData.weatherMaskCache.shadeByCell = parseUInt8Array(extractArray(weatherMaskSection, "shadeByCell"));
 
     const std::string xpStateSection = extractSection(json, "xpState");
     outData.xpSystemState.rngCounter = static_cast<std::uint32_t>(std::max(

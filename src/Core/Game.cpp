@@ -349,7 +349,7 @@ void Game::refreshBuildableCellsOverlay(const InteractionPermissions& permission
 }
 
 void Game::ensureWeatherMaskUpToDate() {
-    WeatherSystem::rebuildMask(board(), m_engine.weatherSystemState(), m_config, m_weatherMaskCache);
+    m_engine.ensureWeatherMaskUpToDate(m_config);
 }
 
 void Game::triggerCheatcodeWeatherFront() {
@@ -358,7 +358,7 @@ void Game::triggerCheatcodeWeatherFront() {
         return;
     }
 
-    m_weatherMaskCache.clear();
+    m_engine.clearWeatherMaskCache();
     invalidateTurnDraft();
     invalidatePendingTurnValidation();
     reconcileSelectionBookmark(bookmark);
@@ -453,7 +453,7 @@ InputContext Game::buildInputContext(const InteractionPermissions& permissions) 
         buildingFactory(),
         authoritativeTurnContext(),
         m_config,
-        m_weatherMaskCache,
+        m_engine.weatherMaskCache(),
         localPerspectiveKingdom()
     };
     return FrontendCoordinator::buildInputContext(
@@ -478,7 +478,9 @@ Piece* Game::selectedDisplayedPiece() {
     }
 
     ensureWeatherMaskUpToDate();
-    if (WeatherVisibility::shouldHidePiece(*piece, localPerspectiveKingdom(), m_weatherMaskCache)) {
+    if (WeatherVisibility::shouldHidePiece(*piece,
+                                          localPerspectiveKingdom(),
+                                          m_engine.weatherMaskCache())) {
         return nullptr;
     }
 
@@ -500,7 +502,7 @@ Building* Game::selectedDisplayedBuilding() {
             *building,
             selectionCell,
             localPerspectiveKingdom(),
-            m_weatherMaskCache)) {
+            m_engine.weatherMaskCache())) {
         return nullptr;
     }
 
@@ -522,7 +524,7 @@ void Game::reconcileSelectionBookmark(const InputSelectionBookmark& bookmark) {
         if (WeatherVisibility::shouldHidePiece(
                 *bookmarkedPiece,
                 localPerspectiveKingdom(),
-                m_weatherMaskCache)) {
+                m_engine.weatherMaskCache())) {
             bookmarkedPiece = nullptr;
         }
     }
@@ -534,7 +536,7 @@ void Game::reconcileSelectionBookmark(const InputSelectionBookmark& bookmark) {
                 *bookmarkedBuilding,
                 *bookmark.selectedCell,
                 localPerspectiveKingdom(),
-                m_weatherMaskCache)) {
+                m_engine.weatherMaskCache())) {
             bookmarkedBuilding = nullptr;
         }
     }
@@ -936,7 +938,7 @@ void Game::render() {
             displayedMapObjects(),
             displayedAutonomousUnits(),
             m_config,
-            m_weatherMaskCache,
+            m_engine.weatherMaskCache(),
             localPerspectiveKingdom()
         };
         const WorldRenderPlan renderPlan = RenderCoordinator::buildWorldRenderPlan(
@@ -1009,6 +1011,7 @@ void Game::stopMultiplayer() {
 }
 
 bool Game::pushSnapshotToRemote(std::string* errorMessage) {
+    m_engine.ensureWeatherMaskUpToDate(m_config);
     const std::string snapshot = m_saveManager.serialize(m_engine.createSaveData());
     return m_multiplayer.pushSnapshotIfConnected(isLanHost(), snapshot, errorMessage);
 }

@@ -96,8 +96,13 @@ public:
 
     const ChestSystemState& chestSystemState() const { return m_chestSystemState; }
     const WeatherSystemState& weatherSystemState() const { return m_weatherSystemState; }
+    WeatherMaskCache& weatherMaskCache() { return m_weatherMaskCache; }
+    const WeatherMaskCache& weatherMaskCache() const { return m_weatherMaskCache; }
     const XPSystemState& xpSystemState() const { return m_xpSystemState; }
     const InfernalSystemState& infernalSystemState() const { return m_infernalSystemState; }
+
+    void ensureWeatherMaskUpToDate(const GameConfig& config);
+    void clearWeatherMaskCache();
 
     TurnSystem& turnSystem() { return m_turnSystem; }
     const TurnSystem& turnSystem() const { return m_turnSystem; }
@@ -144,6 +149,7 @@ private:
     std::vector<AutonomousUnit> m_autonomousUnits;
     ChestSystemState m_chestSystemState{};
     WeatherSystemState m_weatherSystemState{};
+    WeatherMaskCache m_weatherMaskCache{};
     XPSystemState m_xpSystemState{};
     InfernalSystemState m_infernalSystemState{};
     TurnSystem m_turnSystem;

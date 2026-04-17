@@ -65,6 +65,7 @@ struct SaveData {
     std::vector<MapObject> mapObjects;
     ChestSystemState chestSystemState{};
     WeatherSystemState weatherSystemState{};
+    WeatherMaskCache weatherMaskCache{};
     XPSystemState xpSystemState{};
 
     // Autonomous hostile units

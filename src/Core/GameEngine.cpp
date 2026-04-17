@@ -209,6 +209,7 @@ bool GameEngine::startNewSession(const GameSessionConfig& session,
     m_turnSystem.setActiveKingdom(KingdomId::White);
     m_turnSystem.setTurnNumber(1);
     WeatherSystem::initialize(m_weatherSystemState, m_sessionConfig.worldSeed, halfTurnStep(m_turnSystem), config);
+    m_weatherMaskCache.clear();
     m_nextMapObjectId = 1;
     m_nextAutonomousUnitId = 1;
 
@@ -280,6 +281,7 @@ bool GameEngine::restoreFromSave(const SaveData& data,
     m_autonomousUnits = data.autonomousUnits;
     m_chestSystemState = data.chestSystemState;
     m_weatherSystemState = data.weatherSystemState;
+    m_weatherMaskCache = data.weatherMaskCache;
     m_xpSystemState = data.xpSystemState;
     m_infernalSystemState = data.infernalSystemState;
     normalizeLoadedBuildingVisuals(m_publicBuildings, m_sessionConfig.worldSeed);
@@ -299,6 +301,13 @@ bool GameEngine::restoreFromSave(const SaveData& data,
             config);
     } else if (m_weatherSystemState.revision == 0) {
         m_weatherSystemState.revision = 1;
+    }
+    const std::size_t expectedWeatherMaskCells = static_cast<std::size_t>(m_board.getDiameter() * m_board.getDiameter());
+    if (m_weatherMaskCache.revision != m_weatherSystemState.revision
+        || m_weatherMaskCache.diameter != m_board.getDiameter()
+        || m_weatherMaskCache.alphaByCell.size() != expectedWeatherMaskCells
+        || m_weatherMaskCache.shadeByCell.size() != expectedWeatherMaskCells) {
+        m_weatherMaskCache.clear();
     }
     m_nextMapObjectId = 1;
     for (const MapObject& object : m_mapObjects) {
@@ -357,10 +366,19 @@ SaveData GameEngine::createSaveData() const {
     data.autonomousUnits = m_autonomousUnits;
     data.chestSystemState = m_chestSystemState;
     data.weatherSystemState = m_weatherSystemState;
+    data.weatherMaskCache = m_weatherMaskCache;
     data.xpSystemState = m_xpSystemState;
     data.infernalSystemState = m_infernalSystemState;
     data.events = m_eventLog.getEvents();
     return data;
+}
+
+void GameEngine::ensureWeatherMaskUpToDate(const GameConfig& config) {
+    WeatherSystem::rebuildMask(m_board, m_weatherSystemState, config, m_weatherMaskCache);
+}
+
+void GameEngine::clearWeatherMaskCache() {
+    m_weatherMaskCache.clear();
 }
 
 bool GameEngine::validate(std::string* errorMessage) const {

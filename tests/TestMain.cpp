@@ -2458,6 +2458,11 @@ void testSessionValidatorRejectsInvalidOrdering() {
 
         std::string error;
         expect(engine.startNewSession(session, config, &error), error);
+        expect(engine.triggerCheatcodeWeatherFront(config),
+            "Multiplayer snapshot restore test should force a fog front so the host serializes a concrete authoritative weather mask.");
+        engine.ensureWeatherMaskUpToDate(config);
+        expect(!engine.weatherMaskCache().alphaByCell.empty(),
+            "Multiplayer snapshot restore test should build a concrete host weather mask before serializing the snapshot.");
 
         SaveManager saveManager;
         const std::string serializedSnapshot = saveManager.serialize(engine.createSaveData());
@@ -2473,6 +2478,13 @@ void testSessionValidatorRejectsInvalidOrdering() {
         expect(restoredEngine.gameName() == engine.gameName(),
             "MultiplayerEventCoordinator should restore the serialized multiplayer snapshot into the engine.");
         expect(restoredEngine.validate(&error), error);
+        expect(restoredEngine.weatherSystemState().revision == engine.weatherSystemState().revision,
+            "MultiplayerEventCoordinator should restore the authoritative weather revision from the host snapshot.");
+        expect(restoredEngine.weatherMaskCache().revision == engine.weatherMaskCache().revision
+                && restoredEngine.weatherMaskCache().diameter == engine.weatherMaskCache().diameter
+                && restoredEngine.weatherMaskCache().alphaByCell == engine.weatherMaskCache().alphaByCell
+                && restoredEngine.weatherMaskCache().shadeByCell == engine.weatherMaskCache().shadeByCell,
+            "MultiplayerEventCoordinator should restore the exact authoritative weather mask from the host snapshot so clients do not locally regenerate divergent fog shapes.");
 
         MultiplayerRuntime runtime;
         runtime.noteReconnectAwaiting("Connection lost.");
@@ -4042,6 +4054,13 @@ void testSaveManagerRoundTrip() {
             data.multiplayer.port = 41000;
             data.multiplayer.passwordSalt = "salt";
             data.multiplayer.passwordHash = MultiplayerPasswordUtils::computePasswordDigest("secret", data.multiplayer.passwordSalt);
+            data.weatherSystemState.hasActiveFront = true;
+            data.weatherSystemState.revision = 7;
+            data.weatherMaskCache.revision = 7;
+            data.weatherMaskCache.diameter = 3;
+            data.weatherMaskCache.hasActiveFront = true;
+            data.weatherMaskCache.alphaByCell = {0, 12, 24, 48, 96, 144, 192, 220, 255};
+            data.weatherMaskCache.shadeByCell = {210, 208, 206, 204, 202, 200, 198, 196, 194};
             data.refreshLegacyMetadataFromSession();
 
             SaveManager manager;
@@ -4053,6 +4072,12 @@ void testSaveManagerRoundTrip() {
             expect(loaded.gameName == data.gameName, "Serialized string snapshots should preserve the game name.");
             expect(loaded.worldSeed == data.worldSeed, "Serialized string snapshots should preserve the world seed.");
             expect(loaded.multiplayer.port == data.multiplayer.port, "Serialized string snapshots should preserve multiplayer metadata.");
+            expect(loaded.weatherSystemState.revision == data.weatherSystemState.revision,
+                "Serialized string snapshots should preserve the weather revision used to validate authoritative weather masks.");
+            expect(loaded.weatherMaskCache.revision == data.weatherMaskCache.revision
+                && loaded.weatherMaskCache.alphaByCell == data.weatherMaskCache.alphaByCell
+                && loaded.weatherMaskCache.shadeByCell == data.weatherMaskCache.shadeByCell,
+                "Serialized string snapshots should preserve the exact authoritative weather mask payload.");
         }
 
         void testMultiplayerPasswordDigest() {

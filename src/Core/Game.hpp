@@ -229,7 +229,6 @@ private:
     PanelActionCoordinator m_panelActionCoordinator;
     MultiplayerRuntimeCoordinator m_multiplayerRuntimeCoordinator;
     BuildOverlayCache m_buildOverlayCache;
-    WeatherMaskCache m_weatherMaskCache;
     mutable PendingTurnValidationCache m_pendingTurnValidationCache;
 
 #ifdef _WIN32
