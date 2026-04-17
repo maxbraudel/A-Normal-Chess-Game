@@ -6,12 +6,14 @@
 
 class Piece;
 class Building;
+class MapObject;
 struct Cell;
 
 enum class SelectionLayer {
     None,
     Piece,
     Building,
+    Object,
     Terrain
 };
 
@@ -19,8 +21,10 @@ struct LayeredSelectionStack {
     sf::Vector2i cellPos{0, 0};
     Piece* piece = nullptr;
     Building* building = nullptr;
+    MapObject* mapObject = nullptr;
     bool hasTerrain = false;
-    std::array<SelectionLayer, 3> layers{
+    std::array<SelectionLayer, 4> layers{
+        SelectionLayer::None,
         SelectionLayer::None,
         SelectionLayer::None,
         SelectionLayer::None

@@ -8,6 +8,7 @@
 #include "Buildings/Building.hpp"
 #include "Core/GameSessionConfig.hpp"
 #include "Kingdom/Kingdom.hpp"
+#include "Objects/MapObject.hpp"
 
 class GameConfig;
 class GameEngine;
@@ -33,6 +34,9 @@ public:
     std::vector<Building>& publicBuildings() { return m_publicBuildings; }
     const std::vector<Building>& publicBuildings() const { return m_publicBuildings; }
 
+    std::vector<MapObject>& mapObjects() { return m_mapObjects; }
+    const std::vector<MapObject>& mapObjects() const { return m_mapObjects; }
+
     Kingdom& kingdom(KingdomId id) { return m_kingdoms[kingdomIndex(id)]; }
     const Kingdom& kingdom(KingdomId id) const { return m_kingdoms[kingdomIndex(id)]; }
 
@@ -54,6 +58,7 @@ private:
     Board m_board;
     std::array<Kingdom, kNumKingdoms> m_kingdoms{Kingdom(KingdomId::White), Kingdom(KingdomId::Black)};
     std::vector<Building> m_publicBuildings;
+    std::vector<MapObject> m_mapObjects;
     bool m_valid = false;
     std::string m_errorMessage;
 };

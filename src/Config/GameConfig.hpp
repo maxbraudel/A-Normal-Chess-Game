@@ -68,6 +68,24 @@ public:
     int getBuildingWidth(BuildingType type) const;
     int getBuildingHeight(BuildingType type) const;
 
+    // Chests
+    int getChestMinSpawnTurn() const;
+    int getChestRespawnCooldownTurns() const;
+    int getChestSpawnRetryTurns() const;
+    int getChestWeibullShapeTimes100() const;
+    int getChestWeibullScaleTurns() const;
+    int getChestMinDistanceFromKings() const;
+    int getChestGoldRewardAmount() const;
+    int getChestMovementBonusAmount() const;
+    int getChestBuildBonusAmount() const;
+    int getChestLateGameTurn() const;
+    int getChestEarlyGoldWeight() const;
+    int getChestEarlyMovementBonusWeight() const;
+    int getChestEarlyBuildBonusWeight() const;
+    int getChestLateGoldWeight() const;
+    int getChestLateMovementBonusWeight() const;
+    int getChestLateBuildBonusWeight() const;
+
 private:
     // Map params
     int m_mapRadius;
@@ -161,6 +179,24 @@ private:
     int m_mineWidth, m_mineHeight;
     int m_farmWidth, m_farmHeight;
     int m_arenaWidth, m_arenaHeight;
+
+    // Chests
+    int m_chestMinSpawnTurn;
+    int m_chestRespawnCooldownTurns;
+    int m_chestSpawnRetryTurns;
+    int m_chestWeibullShapeTimes100;
+    int m_chestWeibullScaleTurns;
+    int m_chestMinDistanceFromKings;
+    int m_chestGoldRewardAmount;
+    int m_chestMovementBonusAmount;
+    int m_chestBuildBonusAmount;
+    int m_chestLateGameTurn;
+    int m_chestEarlyGoldWeight;
+    int m_chestEarlyMovementBonusWeight;
+    int m_chestEarlyBuildBonusWeight;
+    int m_chestLateGoldWeight;
+    int m_chestLateMovementBonusWeight;
+    int m_chestLateBuildBonusWeight;
 
     void setDefaults();
     

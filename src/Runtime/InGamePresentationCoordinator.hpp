@@ -13,6 +13,7 @@ class Building;
 class GameConfig;
 class GameEngine;
 class Kingdom;
+class MapObject;
 class UIManager;
 class TurnSystem;
 
@@ -34,6 +35,7 @@ struct InGamePresentationState {
     bool overviewVisible = false;
     const Piece* selectedPiece = nullptr;
     const Building* selectedBuilding = nullptr;
+    const MapObject* selectedMapObject = nullptr;
     const Cell* selectedCell = nullptr;
 };
 

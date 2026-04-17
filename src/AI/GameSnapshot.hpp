@@ -175,6 +175,8 @@ struct SnapBuilding {
 struct SnapKingdom {
     KingdomId id = KingdomId::White;
     int gold = 0;
+    int movementPointsMaxBonus = 0;
+    int buildPointsMaxBonus = 0;
     bool hasSpawnedBishop = false;
     int lastBishopSpawnParity = 0;
     std::vector<SnapPiece> pieces;

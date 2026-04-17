@@ -95,6 +95,7 @@ void InGamePresentationCoordinator::updateInGameUi(
         bindings.config,
         state.selectedPiece,
         state.selectedBuilding,
+        state.selectedMapObject,
         state.selectedCell
     };
     applyLeftPanelPresentation(
@@ -146,6 +147,13 @@ void InGamePresentationCoordinator::applyLeftPanelPresentation(
                                             presentation.allowCancelConstruction,
                                             presentation.resourceIncome,
                                             presentation.publicOccupation);
+                return;
+            }
+            break;
+
+        case FrontendLeftPanelKind::MapObject:
+            if (presentation.mapObject != nullptr) {
+                uiManager.showMapObjectPanel(*presentation.mapObject);
                 return;
             }
             break;

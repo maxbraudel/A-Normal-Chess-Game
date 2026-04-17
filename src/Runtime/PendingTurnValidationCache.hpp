@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <deque>
 
 #include "Kingdom/KingdomId.hpp"
 #include "Systems/CheckResponseRules.hpp"
@@ -16,12 +17,13 @@ public:
     template <typename Resolver>
     const CheckTurnValidation& resolve(const PendingTurnValidationCacheKey& key, Resolver&& resolver) {
         if (!m_valid || !sameKey(m_key, key)) {
-            m_validation = resolver();
+            m_history.push_back(resolver());
+            m_current = &m_history.back();
             m_key = key;
             m_valid = true;
         }
 
-        return m_validation;
+        return *m_current;
     }
 
     void invalidate() {
@@ -38,5 +40,6 @@ private:
 
     bool m_valid = false;
     PendingTurnValidationCacheKey m_key;
-    CheckTurnValidation m_validation;
+    std::deque<CheckTurnValidation> m_history;
+    const CheckTurnValidation* m_current = nullptr;
 };

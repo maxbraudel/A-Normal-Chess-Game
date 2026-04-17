@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "Core/GameplayNotification.hpp"
 #include "Core/GameState.hpp"
 #include "Input/InputSelectionBookmark.hpp"
 
@@ -39,6 +40,7 @@ struct TurnLifecycleCallbacks {
     std::function<void()> refreshTurnPhase;
     std::function<void()> updateUI;
     std::function<void()> persistLanHostSnapshot;
+    std::function<void(const GameplayNotification&)> showGameplayNotification;
 };
 
 class TurnLifecycleCoordinator {

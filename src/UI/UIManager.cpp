@@ -77,6 +77,7 @@ void UIManager::init(tgui::Gui& gui, const AssetManager& assets) {
     m_buildingPanel.init(m_leftSidebar);
     m_barracksPanel.init(m_leftSidebar);
     m_buildToolPanel.init(m_leftSidebar);
+    m_mapObjectPanel.init(m_leftSidebar);
     m_cellPanel.init(m_leftSidebar);
     m_eventLogPanel.init(m_rightHistorySection);
     m_plannedActionsPanel.init(m_rightPlannedActionsSection);
@@ -249,6 +250,11 @@ void UIManager::showBarracksPanel(const Building& barracks, const Kingdom& kingd
 void UIManager::showBuildToolPanel(const Kingdom& kingdom, const GameConfig& config, bool allowBuild) {
     activateLeftContext(LeftContextView::BuildTool);
     m_buildToolPanel.show(kingdom, config, allowBuild);
+}
+
+void UIManager::showMapObjectPanel(const MapObject& object) {
+    activateLeftContext(LeftContextView::MapObject);
+    m_mapObjectPanel.show(object);
 }
 
 void UIManager::showCellPanel(const Cell& cell) {
@@ -490,6 +496,7 @@ void UIManager::hideLeftContextPanels() {
     m_buildingPanel.hide();
     m_barracksPanel.hide();
     m_buildToolPanel.hide();
+    m_mapObjectPanel.hide();
     m_cellPanel.hide();
 }
 

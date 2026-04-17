@@ -7,6 +7,7 @@
 #include "Config/GameConfig.hpp"
 #include "Core/GameEngine.hpp"
 #include "Kingdom/Kingdom.hpp"
+#include "Objects/MapObject.hpp"
 
 namespace {
 
@@ -14,13 +15,15 @@ struct AIWorldSnapshot {
     Board board;
     std::array<Kingdom, kNumKingdoms> kingdoms;
     std::vector<Building> publicBuildings;
+    std::vector<MapObject> mapObjects;
 };
 
 AIWorldSnapshot makeAIWorldSnapshot(const Board& board,
                                     const std::array<Kingdom, kNumKingdoms>& kingdoms,
-                                    const std::vector<Building>& publicBuildings) {
-    AIWorldSnapshot snapshot{board, kingdoms, publicBuildings};
-    relinkBoardState(snapshot.board, snapshot.kingdoms, snapshot.publicBuildings);
+                                    const std::vector<Building>& publicBuildings,
+                                    const std::vector<MapObject>& mapObjects) {
+    AIWorldSnapshot snapshot{board, kingdoms, publicBuildings, mapObjects};
+    relinkBoardState(snapshot.board, snapshot.kingdoms, snapshot.publicBuildings, snapshot.mapObjects);
     return snapshot;
 }
 
@@ -37,6 +40,7 @@ bool AITurnRunner::isRunning() const {
 void AITurnRunner::start(const Board& board,
                          const std::array<Kingdom, kNumKingdoms>& kingdoms,
                          const std::vector<Building>& publicBuildings,
+                         const std::vector<MapObject>& mapObjects,
                          KingdomId activeKingdom,
                          int turnNumber,
                          const GameConfig& config,
@@ -50,7 +54,7 @@ void AITurnRunner::start(const Board& board,
     task->turnNumber = turnNumber;
     m_task = task;
 
-    AIWorldSnapshot snapshot = makeAIWorldSnapshot(board, kingdoms, publicBuildings);
+    AIWorldSnapshot snapshot = makeAIWorldSnapshot(board, kingdoms, publicBuildings, mapObjects);
     GameConfig configCopy = config;
     AIDirector directorWorker = director;
 

@@ -11,6 +11,12 @@ bool matchesBookmark(const Building& building, const InputSelectionBookmark& boo
         && building.rotationQuarterTurns == bookmark.selectedBuildingRotationQuarterTurns;
 }
 
+bool matchesBookmark(const MapObject& mapObject, const InputSelectionBookmark& bookmark) {
+    return bookmark.selectedMapObjectPosition.has_value()
+        && mapObject.position == *bookmark.selectedMapObjectPosition
+        && mapObject.type == bookmark.selectedMapObjectType;
+}
+
 } // namespace
 
 Piece* SelectionQueryCoordinator::findPieceById(const SelectionQueryView& view, int pieceId) {
@@ -66,6 +72,35 @@ Building* SelectionQueryCoordinator::findBuildingForBookmark(const SelectionQuer
             if (matchesBookmark(building, bookmark)) {
                 return &building;
             }
+        }
+    }
+
+    return nullptr;
+}
+
+MapObject* SelectionQueryCoordinator::findMapObjectById(const SelectionQueryView& view, int mapObjectId) {
+    if (mapObjectId < 0) {
+        return nullptr;
+    }
+
+    for (MapObject& object : view.mapObjects) {
+        if (object.id == mapObjectId) {
+            return &object;
+        }
+    }
+
+    return nullptr;
+}
+
+MapObject* SelectionQueryCoordinator::findMapObjectForBookmark(const SelectionQueryView& view,
+                                                               const InputSelectionBookmark& bookmark) {
+    if (MapObject* object = findMapObjectById(view, bookmark.mapObjectId)) {
+        return object;
+    }
+
+    for (MapObject& object : view.mapObjects) {
+        if (matchesBookmark(object, bookmark)) {
+            return &object;
         }
     }
 

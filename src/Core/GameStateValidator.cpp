@@ -150,6 +150,10 @@ bool GameStateValidator::validateSaveData(const SaveData& data, std::string* err
             writeError(errorMessage, "Save data contains negative gold for a kingdom.");
             return false;
         }
+        if (kingdom.movementPointsMaxBonus < 0 || kingdom.buildPointsMaxBonus < 0) {
+            writeError(errorMessage, "Save data contains negative permanent turn-point bonuses.");
+            return false;
+        }
 
         int kingCount = 0;
         for (const auto& piece : kingdom.pieces) {
@@ -196,12 +200,21 @@ bool GameStateValidator::validateSaveData(const SaveData& data, std::string* err
         }
     }
 
+    std::set<int> objectIds;
+    for (const auto& object : data.mapObjects) {
+        if (!objectIds.insert(object.id).second) {
+            writeError(errorMessage, "Save data contains duplicate map object IDs.");
+            return false;
+        }
+    }
+
     return true;
 }
 
 bool GameStateValidator::validateRuntimeState(const Board& board,
                                              const std::array<Kingdom, kNumKingdoms>& kingdoms,
                                              const std::vector<Building>& publicBuildings,
+                                             const std::vector<MapObject>& mapObjects,
                                              const TurnSystem& turnSystem,
                                              const GameSessionConfig& session,
                                              std::string* errorMessage) {
@@ -230,6 +243,10 @@ bool GameStateValidator::validateRuntimeState(const Board& board,
         }
         if (kingdom.gold < 0) {
             writeError(errorMessage, "Runtime state contains negative gold for a kingdom.");
+            return false;
+        }
+        if (kingdom.movementPointsMaxBonus < 0 || kingdom.buildPointsMaxBonus < 0) {
+            writeError(errorMessage, "Runtime state contains negative permanent turn-point bonuses.");
             return false;
         }
 
@@ -296,6 +313,23 @@ bool GameStateValidator::validateRuntimeState(const Board& board,
                 writeError(errorMessage, "Runtime state contains a public building outside board bounds.");
                 return false;
             }
+        }
+    }
+
+    std::set<int> objectIds;
+    for (const auto& object : mapObjects) {
+        if (!board.isInBounds(object.position.x, object.position.y)) {
+            writeError(errorMessage, "Runtime state contains a map object outside board bounds.");
+            return false;
+        }
+        if (!objectIds.insert(object.id).second) {
+            writeError(errorMessage, "Runtime state contains duplicate map object IDs.");
+            return false;
+        }
+        const Cell& cell = board.getCell(object.position.x, object.position.y);
+        if (cell.mapObject == nullptr || cell.mapObject->id != object.id) {
+            writeError(errorMessage, "Runtime board cell pointers are out of sync for a map object.");
+            return false;
         }
     }
 

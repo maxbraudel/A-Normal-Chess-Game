@@ -8,6 +8,7 @@
 #include "UI/BuildToolPanel.hpp"
 #include "UI/CellPanel.hpp"
 #include "UI/EventLogPanel.hpp"
+#include "UI/MapObjectPanel.hpp"
 #include "UI/PlannedActionsPanel.hpp"
 #include "UI/KingdomBalancePanel.hpp"
 #include "Systems/PublicBuildingOccupation.hpp"
@@ -24,6 +25,7 @@ class Piece;
 class Building;
 class Kingdom;
 class GameConfig;
+class MapObject;
 struct Cell;
 
 struct MultiplayerDialogAction {
@@ -55,6 +57,7 @@ public:
                            bool allowCancelConstruction,
                            const TurnCommand* pendingProduce = nullptr);
     void showBuildToolPanel(const Kingdom& kingdom, const GameConfig& config, bool allowBuild);
+    void showMapObjectPanel(const MapObject& object);
     void showCellPanel(const Cell& cell);
     void showSelectionEmptyState();
     void hideAllPanels();
@@ -89,6 +92,7 @@ public:
     BuildingPanel&  buildingPanel()   { return m_buildingPanel; }
     BarracksPanel&  barracksPanel()   { return m_barracksPanel; }
     BuildToolPanel& buildToolPanel()  { return m_buildToolPanel; }
+    MapObjectPanel& mapObjectPanel()  { return m_mapObjectPanel; }
     CellPanel&      cellPanel()       { return m_cellPanel; }
     EventLogPanel&  eventLogPanel()   { return m_eventLogPanel; }
     PlannedActionsPanel& plannedActionsPanel() { return m_plannedActionsPanel; }
@@ -101,6 +105,7 @@ private:
         Building,
         Barracks,
         BuildTool,
+        MapObject,
         Cell
     };
 
@@ -116,6 +121,7 @@ private:
     BuildingPanel   m_buildingPanel;
     BarracksPanel   m_barracksPanel;
     BuildToolPanel  m_buildToolPanel;
+    MapObjectPanel  m_mapObjectPanel;
     CellPanel       m_cellPanel;
     EventLogPanel   m_eventLogPanel;
     PlannedActionsPanel m_plannedActionsPanel;

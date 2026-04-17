@@ -4,6 +4,7 @@
 #include "Board/CellType.hpp"
 
 class Building;
+class MapObject;
 class Piece;
 
 struct Cell {
@@ -11,6 +12,7 @@ struct Cell {
     int terrainFlipMask = 0;
     std::uint8_t terrainBrightness = 255;
     Building* building = nullptr;
+    MapObject* mapObject = nullptr;
     Piece* piece = nullptr;
     bool isInCircle = false;
     sf::Vector2i position{0, 0};

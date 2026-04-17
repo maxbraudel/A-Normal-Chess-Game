@@ -8,6 +8,7 @@
 #include "Board/Board.hpp"
 #include "Core/GameSessionConfig.hpp"
 #include "Kingdom/Kingdom.hpp"
+#include "Objects/MapObject.hpp"
 #include "Save/SaveData.hpp"
 #include "Systems/TurnSystem.hpp"
 
@@ -18,6 +19,7 @@ public:
     static bool validateRuntimeState(const Board& board,
                                      const std::array<Kingdom, kNumKingdoms>& kingdoms,
                                      const std::vector<Building>& publicBuildings,
+                                     const std::vector<MapObject>& mapObjects,
                                      const TurnSystem& turnSystem,
                                      const GameSessionConfig& session,
                                      std::string* errorMessage = nullptr);

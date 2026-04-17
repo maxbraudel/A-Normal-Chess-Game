@@ -248,6 +248,12 @@ FrontendLeftPanelPresentation FrontendCoordinator::buildLeftPanelPresentation(
         return presentation;
     }
 
+    if (bindings.selectedMapObject != nullptr) {
+        presentation.kind = FrontendLeftPanelKind::MapObject;
+        presentation.mapObject = bindings.selectedMapObject;
+        return presentation;
+    }
+
     if (bindings.selectedCell != nullptr) {
         presentation.kind = FrontendLeftPanelKind::Cell;
         presentation.cell = bindings.selectedCell;

@@ -3,6 +3,11 @@
 #include <cstdint>
 #include <map>
 #include <vector>
+
+#include "Core/GameplayNotification.hpp"
+#include "Objects/MapObject.hpp"
+#include "Systems/ChestSystem.hpp"
+
 #include "Systems/TurnCommand.hpp"
 #include "Systems/TurnValidationContext.hpp"
 #include "Kingdom/KingdomId.hpp"
@@ -31,7 +36,7 @@ public:
     KingdomId getActiveKingdom() const;
     int getTurnNumber() const;
 
-    void syncPointBudget(const GameConfig& config);
+    void syncPointBudget(const GameConfig& config, const Kingdom& activeKingdom);
     bool queueCommand(const TurnCommand& cmd,
                       const TurnValidationContext& context,
                       BuildingFactory* buildingFactory = nullptr);
@@ -116,8 +121,30 @@ public:
 
     void commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemyKingdom,
                     std::vector<Building>& publicBuildings,
+                    std::vector<MapObject>& mapObjects,
+                    ChestSystemState& chestSystemState,
                     const GameConfig& config, EventLog& log,
+                    std::vector<GameplayNotification>& gameplayNotifications,
                     PieceFactory& pieceFactory, BuildingFactory& buildingFactory);
+    void commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemyKingdom,
+                    std::vector<Building>& publicBuildings,
+                    const GameConfig& config, EventLog& log,
+                    PieceFactory& pieceFactory, BuildingFactory& buildingFactory) {
+        std::vector<MapObject> mapObjects;
+        ChestSystemState chestSystemState{};
+        std::vector<GameplayNotification> gameplayNotifications;
+        commitTurn(board,
+                   activeKingdom,
+                   enemyKingdom,
+                   publicBuildings,
+                   mapObjects,
+                   chestSystemState,
+                   config,
+                   log,
+                   gameplayNotifications,
+                   pieceFactory,
+                   buildingFactory);
+    }
 
     void advanceTurn();
 

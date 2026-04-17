@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 
+#include "Core/GameplayNotification.hpp"
 #include "Core/GameState.hpp"
 #include "Kingdom/KingdomId.hpp"
 
@@ -20,6 +21,7 @@ struct AuthoritativeTurnExecution {
     KingdomId winner = KingdomId::White;
     int committedTurnNumber = 0;
     KingdomId committedActiveKingdom = KingdomId::White;
+    std::vector<GameplayNotification> notifications;
 };
 
 struct AuthoritativeCommitPlan {

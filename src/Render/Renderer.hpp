@@ -3,6 +3,8 @@
 #include <array>
 #include <set>
 #include <vector>
+
+#include "Objects/MapObject.hpp"
 #include "Render/OverlayRenderer.hpp"
 #include "Kingdom/KingdomId.hpp"
 
@@ -21,10 +23,12 @@ public:
     void draw(sf::RenderWindow& window, const Camera& camera,
               const Board& board, const std::array<Kingdom, kNumKingdoms>& kingdoms,
               const std::vector<Building>& publicBuildings,
+              const std::vector<MapObject>& mapObjects,
               const TurnSystem& turnSystem);
     void drawWorldBase(sf::RenderWindow& window, const Camera& camera,
                        const Board& board, const std::array<Kingdom, kNumKingdoms>& kingdoms,
-                       const std::vector<Building>& publicBuildings);
+                       const std::vector<Building>& publicBuildings,
+                       const std::vector<MapObject>& mapObjects);
     void drawPiecesLayer(sf::RenderWindow& window, const Camera& camera,
                          const std::array<Kingdom, kNumKingdoms>& kingdoms);
 
@@ -36,9 +40,11 @@ private:
     void drawBuildings(sf::RenderWindow& window, const Camera& camera,
                         const std::array<Kingdom, kNumKingdoms>& kingdoms,
                         const std::vector<Building>& publicBuildings);
+    void drawMapObjects(sf::RenderWindow& window, const std::vector<MapObject>& mapObjects);
     void drawPieces(sf::RenderWindow& window, const Camera& camera,
                     const std::array<Kingdom, kNumKingdoms>& kingdoms);
     void drawSingleBuilding(sf::RenderWindow& window, const Building& building);
+    void drawSingleMapObject(sf::RenderWindow& window, const MapObject& mapObject);
 
     const AssetManager* m_assets;
     int m_cellSize;

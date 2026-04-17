@@ -62,6 +62,7 @@ set(CORE_SOURCES
     src/Input/InputHandler.cpp
     src/Input/LayeredSelection.cpp
     src/Kingdom/Kingdom.cpp
+    src/Objects/MapObject.hpp
     src/Multiplayer/MultiplayerClient.cpp
     src/Multiplayer/MultiplayerRuntime.cpp
     src/Multiplayer/MultiplayerServer.cpp
@@ -93,6 +94,7 @@ set(CORE_SOURCES
     src/Save/SaveManager.cpp
     src/Systems/BuildReachRules.cpp
     src/Systems/BuildSystem.cpp
+    src/Systems/ChestSystem.cpp
     src/Systems/CheckResponseRules.cpp
     src/Systems/CheckSystem.cpp
     src/Systems/CombatSystem.cpp
@@ -119,6 +121,7 @@ set(CORE_SOURCES
     src/UI/InGameViewModelBuilder.cpp
     src/UI/KingdomBalancePanel.cpp
     src/UI/MainMenuUI.cpp
+    src/UI/MapObjectPanel.cpp
     src/UI/PiecePanel.cpp
     src/UI/PlannedActionsPanel.cpp
     src/UI/ToolBar.cpp

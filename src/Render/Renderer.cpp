@@ -8,6 +8,7 @@
 #include "Kingdom/KingdomId.hpp"
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingType.hpp"
+#include "Objects/MapObject.hpp"
 #include "Units/Piece.hpp"
 #include "Systems/TurnSystem.hpp"
 #include <algorithm>
@@ -68,18 +69,21 @@ OverlayRenderer& Renderer::getOverlay() { return m_overlay; }
 void Renderer::draw(sf::RenderWindow& window, const Camera& camera,
                      const Board& board, const std::array<Kingdom, kNumKingdoms>& kingdoms,
                      const std::vector<Building>& publicBuildings,
+                     const std::vector<MapObject>& mapObjects,
                      const TurnSystem& turnSystem) {
     (void)turnSystem;
-    drawWorldBase(window, camera, board, kingdoms, publicBuildings);
+    drawWorldBase(window, camera, board, kingdoms, publicBuildings, mapObjects);
     drawPiecesLayer(window, camera, kingdoms);
 }
 
 void Renderer::drawWorldBase(sf::RenderWindow& window, const Camera& camera,
                               const Board& board, const std::array<Kingdom, kNumKingdoms>& kingdoms,
-                              const std::vector<Building>& publicBuildings) {
+                              const std::vector<Building>& publicBuildings,
+                              const std::vector<MapObject>& mapObjects) {
     camera.applyTo(window);
     drawBoard(window, camera, board);
     drawBuildings(window, camera, kingdoms, publicBuildings);
+    drawMapObjects(window, mapObjects);
 }
 
 void Renderer::drawPiecesLayer(sf::RenderWindow& window, const Camera& camera,
@@ -169,6 +173,27 @@ void Renderer::drawSingleBuilding(sf::RenderWindow& window, const Building& buil
             window.draw(sprite);
         }
     }
+}
+
+void Renderer::drawMapObjects(sf::RenderWindow& window, const std::vector<MapObject>& mapObjects) {
+    if (!m_assets) return;
+
+    for (const MapObject& mapObject : mapObjects) {
+        drawSingleMapObject(window, mapObject);
+    }
+}
+
+void Renderer::drawSingleMapObject(sf::RenderWindow& window, const MapObject& mapObject) {
+    sf::Sprite sprite;
+    sprite.setTexture(m_assets->getMapObjectTexture(mapObject.type));
+    configureSpriteForCell(sprite,
+                           m_cellSize,
+                           static_cast<float>(mapObject.position.x * m_cellSize),
+                           static_cast<float>(mapObject.position.y * m_cellSize),
+                           0,
+                           0);
+    sprite.setColor(sf::Color::White);
+    window.draw(sprite);
 }
 
 void Renderer::setSkipPieceIds(const std::set<int>& ids) { m_skipPieceIds = ids; }

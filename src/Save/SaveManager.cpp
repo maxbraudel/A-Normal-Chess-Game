@@ -130,7 +130,9 @@ void SaveManager::writeJson(std::ostream& output, const SaveData& data) {
         for (std::size_t x = 0; x < normalized.grid[y].size(); ++x) {
             output << "{\"t\":" << static_cast<int>(normalized.grid[y][x].type)
                    << ",\"c\":" << (normalized.grid[y][x].isInCircle ? 1 : 0)
-                   << ",\"f\":" << normalized.grid[y][x].terrainFlipMask << "}";
+                   << ",\"f\":" << normalized.grid[y][x].terrainFlipMask
+                   << ",\"b\":" << static_cast<int>(normalized.grid[y][x].terrainBrightness)
+                   << "}";
             if (x + 1 < normalized.grid[y].size()) output << ",";
         }
         output << "]";
@@ -144,6 +146,8 @@ void SaveManager::writeJson(std::ostream& output, const SaveData& data) {
         const auto& kd = normalized.kingdoms[k];
         output << "  \"" << kingdomKeys[k] << "\": {\n";
         output << "    \"gold\": " << kd.gold << ",\n";
+        output << "    \"movementPointsMaxBonus\": " << kd.movementPointsMaxBonus << ",\n";
+        output << "    \"buildPointsMaxBonus\": " << kd.buildPointsMaxBonus << ",\n";
         output << "    \"hasSpawnedBishop\": " << (kd.hasSpawnedBishop ? 1 : 0) << ",\n";
         output << "    \"lastBishopSpawnParity\": " << kd.lastBishopSpawnParity << ",\n";
         output << "    \"pieces\": [";
@@ -167,6 +171,19 @@ void SaveManager::writeJson(std::ostream& output, const SaveData& data) {
         output << SaveManager::serializeBuilding(normalized.publicBuildings[i]);
     }
     output << "],\n";
+
+    output << "  \"mapObjects\": [";
+    for (std::size_t i = 0; i < normalized.mapObjects.size(); ++i) {
+        if (i > 0) output << ", ";
+        output << SaveManager::serializeMapObject(normalized.mapObjects[i]);
+    }
+    output << "],\n";
+
+    output << "  \"chestState\": {"
+           << "\"activeChestObjectId\":" << normalized.chestSystemState.activeChestObjectId << ","
+           << "\"nextSpawnTurn\":" << normalized.chestSystemState.nextSpawnTurn << ","
+           << "\"rngCounter\":" << normalized.chestSystemState.rngCounter
+           << "},\n";
 
     output << "  \"events\": [";
     for (std::size_t i = 0; i < normalized.events.size(); ++i) {
@@ -383,6 +400,19 @@ std::string SaveManager::serializeBuilding(const Building& b) {
     return ss.str();
 }
 
+std::string SaveManager::serializeMapObject(const MapObject& object) {
+    std::ostringstream ss;
+    ss << "{ \"id\": " << object.id
+       << ", \"type\": " << static_cast<int>(object.type)
+       << ", \"x\": " << object.position.x
+       << ", \"y\": " << object.position.y
+       << ", \"rewardType\": " << static_cast<int>(object.chest.reward.type)
+       << ", \"rewardAmount\": " << object.chest.reward.amount
+       << ", \"spawnTurn\": " << object.chest.spawnTurn
+       << " }";
+    return ss.str();
+}
+
 std::string SaveManager::serializeEvent(const EventLog::Event& e) {
     std::ostringstream ss;
     ss << "{ \"turn\": " << e.turnNumber
@@ -492,6 +522,18 @@ Building SaveManager::parseBuilding(const std::string& json) {
     return b;
 }
 
+MapObject SaveManager::parseMapObject(const std::string& json) {
+    MapObject object;
+    object.id = extractInt(json, "id", -1);
+    object.type = static_cast<MapObjectType>(extractInt(json, "type", 0));
+    object.position.x = extractInt(json, "x", 0);
+    object.position.y = extractInt(json, "y", 0);
+    object.chest.reward.type = static_cast<ChestRewardType>(extractInt(json, "rewardType", 0));
+    object.chest.reward.amount = extractInt(json, "rewardAmount", 0);
+    object.chest.spawnTurn = extractInt(json, "spawnTurn", 0);
+    return object;
+}
+
 // --- Save / Load ---
 
 bool SaveManager::save(const std::string& filepath, const SaveData& data) {
@@ -569,6 +611,8 @@ bool SaveManager::deserialize(const std::string& json, SaveData& outData) {
         std::string section = extractSection(json, kingdomKeys[k]);
         outData.kingdoms[k].id = id;
         outData.kingdoms[k].gold = extractInt(section, "gold", 0);
+        outData.kingdoms[k].movementPointsMaxBonus = extractInt(section, "movementPointsMaxBonus", 0);
+        outData.kingdoms[k].buildPointsMaxBonus = extractInt(section, "buildPointsMaxBonus", 0);
         outData.kingdoms[k].hasSpawnedBishop = extractInt(section, "hasSpawnedBishop", 0) != 0;
         outData.kingdoms[k].lastBishopSpawnParity = extractInt(section, "lastBishopSpawnParity", 0) & 1;
 
@@ -592,6 +636,20 @@ bool SaveManager::deserialize(const std::string& json, SaveData& outData) {
     for (const auto& elem : pubElements)
         outData.publicBuildings.push_back(parseBuilding(elem));
 
+    std::string mapObjectsArray = extractArray(json, "mapObjects");
+    outData.mapObjects.clear();
+    for (const auto& elem : splitArrayElements(mapObjectsArray)) {
+        outData.mapObjects.push_back(parseMapObject(elem));
+    }
+
+    const std::string chestStateSection = extractSection(json, "chestState");
+    outData.chestSystemState.activeChestObjectId = extractInt(
+        chestStateSection, "activeChestObjectId", -1);
+    outData.chestSystemState.nextSpawnTurn = extractInt(chestStateSection, "nextSpawnTurn", 0);
+    outData.chestSystemState.rngCounter = static_cast<std::uint32_t>(std::max(
+        0,
+        extractInt(chestStateSection, "rngCounter", 0)));
+
     std::string gridArray = extractArray(json, "grid");
     outData.grid.clear();
     for (const auto& rowElement : splitArrayElements(gridArray)) {
@@ -601,6 +659,7 @@ bool SaveManager::deserialize(const std::string& json, SaveData& outData) {
             cell.type = static_cast<CellType>(extractInt(cellElement, "t", static_cast<int>(CellType::Grass)));
             cell.isInCircle = extractInt(cellElement, "c", 0) != 0;
             cell.terrainFlipMask = extractInt(cellElement, "f", -1);
+            cell.terrainBrightness = static_cast<std::uint8_t>(std::clamp(extractInt(cellElement, "b", 255), 0, 255));
             row.push_back(cell);
         }
         outData.grid.push_back(std::move(row));

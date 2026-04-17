@@ -8,6 +8,7 @@
 #include "Buildings/StructurePlacementProfile.hpp"
 #include "Config/GameConfig.hpp"
 #include "Kingdom/Kingdom.hpp"
+#include "Objects/MapObject.hpp"
 #include "Render/Camera.hpp"
 #include "Render/Renderer.hpp"
 #include "Render/StructureOverlay.hpp"
@@ -123,6 +124,8 @@ WorldRenderPlan RenderCoordinator::buildWorldRenderPlan(
                 state.selectedBuilding->getFootprintWidth(),
                 state.selectedBuilding->getFootprintHeight()
             });
+        } else if (state.selectedMapObject != nullptr) {
+            plan.selectionFrames.push_back(SelectionFrameSpec{state.selectedMapObject->position, 1, 1});
         } else if (state.selectedCell.has_value()) {
             plan.selectionFrames.push_back(SelectionFrameSpec{*state.selectedCell, 1, 1});
         }
@@ -205,7 +208,8 @@ void RenderCoordinator::renderWorldFrame(WorldRenderBindings& bindings,
                                     bindings.camera,
                                     bindings.displayedBoard,
                                     bindings.displayedKingdoms,
-                                    bindings.displayedPublicBuildings);
+                                    bindings.displayedPublicBuildings,
+                                    bindings.displayedMapObjects);
 
     if (plan.showOrientationCheckerboard) {
         bindings.renderer.getOverlay().drawOrientationCheckerboard(

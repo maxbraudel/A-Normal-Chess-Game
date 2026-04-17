@@ -27,6 +27,7 @@ class GameConfig;
 class GameEngine;
 class Kingdom;
 class Piece;
+class MapObject;
 struct TurnCommand;
 class TurnSystem;
 class UIManager;
@@ -76,6 +77,7 @@ struct FrontendPanelBindings {
     const GameConfig& config;
     const Piece* selectedPiece = nullptr;
     const Building* selectedBuilding = nullptr;
+    const MapObject* selectedMapObject = nullptr;
     const Cell* selectedCell = nullptr;
 };
 
@@ -85,6 +87,7 @@ enum class FrontendLeftPanelKind {
     Building,
     Barracks,
     BuildTool,
+    MapObject,
     Cell
 };
 
@@ -92,6 +95,7 @@ struct FrontendLeftPanelPresentation {
     FrontendLeftPanelKind kind = FrontendLeftPanelKind::EmptyState;
     const Piece* piece = nullptr;
     const Building* building = nullptr;
+    const MapObject* mapObject = nullptr;
     const Cell* cell = nullptr;
     KingdomId viewedKingdom = KingdomId::White;
     bool allowBuild = false;

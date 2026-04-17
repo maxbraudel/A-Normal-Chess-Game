@@ -124,6 +124,7 @@ private:
     void reconcileSelectionBookmark(const InputSelectionBookmark& bookmark);
     Piece* selectedDisplayedPiece();
     Building* selectedDisplayedBuilding();
+    MapObject* selectedDisplayedMapObject();
     void activateSelectTool();
     void refreshBuildableCellsOverlay(const InteractionPermissions& permissions);
     Board& displayedBoard();
@@ -132,6 +133,8 @@ private:
     const std::array<Kingdom, kNumKingdoms>& displayedKingdoms() const;
     std::vector<Building>& displayedPublicBuildings();
     const std::vector<Building>& displayedPublicBuildings() const;
+    std::vector<MapObject>& displayedMapObjects();
+    const std::vector<MapObject>& displayedMapObjects() const;
     Kingdom& displayedKingdom(KingdomId id);
     const Kingdom& displayedKingdom(KingdomId id) const;
 
@@ -149,6 +152,9 @@ private:
 
     std::vector<Building>& publicBuildings() { return m_engine.publicBuildings(); }
     const std::vector<Building>& publicBuildings() const { return m_engine.publicBuildings(); }
+
+    std::vector<MapObject>& mapObjects() { return m_engine.mapObjects(); }
+    const std::vector<MapObject>& mapObjects() const { return m_engine.mapObjects(); }
 
     TurnSystem& turnSystem() { return m_engine.turnSystem(); }
     const TurnSystem& turnSystem() const { return m_engine.turnSystem(); }

@@ -7,9 +7,12 @@
 #include "Board/Board.hpp"
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingFactory.hpp"
+#include "Core/GameplayNotification.hpp"
 #include "Core/GameSessionConfig.hpp"
 #include "Kingdom/Kingdom.hpp"
+#include "Objects/MapObject.hpp"
 #include "Save/SaveData.hpp"
+#include "Systems/ChestSystem.hpp"
 #include "Systems/CheckResponseRules.hpp"
 #include "Systems/EventLog.hpp"
 #include "Systems/TurnSystem.hpp"
@@ -20,6 +23,10 @@ class GameConfig;
 
 void relinkBoardState(Board& board,
                       std::array<Kingdom, kNumKingdoms>& kingdoms,
+                      std::vector<Building>& publicBuildings,
+                      std::vector<MapObject>& mapObjects);
+void relinkBoardState(Board& board,
+                      std::array<Kingdom, kNumKingdoms>& kingdoms,
                       std::vector<Building>& publicBuildings);
 
 struct PendingTurnCommitResult {
@@ -28,6 +35,7 @@ struct PendingTurnCommitResult {
     KingdomId winner = KingdomId::White;
     CheckTurnValidation activeValidation;
     CheckTurnValidation nextTurnValidation;
+    std::vector<GameplayNotification> notifications;
 };
 
 struct PendingTurnStagingResult {
@@ -68,6 +76,11 @@ public:
     std::vector<Building>& publicBuildings() { return m_publicBuildings; }
     const std::vector<Building>& publicBuildings() const { return m_publicBuildings; }
 
+    std::vector<MapObject>& mapObjects() { return m_mapObjects; }
+    const std::vector<MapObject>& mapObjects() const { return m_mapObjects; }
+
+    const ChestSystemState& chestSystemState() const { return m_chestSystemState; }
+
     TurnSystem& turnSystem() { return m_turnSystem; }
     const TurnSystem& turnSystem() const { return m_turnSystem; }
 
@@ -102,13 +115,17 @@ public:
 
 private:
     void syncFactoryIds();
+    void spawnChestIfDue(const GameConfig& config);
 
     GameSessionConfig m_sessionConfig = makeDefaultGameSessionConfig(GameMode::HumanVsAI);
     Board m_board;
     std::array<Kingdom, kNumKingdoms> m_kingdoms;
     std::vector<Building> m_publicBuildings;
+    std::vector<MapObject> m_mapObjects;
+    ChestSystemState m_chestSystemState{};
     TurnSystem m_turnSystem;
     EventLog m_eventLog;
     PieceFactory m_pieceFactory;
     BuildingFactory m_buildingFactory;
+    int m_nextMapObjectId = 1;
 };

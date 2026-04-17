@@ -13,6 +13,7 @@ class Board;
 class Building;
 class GameConfig;
 class Kingdom;
+class MapObject;
 
 class AITurnRunner {
 public:
@@ -27,6 +28,7 @@ public:
     void start(const Board& board,
                const std::array<Kingdom, kNumKingdoms>& kingdoms,
                const std::vector<Building>& publicBuildings,
+               const std::vector<MapObject>& mapObjects,
                KingdomId activeKingdom,
                int turnNumber,
                const GameConfig& config,

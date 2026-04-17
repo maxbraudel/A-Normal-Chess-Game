@@ -69,6 +69,7 @@ void AssetManager::loadAll(const std::string& assetsDir) {
     loadTexture("ui_shield_black", assetsDir + "/textures/ui/shield_black.png");
     loadTexture("ui_build_ongoing", assetsDir + "/textures/ui/build_ongoing.png");
     loadTexture("ui_move_ongoing", assetsDir + "/textures/ui/move_ongoing.png");
+    loadTexture("object_chest", assetsDir + "/textures/objects/chest.png");
 
     // Font
     if (m_font.loadFromFile(assetsDir + "/fonts/default.ttf")) {
@@ -120,6 +121,15 @@ std::string AssetManager::buildingChunkKey(BuildingType type, int localX, int lo
     return StructureChunkRegistry::makeChunkTextureKey(type, localX, localY);
 }
 
+std::string AssetManager::mapObjectKey(MapObjectType type) const {
+    switch (type) {
+        case MapObjectType::Chest:
+            return "object_chest";
+    }
+
+    return "";
+}
+
 const sf::Texture& AssetManager::getCellTexture(CellType type) const {
     auto key = cellKey(type);
     auto it = m_textures.find(key);
@@ -148,6 +158,13 @@ const sf::Texture& AssetManager::getBuildingTexture(BuildingType type, int local
 
 const sf::Texture& AssetManager::getPieceTexture(PieceType type, KingdomId kingdom) const {
     auto key = pieceKey(type, kingdom);
+    auto it = m_textures.find(key);
+    if (it != m_textures.end()) return it->second;
+    return m_fallback;
+}
+
+const sf::Texture& AssetManager::getMapObjectTexture(MapObjectType type) const {
+    auto key = mapObjectKey(type);
     auto it = m_textures.find(key);
     if (it != m_textures.end()) return it->second;
     return m_fallback;

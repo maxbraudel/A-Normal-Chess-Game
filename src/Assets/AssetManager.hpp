@@ -5,6 +5,7 @@
 #include <SFML/Graphics/Font.hpp>
 #include "Board/CellType.hpp"
 #include "Buildings/BuildingType.hpp"
+#include "Objects/MapObjectType.hpp"
 #include "Units/PieceType.hpp"
 #include "Kingdom/KingdomId.hpp"
 
@@ -17,6 +18,7 @@ public:
     const sf::Texture& getBuildingTexture(BuildingType type) const;
     const sf::Texture& getBuildingTexture(BuildingType type, int localX, int localY) const;
     const sf::Texture& getPieceTexture(PieceType type, KingdomId kingdom) const;
+    const sf::Texture& getMapObjectTexture(MapObjectType type) const;
     const sf::Texture& getUITexture(const std::string& name) const;
     const sf::Font& getFont() const;
     bool hasFont() const;
@@ -32,4 +34,5 @@ private:
     std::string cellKey(CellType type) const;
     std::string buildingKey(BuildingType type) const;
     std::string buildingChunkKey(BuildingType type, int localX, int localY) const;
+    std::string mapObjectKey(MapObjectType type) const;
 };

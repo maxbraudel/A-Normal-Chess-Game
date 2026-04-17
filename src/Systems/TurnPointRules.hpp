@@ -14,7 +14,9 @@ struct TurnPointBudget {
 
 class TurnPointRules {
 public:
-    static TurnPointBudget makeBudget(const GameConfig& config);
+    static TurnPointBudget makeBudget(const GameConfig& config,
+                                      int movementPointsMaxBonus = 0,
+                                      int buildPointsMaxBonus = 0);
     static int movementCost(PieceType type, const GameConfig& config);
     static int buildCost(BuildingType type, const GameConfig& config);
     static int moveAllowance(PieceType type, const GameConfig& config);

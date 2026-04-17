@@ -124,6 +124,22 @@ void GameConfig::setDefaults() {
     m_mineWidth = 6; m_mineHeight = 6;
     m_farmWidth = 6; m_farmHeight = 4;
     m_arenaWidth = 4; m_arenaHeight = 4;
+    m_chestMinSpawnTurn = 4;
+    m_chestRespawnCooldownTurns = 4;
+    m_chestSpawnRetryTurns = 1;
+    m_chestWeibullShapeTimes100 = 180;
+    m_chestWeibullScaleTurns = 6;
+    m_chestMinDistanceFromKings = 6;
+    m_chestGoldRewardAmount = 35;
+    m_chestMovementBonusAmount = 1;
+    m_chestBuildBonusAmount = 1;
+    m_chestLateGameTurn = 10;
+    m_chestEarlyGoldWeight = 8;
+    m_chestEarlyMovementBonusWeight = 3;
+    m_chestEarlyBuildBonusWeight = 3;
+    m_chestLateGoldWeight = 4;
+    m_chestLateMovementBonusWeight = 6;
+    m_chestLateBuildBonusWeight = 6;
 
     alignChunkedStructureDimensions("barracks", BuildingType::Barracks, m_barracksWidth, m_barracksHeight);
     alignChunkedStructureDimensions("church", BuildingType::Church, m_churchWidth, m_churchHeight);
@@ -372,6 +388,65 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
         m_arenaHeight = extractInt(buildSec, "arena_height", m_arenaHeight);
     }
 
+    std::string chestSec = extractSection(root, "chests");
+    if (!chestSec.empty()) {
+        m_chestMinSpawnTurn = extractInt(chestSec, "min_spawn_turn", m_chestMinSpawnTurn);
+        m_chestRespawnCooldownTurns = extractInt(
+            chestSec, "respawn_cooldown_turns", m_chestRespawnCooldownTurns);
+        m_chestSpawnRetryTurns = extractInt(chestSec, "spawn_retry_turns", m_chestSpawnRetryTurns);
+        m_chestWeibullShapeTimes100 = extractInt(
+            chestSec, "weibull_shape_times_100", m_chestWeibullShapeTimes100);
+        m_chestWeibullScaleTurns = extractInt(chestSec, "weibull_scale_turns", m_chestWeibullScaleTurns);
+        m_chestMinDistanceFromKings = extractInt(
+            chestSec, "min_distance_from_kings", m_chestMinDistanceFromKings);
+        m_chestGoldRewardAmount = extractInt(chestSec, "gold_reward_amount", m_chestGoldRewardAmount);
+        m_chestMovementBonusAmount = extractInt(
+            chestSec, "movement_bonus_amount", m_chestMovementBonusAmount);
+        m_chestBuildBonusAmount = extractInt(chestSec, "build_bonus_amount", m_chestBuildBonusAmount);
+        m_chestLateGameTurn = extractInt(chestSec, "late_game_turn", m_chestLateGameTurn);
+        m_chestEarlyGoldWeight = extractInt(chestSec, "early_gold_weight", m_chestEarlyGoldWeight);
+        m_chestEarlyMovementBonusWeight = extractInt(
+            chestSec, "early_movement_bonus_weight", m_chestEarlyMovementBonusWeight);
+        m_chestEarlyBuildBonusWeight = extractInt(
+            chestSec, "early_build_bonus_weight", m_chestEarlyBuildBonusWeight);
+        m_chestLateGoldWeight = extractInt(chestSec, "late_gold_weight", m_chestLateGoldWeight);
+        m_chestLateMovementBonusWeight = extractInt(
+            chestSec, "late_movement_bonus_weight", m_chestLateMovementBonusWeight);
+        m_chestLateBuildBonusWeight = extractInt(
+            chestSec, "late_build_bonus_weight", m_chestLateBuildBonusWeight);
+    }
+
+    m_chestMinSpawnTurn = clampNonNegativeConfigValue("chests.min_spawn_turn", m_chestMinSpawnTurn);
+    m_chestRespawnCooldownTurns = clampNonNegativeConfigValue(
+        "chests.respawn_cooldown_turns", m_chestRespawnCooldownTurns);
+    m_chestSpawnRetryTurns = clampNonNegativeConfigValue(
+        "chests.spawn_retry_turns", m_chestSpawnRetryTurns);
+    m_chestWeibullShapeTimes100 = clampNonNegativeConfigValue(
+        "chests.weibull_shape_times_100", m_chestWeibullShapeTimes100);
+    m_chestWeibullScaleTurns = clampNonNegativeConfigValue(
+        "chests.weibull_scale_turns", m_chestWeibullScaleTurns);
+    m_chestMinDistanceFromKings = clampNonNegativeConfigValue(
+        "chests.min_distance_from_kings", m_chestMinDistanceFromKings);
+    m_chestGoldRewardAmount = clampNonNegativeConfigValue(
+        "chests.gold_reward_amount", m_chestGoldRewardAmount);
+    m_chestMovementBonusAmount = clampNonNegativeConfigValue(
+        "chests.movement_bonus_amount", m_chestMovementBonusAmount);
+    m_chestBuildBonusAmount = clampNonNegativeConfigValue(
+        "chests.build_bonus_amount", m_chestBuildBonusAmount);
+    m_chestLateGameTurn = clampNonNegativeConfigValue("chests.late_game_turn", m_chestLateGameTurn);
+    m_chestEarlyGoldWeight = clampNonNegativeConfigValue(
+        "chests.early_gold_weight", m_chestEarlyGoldWeight);
+    m_chestEarlyMovementBonusWeight = clampNonNegativeConfigValue(
+        "chests.early_movement_bonus_weight", m_chestEarlyMovementBonusWeight);
+    m_chestEarlyBuildBonusWeight = clampNonNegativeConfigValue(
+        "chests.early_build_bonus_weight", m_chestEarlyBuildBonusWeight);
+    m_chestLateGoldWeight = clampNonNegativeConfigValue(
+        "chests.late_gold_weight", m_chestLateGoldWeight);
+    m_chestLateMovementBonusWeight = clampNonNegativeConfigValue(
+        "chests.late_movement_bonus_weight", m_chestLateMovementBonusWeight);
+    m_chestLateBuildBonusWeight = clampNonNegativeConfigValue(
+        "chests.late_build_bonus_weight", m_chestLateBuildBonusWeight);
+
     alignChunkedStructureDimensions("barracks", BuildingType::Barracks, m_barracksWidth, m_barracksHeight);
     alignChunkedStructureDimensions("church", BuildingType::Church, m_churchWidth, m_churchHeight);
     alignChunkedStructureDimensions("mine", BuildingType::Mine, m_mineWidth, m_mineHeight);
@@ -548,3 +623,20 @@ int GameConfig::getBuildingHeight(BuildingType type) const {
     }
     return 1;
 }
+
+int GameConfig::getChestMinSpawnTurn() const { return m_chestMinSpawnTurn; }
+int GameConfig::getChestRespawnCooldownTurns() const { return m_chestRespawnCooldownTurns; }
+int GameConfig::getChestSpawnRetryTurns() const { return m_chestSpawnRetryTurns; }
+int GameConfig::getChestWeibullShapeTimes100() const { return m_chestWeibullShapeTimes100; }
+int GameConfig::getChestWeibullScaleTurns() const { return m_chestWeibullScaleTurns; }
+int GameConfig::getChestMinDistanceFromKings() const { return m_chestMinDistanceFromKings; }
+int GameConfig::getChestGoldRewardAmount() const { return m_chestGoldRewardAmount; }
+int GameConfig::getChestMovementBonusAmount() const { return m_chestMovementBonusAmount; }
+int GameConfig::getChestBuildBonusAmount() const { return m_chestBuildBonusAmount; }
+int GameConfig::getChestLateGameTurn() const { return m_chestLateGameTurn; }
+int GameConfig::getChestEarlyGoldWeight() const { return m_chestEarlyGoldWeight; }
+int GameConfig::getChestEarlyMovementBonusWeight() const { return m_chestEarlyMovementBonusWeight; }
+int GameConfig::getChestEarlyBuildBonusWeight() const { return m_chestEarlyBuildBonusWeight; }
+int GameConfig::getChestLateGoldWeight() const { return m_chestLateGoldWeight; }
+int GameConfig::getChestLateMovementBonusWeight() const { return m_chestLateMovementBonusWeight; }
+int GameConfig::getChestLateBuildBonusWeight() const { return m_chestLateBuildBonusWeight; }

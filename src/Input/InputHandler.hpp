@@ -11,6 +11,7 @@
 #include "Input/InputSelectionBookmark.hpp"
 #include "Input/LayeredSelection.hpp"
 #include "Buildings/BuildingType.hpp"
+#include "Objects/MapObjectType.hpp"
 
 class Camera;
 class Board;
@@ -20,6 +21,7 @@ class GameConfig;
 class Kingdom;
 class Piece;
 class Building;
+class MapObject;
 
 class InputHandler {
 public:
@@ -33,6 +35,7 @@ public:
 
     int getSelectedPieceId() const;
     int getSelectedBuildingId() const;
+    int getSelectedMapObjectId() const;
     bool hasSelectedCell() const;
     sf::Vector2i getSelectedCell() const;
     bool hasSelectionAnchorCell() const;
@@ -56,15 +59,25 @@ public:
     void reconcileSelection(const InputSelectionBookmark& bookmark,
                             Piece* selectedPiece,
                             Building* selectedBuilding,
+                            MapObject* selectedMapObject,
                             const InputContext& context);
+    void reconcileSelection(const InputSelectionBookmark& bookmark,
+                            Piece* selectedPiece,
+                            Building* selectedBuilding,
+                            const InputContext& context) {
+        reconcileSelection(bookmark, selectedPiece, selectedBuilding, nullptr, context);
+    }
     void clearSelection();
 
 private:
     ToolState m_currentTool;
     int m_selectedPieceId;
     int m_selectedBuildingId;
+    int m_selectedMapObjectId;
     std::optional<sf::Vector2i> m_selectedBuildingOrigin;
+    std::optional<sf::Vector2i> m_selectedMapObjectPosition;
     BuildingType m_selectedBuildingType;
+    MapObjectType m_selectedMapObjectType;
     KingdomId m_selectedBuildingOwner;
     bool m_selectedBuildingIsNeutral;
     int m_selectedBuildingRotationQuarterTurns;
@@ -104,6 +117,7 @@ private:
     void activatePieceSelection(Piece* piece, sf::Vector2i cellPos,
                                 const InputContext& context, bool allowCommands);
     void activateBuildingSelection(Building* building, sf::Vector2i cellPos);
+    void activateMapObjectSelection(MapObject* mapObject, sf::Vector2i cellPos);
     void activateTerrainSelection(sf::Vector2i cellPos);
     void setActiveSelectionMetadata(SelectionLayer layer, sf::Vector2i cellPos);
     void clearSelectionCycle();

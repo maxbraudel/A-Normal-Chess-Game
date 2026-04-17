@@ -23,6 +23,7 @@ AuthoritativeTurnExecution TurnCoordinator::executeAuthoritativeTurn() {
     execution.committed = commitResult.committed;
     execution.gameOver = commitResult.gameOver;
     execution.winner = commitResult.winner;
+    execution.notifications = commitResult.notifications;
 
     if (commitResult.committed) {
         m_debugRecorder.logTurnState(execution.committedTurnNumber,

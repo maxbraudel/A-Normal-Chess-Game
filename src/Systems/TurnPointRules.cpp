@@ -2,9 +2,11 @@
 
 #include "Config/GameConfig.hpp"
 
-TurnPointBudget TurnPointRules::makeBudget(const GameConfig& config) {
-    const int movementPoints = config.getMovementPointsPerTurn();
-    const int buildPoints = config.getBuildPointsPerTurn();
+TurnPointBudget TurnPointRules::makeBudget(const GameConfig& config,
+                                           int movementPointsMaxBonus,
+                                           int buildPointsMaxBonus) {
+    const int movementPoints = config.getMovementPointsPerTurn() + std::max(0, movementPointsMaxBonus);
+    const int buildPoints = config.getBuildPointsPerTurn() + std::max(0, buildPointsMaxBonus);
     return {movementPoints, movementPoints, buildPoints, buildPoints};
 }
 

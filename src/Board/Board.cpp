@@ -10,6 +10,7 @@ Board::Board() : m_radius(0), m_diameter(0) {
     m_voidCell.terrainFlipMask = 0;
     m_voidCell.terrainBrightness = 255;
     m_voidCell.isInCircle = false;
+    m_voidCell.mapObject = nullptr;
 }
 
 void Board::init(int radius) {
@@ -38,6 +39,7 @@ void Board::init(int radius) {
             cell.terrainFlipMask = 0;
             cell.terrainBrightness = 255;
             cell.building = nullptr;
+            cell.mapObject = nullptr;
             cell.piece = nullptr;
         }
     }

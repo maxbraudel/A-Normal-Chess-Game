@@ -16,6 +16,7 @@
 #include "Core/InteractionPermissions.hpp"
 #include "Core/ToolState.hpp"
 #include "Kingdom/KingdomId.hpp"
+#include "Objects/MapObject.hpp"
 
 class AssetManager;
 class Board;
@@ -62,6 +63,7 @@ struct WorldRenderState {
     KingdomId activeKingdom = KingdomId::White;
     const Piece* selectedPiece = nullptr;
     const Building* selectedBuilding = nullptr;
+    const MapObject* selectedMapObject = nullptr;
     std::optional<sf::Vector2i> selectedCell;
     bool selectedOriginDangerous = false;
     std::vector<sf::Vector2i> validMoves;
@@ -97,6 +99,7 @@ struct WorldRenderBindings {
     const Board& displayedBoard;
     const std::array<Kingdom, kNumKingdoms>& displayedKingdoms;
     const std::vector<Building>& displayedPublicBuildings;
+    const std::vector<MapObject>& displayedMapObjects;
     const GameConfig& config;
 };
 

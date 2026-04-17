@@ -175,6 +175,8 @@ GameSnapshot ForwardModel::createSnapshot(const Board& board,
     auto assignKingdom = [&](const Kingdom& kingdom) {
         SnapKingdom& target = (kingdom.id == KingdomId::White) ? s.white : s.black;
         target.gold = kingdom.gold;
+        target.movementPointsMaxBonus = kingdom.movementPointsMaxBonus;
+        target.buildPointsMaxBonus = kingdom.buildPointsMaxBonus;
         target.hasSpawnedBishop = kingdom.hasSpawnedBishop;
         target.lastBishopSpawnParity = kingdom.lastBishopSpawnParity;
         target.pieces.clear();
@@ -422,7 +424,10 @@ bool ForwardModel::applyMove(GameSnapshot& s, int pieceId, sf::Vector2i dest,
     SnapTurnBudget& budget = s.turnBudget(mover);
     if (budget.movementPointsMax <= 0 && budget.buildPointsMax <= 0
         && budget.pieceMoveCounts.empty()) {
-        budget = toSnapTurnBudget(TurnPointRules::makeBudget(config));
+        budget = toSnapTurnBudget(TurnPointRules::makeBudget(
+            config,
+            myK.movementPointsMaxBonus,
+            myK.buildPointsMaxBonus));
     }
     const int moveAllowance = TurnPointRules::moveAllowance(piece->type, config);
     if (budget.moveCountForPiece(pieceId) >= moveAllowance) return false;
@@ -455,7 +460,10 @@ bool ForwardModel::applyBuild(GameSnapshot& s, KingdomId k, BuildingType type,
     SnapTurnBudget& budget = s.turnBudget(k);
     if (budget.movementPointsMax <= 0 && budget.buildPointsMax <= 0
         && budget.pieceMoveCounts.empty()) {
-        budget = toSnapTurnBudget(TurnPointRules::makeBudget(config));
+        budget = toSnapTurnBudget(TurnPointRules::makeBudget(
+            config,
+            myK.movementPointsMaxBonus,
+            myK.buildPointsMaxBonus));
     }
     const int buildPointCost = TurnPointRules::buildCost(type, config);
     if (budget.buildPointsRemaining < buildPointCost) return false;
@@ -614,7 +622,11 @@ void ForwardModel::advanceTurn(GameSnapshot& s, KingdomId k,
         }
     }
 
-    s.turnBudget(opponent(k)) = toSnapTurnBudget(TurnPointRules::makeBudget(config));
+    const SnapKingdom& nextKingdom = s.kingdom(opponent(k));
+    s.turnBudget(opponent(k)) = toSnapTurnBudget(TurnPointRules::makeBudget(
+        config,
+        nextKingdom.movementPointsMaxBonus,
+        nextKingdom.buildPointsMaxBonus));
 
 }
 

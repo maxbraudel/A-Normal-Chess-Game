@@ -15,6 +15,7 @@
 #include "Systems/StructureIntegrityRules.hpp"
 #include "Systems/MarriageSystem.hpp"
 #include "Systems/PendingTurnProjection.hpp"
+#include "Systems/ChestSystem.hpp"
 #include "Systems/TurnPointRules.hpp"
 #include "Units/PieceFactory.hpp"
 #include "Buildings/BuildingFactory.hpp"
@@ -205,8 +206,11 @@ void TurnSystem::markPendingStateChanged() {
     ++m_pendingStateRevision;
 }
 
-void TurnSystem::syncPointBudget(const GameConfig& config) {
-    const TurnPointBudget budget = TurnPointRules::makeBudget(config);
+void TurnSystem::syncPointBudget(const GameConfig& config, const Kingdom& activeKingdom) {
+    const TurnPointBudget budget = TurnPointRules::makeBudget(
+        config,
+        activeKingdom.movementPointsMaxBonus,
+        activeKingdom.buildPointsMaxBonus);
     m_movementPointsMax = budget.movementPointsMax;
     m_buildPointsMax = budget.buildPointsMax;
 
@@ -238,7 +242,7 @@ void TurnSystem::rebuildQueuedSpecialState() {
 }
 
 void TurnSystem::refreshProjectedBudgetState(const TurnValidationContext& context) {
-    syncPointBudget(context.config);
+    syncPointBudget(context.config, context.activeKingdom);
     if (m_pendingCommands.empty()) {
         return;
     }
@@ -266,7 +270,7 @@ void TurnSystem::refreshProjectedBudgetState(const TurnValidationContext& contex
 bool TurnSystem::queueCommand(const TurnCommand& cmd,
                               const TurnValidationContext& context,
                               BuildingFactory* buildingFactory) {
-    syncPointBudget(context.config);
+    syncPointBudget(context.config, context.activeKingdom);
 
     TurnCommand queuedCommand = cmd;
 
@@ -423,7 +427,7 @@ bool TurnSystem::replaceMoveCommand(const TurnCommand& moveCommand,
         return false;
     }
 
-    syncPointBudget(context.config);
+    syncPointBudget(context.config, context.activeKingdom);
 
     std::vector<TurnCommand> candidateCommands;
     candidateCommands.reserve(m_pendingCommands.size() + 1);
@@ -642,8 +646,12 @@ std::uint64_t TurnSystem::getPendingStateRevision() const { return m_pendingStat
 
 void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemyKingdom,
                              std::vector<Building>& publicBuildings,
+                             std::vector<MapObject>& mapObjects,
+                             ChestSystemState& chestSystemState,
                              const GameConfig& config, EventLog& log,
+                             std::vector<GameplayNotification>& gameplayNotifications,
                              PieceFactory& pieceFactory, BuildingFactory& buildingFactory) {
+    (void) chestSystemState;
     std::vector<TurnCommand> deferredUpgrades;
     deferredUpgrades.reserve(m_pendingCommands.size());
 
@@ -676,6 +684,18 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                 piece->position = cmd.destination;
                 Cell& newCell = board.getCell(cmd.destination.x, cmd.destination.y);
                 newCell.piece = piece;
+
+                if (std::optional<ChestClaimResult> chestClaim = ChestSystem::collectChestAtPosition(
+                        mapObjects,
+                        chestSystemState,
+                        cmd.destination,
+                        activeKingdom)) {
+                    newCell.mapObject = nullptr;
+                    gameplayNotifications.push_back(chestClaim->notification);
+                    log.log(m_turnNumber,
+                            m_activeKingdom,
+                            "Opened a chest and received " + describeChestReward(chestClaim->reward));
+                }
 
                 log.log(m_turnNumber, m_activeKingdom, "Moved " +
                     std::string(pieceTypeDisplayName(piece->type)) + " to (" +

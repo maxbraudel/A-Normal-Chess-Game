@@ -283,6 +283,11 @@ TurnLifecycleCallbacks Game::makeTurnLifecycleCallbacks() {
         [this]() {
             saveGame();
             pushSnapshotToRemote(nullptr);
+        },
+        [this](const GameplayNotification& notification) {
+            m_uiManager.showMultiplayerAlert(
+                gameplayNotificationTitle(notification),
+                gameplayNotificationMessage(notification));
         }};
 }
 
@@ -413,7 +418,7 @@ InputContext Game::buildInputContext(const InteractionPermissions& permissions) 
 }
 
 SelectionQueryView Game::makeSelectionQueryView() {
-    return SelectionQueryView{displayedKingdoms(), displayedPublicBuildings()};
+    return SelectionQueryView{displayedKingdoms(), displayedPublicBuildings(), displayedMapObjects()};
 }
 
 InputSelectionBookmark Game::captureSelectionBookmark() const {
@@ -429,6 +434,11 @@ Building* Game::selectedDisplayedBuilding() {
                                                        m_input.getSelectedBuildingId());
 }
 
+MapObject* Game::selectedDisplayedMapObject() {
+    return SelectionQueryCoordinator::findMapObjectById(makeSelectionQueryView(),
+                                                        m_input.getSelectedMapObjectId());
+}
+
 void Game::reconcileSelectionBookmark(const InputSelectionBookmark& bookmark) {
     const InteractionPermissions permissions = currentInteractionPermissions();
     InputContext inputContext = buildInputContext(permissions);
@@ -436,6 +446,7 @@ void Game::reconcileSelectionBookmark(const InputSelectionBookmark& bookmark) {
     m_input.reconcileSelection(bookmark,
                                SelectionQueryCoordinator::findPieceById(queryView, bookmark.pieceId),
                                SelectionQueryCoordinator::findBuildingForBookmark(queryView, bookmark),
+                               SelectionQueryCoordinator::findMapObjectForBookmark(queryView, bookmark),
                                inputContext);
 }
 
@@ -466,6 +477,14 @@ std::vector<Building>& Game::displayedPublicBuildings() {
 
 const std::vector<Building>& Game::displayedPublicBuildings() const {
     return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.publicBuildings() : publicBuildings();
+}
+
+std::vector<MapObject>& Game::displayedMapObjects() {
+    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.mapObjects() : mapObjects();
+}
+
+const std::vector<MapObject>& Game::displayedMapObjects() const {
+    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.mapObjects() : mapObjects();
 }
 
 Kingdom& Game::displayedKingdom(KingdomId id) {
@@ -767,6 +786,7 @@ void Game::render() {
         renderState.activeKingdom = activeKingdom().id;
         renderState.selectedPiece = selectedDisplayedPiece();
         renderState.selectedBuilding = selectedDisplayedBuilding();
+        renderState.selectedMapObject = selectedDisplayedMapObject();
         if (m_input.hasSelectionAnchorCell()) {
             renderState.selectedCell = m_input.getSelectionAnchorCell();
         }
@@ -789,6 +809,7 @@ void Game::render() {
             displayedBoard(),
             displayedKingdoms(),
             displayedPublicBuildings(),
+            displayedMapObjects(),
             m_config
         };
         const WorldRenderPlan renderPlan = RenderCoordinator::buildWorldRenderPlan(
@@ -921,7 +942,7 @@ void Game::setupUICallbacks() {
 
 void Game::updateUIState() {
     ensureTurnDraftUpToDate();
-    turnSystem().syncPointBudget(m_config);
+    turnSystem().syncPointBudget(m_config, activeKingdom());
     const FrontendRuntimeState runtimeState = makeFrontendRuntimeState();
     const bool usingProjectedDisplayState = m_turnDraft.isValid() && shouldUseTurnDraft();
     const Board& currentDisplayedBoard = displayedBoard();
@@ -944,6 +965,7 @@ void Game::updateUIState() {
             m_uiManager.isRightSidebarVisible(),
             selectedDisplayedPiece(),
             selectedDisplayedBuilding(),
+            selectedDisplayedMapObject(),
             selectedCell
         },
         InGamePresentationBindings{

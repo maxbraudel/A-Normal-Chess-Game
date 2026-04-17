@@ -320,8 +320,14 @@ GameSnapshot createProjectionBaseSnapshot(const Board& board,
 void PendingTurnProjection::initializeBudgets(GameSnapshot& snapshot,
                                               KingdomId activeKingdom,
                                               const GameConfig& config) {
-    snapshot.turnBudget(activeKingdom) = toSnapTurnBudget(TurnPointRules::makeBudget(config));
-    snapshot.turnBudget(opponent(activeKingdom)) = toSnapTurnBudget(TurnPointRules::makeBudget(config));
+    snapshot.turnBudget(activeKingdom) = toSnapTurnBudget(TurnPointRules::makeBudget(
+        config,
+        snapshot.kingdom(activeKingdom).movementPointsMaxBonus,
+        snapshot.kingdom(activeKingdom).buildPointsMaxBonus));
+    snapshot.turnBudget(opponent(activeKingdom)) = toSnapTurnBudget(TurnPointRules::makeBudget(
+        config,
+        snapshot.kingdom(opponent(activeKingdom)).movementPointsMaxBonus,
+        snapshot.kingdom(opponent(activeKingdom)).buildPointsMaxBonus));
 }
 
 PendingTurnProjectionResult PendingTurnProjection::project(

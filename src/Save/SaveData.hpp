@@ -5,6 +5,8 @@
 #include "Core/GameSessionConfig.hpp"
 #include "Kingdom/KingdomId.hpp"
 #include "Board/Cell.hpp"
+#include "Objects/MapObject.hpp"
+#include "Systems/ChestSystem.hpp"
 #include "Units/Piece.hpp"
 #include "Buildings/Building.hpp"
 #include "Systems/EventLog.hpp"
@@ -31,6 +33,7 @@ struct SaveData {
         CellType type = CellType::Grass;
         bool isInCircle = false;
         int terrainFlipMask = -1;
+        std::uint8_t terrainBrightness = 255;
     };
     std::vector<std::vector<CellData>> grid;
 
@@ -38,18 +41,24 @@ struct SaveData {
     struct KingdomData {
         KingdomId id = KingdomId::White;
         int gold = 0;
+        int movementPointsMaxBonus = 0;
+        int buildPointsMaxBonus = 0;
         bool hasSpawnedBishop = false;
         int lastBishopSpawnParity = 0;
         std::vector<Piece> pieces;
         std::vector<Building> buildings;
     };
     std::array<KingdomData, kNumKingdoms> kingdoms{
-        KingdomData{KingdomId::White, 0, {}, {}},
-        KingdomData{KingdomId::Black, 0, {}, {}}
+        KingdomData{KingdomId::White, 0, 0, 0, false, 0, {}, {}},
+        KingdomData{KingdomId::Black, 0, 0, 0, false, 0, {}, {}}
     };
 
     // Public buildings
     std::vector<Building> publicBuildings;
+
+    // Map objects
+    std::vector<MapObject> mapObjects;
+    ChestSystemState chestSystemState{};
 
     // Events
     std::vector<EventLog::Event> events;

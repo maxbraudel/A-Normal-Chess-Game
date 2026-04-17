@@ -118,6 +118,11 @@ void TurnLifecycleCoordinator::commitAuthoritativeTurn(bool lanHost,
     if (plan.updateUI && callbacks.updateUI) {
         callbacks.updateUI();
     }
+    for (const GameplayNotification& notification : execution.notifications) {
+        if (callbacks.showGameplayNotification) {
+            callbacks.showGameplayNotification(notification);
+        }
+    }
     if (plan.startAITurn) {
         m_aiTurnCoordinator.startTurnIfNeeded(m_gameState);
     }

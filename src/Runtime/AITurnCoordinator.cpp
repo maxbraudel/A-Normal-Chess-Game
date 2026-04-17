@@ -115,6 +115,7 @@ void AITurnCoordinator::startTurnIfNeeded(GameState gameState) {
     m_turnRunner.start(m_engine.board(),
                        m_engine.kingdoms(),
                        m_engine.publicBuildings(),
+                       m_engine.mapObjects(),
                        plan.activeKingdom,
                        plan.turnNumber,
                        m_config,

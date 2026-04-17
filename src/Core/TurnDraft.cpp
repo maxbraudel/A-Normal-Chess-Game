@@ -57,9 +57,10 @@ bool TurnDraft::rebuild(const GameEngine& engine,
     m_board = engine.board();
     m_kingdoms = engine.kingdoms();
     m_publicBuildings = engine.publicBuildings();
+    m_mapObjects = engine.mapObjects();
     m_valid = true;
     m_errorMessage.clear();
-    relinkBoardState(m_board, m_kingdoms, m_publicBuildings);
+    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects);
 
     const KingdomId activeKingdomId = engine.turnSystem().getActiveKingdom();
     for (const TurnCommand& command : commands) {
@@ -101,7 +102,7 @@ bool TurnDraft::rebuild(const GameEngine& engine,
         }
     }
 
-    relinkBoardState(m_board, m_kingdoms, m_publicBuildings);
+    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects);
     return true;
 }
 
@@ -109,6 +110,7 @@ void TurnDraft::clear() {
     m_board = Board();
     m_kingdoms = {Kingdom(KingdomId::White), Kingdom(KingdomId::Black)};
     m_publicBuildings.clear();
+    m_mapObjects.clear();
     m_valid = false;
     m_errorMessage.clear();
 }
@@ -135,7 +137,7 @@ bool TurnDraft::applyMoveCommand(const TurnCommand& command, KingdomId activeKin
     if (destinationCell.piece && destinationCell.piece->kingdom != piece->kingdom) {
         enemyKingdom.removePiece(destinationCell.piece->id);
         destinationCell.piece = nullptr;
-        relinkBoardState(m_board, m_kingdoms, m_publicBuildings);
+        relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects);
     }
 
     piece = activeKingdom.getPieceById(command.pieceId);
@@ -154,7 +156,7 @@ bool TurnDraft::applyBuildCommand(const TurnCommand& command,
     Kingdom& activeKingdom = kingdom(activeKingdomId);
     activeKingdom.gold = std::max(0, activeKingdom.gold - getBuildCost(command.buildingType, config));
     activeKingdom.addBuilding(makeUnderConstructionBuilding(command, activeKingdomId, config));
-    relinkBoardState(m_board, m_kingdoms, m_publicBuildings);
+    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects);
     return true;
 }
 
@@ -198,7 +200,7 @@ bool TurnDraft::applyDisbandCommand(const TurnCommand& command,
     }
 
     activeKingdom.removePiece(piece->id);
-    relinkBoardState(m_board, m_kingdoms, m_publicBuildings);
+    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects);
     return true;
 }
 

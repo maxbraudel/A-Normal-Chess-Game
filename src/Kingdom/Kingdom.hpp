@@ -11,6 +11,8 @@ class Kingdom {
 public:
     KingdomId id;
     int gold;
+    int movementPointsMaxBonus = 0;
+    int buildPointsMaxBonus = 0;
     bool hasSpawnedBishop = false;
     int lastBishopSpawnParity = 0;
     std::deque<Piece> pieces;

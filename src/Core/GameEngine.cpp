@@ -6,6 +6,7 @@
 #include "Board/BoardGenerator.hpp"
 #include "Config/GameConfig.hpp"
 #include "Core/GameStateValidator.hpp"
+#include "Systems/ChestSystem.hpp"
 
 namespace {
 
@@ -88,13 +89,15 @@ void normalizeLoadedBuildingVisuals(std::vector<Building>& buildings, std::uint3
 
 void relinkBoardState(Board& board,
                       std::array<Kingdom, kNumKingdoms>& kingdoms,
-                      std::vector<Building>& publicBuildings) {
+                      std::vector<Building>& publicBuildings,
+                      std::vector<MapObject>& mapObjects) {
     const int diameter = board.getDiameter();
     for (int y = 0; y < diameter; ++y) {
         for (int x = 0; x < diameter; ++x) {
             Cell& cell = board.getCell(x, y);
             cell.piece = nullptr;
             cell.building = nullptr;
+            cell.mapObject = nullptr;
         }
     }
 
@@ -121,6 +124,20 @@ void relinkBoardState(Board& board,
             }
         }
     }
+
+    for (auto& mapObject : mapObjects) {
+        if (board.isInBounds(mapObject.position.x, mapObject.position.y)) {
+            board.getCell(mapObject.position.x, mapObject.position.y).mapObject = &mapObject;
+        }
+    }
+}
+
+void relinkBoardState(Board& board,
+                      std::array<Kingdom, kNumKingdoms>& kingdoms,
+                      std::vector<Building>& publicBuildings) {
+    static std::vector<MapObject> emptyMapObjects;
+    emptyMapObjects.clear();
+    relinkBoardState(board, kingdoms, publicBuildings, emptyMapObjects);
 }
 
 GameEngine::GameEngine()
@@ -143,6 +160,7 @@ bool GameEngine::startNewSession(const GameSessionConfig& session,
 
     m_board.init(config.getMapRadius());
     m_publicBuildings.clear();
+    m_mapObjects.clear();
     const auto generation = BoardGenerator::generate(m_board, config, m_publicBuildings, m_sessionConfig.worldSeed);
 
     for (int kingdomSlot = 0; kingdomSlot < kNumKingdoms; ++kingdomSlot) {
@@ -156,11 +174,13 @@ bool GameEngine::startNewSession(const GameSessionConfig& session,
     kingdom(KingdomId::White).addPiece(whiteKing);
     kingdom(KingdomId::Black).addPiece(blackKing);
 
-    relinkBoardState(m_board, m_kingdoms, m_publicBuildings);
+    ChestSystem::initialize(m_chestSystemState, m_sessionConfig.worldSeed, 1, config);
+    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects);
 
     m_turnSystem = TurnSystem();
     m_turnSystem.setActiveKingdom(KingdomId::White);
     m_turnSystem.setTurnNumber(1);
+    m_nextMapObjectId = 1;
 
     m_eventLog.clear();
     m_eventLog.log(1, KingdomId::White,
@@ -190,6 +210,7 @@ bool GameEngine::restoreFromSave(const SaveData& data,
             for (int x = 0; x < diameter && x < static_cast<int>(data.grid[y].size()); ++x) {
                 grid[y][x].type = data.grid[y][x].type;
                 grid[y][x].isInCircle = data.grid[y][x].isInCircle;
+                grid[y][x].terrainBrightness = data.grid[y][x].terrainBrightness;
             }
         }
 
@@ -199,6 +220,7 @@ bool GameEngine::restoreFromSave(const SaveData& data,
                 if (data.grid[y][x].terrainFlipMask >= 0) {
                     grid[y][x].terrainFlipMask = data.grid[y][x].terrainFlipMask;
                 }
+                grid[y][x].terrainBrightness = data.grid[y][x].terrainBrightness;
             }
         }
     } else {
@@ -210,6 +232,8 @@ bool GameEngine::restoreFromSave(const SaveData& data,
         const auto kingdomId = static_cast<KingdomId>(kingdomSlot);
         m_kingdoms[kingdomSlot] = Kingdom(kingdomId);
         m_kingdoms[kingdomSlot].gold = data.kingdoms[kingdomSlot].gold;
+        m_kingdoms[kingdomSlot].movementPointsMaxBonus = data.kingdoms[kingdomSlot].movementPointsMaxBonus;
+        m_kingdoms[kingdomSlot].buildPointsMaxBonus = data.kingdoms[kingdomSlot].buildPointsMaxBonus;
         m_kingdoms[kingdomSlot].hasSpawnedBishop = data.kingdoms[kingdomSlot].hasSpawnedBishop;
         m_kingdoms[kingdomSlot].lastBishopSpawnParity = data.kingdoms[kingdomSlot].lastBishopSpawnParity & 1;
         for (const auto& piece : data.kingdoms[kingdomSlot].pieces) {
@@ -222,13 +246,19 @@ bool GameEngine::restoreFromSave(const SaveData& data,
     }
 
     m_publicBuildings = data.publicBuildings;
+    m_mapObjects = data.mapObjects;
+    m_chestSystemState = data.chestSystemState;
     normalizeLoadedBuildingVisuals(m_publicBuildings, m_sessionConfig.worldSeed);
 
-    relinkBoardState(m_board, m_kingdoms, m_publicBuildings);
+    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects);
 
     m_turnSystem = TurnSystem();
     m_turnSystem.setActiveKingdom(data.activeKingdom);
     m_turnSystem.setTurnNumber(data.turnNumber);
+    m_nextMapObjectId = 1;
+    for (const MapObject& object : m_mapObjects) {
+        m_nextMapObjectId = std::max(m_nextMapObjectId, object.id + 1);
+    }
 
     m_eventLog.clear();
     for (const auto& event : data.events) {
@@ -258,12 +288,15 @@ SaveData GameEngine::createSaveData() const {
             data.grid[y][x].type = cell.type;
             data.grid[y][x].isInCircle = cell.isInCircle;
             data.grid[y][x].terrainFlipMask = cell.terrainFlipMask;
+            data.grid[y][x].terrainBrightness = cell.terrainBrightness;
         }
     }
 
     for (int kingdomSlot = 0; kingdomSlot < kNumKingdoms; ++kingdomSlot) {
         data.kingdoms[kingdomSlot].id = static_cast<KingdomId>(kingdomSlot);
         data.kingdoms[kingdomSlot].gold = m_kingdoms[kingdomSlot].gold;
+        data.kingdoms[kingdomSlot].movementPointsMaxBonus = m_kingdoms[kingdomSlot].movementPointsMaxBonus;
+        data.kingdoms[kingdomSlot].buildPointsMaxBonus = m_kingdoms[kingdomSlot].buildPointsMaxBonus;
         data.kingdoms[kingdomSlot].hasSpawnedBishop = m_kingdoms[kingdomSlot].hasSpawnedBishop;
         data.kingdoms[kingdomSlot].lastBishopSpawnParity = m_kingdoms[kingdomSlot].lastBishopSpawnParity;
         data.kingdoms[kingdomSlot].pieces.assign(m_kingdoms[kingdomSlot].pieces.begin(), m_kingdoms[kingdomSlot].pieces.end());
@@ -271,13 +304,15 @@ SaveData GameEngine::createSaveData() const {
     }
 
     data.publicBuildings = m_publicBuildings;
+    data.mapObjects = m_mapObjects;
+    data.chestSystemState = m_chestSystemState;
     data.events = m_eventLog.getEvents();
     return data;
 }
 
 bool GameEngine::validate(std::string* errorMessage) const {
     return GameStateValidator::validateRuntimeState(
-        m_board, m_kingdoms, m_publicBuildings, m_turnSystem, m_sessionConfig, errorMessage);
+    m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_turnSystem, m_sessionConfig, errorMessage);
 }
 
 void GameEngine::resetPendingTurn() {
@@ -429,11 +464,30 @@ PendingTurnCommitResult GameEngine::commitPendingTurn(const GameConfig& config) 
                             activeKingdom(),
                             enemyKingdom(),
                             m_publicBuildings,
+                            m_mapObjects,
+                            m_chestSystemState,
                             config,
                             m_eventLog,
+                            result.notifications,
                             m_pieceFactory,
                             m_buildingFactory);
     m_turnSystem.advanceTurn();
+
+    const bool collectedChest = std::any_of(
+        result.notifications.begin(),
+        result.notifications.end(),
+        [](const GameplayNotification& notification) {
+            return notification.kind == GameplayNotificationKind::ChestReward;
+        });
+    if (collectedChest) {
+        ChestSystem::scheduleNextSpawn(
+            m_chestSystemState,
+            m_sessionConfig.worldSeed,
+            m_turnSystem.getTurnNumber(),
+            config);
+    }
+
+    spawnChestIfDue(config);
     result.committed = true;
 
     result.nextTurnValidation = validatePendingTurn(config);
@@ -511,4 +565,25 @@ void GameEngine::syncFactoryIds() {
     for (const auto& building : m_publicBuildings) {
         m_buildingFactory.observeExisting(building.id);
     }
+}
+
+void GameEngine::spawnChestIfDue(const GameConfig& config) {
+    std::optional<MapObject> spawnedChest = ChestSystem::trySpawnChest(
+        m_chestSystemState,
+        m_board,
+        m_kingdoms,
+        m_mapObjects,
+        m_sessionConfig.worldSeed,
+        m_turnSystem.getTurnNumber(),
+        m_nextMapObjectId,
+        config);
+    if (!spawnedChest.has_value()) {
+        relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects);
+        return;
+    }
+
+    m_nextMapObjectId = std::max(m_nextMapObjectId, spawnedChest->id + 1);
+    m_mapObjects.push_back(*spawnedChest);
+    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects);
+    m_eventLog.log(m_turnSystem.getTurnNumber(), m_turnSystem.getActiveKingdom(), "A chest appeared on the map.");
 }

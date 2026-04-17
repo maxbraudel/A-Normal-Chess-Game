@@ -2,6 +2,7 @@
 #include <iosfwd>
 #include <string>
 #include <vector>
+
 #include "Save/SaveData.hpp"
 
 class SaveManager {
@@ -21,12 +22,14 @@ private:
     static std::string serializeMultiplayerConfig(const MultiplayerConfig& multiplayer);
     static std::string serializePiece(const Piece& p);
     static std::string serializeBuilding(const Building& b);
+    static std::string serializeMapObject(const MapObject& object);
     static std::string serializeEvent(const EventLog::Event& e);
     static EventLog::Event parseEvent(const std::string& json);
     static KingdomParticipantConfig parseParticipant(const std::string& json);
     static MultiplayerConfig parseMultiplayerConfig(const std::string& json);
     static Piece parsePiece(const std::string& json);
     static Building parseBuilding(const std::string& json);
+    static MapObject parseMapObject(const std::string& json);
 
     static std::string escapeJsonString(const std::string& value);
     static std::string extractString(const std::string& json, const std::string& key);

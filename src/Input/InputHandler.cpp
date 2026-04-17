@@ -8,6 +8,7 @@
 #include "Units/PieceType.hpp"
 #include "Units/MovementRules.hpp"
 #include "Buildings/Building.hpp"
+#include "Objects/MapObject.hpp"
 #include "Buildings/StructurePlacementProfile.hpp"
 #include "Systems/TurnSystem.hpp"
 #include "Systems/TurnCommand.hpp"
@@ -31,7 +32,9 @@ const auto kSelectionCycleThreshold = std::chrono::milliseconds(350);
 
 InputHandler::InputHandler()
     : m_currentTool(ToolState::Select), m_selectedPieceId(-1), m_selectedBuildingId(-1),
+    m_selectedMapObjectId(-1),
     m_selectedBuildingType(BuildingType::Barracks),
+    m_selectedMapObjectType(MapObjectType::Chest),
     m_selectedBuildingOwner(KingdomId::White), m_selectedBuildingIsNeutral(false),
     m_selectedBuildingRotationQuarterTurns(0),
     m_hasSelectedCell(false), m_selectedCell({0, 0}),
@@ -52,6 +55,7 @@ void InputHandler::setTool(ToolState tool) {
 
 int InputHandler::getSelectedPieceId() const { return m_selectedPieceId; }
 int InputHandler::getSelectedBuildingId() const { return m_selectedBuildingId; }
+int InputHandler::getSelectedMapObjectId() const { return m_selectedMapObjectId; }
 bool InputHandler::hasSelectedCell() const { return m_hasSelectedCell; }
 sf::Vector2i InputHandler::getSelectedCell() const { return m_selectedCell; }
 bool InputHandler::hasSelectionAnchorCell() const { return m_hasActiveSelectionCell || m_hasSelectedCell; }
@@ -109,6 +113,11 @@ InputSelectionBookmark InputHandler::createSelectionBookmark() const {
         bookmark.selectedBuildingIsNeutral = m_selectedBuildingIsNeutral;
         bookmark.selectedBuildingRotationQuarterTurns = m_selectedBuildingRotationQuarterTurns;
     }
+    if (m_selectedMapObjectId >= 0) {
+        bookmark.mapObjectId = m_selectedMapObjectId;
+        bookmark.selectedMapObjectPosition = m_selectedMapObjectPosition;
+        bookmark.selectedMapObjectType = m_selectedMapObjectType;
+    }
     if (m_hasActiveSelectionCell) {
         bookmark.selectedCell = m_activeSelectionCell;
     } else if (m_hasSelectedCell) {
@@ -123,6 +132,7 @@ InputSelectionBookmark InputHandler::createSelectionBookmark() const {
 void InputHandler::reconcileSelection(const InputSelectionBookmark& bookmark,
                                       Piece* selectedPiece,
                                       Building* selectedBuilding,
+                                      MapObject* selectedMapObject,
                                       const InputContext& context) {
     m_currentTool = bookmark.tool;
     m_buildPreviewType = bookmark.buildPreviewType;
@@ -177,6 +187,22 @@ void InputHandler::reconcileSelection(const InputSelectionBookmark& bookmark,
             return true;
         }
 
+        if (bookmark.mapObjectId >= 0) {
+            const bool sameObjectId = stack.mapObject != nullptr && stack.mapObject->id == bookmark.mapObjectId;
+            const bool sameObjectMetadata = stack.mapObject != nullptr
+                && bookmark.selectedMapObjectPosition.has_value()
+                && stack.mapObject->position == *bookmark.selectedMapObjectPosition
+                && stack.mapObject->type == bookmark.selectedMapObjectType;
+
+            if (sameObjectId || sameObjectMetadata) {
+                activateMapObjectSelection(stack.mapObject, cellPos);
+            } else {
+                activateTerrainSelection(cellPos);
+            }
+            restoreBuildPreviewState(bookmark);
+            return true;
+        }
+
         activateTerrainSelection(cellPos);
         restoreBuildPreviewState(bookmark);
         return true;
@@ -198,6 +224,12 @@ void InputHandler::reconcileSelection(const InputSelectionBookmark& bookmark,
 
     if (selectedBuilding) {
         activateBuildingSelection(selectedBuilding, selectedBuilding->origin);
+        restoreBuildPreviewState(bookmark);
+        return;
+    }
+
+    if (selectedMapObject) {
+        activateMapObjectSelection(selectedMapObject, selectedMapObject->position);
         restoreBuildPreviewState(bookmark);
         return;
     }
@@ -234,8 +266,11 @@ void InputHandler::restoreBuildPreviewState(const InputSelectionBookmark& bookma
 void InputHandler::clearSelection() {
     m_selectedPieceId = -1;
     m_selectedBuildingId = -1;
+    m_selectedMapObjectId = -1;
     m_selectedBuildingOrigin.reset();
+    m_selectedMapObjectPosition.reset();
     m_selectedBuildingType = BuildingType::Barracks;
+    m_selectedMapObjectType = MapObjectType::Chest;
     m_selectedBuildingOwner = KingdomId::White;
     m_selectedBuildingIsNeutral = false;
     m_selectedBuildingRotationQuarterTurns = 0;
@@ -255,8 +290,11 @@ void InputHandler::clearSelection() {
 void InputHandler::selectCell(sf::Vector2i cellPos) {
     m_selectedPieceId = -1;
     m_selectedBuildingId = -1;
+    m_selectedMapObjectId = -1;
     m_selectedBuildingOrigin.reset();
+    m_selectedMapObjectPosition.reset();
     m_selectedBuildingType = BuildingType::Barracks;
+    m_selectedMapObjectType = MapObjectType::Chest;
     m_selectedBuildingOwner = KingdomId::White;
     m_selectedBuildingIsNeutral = false;
     m_selectedBuildingRotationQuarterTurns = 0;
@@ -272,8 +310,11 @@ void InputHandler::activatePieceSelection(Piece* piece, sf::Vector2i cellPos,
                                           const InputContext& context, bool allowCommands) {
     m_selectedPieceId = piece ? piece->id : -1;
     m_selectedBuildingId = -1;
+    m_selectedMapObjectId = -1;
     m_selectedBuildingOrigin.reset();
+    m_selectedMapObjectPosition.reset();
     m_selectedBuildingType = BuildingType::Barracks;
+    m_selectedMapObjectType = MapObjectType::Chest;
     m_selectedBuildingOwner = KingdomId::White;
     m_selectedBuildingIsNeutral = false;
     m_selectedBuildingRotationQuarterTurns = 0;
@@ -291,8 +332,11 @@ void InputHandler::activatePieceSelection(Piece* piece, sf::Vector2i cellPos,
 void InputHandler::activateBuildingSelection(Building* building, sf::Vector2i cellPos) {
     m_selectedPieceId = -1;
     m_selectedBuildingId = building ? building->id : -1;
+    m_selectedMapObjectId = -1;
     m_selectedBuildingOrigin = building ? std::optional<sf::Vector2i>{building->origin} : std::nullopt;
+    m_selectedMapObjectPosition.reset();
     m_selectedBuildingType = building ? building->type : BuildingType::Barracks;
+    m_selectedMapObjectType = MapObjectType::Chest;
     m_selectedBuildingOwner = building ? building->owner : KingdomId::White;
     m_selectedBuildingIsNeutral = building ? building->isNeutral : false;
     m_selectedBuildingRotationQuarterTurns = building ? building->rotationQuarterTurns : 0;
@@ -301,6 +345,24 @@ void InputHandler::activateBuildingSelection(Building* building, sf::Vector2i ce
     m_dangerMoves.clear();
     m_selectedOriginDangerous = false;
     setActiveSelectionMetadata(SelectionLayer::Building, cellPos);
+}
+
+void InputHandler::activateMapObjectSelection(MapObject* mapObject, sf::Vector2i cellPos) {
+    m_selectedPieceId = -1;
+    m_selectedBuildingId = -1;
+    m_selectedMapObjectId = mapObject ? mapObject->id : -1;
+    m_selectedBuildingOrigin.reset();
+    m_selectedMapObjectPosition = mapObject ? std::optional<sf::Vector2i>{mapObject->position} : std::nullopt;
+    m_selectedBuildingType = BuildingType::Barracks;
+    m_selectedMapObjectType = mapObject ? mapObject->type : MapObjectType::Chest;
+    m_selectedBuildingOwner = KingdomId::White;
+    m_selectedBuildingIsNeutral = false;
+    m_selectedBuildingRotationQuarterTurns = 0;
+    m_hasSelectedCell = false;
+    m_validMoves.clear();
+    m_dangerMoves.clear();
+    m_selectedOriginDangerous = false;
+    setActiveSelectionMetadata(SelectionLayer::Object, cellPos);
 }
 
 void InputHandler::activateTerrainSelection(sf::Vector2i cellPos) {
@@ -382,6 +444,9 @@ void InputHandler::applyResolvedSelection(const LayeredSelectionStack& stack,
             return;
         case SelectionLayer::Building:
             activateBuildingSelection(stack.building, stack.cellPos);
+            return;
+        case SelectionLayer::Object:
+            activateMapObjectSelection(stack.mapObject, stack.cellPos);
             return;
         case SelectionLayer::Terrain:
             activateTerrainSelection(stack.cellPos);
@@ -627,8 +692,11 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
 
                 m_selectedPieceId = restoredPiece ? restoredPiece->id : -1;
                 m_selectedBuildingId = -1;
+                m_selectedMapObjectId = -1;
                 m_selectedBuildingOrigin.reset();
+                m_selectedMapObjectPosition.reset();
                 m_selectedBuildingType = BuildingType::Barracks;
+                m_selectedMapObjectType = MapObjectType::Chest;
                 m_selectedBuildingOwner = KingdomId::White;
                 m_selectedBuildingIsNeutral = false;
                 m_selectedBuildingRotationQuarterTurns = 0;
@@ -679,8 +747,11 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
                 syncQueuedMovePreviewState(context);
                 m_selectedPieceId = restoredPiece->id;
                 m_selectedBuildingId = -1;
+                m_selectedMapObjectId = -1;
                 m_selectedBuildingOrigin.reset();
+                m_selectedMapObjectPosition.reset();
                 m_selectedBuildingType = BuildingType::Barracks;
+                m_selectedMapObjectType = MapObjectType::Chest;
                 m_selectedBuildingOwner = KingdomId::White;
                 m_selectedBuildingIsNeutral = false;
                 m_selectedBuildingRotationQuarterTurns = 0;
