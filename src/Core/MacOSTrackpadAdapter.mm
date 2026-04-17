@@ -1,4 +1,5 @@
 #import <Cocoa/Cocoa.h>
+#import <objc/runtime.h>
 
 #include <cmath>
 
@@ -9,8 +10,13 @@
 
 namespace {
 
-constexpr float kTrackpadDeltaEpsilon = 0.01f;
+constexpr float kTrackpadDeltaEpsilon = 0.001f;
 constexpr float kTrackpadInitialPanDelta = 1.0f;
+
+// IMP for wantsScrollEventsForSwipeTrackingOnAxis: — always returns NO
+// so macOS skips the swipe-between-pages disambiguation delay and delivers
+// NSEventPhaseBegan immediately when fingers start moving.
+static BOOL noSwipeTracking(id, SEL, NSInteger) { return NO; }
 
 bool hasPhase(NSEventPhase phase, NSEventPhase flag) {
     return (phase & flag) != 0;
@@ -61,6 +67,22 @@ void MacOSTrackpadAdapter::install(LiveResizeRenderWindow& window, Camera& camer
     m_impl->camera = &camera;
     if (m_impl->window == nil || m_impl->camera == nullptr) {
         return;
+    }
+
+    // Disable the macOS swipe-between-pages gesture disambiguation on the SFML
+    // content view. Without this, the system delays NSEventPhaseBegan by
+    // 50-150 ms while deciding if a two-finger scroll is a page swipe,
+    // which is the "startup lag" felt at the beginning of every pan.
+    NSView* contentView = m_impl->window.contentView;
+    if (contentView != nil) {
+        SEL sel = @selector(wantsScrollEventsForSwipeTrackingOnAxis:);
+        if (![contentView respondsToSelector:sel]) {
+            class_addMethod(
+                object_getClass(contentView),
+                sel,
+                reinterpret_cast<IMP>(noSwipeTracking),
+                "B@:" @encode(NSInteger));
+        }
     }
 
     Impl* impl = m_impl;
