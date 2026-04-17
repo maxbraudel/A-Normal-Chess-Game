@@ -81,7 +81,7 @@ void MacOSTrackpadAdapter::install(LiveResizeRenderWindow& window, Camera& camer
                 object_getClass(contentView),
                 sel,
                 reinterpret_cast<IMP>(noSwipeTracking),
-                "B@:" @encode(NSInteger));
+                "B@:q");  // BOOL (id, SEL, NSInteger) — q = long/NSInteger on arm64
         }
     }
 
