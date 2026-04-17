@@ -43,6 +43,7 @@ struct MacOSTrackpadAdapter::Impl {
     NSWindow* window = nil;
     Camera* camera = nullptr;
     bool scrollGestureActive = false;
+    bool scrollGestureAwaitingDelta = false;
 };
 
 MacOSTrackpadAdapter::MacOSTrackpadAdapter()
@@ -86,6 +87,7 @@ void MacOSTrackpadAdapter::install(LiveResizeRenderWindow& window, Camera& camer
         const NSEventPhase phase = event.phase;
         const NSEventPhase momentumPhase = event.momentumPhase;
         if (hasPhase(phase, NSEventPhaseMayBegin)) {
+            impl->scrollGestureAwaitingDelta = true;
             return event;
         }
 
@@ -93,8 +95,16 @@ void MacOSTrackpadAdapter::install(LiveResizeRenderWindow& window, Camera& camer
             || hasPhase(phase, NSEventPhaseChanged);
         const bool momentumActive = hasPhase(momentumPhase, NSEventPhaseBegan)
             || hasPhase(momentumPhase, NSEventPhaseChanged);
-        const bool isGestureStart = !impl->scrollGestureActive && phaseActive && !momentumActive;
-        impl->scrollGestureActive = phaseActive || momentumActive;
+        const bool phaseEnded = hasPhase(phase, NSEventPhaseEnded)
+            || hasPhase(phase, NSEventPhaseCancelled);
+        const bool momentumEnded = hasPhase(momentumPhase, NSEventPhaseEnded)
+            || hasPhase(momentumPhase, NSEventPhaseCancelled);
+
+        if (!momentumActive && phaseActive && !impl->scrollGestureActive) {
+            impl->scrollGestureAwaitingDelta = true;
+        }
+
+        const bool isGestureStart = impl->scrollGestureAwaitingDelta && !momentumActive;
 
         const float directionScale = event.isDirectionInvertedFromDevice ? -1.0f : 1.0f;
         const float zoomLevel = impl->camera->getZoomLevel();
@@ -108,17 +118,22 @@ void MacOSTrackpadAdapter::install(LiveResizeRenderWindow& window, Camera& camer
             * directionScale * zoomLevel;
 
         if (std::abs(deltaX) < kTrackpadDeltaEpsilon && std::abs(deltaY) < kTrackpadDeltaEpsilon) {
-            if (hasPhase(phase, NSEventPhaseEnded) || hasPhase(phase, NSEventPhaseCancelled)
+            if (phaseEnded || momentumEnded
                 || (phase == NSEventPhaseNone && momentumPhase == NSEventPhaseNone)) {
                 impl->scrollGestureActive = false;
+                impl->scrollGestureAwaitingDelta = false;
             }
-            return impl->scrollGestureActive ? nil : event;
+            return (impl->scrollGestureActive || impl->scrollGestureAwaitingDelta) ? nil : event;
         }
 
+        impl->scrollGestureActive = phaseActive || momentumActive;
+        impl->scrollGestureAwaitingDelta = false;
         impl->camera->pan({deltaX, deltaY});
 
-        if (hasPhase(phase, NSEventPhaseEnded) || hasPhase(phase, NSEventPhaseCancelled)) {
+        if (phaseEnded || momentumEnded
+            || (phase == NSEventPhaseNone && momentumPhase == NSEventPhaseNone)) {
             impl->scrollGestureActive = false;
+            impl->scrollGestureAwaitingDelta = false;
         }
 
         return nil;
