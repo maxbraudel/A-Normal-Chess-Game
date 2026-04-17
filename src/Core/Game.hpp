@@ -19,6 +19,7 @@
 #include "Core/TurnPhase.hpp"
 #include "Core/GameClock.hpp"
 #include "Core/GameEngine.hpp"
+#include "Core/MacOSTrackpadAdapter.hpp"
 #include "Core/TurnDraft.hpp"
 #include "Config/GameConfig.hpp"
 #include "Debug/GameStateDebugRecorder.hpp"
@@ -218,6 +219,7 @@ private:
     AssetManager m_assets;
     UIManager m_uiManager;
     SaveManager m_saveManager;
+    MacOSTrackpadAdapter m_macOSTrackpadAdapter;
     LocalPlayerContext m_localPlayerContext;
     MultiplayerRuntime m_multiplayer;
     SessionFlow m_sessionFlow;

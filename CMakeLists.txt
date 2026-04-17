@@ -1,6 +1,10 @@
 cmake_minimum_required(VERSION 3.20)
 project(ANormalChessGame LANGUAGES CXX)
 
+if(APPLE)
+    enable_language(OBJCXX)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -65,6 +69,7 @@ set(CORE_SOURCES
     src/Core/GameEngine.cpp
     src/Core/GameStateValidator.cpp
     src/Core/InteractionPermissions.cpp
+    src/Core/MacOSTrackpadAdapter.hpp
     src/Core/TurnDraft.cpp
     src/Debug/GameStateDebugRecorder.cpp
     src/Input/InputHandler.cpp
@@ -141,6 +146,12 @@ set(CORE_SOURCES
     src/Units/Piece.cpp
     src/Units/PieceFactory.cpp
 )
+
+if(APPLE)
+    list(APPEND CORE_SOURCES
+        src/Core/MacOSTrackpadAdapter.mm
+    )
+endif()
 
 set(APP_SOURCES
     src/main.cpp

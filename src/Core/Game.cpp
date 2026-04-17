@@ -714,6 +714,10 @@ void Game::init() {
     m_camera.init(m_window);
     handleWindowResize(m_windowSize);
 
+#ifdef __APPLE__
+    m_macOSTrackpadAdapter.install(m_window, m_camera);
+#endif
+
     // Init UI
     m_uiManager.init(m_gui, m_assets);
     setupUICallbacks();
