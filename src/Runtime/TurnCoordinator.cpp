@@ -103,9 +103,6 @@ ClientTurnSubmissionResult TurnCoordinator::submitClientTurn(bool lanClient) {
 
     result.submitted = true;
     result.clearMovePreview = true;
-    result.resetPendingCommands = true;
-    result.syncTurnDraftBeforeReconcile = true;
-    result.reconcileSelection = true;
     result.waitForRemoteTurnResult = true;
     return result;
 }

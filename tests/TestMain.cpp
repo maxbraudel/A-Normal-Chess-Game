@@ -6415,7 +6415,7 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             "Despawning the infernal should schedule a later respawn using the configured cooldown.");
     }
 
-    void testTurnDraftCoordinatorSynchronizesAndClearsProjectedDraft() {
+    void testTurnDraftCoordinatorSynchronizesAndKeepsProjectedDraftWhileWaiting() {
         GameConfig config;
         GameEngine engine;
         engine.board().init(12);
@@ -6498,10 +6498,10 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
 
         context.runtimeState.waitingForRemoteTurnResult = true;
         TurnDraftCoordinator::ensureUpToDate(context);
-        expect(!draft.isValid(),
-            "TurnDraftCoordinator should clear the projected draft as soon as the local client starts waiting for remote turn confirmation.");
-        expect(captureCalls == 2 && reconcileCalls == 2,
-            "TurnDraftCoordinator should capture and reconcile selection again when it clears an existing projected draft.");
+        expect(draft.isValid(),
+            "TurnDraftCoordinator should keep the projected draft visible while a LAN client waits for remote turn confirmation.");
+        expect(captureCalls == 1 && reconcileCalls == 1,
+            "TurnDraftCoordinator should not churn selection reconciliation just because a submitted LAN client is waiting for host confirmation.");
     }
 
     void testPendingTurnProjectionMaterializesQueuedBuildWithStableId() {
@@ -7218,6 +7218,7 @@ int main() {
         {"xp forward model matches runtime capture", testForwardModelCaptureXPMatchesCommittedTurn},
         {"infernal blood debt from captures", testInfernalBloodDebtAccumulatesFromCommittedCaptures},
         {"infernal spawn and hunt", testInfernalSystemSpawnsOnBorderAndStartsHunt},
+        {"turn draft coordinator sync and keep while waiting", testTurnDraftCoordinatorSynchronizesAndKeepsProjectedDraftWhileWaiting},
         {"infernal capture return despawn", testInfernalSystemCapturesTargetReturnsAndDespawns},
         {"render coordinator anchored piece selection frame", testRenderCoordinatorPrefersAnchoredSelectionCellForPieceFrame},
         {"render coordinator build overlay plan", testRenderCoordinatorBuildsBuildPreviewAndPendingBuildPlan},
@@ -7329,7 +7330,6 @@ int main() {
         {"turn draft materializes under construction build", testTurnDraftMaterializesQueuedBuildingAsUnderConstruction},
         {"turn draft captures autonomous unit", testTurnDraftCapturesAutonomousUnitOnQueuedMove},
         {"turn system captures autonomous unit", testTurnSystemCapturesAutonomousUnitAndClearsInfernalState},
-        {"turn draft coordinator sync and clear", testTurnDraftCoordinatorSynchronizesAndClearsProjectedDraft},
         {"pending turn projection stable build id", testPendingTurnProjectionMaterializesQueuedBuildWithStableId},
         {"pending turn projection rejects under construction produce", testPendingTurnProjectionRejectsProductionFromUnderConstructionBarracks},
         {"forward model completes under construction barracks", testForwardModelCompletesUnderConstructionBarracksOnTurnAdvance},

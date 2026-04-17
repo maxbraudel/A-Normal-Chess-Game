@@ -30,7 +30,6 @@ bool TurnDraftCoordinator::shouldUseTurnDraft(const TurnDraftRuntimeState& state
             || state.gameState == GameState::Paused
             || state.gameState == GameState::GameOver)
         && state.isLocalPlayerTurn
-        && !state.waitingForRemoteTurnResult
         && state.hasPendingCommands;
 }
 

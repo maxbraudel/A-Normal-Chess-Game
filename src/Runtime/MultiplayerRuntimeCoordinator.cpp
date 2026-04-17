@@ -239,6 +239,9 @@ void MultiplayerRuntimeCoordinator::processClientEvent(const MultiplayerClient::
                 m_localPlayerContext,
                 m_waitingForRemoteTurnResult);
             m_uiManager.hideMultiplayerAlert();
+            if (callbacks.invalidateTurnDraft) {
+                callbacks.invalidateTurnDraft();
+            }
             if (callbacks.refreshTurnPhase) {
                 callbacks.refreshTurnPhase();
             }
