@@ -2,6 +2,7 @@
 #include "Autonomous/AutonomousUnit.hpp"
 #include "Board/Board.hpp"
 #include "Board/Cell.hpp"
+#include "Buildings/StructurePlacementProfile.hpp"
 #include "Kingdom/Kingdom.hpp"
 #include "Buildings/Building.hpp"
 #include "Units/Piece.hpp"
@@ -43,6 +44,22 @@ bool isEnemyCapturableBuildingCell(const GameSnapshot& snapshot,
                                    KingdomId mover) {
     const SnapBuilding* building = snapshot.buildingAt(pos);
     return building && !building->isNeutral && building->owner != mover;
+}
+
+bool isSnapshotTerrainTraversableForSpawn(const GameSnapshot& snapshot,
+                                          sf::Vector2i pos) {
+    if (!snapshot.isTraversable(pos.x, pos.y)) {
+        return false;
+    }
+
+    const SnapBuilding* building = snapshot.buildingAt(pos);
+    if (!building) {
+        return true;
+    }
+
+    const int localX = pos.x - building->origin.x;
+    const int localY = pos.y - building->origin.y;
+    return !StructureIntegrityRules::isWallCellBlocking(*building, localX, localY);
 }
 
 void removeAutonomousOccupantAt(GameSnapshot& snapshot, sf::Vector2i pos) {
@@ -585,17 +602,22 @@ sf::Vector2i ForwardModel::findSpawnCell(const GameSnapshot& s,
     const std::optional<int> preferredParity = (type == PieceType::Bishop)
         ? kingdom.preferredNextBishopSpawnParity()
         : std::nullopt;
+    const sf::Vector2i anchorCell = StructurePlacementProfiles::anchorCellFromOrigin(
+        barracks.type,
+        barracks.origin,
+        barracks.width,
+        barracks.height,
+        barracks.rotationQuarterTurns,
+        barracks.flipMask);
 
     return ProductionSpawnRules::findSpawnCell(
-        barracks.origin,
-        barracks.getFootprintWidth(),
-        barracks.getFootprintHeight(),
+        anchorCell,
         s.getDiameter(),
         [&s](const sf::Vector2i& pos) {
-            if (!s.isTraversable(pos.x, pos.y)) return false;
+            if (!isSnapshotTerrainTraversableForSpawn(s, pos)) return false;
             if (s.pieceAt(pos)) return false;
             if (s.autonomousUnitAt(pos)) return false;
-            return s.buildingAt(pos) == nullptr;
+            return true;
         },
         preferredParity);
 }

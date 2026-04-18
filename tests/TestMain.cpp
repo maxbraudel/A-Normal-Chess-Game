@@ -321,19 +321,18 @@ void linkBuildingOnBoard(Building& building, Board& board) {
     }
 }
 
-int ringDistanceFromBuilding(const Building& building, const sf::Vector2i& position) {
-    const int left = building.origin.x;
-    const int top = building.origin.y;
-    const int right = building.origin.x + building.getFootprintWidth() - 1;
-    const int bottom = building.origin.y + building.getFootprintHeight() - 1;
+sf::Vector2i spawnAnchorCellForBuilding(const Building& building) {
+    return StructurePlacementProfiles::anchorCellFromOrigin(
+        building.type,
+        building.origin,
+        building.width,
+        building.height,
+        building.rotationQuarterTurns,
+        building.flipMask);
+}
 
-    const int dx = (position.x < left)
-        ? (left - position.x)
-        : (position.x > right ? position.x - right : 0);
-    const int dy = (position.y < top)
-        ? (top - position.y)
-        : (position.y > bottom ? position.y - bottom : 0);
-    return std::max(dx, dy);
+int ringDistanceFromAnchor(const sf::Vector2i& anchorCell, const sf::Vector2i& position) {
+    return std::max(std::abs(position.x - anchorCell.x), std::abs(position.y - anchorCell.y));
 }
 
 float buildingCenterDistance(const Building& lhs, const Building& rhs) {
@@ -5114,6 +5113,85 @@ void testFirstBishopSpawnUsesDefaultNearestRule() {
            "The first bishop spawn for a kingdom should use the default nearest-cell spawn rule.");
 }
 
+    void testSpawnUsesAnchorCellWhenFree() {
+        GameConfig config;
+        Board board;
+        board.init(10);
+
+        Kingdom white(KingdomId::White);
+        Building barracks = makeTestBarracks(79, KingdomId::White, {7, 8}, config);
+        linkBuildingOnBoard(barracks, board);
+
+        const sf::Vector2i anchorCell = spawnAnchorCellForBuilding(barracks);
+        const sf::Vector2i spawn = ProductionSystem::findSpawnCell(barracks, board, PieceType::Pawn, white);
+        expect(spawn == anchorCell,
+            "Produced units should spawn directly on the building anchor cell when it is free and traversable.");
+    }
+
+    void testSpawnFallsBackToNearestCellAroundBlockedAnchor() {
+        GameConfig config;
+        Board board;
+        board.init(10);
+
+        Kingdom white(KingdomId::White);
+        Building barracks = makeTestBarracks(80, KingdomId::White, {7, 8}, config);
+        linkBuildingOnBoard(barracks, board);
+
+        const sf::Vector2i anchorCell = spawnAnchorCellForBuilding(barracks);
+        Piece blocker(5000, PieceType::Pawn, KingdomId::White, anchorCell);
+        white.addPiece(blocker);
+        board.getCell(anchorCell.x, anchorCell.y).piece = &white.pieces.back();
+
+        const std::vector<sf::Vector2i> candidates = ProductionSpawnRules::buildSpawnCandidateOrder(
+         anchorCell,
+         board.getDiameter());
+
+        sf::Vector2i expected{-1, -1};
+        for (const sf::Vector2i& candidate : candidates) {
+         const Cell& cell = board.getCell(candidate.x, candidate.y);
+         if (!isCellTerrainTraversable(cell) || cell.piece || cell.autonomousUnit) {
+             continue;
+         }
+
+         expected = candidate;
+         break;
+        }
+
+        expect(expected.x >= 0,
+            "The blocked-anchor spawn regression should leave at least one nearby traversable fallback cell.");
+
+        const sf::Vector2i spawn = ProductionSystem::findSpawnCell(barracks, board, PieceType::Pawn, white);
+        expect(spawn == expected,
+            "If the anchor cell is occupied, production should fall back to the nearest available cell around the anchor.");
+        expect(ringDistanceFromAnchor(anchorCell, spawn) == 1,
+            "The first fallback from a blocked anchor should stay in the nearest anchor-centered ring when space exists there.");
+    }
+
+    void testSpawnAllowsTraversableBuildingCells() {
+        GameConfig config;
+        Board board;
+        board.init(10);
+
+        Kingdom white(KingdomId::White);
+        Building barracks = makeTestBarracks(81, KingdomId::White, {7, 8}, config);
+        linkBuildingOnBoard(barracks, board);
+
+        const sf::Vector2i anchorCell = spawnAnchorCellForBuilding(barracks);
+        Piece blocker(5001, PieceType::Pawn, KingdomId::White, anchorCell);
+        white.addPiece(blocker);
+        board.getCell(anchorCell.x, anchorCell.y).piece = &white.pieces.back();
+
+        const sf::Vector2i preferredFallback{anchorCell.x - 1, anchorCell.y};
+        expect(barracks.containsCell(preferredFallback.x, preferredFallback.y),
+            "The traversable-building-cell spawn regression expects the nearest fallback to remain inside the barracks footprint.");
+        expect(isCellTerrainTraversable(board.getCell(preferredFallback.x, preferredFallback.y)),
+            "The chosen fallback test cell should be traversable even though it belongs to the barracks.");
+
+        const sf::Vector2i spawn = ProductionSystem::findSpawnCell(barracks, board, PieceType::Pawn, white);
+        expect(spawn == preferredFallback,
+            "Production should allow traversable building cells as spawn destinations instead of forcing units outside the structure footprint.");
+    }
+
 void testBishopSpawnAlternatesAcrossKingdomBarracks() {
     GameConfig config;
     Board board;
@@ -5169,19 +5247,18 @@ void testSpawnSearchExpandsBeyondInitialRadius() {
     Kingdom white(KingdomId::White);
     Building barracks = makeTestBarracks(74, KingdomId::White, {7, 8}, config);
     linkBuildingOnBoard(barracks, board);
+    const sf::Vector2i anchorCell = spawnAnchorCellForBuilding(barracks);
 
     const std::vector<sf::Vector2i> candidates = ProductionSpawnRules::buildSpawnCandidateOrder(
-        barracks.origin,
-        barracks.getFootprintWidth(),
-        barracks.getFootprintHeight(),
+        anchorCell,
         board.getDiameter());
 
     for (const sf::Vector2i& candidate : candidates) {
-        if (!board.getCell(candidate.x, candidate.y).isInCircle || barracks.containsCell(candidate.x, candidate.y)) {
+        if (!board.getCell(candidate.x, candidate.y).isInCircle) {
             continue;
         }
 
-        if (ringDistanceFromBuilding(barracks, candidate) <= 2) {
+        if (ringDistanceFromAnchor(anchorCell, candidate) <= 2) {
             board.getCell(candidate.x, candidate.y).type = CellType::Water;
         }
     }
@@ -5189,7 +5266,7 @@ void testSpawnSearchExpandsBeyondInitialRadius() {
     sf::Vector2i expected{-1, -1};
     for (const sf::Vector2i& candidate : candidates) {
         const Cell& cell = board.getCell(candidate.x, candidate.y);
-        if (!cell.isInCircle || cell.type == CellType::Water || cell.building || barracks.containsCell(candidate.x, candidate.y)) {
+        if (!isCellTerrainTraversable(cell) || cell.piece || cell.autonomousUnit) {
             continue;
         }
 
@@ -5202,7 +5279,7 @@ void testSpawnSearchExpandsBeyondInitialRadius() {
 
     const sf::Vector2i spawn = ProductionSystem::findSpawnCell(barracks, board, PieceType::Pawn, white);
     expect(spawn == expected,
-           "Barracks spawn search should expand beyond the previous radius-2 limit when closer rings are blocked.");
+        "Barracks spawn search should expand beyond the initial anchor-centered rings when the closer cells are blocked.");
 }
 
 void testBlockedBishopSpawnKeepsKingdomMemoryUnchanged() {
@@ -8244,6 +8321,9 @@ int main() {
         {"stone wall destroys after staying breached", testStoneWallDestroysWhenEnemyStaysOnBreachedCellUntilNextCommit},
         {"stone wall breach persists after leaving", testStoneWallBreachPersistsAfterAttackerLeavesAndFinishesOnReturn},
         {"first bishop spawn uses default rule", testFirstBishopSpawnUsesDefaultNearestRule},
+        {"spawn uses anchor cell when free", testSpawnUsesAnchorCellWhenFree},
+        {"spawn falls back around blocked anchor", testSpawnFallsBackToNearestCellAroundBlockedAnchor},
+        {"spawn allows traversable building cells", testSpawnAllowsTraversableBuildingCells},
         {"bishop spawn alternates across barracks", testBishopSpawnAlternatesAcrossKingdomBarracks},
         {"bishop spawn fallback parity", testBishopSpawnFallsBackWhenPreferredParityUnavailable},
         {"spawn search expands beyond radius two", testSpawnSearchExpandsBeyondInitialRadius},

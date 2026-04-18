@@ -11,13 +11,9 @@ public:
     using SpawnCellValidator = std::function<bool(const sf::Vector2i&)>;
 
     static int squareColorParity(const sf::Vector2i& position);
-    static std::vector<sf::Vector2i> buildSpawnCandidateOrder(const sf::Vector2i& origin,
-                                                              int footprintWidth,
-                                                              int footprintHeight,
+    static std::vector<sf::Vector2i> buildSpawnCandidateOrder(const sf::Vector2i& anchorCell,
                                                               int boardDiameter);
-    static sf::Vector2i findSpawnCell(const sf::Vector2i& origin,
-                                      int footprintWidth,
-                                      int footprintHeight,
+    static sf::Vector2i findSpawnCell(const sf::Vector2i& anchorCell,
                                       int boardDiameter,
                                       const SpawnCellValidator& isValidCell,
                                       std::optional<int> preferredParity = std::nullopt);

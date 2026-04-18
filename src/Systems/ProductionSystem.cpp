@@ -2,7 +2,9 @@
 #include "Buildings/Building.hpp"
 #include "Buildings/BuildingType.hpp"
 #include "Board/Board.hpp"
+#include "Board/CellTraversal.hpp"
 #include "Board/Cell.hpp"
+#include "Buildings/StructurePlacementProfile.hpp"
 #include "Kingdom/Kingdom.hpp"
 #include "Config/GameConfig.hpp"
 #include "Systems/ProductionSpawnRules.hpp"
@@ -39,15 +41,22 @@ sf::Vector2i ProductionSystem::findSpawnCell(const Building& barracks,
     const std::optional<int> preferredParity = (type == PieceType::Bishop)
         ? kingdom.preferredNextBishopSpawnParity()
         : std::nullopt;
+    const sf::Vector2i anchorCell = StructurePlacementProfiles::anchorCellFromOrigin(
+        barracks.type,
+        barracks.origin,
+        barracks.width,
+        barracks.height,
+        barracks.rotationQuarterTurns,
+        barracks.flipMask);
 
     return ProductionSpawnRules::findSpawnCell(
-        barracks.origin,
-        barracks.getFootprintWidth(),
-        barracks.getFootprintHeight(),
+        anchorCell,
         board.getDiameter(),
         [&board](const sf::Vector2i& pos) {
             const Cell& cell = board.getCell(pos.x, pos.y);
-            return cell.isInCircle && cell.type != CellType::Water && !cell.piece && !cell.building;
+            return isCellTerrainTraversable(cell)
+                && !cell.piece
+                && !cell.autonomousUnit;
         },
         preferredParity);
 }

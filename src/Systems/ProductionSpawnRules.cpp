@@ -19,21 +19,21 @@ int ProductionSpawnRules::squareColorParity(const sf::Vector2i& position) {
     return (position.x + position.y) & 1;
 }
 
-std::vector<sf::Vector2i> ProductionSpawnRules::buildSpawnCandidateOrder(const sf::Vector2i& origin,
-                                                                         int footprintWidth,
-                                                                         int footprintHeight,
+std::vector<sf::Vector2i> ProductionSpawnRules::buildSpawnCandidateOrder(const sf::Vector2i& anchorCell,
                                                                          int boardDiameter) {
     std::vector<sf::Vector2i> candidates;
-    if (boardDiameter <= 0 || footprintWidth <= 0 || footprintHeight <= 0) {
+    if (boardDiameter <= 0) {
         return candidates;
     }
 
-    candidates.reserve(boardDiameter * 8);
+    candidates.reserve((boardDiameter * 8) + 1);
+    appendIfInBounds(candidates, boardDiameter, anchorCell.x, anchorCell.y);
+
     for (int radius = 1; radius <= boardDiameter; ++radius) {
-        const int left = origin.x - radius;
-        const int right = origin.x + footprintWidth - 1 + radius;
-        const int top = origin.y - radius;
-        const int bottom = origin.y + footprintHeight - 1 + radius;
+        const int left = anchorCell.x - radius;
+        const int right = anchorCell.x + radius;
+        const int top = anchorCell.y - radius;
+        const int bottom = anchorCell.y + radius;
 
         for (int x = left; x <= right; ++x) {
             appendIfInBounds(candidates, boardDiameter, x, top);
@@ -54,14 +54,12 @@ std::vector<sf::Vector2i> ProductionSpawnRules::buildSpawnCandidateOrder(const s
     return candidates;
 }
 
-sf::Vector2i ProductionSpawnRules::findSpawnCell(const sf::Vector2i& origin,
-                                                 int footprintWidth,
-                                                 int footprintHeight,
+sf::Vector2i ProductionSpawnRules::findSpawnCell(const sf::Vector2i& anchorCell,
                                                  int boardDiameter,
                                                  const SpawnCellValidator& isValidCell,
                                                  std::optional<int> preferredParity) {
     const std::vector<sf::Vector2i> candidates = buildSpawnCandidateOrder(
-        origin, footprintWidth, footprintHeight, boardDiameter);
+        anchorCell, boardDiameter);
 
     if (preferredParity.has_value()) {
         for (const sf::Vector2i& candidate : candidates) {
