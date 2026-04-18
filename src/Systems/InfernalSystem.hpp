@@ -10,6 +10,7 @@
 class Board;
 class GameConfig;
 class Kingdom;
+struct WeatherMaskCache;
 
 struct InfernalSystemState {
     int activeInfernalUnitId = -1;
@@ -48,6 +49,7 @@ public:
         InfernalSystemState& state,
         const Board& board,
         const std::array<Kingdom, kNumKingdoms>& kingdoms,
+        const WeatherMaskCache& weatherMaskCache,
         std::uint32_t worldSeed,
         int currentTurnStep,
         int currentTurnNumber,
@@ -57,6 +59,7 @@ public:
         InfernalSystemState& state,
         const Board& board,
         const std::array<Kingdom, kNumKingdoms>& kingdoms,
+        const WeatherMaskCache& weatherMaskCache,
         std::uint32_t worldSeed,
         int currentTurnStep,
         int currentTurnNumber,
@@ -66,6 +69,7 @@ public:
                                       Board& board,
                                       std::array<Kingdom, kNumKingdoms>& kingdoms,
                                       std::vector<AutonomousUnit>& units,
+                                      const WeatherMaskCache& weatherMaskCache,
                                       std::uint32_t worldSeed,
                                       int currentTurnStep,
                                       int currentTurnNumber,

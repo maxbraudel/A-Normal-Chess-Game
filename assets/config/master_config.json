@@ -159,7 +159,8 @@
             "target_weight_knight": 14,
             "target_weight_bishop": 14,
             "target_weight_rook": 26,
-            "target_weight_queen": 38
+            "target_weight_queen": 38,
+            "searching_random_move_chance_times_1000": 333
         },
         "weather": {
             "cooldown_min_turns": 5,

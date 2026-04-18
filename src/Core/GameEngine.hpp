@@ -129,7 +129,9 @@ public:
 private:
     void syncFactoryIds();
     bool spawnChestIfDue(const GameConfig& config);
-    bool spawnInfernalIfDue(const GameConfig& config, int currentTurnStep);
+    bool spawnInfernalIfDue(const GameConfig& config,
+                           const WeatherMaskCache& weatherMaskCache,
+                           int currentTurnStep);
 
     GameSessionConfig m_sessionConfig = makeDefaultGameSessionConfig(GameMode::HumanVsHuman);
     Board m_board;

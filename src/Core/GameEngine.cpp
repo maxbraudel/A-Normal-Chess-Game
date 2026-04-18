@@ -457,6 +457,7 @@ bool GameEngine::triggerCheatcodeInfernalSpawn(const GameConfig& config) {
             m_infernalSystemState,
             m_board,
             m_kingdoms,
+            m_weatherMaskCache,
             m_sessionConfig.worldSeed,
             currentTurnStep,
             m_turnSystem.getTurnNumber(),
@@ -548,13 +549,14 @@ PendingTurnCommitResult GameEngine::commitPendingTurn(const GameConfig& config) 
 
     spawnChestIfDue(config);
 
-    bool infernalBoardChanged = spawnInfernalIfDue(config, currentHalfTurnStep);
+        bool infernalBoardChanged = spawnInfernalIfDue(config, m_weatherMaskCache, currentHalfTurnStep);
 
     if (InfernalSystem::actAfterCommittedTurn(
             m_infernalSystemState,
             m_board,
             m_kingdoms,
             m_autonomousUnits,
+            m_weatherMaskCache,
             m_sessionConfig.worldSeed,
             currentHalfTurnStep,
             m_turnSystem.getTurnNumber(),
@@ -665,11 +667,14 @@ bool GameEngine::spawnChestIfDue(const GameConfig& config) {
     return true;
 }
 
-bool GameEngine::spawnInfernalIfDue(const GameConfig& config, int currentTurnStep) {
+bool GameEngine::spawnInfernalIfDue(const GameConfig& config,
+                                    const WeatherMaskCache& weatherMaskCache,
+                                    int currentTurnStep) {
     if (std::optional<AutonomousUnit> spawnedInfernal = InfernalSystem::trySpawnInfernal(
             m_infernalSystemState,
             m_board,
             m_kingdoms,
+            weatherMaskCache,
             m_sessionConfig.worldSeed,
             currentTurnStep,
             m_turnSystem.getTurnNumber(),

@@ -102,6 +102,7 @@ public:
     int getInfernalBloodDebtForCapturedPiece(PieceType victim) const;
     int getInfernalBloodDebtForStructureDamage() const;
     int getInfernalTargetWeight(PieceType type) const;
+    int getInfernalSearchingRandomMoveChanceTimes1000() const;
 
     // Weather
     int getWeatherCooldownMinTurns() const;
@@ -257,6 +258,7 @@ private:
     int m_infernalTargetWeightBishop;
     int m_infernalTargetWeightRook;
     int m_infernalTargetWeightQueen;
+    int m_infernalSearchingRandomMoveChanceTimes1000;
 
     // Weather
     int m_weatherCooldownMinTurns;

@@ -10,7 +10,8 @@
 
 enum class InfernalPhase {
     Hunting = 0,
-    Returning = 1
+    Returning = 1,
+    Searching = 2
 };
 
 struct InfernalUnitData {
@@ -36,6 +37,8 @@ inline constexpr const char* infernalPhaseDisplayName(InfernalPhase phase) {
             return "Hunting";
         case InfernalPhase::Returning:
             return "Returning";
+        case InfernalPhase::Searching:
+            return "Searching";
     }
 
     return "Unknown";

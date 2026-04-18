@@ -298,6 +298,7 @@ void GameConfig::setDefaults() {
     m_infernalTargetWeightBishop = 14;
     m_infernalTargetWeightRook = 26;
     m_infernalTargetWeightQueen = 38;
+    m_infernalSearchingRandomMoveChanceTimes1000 = 333;
 
     m_weatherCooldownMinTurns = 5;
     m_weatherArrivalGammaShapeTimes100 = 240;
@@ -776,6 +777,10 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
             infernalSec, "target_weight_rook", m_infernalTargetWeightRook);
         m_infernalTargetWeightQueen = extractInt(
             infernalSec, "target_weight_queen", m_infernalTargetWeightQueen);
+        m_infernalSearchingRandomMoveChanceTimes1000 = extractInt(
+            infernalSec,
+            "searching_random_move_chance_times_1000",
+            m_infernalSearchingRandomMoveChanceTimes1000);
     }
 
     m_infernalMinSpawnTurn = clampNonNegativeConfigValue(
@@ -811,6 +816,11 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
         "infernal.target_weight_rook", m_infernalTargetWeightRook);
     m_infernalTargetWeightQueen = clampNonNegativeConfigValue(
         "infernal.target_weight_queen", m_infernalTargetWeightQueen);
+    m_infernalSearchingRandomMoveChanceTimes1000 = clampRangedConfigValue(
+        "infernal.searching_random_move_chance_times_1000",
+        m_infernalSearchingRandomMoveChanceTimes1000,
+        0,
+        1000);
 
     std::string weatherSec = extractSection(root, "weather");
     if (!weatherSec.empty()) {
@@ -1246,6 +1256,10 @@ int GameConfig::getInfernalTargetWeight(PieceType type) const {
     }
 
     return 0;
+}
+
+int GameConfig::getInfernalSearchingRandomMoveChanceTimes1000() const {
+    return m_infernalSearchingRandomMoveChanceTimes1000;
 }
 
 int GameConfig::getWeatherCooldownMinTurns() const { return m_weatherCooldownMinTurns; }

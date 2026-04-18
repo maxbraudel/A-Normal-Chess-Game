@@ -215,6 +215,30 @@ GameConfig makeWeatherTestConfig(const std::string& weatherJsonBody) {
     return config;
 }
 
+WeatherMaskCache makeConcealingFogMask(const Board& board,
+                                       const std::vector<sf::Vector2i>& foggedCells) {
+    WeatherMaskCache weatherMaskCache;
+    weatherMaskCache.diameter = board.getDiameter();
+    weatherMaskCache.hasActiveFront = true;
+    weatherMaskCache.alphaByCell.assign(
+        static_cast<std::size_t>(weatherMaskCache.diameter * weatherMaskCache.diameter),
+        0);
+    weatherMaskCache.shadeByCell.assign(
+        static_cast<std::size_t>(weatherMaskCache.diameter * weatherMaskCache.diameter),
+        255);
+
+    for (const sf::Vector2i& cell : foggedCells) {
+        if (!board.isInBounds(cell.x, cell.y)) {
+            continue;
+        }
+
+        weatherMaskCache.alphaByCell[static_cast<std::size_t>(
+            (cell.y * weatherMaskCache.diameter) + cell.x)] = 255;
+    }
+
+    return weatherMaskCache;
+}
+
 Piece& addPieceToBoard(Kingdom& kingdom,
                        Board& board,
                        int id,
@@ -6354,6 +6378,7 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             "      \"poisson_lambda_cap_times_1000\": 100000");
         Board board;
         board.init(12);
+        WeatherMaskCache weatherMaskCache;
 
         std::array<Kingdom, kNumKingdoms> kingdoms{Kingdom(KingdomId::White), Kingdom(KingdomId::Black)};
         addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::White)],
@@ -6383,6 +6408,7 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             infernalSystemState,
             board,
             kingdoms,
+            weatherMaskCache,
             123456u,
             0,
             1,
@@ -6408,6 +6434,7 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
                                                      board,
                                                      kingdoms,
                                                      autonomousUnits,
+                                                     weatherMaskCache,
                                                      123456u,
                                                      1,
                                                      1,
@@ -6422,6 +6449,195 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             "The infernal should remain in the hunting phase until it reaches or loses its target.");
     }
 
+    void testInfernalSystemSpawnsSearchingWhenOnlyFoggedTargetsRemain() {
+        GameConfig config = makeInfernalTestConfig(
+            "      \"min_spawn_turn\": 0,\n"
+            "      \"poisson_lambda_base_times_1000\": 100000,\n"
+            "      \"poisson_lambda_per_debt_times_1000\": 0,\n"
+            "      \"poisson_lambda_cap_times_1000\": 100000");
+        Board board;
+        board.init(12);
+
+        std::array<Kingdom, kNumKingdoms> kingdoms{Kingdom(KingdomId::White), Kingdom(KingdomId::Black)};
+        addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::White)],
+                        board,
+                        843,
+                        PieceType::King,
+                        KingdomId::White,
+                        {1, 1});
+        addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::White)],
+                        board,
+                        844,
+                        PieceType::Rook,
+                        KingdomId::White,
+                        {5, 5});
+        addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::Black)],
+                        board,
+                        943,
+                        PieceType::King,
+                        KingdomId::Black,
+                        {10, 10});
+        const WeatherMaskCache weatherMaskCache = makeConcealingFogMask(board, {{5, 5}});
+
+        InfernalSystemState infernalSystemState{};
+        InfernalSystem::initialize(infernalSystemState, 0, config);
+        infernalSystemState.nextSpawnTurn = 0;
+
+        std::optional<AutonomousUnit> spawnedInfernal = InfernalSystem::trySpawnInfernal(
+            infernalSystemState,
+            board,
+            kingdoms,
+            weatherMaskCache,
+            987654u,
+            0,
+            1,
+            7002,
+            config);
+
+        expect(spawnedInfernal.has_value(),
+            "An infernal should still spawn when its target kingdom has pieces but all of them are concealed by fog.");
+        expect(spawnedInfernal->infernal.phase == InfernalPhase::Searching,
+            "An infernal that finds no visible prey at spawn should enter the searching phase.");
+        expect(spawnedInfernal->infernal.targetKingdom == KingdomId::White,
+            "The spawned infernal should stay bound to the kingdom that still has targetable pieces behind fog.");
+        expect(spawnedInfernal->infernal.targetPieceId == -1,
+            "An infernal spawned into the searching phase should not bind to a hidden piece id.");
+        expect(spawnedInfernal->infernal.manifestedPieceType == PieceType::Rook,
+            "The infernal should still manifest from the hidden kingdom's available prey types when only one type exists.");
+        expect(isBoardBorderCell(board, spawnedInfernal->position),
+            "A searching infernal should still spawn on a legal border cell.");
+    }
+
+    void testInfernalSystemRetargetsVisiblePreyWithinSameKingdomWhenTargetEntersFog() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        std::array<Kingdom, kNumKingdoms> kingdoms{Kingdom(KingdomId::White), Kingdom(KingdomId::Black)};
+        addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::White)],
+                        board,
+                        851,
+                        PieceType::Rook,
+                        KingdomId::White,
+                        {5, 5});
+        addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::White)],
+                        board,
+                        852,
+                        PieceType::Pawn,
+                        KingdomId::White,
+                        {2, 2});
+        addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::White)],
+                        board,
+                        853,
+                        PieceType::King,
+                        KingdomId::White,
+                        {1, 1});
+        addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::Black)],
+                        board,
+                        951,
+                        PieceType::King,
+                        KingdomId::Black,
+                        {10, 10});
+
+        std::vector<Building> publicBuildings;
+        std::vector<MapObject> mapObjects;
+        std::vector<AutonomousUnit> autonomousUnits;
+        autonomousUnits.push_back(makeTestInfernalUnit(8101, KingdomId::White, {0, 1}, PieceType::Rook));
+        autonomousUnits.front().infernal.targetPieceId = 851;
+        autonomousUnits.front().infernal.preferredTargetType = PieceType::Rook;
+        autonomousUnits.front().infernal.phase = InfernalPhase::Hunting;
+        relinkBoardState(board, kingdoms, publicBuildings, mapObjects, autonomousUnits);
+
+        InfernalSystemState infernalSystemState{};
+        infernalSystemState.activeInfernalUnitId = 8101;
+        const WeatherMaskCache weatherMaskCache = makeConcealingFogMask(board, {{5, 5}});
+        const sf::Vector2i originalPosition = autonomousUnits.front().position;
+
+        expect(InfernalSystem::actAfterCommittedTurn(infernalSystemState,
+                                                     board,
+                                                     kingdoms,
+                                                     autonomousUnits,
+                                                     weatherMaskCache,
+                                                     246810u,
+                                                     1,
+                                                     1,
+                                                     KingdomId::Black,
+                                                     config),
+            "A hunting infernal should react when its tracked prey disappears into fog.");
+
+        expect(!autonomousUnits.empty(),
+            "Retargeting after fog loss should keep the infernal alive on the board.");
+        expect(autonomousUnits.front().infernal.targetKingdom == KingdomId::White,
+            "An infernal that loses sight of its prey should stay bound to the same target kingdom.");
+        expect(autonomousUnits.front().infernal.targetPieceId == 852,
+            "When its tracked prey enters fog, the infernal should retarget another visible prey in that same kingdom.");
+        expect(autonomousUnits.front().infernal.phase == InfernalPhase::Hunting,
+            "Retargeting onto visible prey should keep the infernal in the hunting phase.");
+        expect(autonomousUnits.front().position != originalPosition,
+            "After reacquiring visible prey, the infernal should continue its hunt during the same action tick.");
+    }
+
+    void testInfernalSystemSearchesInsteadOfReturningWhenOnlyFoggedTargetsRemain() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        std::array<Kingdom, kNumKingdoms> kingdoms{Kingdom(KingdomId::White), Kingdom(KingdomId::Black)};
+        addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::White)],
+                        board,
+                        861,
+                        PieceType::Pawn,
+                        KingdomId::White,
+                        {2, 2});
+        addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::White)],
+                        board,
+                        862,
+                        PieceType::King,
+                        KingdomId::White,
+                        {1, 1});
+        addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::Black)],
+                        board,
+                        961,
+                        PieceType::King,
+                        KingdomId::Black,
+                        {10, 10});
+
+        std::vector<Building> publicBuildings;
+        std::vector<MapObject> mapObjects;
+        std::vector<AutonomousUnit> autonomousUnits;
+        autonomousUnits.push_back(makeTestInfernalUnit(8102, KingdomId::White, {0, 1}, PieceType::Rook));
+        autonomousUnits.front().infernal.targetPieceId = 861;
+        autonomousUnits.front().infernal.preferredTargetType = PieceType::Pawn;
+        autonomousUnits.front().infernal.phase = InfernalPhase::Hunting;
+        relinkBoardState(board, kingdoms, publicBuildings, mapObjects, autonomousUnits);
+
+        InfernalSystemState infernalSystemState{};
+        infernalSystemState.activeInfernalUnitId = 8102;
+        const WeatherMaskCache weatherMaskCache = makeConcealingFogMask(board, {{2, 2}});
+        const sf::Vector2i originalPosition = autonomousUnits.front().position;
+
+        expect(InfernalSystem::actAfterCommittedTurn(infernalSystemState,
+                                                     board,
+                                                     kingdoms,
+                                                     autonomousUnits,
+                                                     weatherMaskCache,
+                                                     135791u,
+                                                     1,
+                                                     1,
+                                                     KingdomId::Black,
+                                                     config),
+            "A hunting infernal should still change state when its last known prey is concealed by fog.");
+
+        expect(!autonomousUnits.empty(),
+            "Losing sight of the last visible prey should not despawn the infernal immediately.");
+        expect(autonomousUnits.front().infernal.phase == InfernalPhase::Searching,
+            "When only fogged prey remain, the infernal should switch to the searching phase instead of returning home.");
+        expect(autonomousUnits.front().infernal.targetPieceId == -1,
+            "The searching phase should clear the tracked target piece id when no visible prey remain.");
+        expect(autonomousUnits.front().position == originalPosition,
+            "Transitioning from hunting to searching because of fog should not require an immediate random move.");
+    }
+
     void testInfernalSystemCapturesTargetReturnsAndDespawns() {
         GameConfig config = makeInfernalTestConfig(
             "      \"min_spawn_turn\": 0,\n"
@@ -6429,6 +6645,7 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             "      \"spawn_retry_turns\": 1");
         Board board;
         board.init(12);
+        WeatherMaskCache weatherMaskCache;
 
         std::array<Kingdom, kNumKingdoms> kingdoms{Kingdom(KingdomId::White), Kingdom(KingdomId::Black)};
         addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::White)],
@@ -6466,6 +6683,7 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
                                                      board,
                                                      kingdoms,
                                                      autonomousUnits,
+                                                     weatherMaskCache,
                                                      424242u,
                                                      1,
                                                      1,
@@ -6485,6 +6703,7 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
                                                          board,
                                                          kingdoms,
                                                          autonomousUnits,
+                                                         weatherMaskCache,
                                                          424242u,
                                                          currentTurnStep,
                                                          2 + iteration,
@@ -6503,6 +6722,90 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             "Despawning the infernal should clear the active infernal unit id.");
         expect(infernalSystemState.nextSpawnTurn >= currentTurnStep - 2 + 4,
             "Despawning the infernal should schedule a later respawn using the configured cooldown.");
+    }
+
+    void testInfernalSearchingRandomMoveIsDeterministicForFixedSeedAndCounter() {
+        GameConfig config = makeInfernalTestConfig(
+            "      \"searching_random_move_chance_times_1000\": 1000");
+
+        auto buildScenario = [&](int infernalId) {
+            Board board;
+            board.init(12);
+
+            std::array<Kingdom, kNumKingdoms> kingdoms{Kingdom(KingdomId::White), Kingdom(KingdomId::Black)};
+            addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::White)],
+                            board,
+                            871,
+                            PieceType::Pawn,
+                            KingdomId::White,
+                            {5, 5});
+            addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::White)],
+                            board,
+                            872,
+                            PieceType::King,
+                            KingdomId::White,
+                            {1, 1});
+            addPieceToBoard(kingdoms[static_cast<std::size_t>(KingdomId::Black)],
+                            board,
+                            971,
+                            PieceType::King,
+                            KingdomId::Black,
+                            {10, 10});
+
+            std::vector<Building> publicBuildings;
+            std::vector<MapObject> mapObjects;
+            std::vector<AutonomousUnit> autonomousUnits;
+            autonomousUnits.push_back(makeTestInfernalUnit(infernalId, KingdomId::White, {0, 1}, PieceType::Rook));
+            autonomousUnits.front().infernal.targetPieceId = -1;
+            autonomousUnits.front().infernal.preferredTargetType = PieceType::Pawn;
+            autonomousUnits.front().infernal.phase = InfernalPhase::Searching;
+            relinkBoardState(board, kingdoms, publicBuildings, mapObjects, autonomousUnits);
+
+            return std::make_tuple(board, kingdoms, autonomousUnits);
+        };
+
+        auto [boardA, kingdomsA, autonomousUnitsA] = buildScenario(8201);
+        auto [boardB, kingdomsB, autonomousUnitsB] = buildScenario(8202);
+        const WeatherMaskCache weatherMaskCacheA = makeConcealingFogMask(boardA, {{5, 5}});
+        const WeatherMaskCache weatherMaskCacheB = makeConcealingFogMask(boardB, {{5, 5}});
+
+        InfernalSystemState infernalSystemStateA{};
+        infernalSystemStateA.activeInfernalUnitId = 8201;
+        infernalSystemStateA.rngCounter = 19;
+        InfernalSystemState infernalSystemStateB{};
+        infernalSystemStateB.activeInfernalUnitId = 8202;
+        infernalSystemStateB.rngCounter = 19;
+
+        const sf::Vector2i originalPosition = autonomousUnitsA.front().position;
+        expect(InfernalSystem::actAfterCommittedTurn(infernalSystemStateA,
+                                                     boardA,
+                                                     kingdomsA,
+                                                     autonomousUnitsA,
+                                                     weatherMaskCacheA,
+                                                     777777u,
+                                                     1,
+                                                     1,
+                                                     KingdomId::Black,
+                                                     config),
+            "A searching infernal with a guaranteed wander chance should perform a random move.");
+        expect(InfernalSystem::actAfterCommittedTurn(infernalSystemStateB,
+                                                     boardB,
+                                                     kingdomsB,
+                                                     autonomousUnitsB,
+                                                     weatherMaskCacheB,
+                                                     777777u,
+                                                     1,
+                                                     1,
+                                                     KingdomId::Black,
+                                                     config),
+            "Replaying the same searching infernal move with the same seed and counter should also move.");
+
+        expect(autonomousUnitsA.front().position != originalPosition,
+            "A guaranteed searching wander chance should move the infernal off its starting cell.");
+        expect(autonomousUnitsA.front().position == autonomousUnitsB.front().position,
+            "Searching random movement should remain deterministic for a fixed world seed and infernal rng counter.");
+        expect(autonomousUnitsA.front().infernal.phase == InfernalPhase::Searching,
+            "Random wandering while searching should keep the infernal in the searching phase when no prey is revealed.");
     }
 
     void testTurnDraftCoordinatorSynchronizesAndKeepsProjectedDraftWhileWaiting() {
@@ -6976,6 +7279,8 @@ void testGameStateValidatorRejectsUnderConstructionRuntimeBuilding() {
         expect(engine.startNewSession(session, config, &error), error);
 
         engine.autonomousUnits().push_back(makeTestInfernalUnit(6601, KingdomId::Black, {3, 5}, PieceType::Bishop));
+        engine.autonomousUnits().front().infernal.phase = InfernalPhase::Searching;
+        engine.autonomousUnits().front().infernal.targetPieceId = -1;
         relinkBoardState(engine.board(),
                 engine.kingdoms(),
                 engine.publicBuildings(),
@@ -6999,6 +7304,8 @@ void testGameStateValidatorRejectsUnderConstructionRuntimeBuilding() {
             "The serialized save should preserve the infernal autonomous unit entry.");
         expect(loaded.autonomousUnits.front().infernal.manifestedPieceType == PieceType::Bishop,
             "The infernal autonomous unit should preserve its manifested piece archetype across save/load.");
+        expect(loaded.autonomousUnits.front().infernal.phase == InfernalPhase::Searching,
+            "The infernal autonomous unit should preserve the searching phase across save/load.");
 
         GameEngine restored;
         expect(restored.restoreFromSave(loaded, config, &error), error);
@@ -7006,6 +7313,8 @@ void testGameStateValidatorRejectsUnderConstructionRuntimeBuilding() {
             "Restoring a save should rebuild the persisted infernal autonomous unit.");
         expect(restored.autonomousUnits().front().infernal.manifestedPieceType == PieceType::Bishop,
             "Restoring a save should keep the infernal autonomous unit manifested piece type intact.");
+        expect(restored.autonomousUnits().front().infernal.phase == InfernalPhase::Searching,
+            "Restoring a save should keep the infernal searching phase intact.");
     }
 
 void testGameConfigClampsNegativeEconomyValues() {
@@ -7273,8 +7582,12 @@ int main() {
         {"xp forward model matches runtime capture", testForwardModelCaptureXPMatchesCommittedTurn},
         {"infernal blood debt from captures", testInfernalBloodDebtAccumulatesFromCommittedCaptures},
         {"infernal spawn and hunt", testInfernalSystemSpawnsOnBorderAndStartsHunt},
+        {"infernal spawn searching when prey fogged", testInfernalSystemSpawnsSearchingWhenOnlyFoggedTargetsRemain},
+        {"infernal retargets within same kingdom after fog loss", testInfernalSystemRetargetsVisiblePreyWithinSameKingdomWhenTargetEntersFog},
+        {"infernal searches instead of returning when prey fogged", testInfernalSystemSearchesInsteadOfReturningWhenOnlyFoggedTargetsRemain},
         {"turn draft coordinator sync and keep while waiting", testTurnDraftCoordinatorSynchronizesAndKeepsProjectedDraftWhileWaiting},
         {"infernal capture return despawn", testInfernalSystemCapturesTargetReturnsAndDespawns},
+        {"infernal searching random move deterministic", testInfernalSearchingRandomMoveIsDeterministicForFixedSeedAndCounter},
         {"render coordinator anchored piece selection frame", testRenderCoordinatorPrefersAnchoredSelectionCellForPieceFrame},
         {"render coordinator build overlay plan", testRenderCoordinatorBuildsBuildPreviewAndPendingBuildPlan},
         {"update coordinator playing tick", testUpdateCoordinatorPlansPlayingTick},

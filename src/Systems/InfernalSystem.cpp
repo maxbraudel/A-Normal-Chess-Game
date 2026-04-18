@@ -13,6 +13,7 @@
 #include "Board/Cell.hpp"
 #include "Config/GameConfig.hpp"
 #include "Kingdom/Kingdom.hpp"
+#include "Runtime/WeatherVisibility.hpp"
 #include "Systems/StructureIntegrityRules.hpp"
 #include "Units/MovementRules.hpp"
 #include "Units/Piece.hpp"
@@ -34,6 +35,10 @@ struct SpawnOption {
     sf::Vector2i spawnCell{0, 0};
     int weight = 0;
 };
+
+bool isVisibleToInfernal(const WeatherMaskCache& weatherMaskCache, sf::Vector2i position) {
+    return !WeatherVisibility::cellHasConcealingFog(weatherMaskCache, position);
+}
 
 int& debtForKingdom(InfernalSystemState& state, KingdomId kingdom) {
     return (kingdom == KingdomId::White) ? state.whiteBloodDebt : state.blackBloodDebt;
@@ -214,19 +219,84 @@ std::vector<TargetCandidate> collectTargetCandidates(const Kingdom& kingdom) {
     return candidates;
 }
 
+std::vector<TargetCandidate> collectVisibleTargetCandidates(const Kingdom& kingdom,
+                                                           const WeatherMaskCache& weatherMaskCache) {
+    std::vector<TargetCandidate> candidates;
+    candidates.reserve(kingdom.pieces.size());
+    for (const Piece& piece : kingdom.pieces) {
+        if (!isTargetablePieceType(piece.type) || !isVisibleToInfernal(weatherMaskCache, piece.position)) {
+            continue;
+        }
+
+        candidates.push_back(TargetCandidate{piece.id, piece.type, piece.position});
+    }
+
+    return candidates;
+}
+
 bool kingdomHasTargetablePieces(const Kingdom& kingdom) {
     return std::any_of(kingdom.pieces.begin(), kingdom.pieces.end(), [](const Piece& piece) {
         return isTargetablePieceType(piece.type);
     });
 }
 
-std::optional<SpawnOption> chooseSpawnOptionForKingdom(InfernalSystemState& state,
+std::optional<PieceType> chooseTargetTypeFromCandidates(InfernalSystemState& state,
+                                                        const std::vector<TargetCandidate>& targets,
+                                                        std::uint32_t worldSeed,
+                                                        const GameConfig& config) {
+    if (targets.empty()) {
+        return std::nullopt;
+    }
+
+    constexpr std::array<PieceType, 5> candidateTypes{
+        PieceType::Queen,
+        PieceType::Rook,
+        PieceType::Bishop,
+        PieceType::Knight,
+        PieceType::Pawn};
+
+    std::vector<int> typeWeights;
+    typeWeights.reserve(candidateTypes.size());
+    for (PieceType type : candidateTypes) {
+        const bool hasType = std::any_of(targets.begin(), targets.end(), [type](const TargetCandidate& target) {
+            return target.type == type;
+        });
+        typeWeights.push_back(hasType ? config.getInfernalTargetWeight(type) : 0);
+    }
+
+    if (std::accumulate(typeWeights.begin(), typeWeights.end(), 0) <= 0) {
+        return targets.front().type;
+    }
+
+    std::mt19937 generator = makeEventGenerator(state, worldSeed);
+    std::discrete_distribution<std::size_t> typeDistribution(typeWeights.begin(), typeWeights.end());
+    return candidateTypes[typeDistribution(generator)];
+}
+
+std::optional<sf::Vector2i> chooseRandomBorderSpawnCell(InfernalSystemState& state,
+                                                        const Board& board,
+                                                        std::uint32_t worldSeed) {
+    std::vector<sf::Vector2i> borderCells = collectBorderCells(board);
+    if (borderCells.empty()) {
+        return std::nullopt;
+    }
+
+    std::mt19937 generator = makeEventGenerator(state, worldSeed);
+    std::uniform_int_distribution<std::size_t> distribution(0, borderCells.size() - 1);
+    return borderCells[distribution(generator)];
+}
+
+void enterSearchingPhase(AutonomousUnit& unit) {
+    unit.infernal.phase = InfernalPhase::Searching;
+    unit.infernal.targetPieceId = -1;
+}
+
+std::optional<SpawnOption> chooseSpawnOptionForTargets(InfernalSystemState& state,
                                                        const Board& board,
-                                                       const Kingdom& targetKingdomState,
+                                                       const std::vector<TargetCandidate>& allTargets,
                                                        KingdomId targetKingdom,
                                                        std::uint32_t worldSeed,
                                                        const GameConfig& config) {
-    std::vector<TargetCandidate> allTargets = collectTargetCandidates(targetKingdomState);
     if (allTargets.empty()) {
         return std::nullopt;
     }
@@ -335,9 +405,10 @@ std::optional<TargetCandidate> chooseReplacementTarget(InfernalSystemState& stat
                                                        const Board& board,
                                                        const Kingdom& targetKingdomState,
                                                        const AutonomousUnit& unit,
+                                                       const WeatherMaskCache& weatherMaskCache,
                                                        std::uint32_t worldSeed,
                                                        const GameConfig& config) {
-    std::vector<TargetCandidate> targets = collectTargetCandidates(targetKingdomState);
+    std::vector<TargetCandidate> targets = collectVisibleTargetCandidates(targetKingdomState, weatherMaskCache);
     if (targets.empty()) {
         return std::nullopt;
     }
@@ -412,9 +483,93 @@ std::optional<TargetCandidate> chooseReplacementTarget(InfernalSystemState& stat
     return std::nullopt;
 }
 
+std::optional<sf::Vector2i> chooseSearchingRandomMove(InfernalSystemState& state,
+                                                      const Board& board,
+                                                      const AutonomousUnit& unit,
+                                                      const WeatherMaskCache& weatherMaskCache,
+                                                      std::uint32_t worldSeed,
+                                                      const GameConfig& config) {
+    const int chanceTimes1000 = std::clamp(
+        config.getInfernalSearchingRandomMoveChanceTimes1000(),
+        0,
+        kLambdaScale);
+    if (chanceTimes1000 <= 0) {
+        return std::nullopt;
+    }
+
+    std::vector<sf::Vector2i> moves = generateInfernalMoves(
+        unit.infernal.manifestedPieceType,
+        unit.infernal.targetKingdom,
+        unit.position,
+        board,
+        config);
+    moves.erase(
+        std::remove_if(moves.begin(), moves.end(), [&](sf::Vector2i move) {
+            const Cell& cell = board.getCell(move.x, move.y);
+            return cell.piece != nullptr
+                && cell.piece->kingdom == unit.infernal.targetKingdom
+                && !isVisibleToInfernal(weatherMaskCache, cell.piece->position);
+        }),
+        moves.end());
+    if (moves.empty()) {
+        return std::nullopt;
+    }
+
+    std::mt19937 generator = makeEventGenerator(state, worldSeed);
+    if (chanceTimes1000 < kLambdaScale) {
+        std::uniform_int_distribution<int> chanceDistribution(0, kLambdaScale - 1);
+        if (chanceDistribution(generator) >= chanceTimes1000) {
+            return std::nullopt;
+        }
+    }
+
+    std::uniform_int_distribution<std::size_t> moveDistribution(0, moves.size() - 1);
+    return moves[moveDistribution(generator)];
+}
+
+bool applyInfernalArrivalEffects(Board& board,
+                                 Kingdom& targetKingdom,
+                                 const AutonomousUnit& unit,
+                                 sf::Vector2i destination,
+                                 const GameConfig& config,
+                                 int trackedTargetPieceId) {
+    Cell& destinationCell = board.getCell(destination.x, destination.y);
+    const bool capturedTrackedTarget = destinationCell.piece != nullptr
+        && destinationCell.piece->kingdom == unit.infernal.targetKingdom
+        && destinationCell.piece->id == trackedTargetPieceId;
+    if (destinationCell.piece != nullptr
+        && destinationCell.piece->kingdom == unit.infernal.targetKingdom
+        && isTargetablePieceType(destinationCell.piece->type)) {
+        const int capturedPieceId = destinationCell.piece->id;
+        destinationCell.piece = nullptr;
+        targetKingdom.removePiece(capturedPieceId);
+    }
+
+    if (destinationCell.building != nullptr
+        && !destinationCell.building->isNeutral
+        && destinationCell.building->owner == unit.infernal.targetKingdom) {
+        const int localX = destination.x - destinationCell.building->origin.x;
+        const int localY = destination.y - destinationCell.building->origin.y;
+        const StructureOccupancyResult occupancyResult = StructureIntegrityRules::applyEnemyOccupancy(
+            *destinationCell.building,
+            localX,
+            localY,
+            config);
+        if (occupancyResult != StructureOccupancyResult::None
+            && destinationCell.building->isDestroyed()
+            && StructureIntegrityRules::shouldRemoveWhenFullyDestroyed(destinationCell.building->type)) {
+            const int buildingId = destinationCell.building->id;
+            targetKingdom.removeBuilding(buildingId);
+        }
+    }
+
+    return capturedTrackedTarget;
+}
+
 std::optional<AutonomousUnit> spawnInfernalFromResolvedTarget(InfernalSystemState& state,
                                                               const Board& board,
                                                               const std::array<Kingdom, kNumKingdoms>& kingdoms,
+                                                              const WeatherMaskCache& weatherMaskCache,
                                                               std::uint32_t worldSeed,
                                                               int currentTurnStep,
                                                               int currentTurnNumber,
@@ -427,44 +582,53 @@ std::optional<AutonomousUnit> spawnInfernalFromResolvedTarget(InfernalSystemStat
     }
 
     const Kingdom& chosenKingdom = kingdoms[kingdomIndex(*primaryTargetKingdom)];
-    std::optional<SpawnOption> option = chooseSpawnOptionForKingdom(
-        state,
-        board,
-        chosenKingdom,
-        *primaryTargetKingdom,
-        worldSeed,
-        config);
-
-    KingdomId finalTargetKingdom = *primaryTargetKingdom;
-    if (!option.has_value()) {
-        const KingdomId fallbackKingdom = opponent(*primaryTargetKingdom);
-        option = chooseSpawnOptionForKingdom(
-            state,
-            board,
-            kingdoms[kingdomIndex(fallbackKingdom)],
-            fallbackKingdom,
-            worldSeed,
-            config);
-        if (option.has_value()) {
-            finalTargetKingdom = fallbackKingdom;
-        }
-    }
-
-    if (!option.has_value()) {
+    const std::vector<TargetCandidate> allTargets = collectTargetCandidates(chosenKingdom);
+    if (allTargets.empty()) {
         state.nextSpawnTurn = currentTurnStep + cadenceStepsFromTurns(config.getInfernalSpawnRetryTurns());
         return std::nullopt;
     }
 
+    const std::vector<TargetCandidate> visibleTargets = collectVisibleTargetCandidates(
+        chosenKingdom,
+        weatherMaskCache);
+    std::optional<SpawnOption> option = chooseSpawnOptionForTargets(
+        state,
+        board,
+        visibleTargets,
+        *primaryTargetKingdom,
+        worldSeed,
+        config);
+
     AutonomousUnit unit;
     unit.id = nextUnitId;
     unit.type = AutonomousUnitType::InfernalPiece;
-    unit.position = option->spawnCell;
-    unit.infernal.targetKingdom = finalTargetKingdom;
-    unit.infernal.targetPieceId = option->targetPieceId;
-    unit.infernal.manifestedPieceType = option->targetType;
-    unit.infernal.preferredTargetType = option->targetType;
-    unit.infernal.phase = InfernalPhase::Hunting;
-    unit.infernal.returnBorderCell = option->spawnCell;
+    unit.infernal.targetKingdom = *primaryTargetKingdom;
+
+    if (option.has_value()) {
+        unit.position = option->spawnCell;
+        unit.infernal.targetPieceId = option->targetPieceId;
+        unit.infernal.manifestedPieceType = option->targetType;
+        unit.infernal.preferredTargetType = option->targetType;
+        unit.infernal.phase = InfernalPhase::Hunting;
+        unit.infernal.returnBorderCell = option->spawnCell;
+    } else {
+        const std::optional<sf::Vector2i> spawnCell = chooseRandomBorderSpawnCell(state, board, worldSeed);
+        if (!spawnCell.has_value()) {
+            state.nextSpawnTurn = currentTurnStep + cadenceStepsFromTurns(config.getInfernalSpawnRetryTurns());
+            return std::nullopt;
+        }
+
+        unit.position = *spawnCell;
+        unit.infernal.targetPieceId = -1;
+        unit.infernal.manifestedPieceType = chooseTargetTypeFromCandidates(
+            state,
+            allTargets,
+            worldSeed,
+            config).value_or(PieceType::Queen);
+        unit.infernal.preferredTargetType = unit.infernal.manifestedPieceType;
+        unit.infernal.phase = InfernalPhase::Searching;
+        unit.infernal.returnBorderCell = *spawnCell;
+    }
     unit.infernal.spawnTurn = currentTurnNumber;
 
     state.activeInfernalUnitId = unit.id;
@@ -675,6 +839,7 @@ std::optional<AutonomousUnit> InfernalSystem::trySpawnInfernal(
     InfernalSystemState& state,
     const Board& board,
     const std::array<Kingdom, kNumKingdoms>& kingdoms,
+    const WeatherMaskCache& weatherMaskCache,
     std::uint32_t worldSeed,
     int currentTurnStep,
     int currentTurnNumber,
@@ -709,6 +874,7 @@ std::optional<AutonomousUnit> InfernalSystem::trySpawnInfernal(
         state,
         board,
         kingdoms,
+        weatherMaskCache,
         worldSeed,
         currentTurnStep,
         currentTurnNumber,
@@ -720,6 +886,7 @@ std::optional<AutonomousUnit> InfernalSystem::forceSpawnInfernal(
     InfernalSystemState& state,
     const Board& board,
     const std::array<Kingdom, kNumKingdoms>& kingdoms,
+    const WeatherMaskCache& weatherMaskCache,
     std::uint32_t worldSeed,
     int currentTurnStep,
     int currentTurnNumber,
@@ -734,6 +901,7 @@ std::optional<AutonomousUnit> InfernalSystem::forceSpawnInfernal(
         state,
         board,
         kingdoms,
+        weatherMaskCache,
         worldSeed,
         currentTurnStep,
         currentTurnNumber,
@@ -745,6 +913,7 @@ bool InfernalSystem::actAfterCommittedTurn(InfernalSystemState& state,
                                            Board& board,
                                            std::array<Kingdom, kNumKingdoms>& kingdoms,
                                            std::vector<AutonomousUnit>& units,
+                                           const WeatherMaskCache& weatherMaskCache,
                                            std::uint32_t worldSeed,
                                            int currentTurnStep,
                                            int currentTurnNumber,
@@ -768,21 +937,83 @@ bool InfernalSystem::actAfterCommittedTurn(InfernalSystemState& state,
     }
 
     bool changed = false;
+    Kingdom& targetKingdom = kingdoms[kingdomIndex(unit->infernal.targetKingdom)];
+
+    if (unit->infernal.phase == InfernalPhase::Searching) {
+        const std::optional<TargetCandidate> replacement = chooseReplacementTarget(
+            state,
+            board,
+            targetKingdom,
+            *unit,
+            weatherMaskCache,
+            worldSeed,
+            config);
+        if (replacement.has_value()) {
+            unit->infernal.targetPieceId = replacement->pieceId;
+            unit->infernal.preferredTargetType = replacement->type;
+            unit->infernal.phase = InfernalPhase::Hunting;
+            changed = true;
+        } else if (!kingdomHasTargetablePieces(targetKingdom)) {
+            unit->infernal.phase = InfernalPhase::Returning;
+            const std::optional<sf::Vector2i> returnCell = chooseReturnBorderCell(
+                state,
+                board,
+                *unit,
+                worldSeed,
+                config);
+            unit->infernal.returnBorderCell = returnCell.value_or(unit->position);
+            changed = true;
+        } else if (const std::optional<sf::Vector2i> randomMove = chooseSearchingRandomMove(
+                       state,
+                       board,
+                       *unit,
+                       weatherMaskCache,
+                       worldSeed,
+                       config)) {
+            unit->position = *randomMove;
+            applyInfernalArrivalEffects(
+                board,
+                targetKingdom,
+                *unit,
+                *randomMove,
+                config,
+                -1);
+            changed = true;
+
+            if (!kingdomHasTargetablePieces(targetKingdom)) {
+                unit->infernal.phase = InfernalPhase::Returning;
+                const std::optional<sf::Vector2i> returnCell = chooseReturnBorderCell(
+                    state,
+                    board,
+                    *unit,
+                    worldSeed,
+                    config);
+                unit->infernal.returnBorderCell = returnCell.value_or(unit->position);
+            }
+        }
+    }
+
     if (unit->infernal.phase == InfernalPhase::Hunting) {
-        Kingdom& targetKingdom = kingdoms[kingdomIndex(unit->infernal.targetKingdom)];
         const Piece* targetPiece = targetKingdom.getPieceById(unit->infernal.targetPieceId);
-        if (targetPiece == nullptr || !isTargetablePieceType(targetPiece->type)) {
+        const bool targetPieceVisible = targetPiece != nullptr
+            && isTargetablePieceType(targetPiece->type)
+            && isVisibleToInfernal(weatherMaskCache, targetPiece->position);
+        if (!targetPieceVisible) {
             const std::optional<TargetCandidate> replacement = chooseReplacementTarget(
                 state,
                 board,
                 targetKingdom,
                 *unit,
+                weatherMaskCache,
                 worldSeed,
                 config);
             if (replacement.has_value()) {
                 unit->infernal.targetPieceId = replacement->pieceId;
                 unit->infernal.preferredTargetType = replacement->type;
                 targetPiece = targetKingdom.getPieceById(unit->infernal.targetPieceId);
+                changed = true;
+            } else if (kingdomHasTargetablePieces(targetKingdom)) {
+                enterSearchingPhase(*unit);
                 changed = true;
             } else {
                 unit->infernal.phase = InfernalPhase::Returning;
@@ -826,11 +1057,15 @@ bool InfernalSystem::actAfterCommittedTurn(InfernalSystemState& state,
                     board,
                     targetKingdom,
                     *unit,
+                    weatherMaskCache,
                     worldSeed,
                     config);
-                if (replacement.has_value() && replacement->pieceId != unit->infernal.targetPieceId) {
+                if (replacement.has_value()) {
                     unit->infernal.targetPieceId = replacement->pieceId;
                     unit->infernal.preferredTargetType = replacement->type;
+                    changed = true;
+                } else if (kingdomHasTargetablePieces(targetKingdom)) {
+                    enterSearchingPhase(*unit);
                     changed = true;
                 } else {
                     unit->infernal.phase = InfernalPhase::Returning;
@@ -850,36 +1085,14 @@ bool InfernalSystem::actAfterCommittedTurn(InfernalSystemState& state,
                     changed = true;
                 }
             } else {
-                Cell& destinationCell = board.getCell(chosenMove.x, chosenMove.y);
                 const int targetPieceId = unit->infernal.targetPieceId;
-                const bool capturedTrackedTarget = destinationCell.piece != nullptr
-                    && destinationCell.piece->kingdom == unit->infernal.targetKingdom
-                    && destinationCell.piece->id == targetPieceId;
-                if (destinationCell.piece != nullptr
-                    && destinationCell.piece->kingdom == unit->infernal.targetKingdom
-                    && isTargetablePieceType(destinationCell.piece->type)) {
-                    const int capturedPieceId = destinationCell.piece->id;
-                    destinationCell.piece = nullptr;
-                    targetKingdom.removePiece(capturedPieceId);
-                }
-
-                if (destinationCell.building != nullptr
-                    && !destinationCell.building->isNeutral
-                    && destinationCell.building->owner == unit->infernal.targetKingdom) {
-                    const int localX = chosenMove.x - destinationCell.building->origin.x;
-                    const int localY = chosenMove.y - destinationCell.building->origin.y;
-                    const StructureOccupancyResult occupancyResult = StructureIntegrityRules::applyEnemyOccupancy(
-                        *destinationCell.building,
-                        localX,
-                        localY,
-                        config);
-                    if (occupancyResult != StructureOccupancyResult::None
-                        && destinationCell.building->isDestroyed()
-                        && StructureIntegrityRules::shouldRemoveWhenFullyDestroyed(destinationCell.building->type)) {
-                        const int buildingId = destinationCell.building->id;
-                        targetKingdom.removeBuilding(buildingId);
-                    }
-                }
+                const bool capturedTrackedTarget = applyInfernalArrivalEffects(
+                    board,
+                    targetKingdom,
+                    *unit,
+                    chosenMove,
+                    config,
+                    targetPieceId);
 
                 changed = true;
 
@@ -889,11 +1102,14 @@ bool InfernalSystem::actAfterCommittedTurn(InfernalSystemState& state,
                         board,
                         targetKingdom,
                         *unit,
+                        weatherMaskCache,
                         worldSeed,
                         config);
                     if (replacement.has_value()) {
                         unit->infernal.targetPieceId = replacement->pieceId;
                         unit->infernal.preferredTargetType = replacement->type;
+                    } else if (kingdomHasTargetablePieces(targetKingdom)) {
+                        enterSearchingPhase(*unit);
                     } else {
                         unit->infernal.phase = InfernalPhase::Returning;
                         const std::optional<sf::Vector2i> returnCell = chooseReturnBorderCell(
