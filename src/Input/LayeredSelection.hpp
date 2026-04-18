@@ -5,6 +5,7 @@
 #include <SFML/System/Vector2.hpp>
 
 class Piece;
+struct AutonomousUnit;
 class Building;
 class MapObject;
 struct Cell;
@@ -12,6 +13,7 @@ struct Cell;
 enum class SelectionLayer {
     None,
     Piece,
+    AutonomousUnit,
     Building,
     Object,
     Terrain
@@ -20,10 +22,12 @@ enum class SelectionLayer {
 struct LayeredSelectionStack {
     sf::Vector2i cellPos{0, 0};
     Piece* piece = nullptr;
+    AutonomousUnit* autonomousUnit = nullptr;
     Building* building = nullptr;
     MapObject* mapObject = nullptr;
     bool hasTerrain = false;
-    std::array<SelectionLayer, 4> layers{
+    std::array<SelectionLayer, 5> layers{
+        SelectionLayer::None,
         SelectionLayer::None,
         SelectionLayer::None,
         SelectionLayer::None,

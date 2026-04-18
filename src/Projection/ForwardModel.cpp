@@ -1,4 +1,5 @@
 #include "Projection/ForwardModel.hpp"
+#include "Autonomous/AutonomousUnit.hpp"
 #include "Board/Board.hpp"
 #include "Board/Cell.hpp"
 #include "Kingdom/Kingdom.hpp"
@@ -14,6 +15,7 @@
 #include "Systems/XPSystem.hpp"
 #include <cmath>
 #include <algorithm>
+#include <set>
 
 namespace {
 
@@ -41,6 +43,15 @@ bool isEnemyCapturableBuildingCell(const GameSnapshot& snapshot,
                                    KingdomId mover) {
     const SnapBuilding* building = snapshot.buildingAt(pos);
     return building && !building->isNeutral && building->owner != mover;
+}
+
+void removeAutonomousOccupantAt(GameSnapshot& snapshot, sf::Vector2i pos) {
+    const SnapAutonomousUnit* occupant = snapshot.autonomousUnitAt(pos);
+    if (!occupant) {
+        return;
+    }
+
+    snapshot.removeAutonomousUnit(occupant->id);
 }
 
 void processEnemyStructureOccupancy(GameSnapshot& snapshot,
@@ -127,6 +138,10 @@ static SnapPiece toSnap(const Piece& p) {
     return {p.id, p.type, p.kingdom, p.position, p.xp};
 }
 
+static SnapAutonomousUnit toSnap(const AutonomousUnit& unit) {
+    return {unit.id, unit.type, unit.position};
+}
+
 static SnapBuilding toSnapBuilding(const Building& b) {
     SnapBuilding sb;
     sb.id = b.id;
@@ -191,6 +206,20 @@ GameSnapshot ForwardModel::createSnapshot(const Board& board,
     assignKingdom(first);
     assignKingdom(second);
 
+    std::set<int> autonomousIds;
+    for (int y = 0; y < tg->diameter; ++y) {
+        for (int x = 0; x < tg->diameter; ++x) {
+            const Cell& cell = board.getCell(x, y);
+            if (cell.autonomousUnit == nullptr) {
+                continue;
+            }
+
+            if (autonomousIds.insert(cell.autonomousUnit->id).second) {
+                s.autonomousUnits.push_back(toSnap(*cell.autonomousUnit));
+            }
+        }
+    }
+
     // Public buildings
     for (auto& b : publicBuildings) s.publicBuildings.push_back(toSnapBuilding(b));
 
@@ -212,6 +241,7 @@ bool ForwardModel::canLandOn(const GameSnapshot& s, sf::Vector2i pos, KingdomId 
     }
     const SnapPiece* occ = s.pieceAt(pos);
     if (occ && occ->kingdom == mover) return false; // can't land on own piece
+    if (s.autonomousUnitAt(pos)) return true;
     return true;
 }
 
@@ -227,7 +257,7 @@ std::vector<sf::Vector2i> ForwardModel::getPawnMoves(const SnapPiece& piece,
             continue;
         }
 
-        if (s.pieceAt(dest)) {
+        if (s.pieceAt(dest) || s.autonomousUnitAt(dest)) {
             continue;
         }
         if (isEnemyCapturableBuildingCell(s, dest, piece.kingdom)) {
@@ -248,6 +278,10 @@ std::vector<sf::Vector2i> ForwardModel::getPawnMoves(const SnapPiece& piece,
 
         const SnapPiece* occupant = s.pieceAt(dest);
         if (occupant && occupant->kingdom != piece.kingdom) {
+            moves.push_back(dest);
+            continue;
+        }
+        if (s.autonomousUnitAt(dest)) {
             moves.push_back(dest);
             continue;
         }
@@ -303,12 +337,17 @@ std::vector<sf::Vector2i> ForwardModel::getDirectionalMoves(const SnapPiece& pie
         }
 
         const SnapPiece* occ = s.pieceAt(dest);
-        if (occ) {
-            if (occ->kingdom != piece.kingdom)
-                moves.push_back(dest); // capture
-            break; // blocked
+        if (occ && occ->kingdom == piece.kingdom) {
+            break;
         }
+
         moves.push_back(dest);
+        if (s.autonomousUnitAt(dest)) {
+            break;
+        }
+        if (occ && occ->kingdom != piece.kingdom) {
+            break;
+        }
     }
     return moves;
 }
@@ -403,6 +442,8 @@ std::vector<sf::Vector2i> ForwardModel::getLegalMoves(const GameSnapshot& s,
             simEnemy.removePiece(victim->id);
         }
 
+        removeAutonomousOccupantAt(sim, destination);
+
         simPiece->position = destination;
         if (!isInCheck(sim, piece.kingdom, globalMaxRange)) {
             legalMoves.push_back(destination);
@@ -444,6 +485,8 @@ bool ForwardModel::applyMove(GameSnapshot& s, int pieceId, sf::Vector2i dest,
         enemyK.removePiece(victim->id);
     }
 
+    removeAutonomousOccupantAt(s, dest);
+
     piece->position = dest;
     budget.movementPointsRemaining -= moveCost;
     budget.setMoveCountForPiece(pieceId, budget.moveCountForPiece(pieceId) + 1);
@@ -478,6 +521,7 @@ bool ForwardModel::applyBuild(GameSnapshot& s, KingdomId k, BuildingType type,
             int cx = pos.x + dx, cy = pos.y + dy;
             if (!s.isTraversable(cx, cy)) return false;
             if (s.pieceAt({cx, cy})) return false;
+            if (s.autonomousUnitAt({cx, cy})) return false;
             if (s.buildingAt({cx, cy})) return false;
         }
     }
@@ -550,6 +594,7 @@ sf::Vector2i ForwardModel::findSpawnCell(const GameSnapshot& s,
         [&s](const sf::Vector2i& pos) {
             if (!s.isTraversable(pos.x, pos.y)) return false;
             if (s.pieceAt(pos)) return false;
+            if (s.autonomousUnitAt(pos)) return false;
             return s.buildingAt(pos) == nullptr;
         },
         preferredParity);
@@ -723,6 +768,7 @@ bool ForwardModel::isCheckmate(const GameSnapshot& s, KingdomId k, int globalMax
                 if (victim->type == PieceType::King) continue;
                 simEnemy.removePiece(victim->id);
             }
+            removeAutonomousOccupantAt(sim, dest);
             simPiece->position = dest;
 
             if (!isInCheck(sim, k, globalMaxRange))

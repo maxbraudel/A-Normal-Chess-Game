@@ -12,6 +12,7 @@
 struct InputSelectionBookmark {
     ToolState tool = ToolState::Select;
     int pieceId = -1;
+    int autonomousUnitId = -1;
     int buildingId = -1;
     int mapObjectId = -1;
     // Canonical world cell where the current selection was anchored.

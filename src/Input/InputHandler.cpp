@@ -1,5 +1,6 @@
 #include "Input/InputHandler.hpp"
 
+#include "Autonomous/AutonomousUnit.hpp"
 #include "Render/Camera.hpp"
 #include "Board/Board.hpp"
 #include "Board/Cell.hpp"
@@ -34,6 +35,9 @@ void rebuildLayerOrder(LayeredSelectionStack& stack) {
     if (stack.piece) {
         stack.layers[stack.count++] = SelectionLayer::Piece;
     }
+    if (stack.autonomousUnit) {
+        stack.layers[stack.count++] = SelectionLayer::AutonomousUnit;
+    }
     if (stack.building) {
         stack.layers[stack.count++] = SelectionLayer::Building;
     }
@@ -55,7 +59,8 @@ void rebuildLayerOrder(LayeredSelectionStack& stack) {
 } // namespace
 
 InputHandler::InputHandler()
-    : m_currentTool(ToolState::Select), m_selectedPieceId(-1), m_selectedBuildingId(-1),
+    : m_currentTool(ToolState::Select), m_selectedPieceId(-1), m_selectedAutonomousUnitId(-1),
+    m_selectedBuildingId(-1),
     m_selectedMapObjectId(-1),
     m_selectedBuildingType(BuildingType::Barracks),
     m_selectedMapObjectType(MapObjectType::Chest),
@@ -135,6 +140,9 @@ InputSelectionBookmark InputHandler::createSelectionBookmark() const {
     if (m_selectedPieceId >= 0) {
         bookmark.pieceId = m_selectedPieceId;
     }
+    if (m_selectedAutonomousUnitId >= 0) {
+        bookmark.autonomousUnitId = m_selectedAutonomousUnitId;
+    }
     if (m_selectedBuildingId >= 0) {
         bookmark.buildingId = m_selectedBuildingId;
         bookmark.selectedBuildingOrigin = m_selectedBuildingOrigin;
@@ -191,6 +199,16 @@ void InputHandler::reconcileSelection(const InputSelectionBookmark& bookmark,
                                        context,
                                        context.permissions.canIssueCommands
                                            && stack.piece->kingdom == context.controlledKingdom.id);
+            } else {
+                activateTerrainSelection(cellPos);
+            }
+            restoreBuildPreviewState(bookmark);
+            return true;
+        }
+
+        if (bookmark.autonomousUnitId >= 0) {
+            if (stack.autonomousUnit != nullptr && stack.autonomousUnit->id == bookmark.autonomousUnitId) {
+                activateAutonomousSelection(stack.autonomousUnit, cellPos);
             } else {
                 activateTerrainSelection(cellPos);
             }
@@ -295,6 +313,7 @@ void InputHandler::restoreBuildPreviewState(const InputSelectionBookmark& bookma
 
 void InputHandler::clearSelection() {
     m_selectedPieceId = -1;
+    m_selectedAutonomousUnitId = -1;
     m_selectedBuildingId = -1;
     m_selectedMapObjectId = -1;
     m_selectedBuildingOrigin.reset();
@@ -320,6 +339,7 @@ void InputHandler::clearSelection() {
 
 void InputHandler::selectCell(sf::Vector2i cellPos) {
     m_selectedPieceId = -1;
+    m_selectedAutonomousUnitId = -1;
     m_selectedBuildingId = -1;
     m_selectedMapObjectId = -1;
     m_selectedBuildingOrigin.reset();
@@ -341,6 +361,7 @@ void InputHandler::selectCell(sf::Vector2i cellPos) {
 void InputHandler::activatePieceSelection(Piece* piece, sf::Vector2i cellPos,
                                           const InputContext& context, bool allowCommands) {
     m_selectedPieceId = piece ? piece->id : -1;
+    m_selectedAutonomousUnitId = -1;
     m_selectedBuildingId = -1;
     m_selectedMapObjectId = -1;
     m_selectedBuildingOrigin.reset();
@@ -362,8 +383,30 @@ void InputHandler::activatePieceSelection(Piece* piece, sf::Vector2i cellPos,
     setActiveSelectionMetadata(SelectionLayer::Piece, cellPos);
 }
 
+void InputHandler::activateAutonomousSelection(AutonomousUnit* autonomousUnit, sf::Vector2i cellPos) {
+    m_selectedPieceId = -1;
+    m_selectedAutonomousUnitId = autonomousUnit ? autonomousUnit->id : -1;
+    m_selectedBuildingId = -1;
+    m_selectedMapObjectId = -1;
+    m_selectedBuildingOrigin.reset();
+    m_selectedMapObjectPosition.reset();
+    m_selectedBuildingType = BuildingType::Barracks;
+    m_selectedMapObjectType = MapObjectType::Chest;
+    m_selectedBuildingOwner = KingdomId::White;
+    m_selectedBuildingIsNeutral = false;
+    m_selectedBuildingRotationQuarterTurns = 0;
+    m_selectedCell = cellPos;
+    m_hasSelectedCell = true;
+    m_validMoves.clear();
+    m_dangerMoves.clear();
+    m_selectedOriginDangerous = false;
+    m_selectedOriginSelectable = true;
+    setActiveSelectionMetadata(SelectionLayer::AutonomousUnit, cellPos);
+}
+
 void InputHandler::activateBuildingSelection(Building* building, sf::Vector2i cellPos) {
     m_selectedPieceId = -1;
+    m_selectedAutonomousUnitId = -1;
     m_selectedBuildingId = building ? building->id : -1;
     m_selectedMapObjectId = -1;
     m_selectedBuildingOrigin = building ? std::optional<sf::Vector2i>{building->origin} : std::nullopt;
@@ -383,6 +426,7 @@ void InputHandler::activateBuildingSelection(Building* building, sf::Vector2i ce
 
 void InputHandler::activateMapObjectSelection(MapObject* mapObject, sf::Vector2i cellPos) {
     m_selectedPieceId = -1;
+    m_selectedAutonomousUnitId = -1;
     m_selectedBuildingId = -1;
     m_selectedMapObjectId = mapObject ? mapObject->id : -1;
     m_selectedBuildingOrigin.reset();
@@ -445,6 +489,11 @@ LayeredSelectionStack InputHandler::resolveSelectionStackAtCell(const InputConte
                     *context.weatherMaskCache)) {
                 stack.piece = nullptr;
             }
+            if (stack.autonomousUnit != nullptr && WeatherVisibility::shouldHideAutonomousUnit(
+                    *stack.autonomousUnit,
+                    *context.weatherMaskCache)) {
+                stack.autonomousUnit = nullptr;
+            }
             if (stack.building != nullptr && WeatherVisibility::shouldHideBuildingSelection(
                     *stack.building,
                     cellPos,
@@ -490,6 +539,11 @@ LayeredSelectionStack InputHandler::resolveSelectionStackAtCell(const InputConte
                 *context.weatherMaskCache)) {
             stack.piece = nullptr;
         }
+        if (stack.autonomousUnit != nullptr && WeatherVisibility::shouldHideAutonomousUnit(
+                *stack.autonomousUnit,
+                *context.weatherMaskCache)) {
+            stack.autonomousUnit = nullptr;
+        }
         if (stack.building != nullptr && WeatherVisibility::shouldHideBuildingSelection(
                 *stack.building,
                 cellPos,
@@ -515,6 +569,9 @@ void InputHandler::applyResolvedSelection(const LayeredSelectionStack& stack,
                                    context,
                                    context.permissions.canIssueCommands && stack.piece
                                        && stack.piece->kingdom == context.controlledKingdom.id);
+            return;
+        case SelectionLayer::AutonomousUnit:
+            activateAutonomousSelection(stack.autonomousUnit, stack.cellPos);
             return;
         case SelectionLayer::Building:
             activateBuildingSelection(stack.building, stack.cellPos);

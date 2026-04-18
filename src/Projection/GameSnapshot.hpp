@@ -5,6 +5,7 @@
 #include <optional>
 #include <vector>
 #include <SFML/System/Vector2.hpp>
+#include "Autonomous/AutonomousUnitType.hpp"
 #include "Buildings/Building.hpp"
 #include "Units/PieceType.hpp"
 #include "Buildings/BuildingType.hpp"
@@ -21,6 +22,12 @@ struct SnapPiece {
     KingdomId kingdom = KingdomId::White;
     sf::Vector2i position{0, 0};
     int xp = 0;
+};
+
+struct SnapAutonomousUnit {
+    int id = -1;
+    AutonomousUnitType type = AutonomousUnitType::InfernalPiece;
+    sf::Vector2i position{0, 0};
 };
 
 struct SnapBuilding {
@@ -282,6 +289,7 @@ struct GameSnapshot {
     SnapKingdom black;
     SnapTurnBudget whiteTurnBudget;
     SnapTurnBudget blackTurnBudget;
+    std::vector<SnapAutonomousUnit> autonomousUnits;
     std::vector<SnapBuilding> publicBuildings;  // neutral/public buildings
     int turnNumber = 1;
     std::uint32_t worldSeed = 0;
@@ -323,6 +331,24 @@ struct GameSnapshot {
         return black.getPieceAt(pos);
     }
 
+    SnapAutonomousUnit* autonomousUnitAt(sf::Vector2i pos) {
+        for (auto& unit : autonomousUnits) if (unit.position == pos) return &unit;
+        return nullptr;
+    }
+    const SnapAutonomousUnit* autonomousUnitAt(sf::Vector2i pos) const {
+        for (auto& unit : autonomousUnits) if (unit.position == pos) return &unit;
+        return nullptr;
+    }
+
+    void removeAutonomousUnit(int unitId) {
+        autonomousUnits.erase(
+            std::remove_if(autonomousUnits.begin(), autonomousUnits.end(),
+                           [unitId](const SnapAutonomousUnit& unit) {
+                               return unit.id == unitId;
+                           }),
+            autonomousUnits.end());
+    }
+
     // Find building at position (kingdom-owned or public)
     const SnapBuilding* buildingAt(sf::Vector2i pos) const {
         for (auto& b : white.buildings) if (b.containsCell(pos.x, pos.y)) return &b;
@@ -345,6 +371,7 @@ struct GameSnapshot {
         s.black = black;
         s.whiteTurnBudget = whiteTurnBudget;
         s.blackTurnBudget = blackTurnBudget;
+        s.autonomousUnits = autonomousUnits;
         s.publicBuildings = publicBuildings;
         s.turnNumber = turnNumber;
         s.worldSeed = worldSeed;

@@ -20,6 +20,7 @@ class UIManager;
 class GameConfig;
 class Kingdom;
 class Piece;
+struct AutonomousUnit;
 class Building;
 class MapObject;
 
@@ -73,6 +74,7 @@ public:
 private:
     ToolState m_currentTool;
     int m_selectedPieceId;
+    int m_selectedAutonomousUnitId;
     int m_selectedBuildingId;
     int m_selectedMapObjectId;
     std::optional<sf::Vector2i> m_selectedBuildingOrigin;
@@ -122,6 +124,7 @@ private:
     void selectCell(sf::Vector2i cellPos);
     void activatePieceSelection(Piece* piece, sf::Vector2i cellPos,
                                 const InputContext& context, bool allowCommands);
+    void activateAutonomousSelection(AutonomousUnit* autonomousUnit, sf::Vector2i cellPos);
     void activateBuildingSelection(Building* building, sf::Vector2i cellPos);
     void activateMapObjectSelection(MapObject* mapObject, sf::Vector2i cellPos);
     void activateTerrainSelection(sf::Vector2i cellPos);

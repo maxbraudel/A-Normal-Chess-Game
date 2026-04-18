@@ -48,12 +48,16 @@ LayeredSelectionStack resolveCellSelectionStack(const Cell& cell, sf::Vector2i c
     }
 
     stack.piece = pieceOverride ? pieceOverride : (suppressCellPiece ? nullptr : cell.piece);
+    stack.autonomousUnit = cell.autonomousUnit;
     stack.building = cell.building;
     stack.mapObject = cell.mapObject;
     stack.hasTerrain = true;
 
     if (stack.piece) {
         stack.layers[stack.count++] = SelectionLayer::Piece;
+    }
+    if (stack.autonomousUnit) {
+        stack.layers[stack.count++] = SelectionLayer::AutonomousUnit;
     }
     if (stack.building) {
         stack.layers[stack.count++] = SelectionLayer::Building;

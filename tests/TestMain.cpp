@@ -702,6 +702,25 @@ void testLayeredSelectionStackSupportsBuildingTerrainCycle() {
         "Terrain should wrap back to building when those are the only two layers.");
 }
 
+void testLayeredSelectionStackSupportsAutonomousTerrainCycle() {
+    Cell cell;
+    cell.type = CellType::Grass;
+    cell.isInCircle = true;
+
+    AutonomousUnit infernal = makeTestInfernalUnit(31, KingdomId::Black, {5, 6});
+    cell.autonomousUnit = &infernal;
+
+    const LayeredSelectionStack stack = resolveCellSelectionStack(cell, {5, 6});
+    expect(stack.count == 2,
+        "Cells containing only an autonomous unit should expose autonomous plus terrain layers.");
+    expect(stack.top() == SelectionLayer::AutonomousUnit,
+        "Autonomous units should be the top selection layer on infernal-occupied cells.");
+    expect(stack.nextBelow(SelectionLayer::AutonomousUnit) == SelectionLayer::Terrain,
+        "Cycling below an autonomous unit should expose terrain next.");
+    expect(stack.nextBelow(SelectionLayer::Terrain) == SelectionLayer::AutonomousUnit,
+        "Terrain should wrap back to the autonomous unit when those are the only two layers.");
+}
+
 void testLayeredSelectionStackSupportsPreviewPieceOverride() {
     Cell cell;
     cell.type = CellType::Grass;
@@ -779,6 +798,56 @@ void testInputHandlerBookmarksActivePieceSelectionCell() {
         "InputHandler should preserve the selected piece id when creating a bookmark for a piece selection.");
     expect(bookmark.selectedCell.has_value() && *bookmark.selectedCell == sf::Vector2i{4, 5},
         "InputHandler should preserve the active piece selection cell in bookmarks so draft reconciliation can restore the original clicked location.");
+}
+
+void testInputHandlerReconcileSelectionRestoresAutonomousSelection() {
+    GameConfig config;
+    Board board;
+    board.init(12);
+
+    Kingdom white(KingdomId::White);
+    Kingdom black(KingdomId::Black);
+    addPieceToBoard(white, board, 1104, PieceType::King, KingdomId::White, {4, 4});
+    addPieceToBoard(black, board, 2104, PieceType::King, KingdomId::Black, {9, 9});
+
+    std::vector<AutonomousUnit> autonomousUnits;
+    autonomousUnits.push_back(makeTestInfernalUnit(5104, KingdomId::White, {6, 6}));
+    board.getCell(6, 6).autonomousUnit = &autonomousUnits.front();
+
+    TurnSystem turnSystem;
+    turnSystem.setActiveKingdom(KingdomId::White);
+    turnSystem.setTurnNumber(1);
+    BuildingFactory buildingFactory;
+    std::vector<Building> publicBuildings;
+    sf::RenderWindow window;
+    Camera camera;
+    UIManager uiManager;
+    InputContext context = makePassiveInputContext(window,
+                                                   camera,
+                                                   board,
+                                                   turnSystem,
+                                                   buildingFactory,
+                                                   white,
+                                                   black,
+                                                   publicBuildings,
+                                                   uiManager,
+                                                   config);
+    context.permissions.canIssueCommands = false;
+
+    InputSelectionBookmark bookmark;
+    bookmark.selectedCell = sf::Vector2i{6, 6};
+    bookmark.autonomousUnitId = 5104;
+
+    InputHandler input;
+    input.reconcileSelection(bookmark, nullptr, nullptr, nullptr, context);
+
+    const InputSelectionBookmark restoredBookmark = input.createSelectionBookmark();
+    expect(restoredBookmark.autonomousUnitId == 5104,
+        "InputHandler should restore an autonomous-unit selection from a bookmarked infernal id.");
+    expect(restoredBookmark.selectedCell.has_value() && *restoredBookmark.selectedCell == sf::Vector2i{6, 6},
+        "InputHandler should preserve the infernal cell anchor when restoring an autonomous selection.");
+    expect(input.hasSelectedCell() && input.getSelectedCell() == sf::Vector2i{6, 6},
+        "Autonomous selections should keep the selected cell populated so the normal board selection frame can render.");
 }
 
 void testInputHandlerReconcileSelectionDoesNotJumpToMismatchedPieceElsewhere() {
@@ -1398,6 +1467,28 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
             "Red king destinations should remain selectable even though they are unsafe.");
     }
 
+    void testSelectionMoveRulesAllowPawnToCaptureAutonomousUnitDiagonally() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 3220, PieceType::King, KingdomId::White, {4, 4});
+        Piece& pawn = addPieceToBoard(white, board, 3221, PieceType::Pawn, KingdomId::White, {8, 8});
+        addPieceToBoard(black, board, 4220, PieceType::King, KingdomId::Black, {16, 16});
+
+        AutonomousUnit infernal = makeTestInfernalUnit(5220, KingdomId::White, {9, 9});
+        board.getCell(9, 9).autonomousUnit = &infernal;
+
+        const std::vector<Building> publicBuildings;
+        const SelectionMoveOptions moveOptions = SelectionMoveRules::classifyPieceMoves(
+            board, white, black, publicBuildings, 1, {}, pawn.id, config);
+
+        expect(containsCell(moveOptions.safeMoves, {9, 9}),
+            "Selection move classification should expose a pawn's diagonal capture against an autonomous infernal unit.");
+    }
+
     void testSelectionMoveRulesIgnoreQueuedUpgradeForLivePieceMoves() {
         GameConfig config;
         Board board;
@@ -1812,6 +1903,42 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
             "ForwardModel pawn threat maps should include diagonal attack squares.");
         expect(!threats.isSet({8, 7}) && !threats.isSet({8, 9}),
             "ForwardModel pawn threat maps should exclude orthogonal squares.");
+    }
+
+    void testForwardModelCapturesAutonomousUnitDiagonally() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 740, PieceType::King, KingdomId::White, {4, 4});
+        addPieceToBoard(white, board, 741, PieceType::Pawn, KingdomId::White, {8, 8});
+        addPieceToBoard(black, board, 840, PieceType::King, KingdomId::Black, {16, 16});
+
+        AutonomousUnit infernal = makeTestInfernalUnit(5740, KingdomId::White, {9, 9});
+        board.getCell(9, 9).autonomousUnit = &infernal;
+
+        GameSnapshot snapshot = ForwardModel::createSnapshot(board, white, black, {}, 1);
+        const SnapPiece* snapPawn = snapshot.white.getPieceById(741);
+        expect(snapPawn != nullptr,
+            "The forward-model autonomous capture setup should preserve the pawn in the white kingdom snapshot.");
+        expect(snapshot.autonomousUnitAt({9, 9}) != nullptr,
+            "Snapshot creation should preserve autonomous occupancy from the real board state.");
+
+        const std::vector<sf::Vector2i> legalMoves = ForwardModel::getLegalMoves(
+            snapshot, *snapPawn, config.getGlobalMaxRange());
+        expect(containsCell(legalMoves, {9, 9}),
+            "ForwardModel legal moves should include diagonal captures against autonomous infernal units.");
+
+        GameSnapshot sim = snapshot.clone();
+        expect(ForwardModel::applyMove(sim, 741, {9, 9}, KingdomId::White, config),
+            "ForwardModel should allow applying a legal diagonal pawn capture against an autonomous infernal unit.");
+        const SnapPiece* movedPawn = sim.white.getPieceById(741);
+        expect(movedPawn != nullptr && movedPawn->position == sf::Vector2i{9, 9},
+            "The simulated capturing pawn should occupy the infernal's destination cell after the projected capture.");
+        expect(sim.autonomousUnitAt({9, 9}) == nullptr,
+            "Projected captures should remove the autonomous occupant from the snapshot destination cell.");
     }
 
         void testCheckResponseAllowsKingSidestepAgainstRookCheck() {
@@ -7609,9 +7736,11 @@ int main() {
         {"board generator resource dispersion", testBoardGeneratorDispersesPublicResourcesAcrossTypes},
         {"layered selection priority", testLayeredSelectionStackResolvesPriority},
         {"layered selection building cycle", testLayeredSelectionStackSupportsBuildingTerrainCycle},
+        {"layered selection autonomous cycle", testLayeredSelectionStackSupportsAutonomousTerrainCycle},
         {"layered selection preview override", testLayeredSelectionStackSupportsPreviewPieceOverride},
         {"layered selection under construction building", testLayeredSelectionStackTreatsUnderConstructionBuildingAsNormalBuilding},
         {"input bookmarks active piece cell", testInputHandlerBookmarksActivePieceSelectionCell},
+        {"input reconcile restores autonomous selection", testInputHandlerReconcileSelectionRestoresAutonomousSelection},
         {"input reconcile avoids distant piece jump", testInputHandlerReconcileSelectionDoesNotJumpToMismatchedPieceElsewhere},
         {"input reconcile fogged enemy piece", testInputHandlerReconcileSelectionDemotesFoggedEnemyPieceToTerrain},
         {"input reconcile prefers visible piece over pending override", testInputHandlerReconcileSelectionPrefersVisiblePieceOverPendingMoveOverride},
@@ -7629,6 +7758,7 @@ int main() {
         {"check response rejects non-move", testCheckResponseRejectsNonMoveActionsWhileInCheck},
         {"selection move rules unsafe non-king selectable", testSelectionMoveRulesClassifyUnsafeNonKingMovesAsSelectable},
         {"selection move rules unsafe king selectable", testSelectionMoveRulesKeepUnsafeKingSquaresSelectable},
+        {"selection move rules pawn autonomous capture", testSelectionMoveRulesAllowPawnToCaptureAutonomousUnitDiagonally},
         {"selection move rules ignore queued upgrade live moves", testSelectionMoveRulesIgnoreQueuedUpgradeForLivePieceMoves},
         {"selection move rules keep alternates when origin later occupied", testSelectionMoveRulesKeepAlternateMovesWhenLaterQueuedMoveOccupiesOrigin},
         {"turn system move after queued upgrade", testTurnSystemAllowsMoveAfterQueuedUpgradeBeforeCommit},
@@ -7643,6 +7773,7 @@ int main() {
         {"check system pawn diagonal threat", testCheckSystemUsesPawnDiagonalThreats},
         {"pawn diagonal structure capture", testPawnCapturesEnemyStructuresDiagonallyOnly},
         {"forward model pawn semantics", testForwardModelPawnRulesMatchRuntimeSemantics},
+        {"forward model autonomous capture", testForwardModelCapturesAutonomousUnitDiagonally},
         {"check response king sidestep", testCheckResponseAllowsKingSidestepAgainstRookCheck},
         {"check response edge king escape", testCheckResponseAllowsEdgeKingEscapeFromRookCheck},
         {"check response true edge checkmate", testCheckResponseDetectsTrueEdgeCheckmate},
