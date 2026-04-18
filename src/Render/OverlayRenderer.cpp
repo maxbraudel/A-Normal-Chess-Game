@@ -29,7 +29,8 @@ constexpr float kOverlayItemGap = 6.f;
 constexpr float kOverlayRowGap = 4.f;
 constexpr float kOverlayMarginAboveBuilding = 8.f;
 constexpr unsigned int kOverlayTextSize = 13;
-const sf::Color kOrientationCheckerColor(70, 70, 70, 110);
+const sf::Color kOrientationCheckerDarkColor(36, 36, 36, 96);
+const sf::Color kOrientationCheckerLightColor(255, 255, 255, 48);
 
 void drawDot(sf::RenderWindow& window, float x, float y, float diameter) {
     sf::RectangleShape dot({diameter, diameter});
@@ -381,16 +382,18 @@ void OverlayRenderer::drawOrientationCheckerboard(sf::RenderWindow& window,
                                                   const Board& board,
                                                   int cellSize) {
     sf::RectangleShape overlay(sf::Vector2f(static_cast<float>(cellSize), static_cast<float>(cellSize)));
-    overlay.setFillColor(kOrientationCheckerColor);
 
     const int diameter = board.getDiameter();
     for (int y = 0; y < diameter; ++y) {
         for (int x = 0; x < diameter; ++x) {
             const Cell& cell = board.getCell(x, y);
-            if (!cell.isInCircle || ((x + y) % 2 != 0)) {
+            if (!cell.isInCircle) {
                 continue;
             }
 
+            overlay.setFillColor(((x + y) % 2 == 0)
+                ? kOrientationCheckerDarkColor
+                : kOrientationCheckerLightColor);
             overlay.setPosition(static_cast<float>(x * cellSize), static_cast<float>(y * cellSize));
             window.draw(overlay);
         }

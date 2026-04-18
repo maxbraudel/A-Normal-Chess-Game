@@ -174,8 +174,8 @@ void Renderer::drawWeatherLayer(sf::RenderWindow& window,
     const int minRow = std::max(0, static_cast<int>(viewBounds.top / m_cellSize) - 1);
     const int maxRow = std::min(diameter - 1, static_cast<int>((viewBounds.top + viewBounds.height) / m_cellSize) + 1);
 
-    sf::RectangleShape cellFog(sf::Vector2f(static_cast<float>(m_cellSize) + 1.0f,
-                                            static_cast<float>(m_cellSize) + 1.0f));
+    sf::RectangleShape cellFog(sf::Vector2f(static_cast<float>(m_cellSize),
+                                            static_cast<float>(m_cellSize)));
     for (int y = minRow; y <= maxRow; ++y) {
         for (int x = minCol; x <= maxCol; ++x) {
             const std::uint8_t alpha = WeatherSystem::alphaAtCell(weatherMaskCache, x, y);
