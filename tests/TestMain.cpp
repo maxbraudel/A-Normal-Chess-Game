@@ -239,6 +239,42 @@ WeatherMaskCache makeConcealingFogMask(const Board& board,
     return weatherMaskCache;
 }
 
+int countRenderedWeatherCells(const WeatherMaskCache& cache) {
+    return static_cast<int>(std::count_if(cache.alphaByCell.begin(),
+                                          cache.alphaByCell.end(),
+                                          [](std::uint8_t alpha) {
+                                              return alpha > 0;
+                                          }));
+}
+
+int minRenderedWeatherX(const WeatherMaskCache& cache) {
+    int minX = cache.diameter;
+    for (int y = 0; y < cache.diameter; ++y) {
+        for (int x = 0; x < cache.diameter; ++x) {
+            const std::size_t index = static_cast<std::size_t>((y * cache.diameter) + x);
+            if (index < cache.alphaByCell.size() && cache.alphaByCell[index] > 0) {
+                minX = std::min(minX, x);
+            }
+        }
+    }
+
+    return minX;
+}
+
+int maxRenderedWeatherY(const WeatherMaskCache& cache) {
+    int maxY = -1;
+    for (int y = 0; y < cache.diameter; ++y) {
+        for (int x = 0; x < cache.diameter; ++x) {
+            const std::size_t index = static_cast<std::size_t>((y * cache.diameter) + x);
+            if (index < cache.alphaByCell.size() && cache.alphaByCell[index] > 0) {
+                maxY = std::max(maxY, y);
+            }
+        }
+    }
+
+    return maxY;
+}
+
 Piece& addPieceToBoard(Kingdom& kingdom,
                        Board& board,
                        int id,
@@ -6455,6 +6491,153 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             "A speed of 50 blocks per 100 turns should move the front center by about 1 block every 2 turns.");
     }
 
+    void testWeatherSystemSpawnsFullyInvisibleBeforeEnteringBoard() {
+        GameConfig config = makeWeatherTestConfig(
+            "      \"cooldown_min_turns\": 0,\n"
+            "      \"direction_weights\": {\n"
+            "        \"north\": 0,\n"
+            "        \"south\": 0,\n"
+            "        \"east\": 1,\n"
+            "        \"west\": 0,\n"
+            "        \"north_east\": 0,\n"
+            "        \"north_west\": 0,\n"
+            "        \"south_east\": 0,\n"
+            "        \"south_west\": 0\n"
+            "      },\n"
+            "      \"coverage_min_percent\": 20,\n"
+            "      \"coverage_max_percent\": 20,\n"
+            "      \"aspect_ratio_min_times_100\": 220,\n"
+            "      \"aspect_ratio_max_times_100\": 220,\n"
+            "      \"shape_noise_amplitude_percent\": 100,\n"
+            "      \"edge_softness_percent\": 18,\n"
+            "      \"alpha_base_percent\": 48,\n"
+            "      \"alpha_min_percent\": 22,\n"
+            "      \"alpha_max_percent\": 82");
+
+        Board board;
+        board.init(12);
+
+        WeatherSystemState state{};
+        state.nextSpawnTurnStep = 0;
+        expect(WeatherSystem::trySpawnFront(state, board, 246810u, 0, config),
+            "WeatherSystem should spawn a deterministic eastbound front for the entry-visibility regression.");
+
+        WeatherMaskCache mask;
+        WeatherSystem::rebuildMask(board, state, config, mask);
+        expect(countRenderedWeatherCells(mask) == 0,
+            "A freshly spawned weather front should remain fully invisible before it starts entering the board.");
+
+        bool becameVisible = false;
+        int simulatedTurnStep = 1;
+        while (state.hasActiveFront && !becameVisible) {
+            WeatherSystem::advanceFront(state, 246810u, simulatedTurnStep++, config);
+            WeatherSystem::rebuildMask(board, state, config, mask);
+            becameVisible = countRenderedWeatherCells(mask) > 0;
+        }
+
+        expect(becameVisible,
+            "An eastbound weather front should eventually become visible after entering from off-map.");
+        expect(minRenderedWeatherX(mask) <= 1,
+            "The first visible eastbound weather cells should appear at the left border rather than popping deep inside the board.");
+    }
+
+    void testWeatherSystemDiagonalFrontAlsoStartsInvisible() {
+        GameConfig config = makeWeatherTestConfig(
+            "      \"cooldown_min_turns\": 0,\n"
+            "      \"direction_weights\": {\n"
+            "        \"north\": 0,\n"
+            "        \"south\": 0,\n"
+            "        \"east\": 0,\n"
+            "        \"west\": 0,\n"
+            "        \"north_east\": 1,\n"
+            "        \"north_west\": 0,\n"
+            "        \"south_east\": 0,\n"
+            "        \"south_west\": 0\n"
+            "      },\n"
+            "      \"coverage_min_percent\": 18,\n"
+            "      \"coverage_max_percent\": 18,\n"
+            "      \"aspect_ratio_min_times_100\": 220,\n"
+            "      \"aspect_ratio_max_times_100\": 220,\n"
+            "      \"shape_noise_amplitude_percent\": 100,\n"
+            "      \"edge_softness_percent\": 18");
+
+        Board board;
+        board.init(12);
+
+        WeatherSystemState state{};
+        state.nextSpawnTurnStep = 0;
+        expect(WeatherSystem::trySpawnFront(state, board, 135791u, 0, config),
+            "WeatherSystem should spawn a deterministic diagonal front for the diagonal entry regression.");
+
+        WeatherMaskCache mask;
+        WeatherSystem::rebuildMask(board, state, config, mask);
+        expect(countRenderedWeatherCells(mask) == 0,
+            "A diagonal weather front should also begin fully invisible rather than showing a corner chunk immediately.");
+
+        bool becameVisible = false;
+        int simulatedTurnStep = 1;
+        while (state.hasActiveFront && !becameVisible) {
+            WeatherSystem::advanceFront(state, 135791u, simulatedTurnStep++, config);
+            WeatherSystem::rebuildMask(board, state, config, mask);
+            becameVisible = countRenderedWeatherCells(mask) > 0;
+        }
+
+        expect(becameVisible,
+            "A diagonal weather front should still become visible after advancing in from off-map.");
+    }
+
+    void testWeatherSystemKeepsFrontAliveUntilNextStepIsInvisible() {
+        GameConfig config = makeWeatherTestConfig(
+            "      \"cooldown_min_turns\": 0,\n"
+            "      \"direction_weights\": {\n"
+            "        \"north\": 0,\n"
+            "        \"south\": 0,\n"
+            "        \"east\": 1,\n"
+            "        \"west\": 0,\n"
+            "        \"north_east\": 0,\n"
+            "        \"north_west\": 0,\n"
+            "        \"south_east\": 0,\n"
+            "        \"south_west\": 0\n"
+            "      },\n"
+            "      \"coverage_min_percent\": 20,\n"
+            "      \"coverage_max_percent\": 20,\n"
+            "      \"aspect_ratio_min_times_100\": 220,\n"
+            "      \"aspect_ratio_max_times_100\": 220,\n"
+            "      \"shape_noise_amplitude_percent\": 100,\n"
+            "      \"edge_softness_percent\": 18");
+
+        Board board;
+        board.init(12);
+
+        WeatherSystemState state{};
+        state.nextSpawnTurnStep = 0;
+        expect(WeatherSystem::trySpawnFront(state, board, 112233u, 0, config),
+            "WeatherSystem should spawn a deterministic front for the exit regression.");
+
+        bool sawVisibleMask = false;
+        int simulatedTurnStep = 1;
+        while (state.hasActiveFront) {
+            WeatherMaskCache currentMask;
+            WeatherSystem::rebuildMask(board, state, config, currentMask);
+            sawVisibleMask = sawVisibleMask || (countRenderedWeatherCells(currentMask) > 0);
+
+            const bool willDeactivateOnAdvance = state.activeFront.currentTurnStep + 1 >= state.activeFront.totalTurnSteps;
+            if (willDeactivateOnAdvance) {
+                WeatherSystemState nextGeometryState = state;
+                nextGeometryState.activeFront.currentTurnStep += 1;
+                WeatherMaskCache nextMask;
+                WeatherSystem::rebuildMask(board, nextGeometryState, config, nextMask);
+                expect(countRenderedWeatherCells(nextMask) == 0,
+                    "A weather front should only deactivate once the next geometric step is already fully invisible on the board.");
+            }
+
+            WeatherSystem::advanceFront(state, 112233u, simulatedTurnStep++, config);
+        }
+
+        expect(sawVisibleMask,
+            "The exit regression should exercise a front that actually became visible before leaving the board.");
+    }
+
     void testGameEngineCheatcodeTriggersSpawnEvents() {
         GameConfig config;
         GameEngine engine;
@@ -7952,6 +8135,9 @@ int main() {
         {"xp config structured profiles", testXPConfigLoadsStructuredProfiles},
         {"weather deterministic serialized sequence", testWeatherSystemUsesDeterministicSerializedSequence},
         {"weather configured speed blocks per 100 turns", testWeatherSystemUsesConfiguredSpeedBlocksPer100Turns},
+        {"weather spawns invisible before entering", testWeatherSystemSpawnsFullyInvisibleBeforeEnteringBoard},
+        {"weather diagonal front starts invisible", testWeatherSystemDiagonalFrontAlsoStartsInvisible},
+        {"weather front exits only after invisible next step", testWeatherSystemKeepsFrontAliveUntilNextStepIsInvisible},
         {"game engine cheatcode event triggers", testGameEngineCheatcodeTriggersSpawnEvents},
         {"xp deterministic serialized sequence", testXPSystemUsesDeterministicSerializedSequence},
         {"xp forward model matches runtime capture", testForwardModelCaptureXPMatchesCommittedTurn},

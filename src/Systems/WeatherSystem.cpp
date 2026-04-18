@@ -298,6 +298,111 @@ float concealmentAlpha(const WeatherFrontDescriptor& front,
     return std::clamp(localAlpha * edgeFade, 0.0f, 1.0f);
 }
 
+std::uint8_t encodedAlpha(float alpha) {
+    return static_cast<std::uint8_t>(std::clamp(
+        static_cast<int>(std::lround(alpha * 255.0f)),
+        0,
+        255));
+}
+
+WeatherFrontDescriptor makeStaticFrontDescriptor(WeatherDirection direction,
+                                                 const sf::Vector2f& center,
+                                                 float radiusAlong,
+                                                 float radiusAcross,
+                                                 std::uint32_t shapeSeed,
+                                                 std::uint32_t densitySeed) {
+    WeatherFrontDescriptor descriptor;
+    descriptor.direction = direction;
+    descriptor.currentTurnStep = 0;
+    descriptor.totalTurnSteps = 1;
+    descriptor.centerStartXTimes1000 = toFixed(center.x);
+    descriptor.centerStartYTimes1000 = toFixed(center.y);
+    descriptor.stepXTimes1000 = 0;
+    descriptor.stepYTimes1000 = 0;
+    descriptor.radiusAlongTimes1000 = toFixed(radiusAlong);
+    descriptor.radiusAcrossTimes1000 = toFixed(radiusAcross);
+    descriptor.shapeSeed = shapeSeed;
+    descriptor.densitySeed = densitySeed;
+    return descriptor;
+}
+
+bool frontHasAnyRenderedCells(const WeatherFrontDescriptor& front,
+                              const Board& board,
+                              const std::vector<sf::Vector2i>& validCells,
+                              const GameConfig& config) {
+    for (const sf::Vector2i& cellPos : validCells) {
+        if (encodedAlpha(concealmentAlpha(front, board, cellPos.x, cellPos.y, config)) > 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+float maxSearchDistance(const Board& board,
+                        float radiusAlong,
+                        float radiusAcross,
+                        float startDistance) {
+    const float maxRadius = std::max(radiusAlong, radiusAcross);
+    return startDistance
+        + static_cast<float>(board.getDiameter())
+        + ((maxRadius + 4.0f) * 6.0f);
+}
+
+float findNearestHiddenDistance(const Board& board,
+                                const std::vector<sf::Vector2i>& validCells,
+                                const sf::Vector2f& boundaryCenter,
+                                const sf::Vector2f& normalizedDirection,
+                                WeatherDirection direction,
+                                float radiusAlong,
+                                float radiusAcross,
+                                std::uint32_t shapeSeed,
+                                std::uint32_t densitySeed,
+                                const GameConfig& config,
+                                float startDistance,
+                                float directionSign) {
+    const auto hasRenderedCellsAtDistance = [&](float distanceAlongRay) {
+        const sf::Vector2f center = boundaryCenter + (normalizedDirection * (distanceAlongRay * directionSign));
+        const WeatherFrontDescriptor descriptor = makeStaticFrontDescriptor(
+            direction,
+            center,
+            radiusAlong,
+            radiusAcross,
+            shapeSeed,
+            densitySeed);
+        return frontHasAnyRenderedCells(descriptor, board, validCells, config);
+    };
+
+    float low = std::max(0.0f, startDistance);
+    if (!hasRenderedCellsAtDistance(low)) {
+        return low;
+    }
+
+    float step = std::max(0.5f, weatherDistancePerStep(config));
+    float high = low + step;
+    const float searchLimit = maxSearchDistance(board, radiusAlong, radiusAcross, startDistance);
+    while (high < searchLimit && hasRenderedCellsAtDistance(high)) {
+        low = high;
+        step *= 2.0f;
+        high = std::min(searchLimit, low + step);
+    }
+
+    if (hasRenderedCellsAtDistance(high)) {
+        return high;
+    }
+
+    for (int iteration = 0; iteration < 18; ++iteration) {
+        const float mid = (low + high) * 0.5f;
+        if (hasRenderedCellsAtDistance(mid)) {
+            low = mid;
+        } else {
+            high = mid;
+        }
+    }
+
+    return high;
+}
+
 std::uint8_t concealmentShade(std::uint8_t alpha,
                               std::uint32_t seed,
                               int cellX,
@@ -365,7 +470,8 @@ bool WeatherSystem::trySpawnFront(WeatherSystemState& state,
     const std::array<int, 2> rawDirection = directionStep(direction);
     const sf::Vector2f normalizedDirection = normalizeDirection(rawDirection);
 
-    const int visibleCells = static_cast<int>(board.getAllValidCells().size());
+    const std::vector<sf::Vector2i> validCells = board.getAllValidCells();
+    const int visibleCells = static_cast<int>(validCells.size());
     const int coveragePercent = std::uniform_int_distribution<int>(
         config.getWeatherCoverageMinPercent(),
         config.getWeatherCoverageMaxPercent())(generator);
@@ -375,9 +481,37 @@ bool WeatherSystem::trySpawnFront(WeatherSystemState& state,
         config.getWeatherAspectRatioMaxTimes100())(generator)) / 100.0f;
     const float radiusAlong = std::sqrt(targetArea / (kPi * std::max(1.0f, aspectRatio)));
     const float radiusAcross = std::sqrt((targetArea * std::max(1.0f, aspectRatio)) / kPi);
-    const float offscreenMargin = radiusAlong + 1.5f;
-    const float exitDistance = exitDistanceForRay(boundaryCenter, normalizedDirection, board.getDiameter());
-    const float totalTravelDistance = exitDistance + (offscreenMargin * 2.0f);
+    const std::uint32_t shapeSeed = generator();
+    const std::uint32_t densitySeed = generator();
+
+    const float entryHiddenDistance = findNearestHiddenDistance(
+        board,
+        validCells,
+        boundaryCenter,
+        normalizedDirection,
+        direction,
+        radiusAlong,
+        radiusAcross,
+        shapeSeed,
+        densitySeed,
+        config,
+        0.0f,
+        -1.0f);
+    const float boardCrossDistance = exitDistanceForRay(boundaryCenter, normalizedDirection, board.getDiameter());
+    const float exitHiddenDistance = findNearestHiddenDistance(
+        board,
+        validCells,
+        boundaryCenter,
+        normalizedDirection,
+        direction,
+        radiusAlong,
+        radiusAcross,
+        shapeSeed,
+        densitySeed,
+        config,
+        boardCrossDistance,
+        1.0f);
+    const float totalTravelDistance = entryHiddenDistance + exitHiddenDistance;
 
     const float distancePerStep = weatherDistancePerStep(config);
     const int totalTurnSteps = std::max(
@@ -388,14 +522,14 @@ bool WeatherSystem::trySpawnFront(WeatherSystemState& state,
     state.activeFront.direction = direction;
     state.activeFront.currentTurnStep = 0;
     state.activeFront.totalTurnSteps = totalTurnSteps;
-    state.activeFront.centerStartXTimes1000 = toFixed(boundaryCenter.x - (normalizedDirection.x * offscreenMargin));
-    state.activeFront.centerStartYTimes1000 = toFixed(boundaryCenter.y - (normalizedDirection.y * offscreenMargin));
+    state.activeFront.centerStartXTimes1000 = toFixed(boundaryCenter.x - (normalizedDirection.x * entryHiddenDistance));
+    state.activeFront.centerStartYTimes1000 = toFixed(boundaryCenter.y - (normalizedDirection.y * entryHiddenDistance));
     state.activeFront.stepXTimes1000 = toFixed(normalizedDirection.x * distancePerStep);
     state.activeFront.stepYTimes1000 = toFixed(normalizedDirection.y * distancePerStep);
     state.activeFront.radiusAlongTimes1000 = toFixed(radiusAlong);
     state.activeFront.radiusAcrossTimes1000 = toFixed(radiusAcross);
-    state.activeFront.shapeSeed = generator();
-    state.activeFront.densitySeed = generator();
+    state.activeFront.shapeSeed = shapeSeed;
+    state.activeFront.densitySeed = densitySeed;
     bumpRevision(state);
     return true;
 }
@@ -448,15 +582,13 @@ void WeatherSystem::rebuildMask(const Board& board,
             }
 
             const float alpha = concealmentAlpha(state.activeFront, board, x, y, config);
-            if (alpha <= 0.0f) {
+            const std::uint8_t encoded = encodedAlpha(alpha);
+            if (encoded == 0) {
                 continue;
             }
 
             const std::size_t index = static_cast<std::size_t>((y * diameter) + x);
-            cache.alphaByCell[index] = static_cast<std::uint8_t>(std::clamp(
-                static_cast<int>(std::lround(alpha * 255.0f)),
-                0,
-                255));
+            cache.alphaByCell[index] = encoded;
             cache.shadeByCell[index] = concealmentShade(
                 cache.alphaByCell[index],
                 state.activeFront.shapeSeed,
