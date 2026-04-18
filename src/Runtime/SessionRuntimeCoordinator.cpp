@@ -88,6 +88,9 @@ void SessionRuntimeCoordinator::returnToMainMenu(const SessionRuntimeCallbacks& 
     if (plan.invalidateTurnDraft && callbacks.invalidateTurnDraft) {
         callbacks.invalidateTurnDraft();
     }
+    if (callbacks.clearHotseatFrontendState) {
+        callbacks.clearHotseatFrontendState();
+    }
     m_gameState = plan.nextGameState;
     if (plan.hideGameMenu && callbacks.hideGameMenu) {
         callbacks.hideGameMenu();
@@ -113,6 +116,9 @@ void SessionRuntimeCoordinator::applySessionResetPlan(const SessionResetPlan& pl
     }
     if (plan.invalidateTurnDraft && callbacks.invalidateTurnDraft) {
         callbacks.invalidateTurnDraft();
+    }
+    if (callbacks.clearHotseatFrontendState) {
+        callbacks.clearHotseatFrontendState();
     }
 }
 

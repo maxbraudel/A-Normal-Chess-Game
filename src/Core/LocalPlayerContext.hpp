@@ -58,3 +58,9 @@ inline int countLocallyControlledKingdoms(const LocalPlayerContext& context) {
 inline bool hasSingleLocallyControlledKingdom(const LocalPlayerContext& context) {
     return countLocallyControlledKingdoms(context) == 1;
 }
+
+inline bool isLocalHotseatSession(const LocalPlayerContext& context) {
+    return context.mode == LocalSessionMode::LocalOnly
+        && context.isLocallyControlled(KingdomId::White)
+        && context.isLocallyControlled(KingdomId::Black);
+}

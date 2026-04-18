@@ -22,6 +22,7 @@ struct SessionRuntimeCallbacks {
     std::function<void()> resetPendingTurn;
     std::function<void()> resetPendingCommands;
     std::function<void()> invalidateTurnDraft;
+    std::function<void()> clearHotseatFrontendState;
     std::function<void(KingdomId)> centerCameraOnKingdom;
     std::function<void()> refreshTurnPhase;
     std::function<void()> showHud;

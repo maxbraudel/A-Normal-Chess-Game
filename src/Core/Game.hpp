@@ -29,6 +29,7 @@
 #include "Render/Renderer.hpp"
 #include "Runtime/BuildOverlayCoordinator.hpp"
 #include "Runtime/FrontendCoordinator.hpp"
+#include "Runtime/HotseatFrontendState.hpp"
 #include "Runtime/InGamePresentationCoordinator.hpp"
 #include "Runtime/MultiplayerJoinCoordinator.hpp"
 #include "Runtime/MultiplayerRuntimeCoordinator.hpp"
@@ -119,6 +120,10 @@ private:
     void ensureTurnDraftUpToDate();
     SelectionQueryView makeSelectionQueryView();
     InputSelectionBookmark captureSelectionBookmark() const;
+    bool usesLocalHotseatFrontendState() const;
+    void clearHotseatFrontendState();
+    void captureHotseatFrontendState(KingdomId kingdom, const InputSelectionBookmark& bookmark);
+    void restoreHotseatFrontendStateForActiveKingdom(const InputSelectionBookmark& fallbackBookmark);
     void reconcileSelectionBookmark(const InputSelectionBookmark& bookmark);
     Piece* selectedDisplayedPiece();
     Building* selectedDisplayedBuilding();
@@ -222,6 +227,7 @@ private:
     PanelActionCoordinator m_panelActionCoordinator;
     MultiplayerRuntimeCoordinator m_multiplayerRuntimeCoordinator;
     BuildOverlayCache m_buildOverlayCache;
+    HotseatFrontendStateStore m_hotseatFrontendState;
     mutable PendingTurnValidationCache m_pendingTurnValidationCache;
 
 #ifdef _WIN32

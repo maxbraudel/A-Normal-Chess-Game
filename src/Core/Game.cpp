@@ -218,6 +218,9 @@ SessionRuntimeCallbacks Game::makeSessionRuntimeCallbacks() {
         [this]() {
             invalidateTurnDraft();
         },
+        [this]() {
+            clearHotseatFrontendState();
+        },
         [this](KingdomId kingdom) {
             centerCameraOnKingdom(kingdom);
         },
@@ -261,10 +264,17 @@ SessionRuntimeCallbacks Game::makeSessionRuntimeCallbacks() {
 TurnLifecycleCallbacks Game::makeTurnLifecycleCallbacks() {
     return TurnLifecycleCallbacks{
         [this]() {
-            return captureSelectionBookmark();
+            const InputSelectionBookmark bookmark = captureSelectionBookmark();
+            captureHotseatFrontendState(turnSystem().getActiveKingdom(), bookmark);
+            return bookmark;
         },
         [this](const InputSelectionBookmark& bookmark) {
             invalidatePendingTurnValidation();
+            if (usesLocalHotseatFrontendState()) {
+                restoreHotseatFrontendStateForActiveKingdom(bookmark);
+                return;
+            }
+
             reconcileSelectionBookmark(bookmark);
         },
         [this]() {
@@ -464,6 +474,38 @@ SelectionQueryView Game::makeSelectionQueryView() {
 
 InputSelectionBookmark Game::captureSelectionBookmark() const {
     return m_input.createSelectionBookmark();
+}
+
+bool Game::usesLocalHotseatFrontendState() const {
+    return HotseatFrontendStateStore::isEnabled(m_localPlayerContext);
+}
+
+void Game::clearHotseatFrontendState() {
+    m_hotseatFrontendState.clear();
+}
+
+void Game::captureHotseatFrontendState(KingdomId kingdom, const InputSelectionBookmark& bookmark) {
+    if (!usesLocalHotseatFrontendState()) {
+        return;
+    }
+
+    m_hotseatFrontendState.storeBookmark(kingdom, bookmark);
+}
+
+void Game::restoreHotseatFrontendStateForActiveKingdom(const InputSelectionBookmark& fallbackBookmark) {
+    if (!usesLocalHotseatFrontendState()) {
+        reconcileSelectionBookmark(fallbackBookmark);
+        return;
+    }
+
+    const KingdomId active = turnSystem().getActiveKingdom();
+    InputSelectionBookmark bookmarkToRestore = fallbackBookmark;
+    if (m_hotseatFrontendState.tryLoadBookmark(active, bookmarkToRestore)) {
+        reconcileSelectionBookmark(bookmarkToRestore);
+        return;
+    }
+
+    activateSelectTool();
 }
 
 Piece* Game::selectedDisplayedPiece() {

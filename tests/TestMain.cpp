@@ -40,6 +40,7 @@
 #include "Multiplayer/MultiplayerServer.hpp"
 #include "Runtime/BuildOverlayCoordinator.hpp"
 #include "Runtime/FrontendCoordinator.hpp"
+#include "Runtime/HotseatFrontendState.hpp"
 #include "Runtime/InGamePresentationCoordinator.hpp"
 #include "Runtime/InputCoordinator.hpp"
 #include "Runtime/InteractivePermissionsCache.hpp"
@@ -2138,6 +2139,8 @@ void testSessionValidatorRejectsInvalidOrdering() {
         expect(hotseatContext.isLocallyControlled(KingdomId::White)
          && hotseatContext.isLocallyControlled(KingdomId::Black),
             "Hotseat sessions should expose both kingdoms as local.");
+        expect(isLocalHotseatSession(hotseatContext),
+            "Local player context should explicitly recognize a two-player local session as hotseat.");
 
         GameSessionConfig host = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, "host_session");
         host.multiplayer.enabled = true;
@@ -2150,6 +2153,8 @@ void testSessionValidatorRejectsInvalidOrdering() {
         expect(hostContext.isLocallyControlled(KingdomId::White)
          && !hostContext.isLocallyControlled(KingdomId::Black),
             "LAN host sessions should only expose the White kingdom as local.");
+        expect(!isLocalHotseatSession(hostContext),
+            "LAN host context should never be treated as local hotseat.");
 
         const LocalPlayerContext clientContext = makeLanClientLocalPlayerContext();
         expect(clientContext.mode == LocalSessionMode::LanClient,
@@ -2157,6 +2162,46 @@ void testSessionValidatorRejectsInvalidOrdering() {
         expect(!clientContext.isLocallyControlled(KingdomId::White)
          && clientContext.isLocallyControlled(KingdomId::Black),
             "LAN client sessions should only expose the Black kingdom as local.");
+        expect(!isLocalHotseatSession(clientContext),
+            "LAN client context should never be treated as local hotseat.");
+    }
+
+    void testHotseatFrontendStateStoreSeparatesKingdomBookmarks() {
+        HotseatFrontendStateStore store;
+
+        InputSelectionBookmark whiteBookmark;
+        whiteBookmark.tool = ToolState::Build;
+        whiteBookmark.pieceId = 4101;
+        whiteBookmark.buildPreviewAnchorCell = sf::Vector2i{3, 4};
+
+        InputSelectionBookmark blackBookmark;
+        blackBookmark.tool = ToolState::Select;
+        blackBookmark.pieceId = 5101;
+        blackBookmark.selectedCell = sf::Vector2i{8, 9};
+
+        store.storeBookmark(KingdomId::White, whiteBookmark);
+        store.storeBookmark(KingdomId::Black, blackBookmark);
+
+        InputSelectionBookmark restoredWhiteBookmark;
+        InputSelectionBookmark restoredBlackBookmark;
+
+        expect(store.tryLoadBookmark(KingdomId::White, restoredWhiteBookmark)
+                && restoredWhiteBookmark.tool == ToolState::Build
+                && restoredWhiteBookmark.pieceId == 4101
+                && restoredWhiteBookmark.buildPreviewAnchorCell.has_value()
+                && *restoredWhiteBookmark.buildPreviewAnchorCell == sf::Vector2i(3, 4),
+            "Hotseat frontend state should restore the White kingdom bookmark from its own slot.");
+        expect(store.tryLoadBookmark(KingdomId::Black, restoredBlackBookmark)
+                && restoredBlackBookmark.tool == ToolState::Select
+                && restoredBlackBookmark.pieceId == 5101
+                && restoredBlackBookmark.selectedCell.has_value()
+                && *restoredBlackBookmark.selectedCell == sf::Vector2i(8, 9),
+            "Hotseat frontend state should restore the Black kingdom bookmark from its own slot.");
+
+        store.clear();
+        expect(!store.tryLoadBookmark(KingdomId::White, restoredWhiteBookmark)
+                && !store.tryLoadBookmark(KingdomId::Black, restoredBlackBookmark),
+            "Hotseat frontend state clear should drop all stored per-kingdom frontend state.");
     }
 
     void testSingleLocalHudModes() {
@@ -3348,6 +3393,7 @@ void testSessionValidatorRejectsInvalidOrdering() {
             bool resetPendingTurn = false;
             bool resetPendingCommands = false;
             bool invalidateTurnDraft = false;
+            bool clearHotseatFrontendState = false;
             bool centerCamera = false;
             bool refreshTurnPhase = false;
             bool showHud = false;
@@ -3379,6 +3425,9 @@ void testSessionValidatorRejectsInvalidOrdering() {
                 },
                 [&invalidateTurnDraft]() {
                     invalidateTurnDraft = true;
+                },
+                [&clearHotseatFrontendState]() {
+                    clearHotseatFrontendState = true;
                 },
                 [&centerCamera, &centeredKingdom](KingdomId kingdom) {
                     centerCamera = true;
@@ -3425,7 +3474,8 @@ void testSessionValidatorRejectsInvalidOrdering() {
                     && clearMovePreview
                     && activateSelectTool
                     && resetPendingCommands
-                    && invalidateTurnDraft,
+                    && invalidateTurnDraft
+                    && clearHotseatFrontendState,
                 "SessionRuntimeCoordinator should apply the full main-menu cleanup plan before leaving a session.");
             expect(hideGameMenu && showMainMenu,
                 "SessionRuntimeCoordinator should restore the main-menu presentation after quitting an in-game session.");
@@ -3436,6 +3486,7 @@ void testSessionValidatorRejectsInvalidOrdering() {
             resetPendingTurn = false;
             resetPendingCommands = false;
             invalidateTurnDraft = false;
+            clearHotseatFrontendState = false;
             centerCamera = false;
             refreshTurnPhase = false;
             showHud = false;
@@ -3455,7 +3506,7 @@ void testSessionValidatorRejectsInvalidOrdering() {
                                                                      "session_runtime_transition_test");
             std::string error;
             expect(coordinator.startNewGame(session, callbacks, &error), error);
-            expect(resetPendingTurn && invalidateTurnDraft,
+            expect(resetPendingTurn && invalidateTurnDraft && clearHotseatFrontendState,
                 "SessionRuntimeCoordinator should apply the authoritative session reset before starting a new session.");
             expect(gameState == GameState::Playing,
                 "SessionRuntimeCoordinator should transition into active gameplay after starting a new session.");
@@ -7192,6 +7243,7 @@ int main() {
         {"session validator", testSessionValidatorRejectsInvalidOrdering},
         {"multiplayer validator port", testSessionValidatorRejectsInvalidMultiplayerPort},
         {"local player context", testLocalPlayerContextModes},
+        {"hotseat frontend state store", testHotseatFrontendStateStoreSeparatesKingdomBookmarks},
         {"single local hud modes", testSingleLocalHudModes},
         {"multiplayer runtime reconnect state", testMultiplayerRuntimeReconnectStateLifecycle},
         {"session flow roundtrip", testSessionFlowStartsSavesAndLoadsSession},

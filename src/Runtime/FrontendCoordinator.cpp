@@ -26,9 +26,7 @@ std::vector<InGameAlert> buildInGameAlerts(const FrontendRuntimeState& state,
     std::vector<InGameAlert> alerts;
     if (state.gameState == GameState::GameOver && validation.activeKingInCheck && !validation.hasAnyLegalResponse) {
         const KingdomId winner = opponent(state.activeKingdom);
-        const bool localHotseat = state.localPlayerContext.mode == LocalSessionMode::LocalOnly
-            && state.localPlayerContext.localControl[kingdomIndex(KingdomId::White)]
-            && state.localPlayerContext.localControl[kingdomIndex(KingdomId::Black)];
+        const bool localHotseat = isLocalHotseatSession(state.localPlayerContext);
         if (localHotseat) {
             alerts.push_back(InGameAlert{
                 std::string{"Checkmate - "}
