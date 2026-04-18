@@ -16,6 +16,7 @@ struct SelectionMoveOptions {
     std::vector<sf::Vector2i> safeMoves;
     std::vector<sf::Vector2i> unsafeMoves;
     bool originUnsafe = false;
+    bool originSelectable = true;
 
     bool contains(sf::Vector2i destination) const;
 };

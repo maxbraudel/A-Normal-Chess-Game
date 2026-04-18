@@ -43,6 +43,7 @@ public:
     const std::vector<sf::Vector2i>& getValidMoves() const;
     const std::vector<sf::Vector2i>& getDangerMoves() const; // selectable moves that still leave the active king in check
     bool isSelectedOriginDangerous() const;
+    bool isSelectedOriginSelectable() const;
     const std::set<int>& getCapturePreviewPieceIds() const; // enemy pieces visually hidden during queued capture previews
     bool hasMovePreview() const;
     void cancelLiveMove(Kingdom& controlledKingdom, const TurnSystem& turnSystem);   // restores queued preview positions and clears preview state
@@ -86,6 +87,7 @@ private:
     std::vector<sf::Vector2i> m_validMoves;
     std::vector<sf::Vector2i> m_dangerMoves; // selectable moves shown red because they leave the active king in check
     bool m_selectedOriginDangerous;
+    bool m_selectedOriginSelectable;
     std::set<int> m_capturePreviewPieceIds;
     std::map<int, sf::Vector2i> m_movePreviewOrigins;
 

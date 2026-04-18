@@ -947,6 +947,106 @@ void testInputHandlerReconcileSelectionPrefersVisiblePieceOverPendingMoveOverrid
         "InputHandler should preserve the bookmarked cell anchor instead of demoting the selection when a visible piece still occupies that cell.");
 }
 
+void testInputHandlerKeepsBlockedOriginInformationalOnly() {
+    GameConfig config;
+    Board board;
+    board.init(12);
+
+    Kingdom authoritativeWhite(KingdomId::White);
+    Kingdom authoritativeBlack(KingdomId::Black);
+    addPieceToBoard(authoritativeWhite, board, 1210, PieceType::King, KingdomId::White, {4, 4});
+    addPieceToBoard(authoritativeBlack, board, 2210, PieceType::King, KingdomId::Black, {18, 18});
+    Piece& authoritativeUpperPawn = addPieceToBoard(authoritativeWhite,
+                                                    board,
+                                                    1211,
+                                                    PieceType::Pawn,
+                                                    KingdomId::White,
+                                                    {10, 10});
+    Piece& authoritativeLowerPawn = addPieceToBoard(authoritativeWhite,
+                                                    board,
+                                                    1212,
+                                                    PieceType::Pawn,
+                                                    KingdomId::White,
+                                                    {10, 11});
+
+    std::vector<Building> publicBuildings;
+    TurnSystem turnSystem;
+    turnSystem.setActiveKingdom(KingdomId::White);
+    turnSystem.setTurnNumber(1);
+
+    expect(turnSystem.queueCommand(makeMoveCommand(authoritativeLowerPawn.id, {10, 11}, {10, 12}),
+                                   board,
+                                   authoritativeWhite,
+                                   authoritativeBlack,
+                                   publicBuildings,
+                                   config),
+        "The lower pawn move should queue successfully for the input reselection regression.");
+    expect(turnSystem.queueCommand(makeMoveCommand(authoritativeUpperPawn.id, {10, 10}, {10, 11}),
+                                   board,
+                                   authoritativeWhite,
+                                   authoritativeBlack,
+                                   publicBuildings,
+                                   config),
+        "The upper pawn move should queue successfully after the lower pawn vacates its origin.");
+
+    Kingdom previewWhite = authoritativeWhite;
+    Kingdom previewBlack = authoritativeBlack;
+    Piece* previewUpperPawn = previewWhite.getPieceById(authoritativeUpperPawn.id);
+    Piece* previewLowerPawn = previewWhite.getPieceById(authoritativeLowerPawn.id);
+    expect(previewUpperPawn != nullptr && previewLowerPawn != nullptr,
+        "The input reselection regression should find the preview pieces by id.");
+    previewUpperPawn->position = {10, 11};
+    previewLowerPawn->position = {10, 12};
+
+    BuildingFactory buildingFactory;
+    sf::RenderWindow window;
+    Camera camera;
+    UIManager uiManager;
+    InputContext context{
+        window,
+        camera,
+        board,
+        turnSystem,
+        buildingFactory,
+        previewWhite,
+        previewBlack,
+        publicBuildings,
+        board,
+        authoritativeWhite,
+        authoritativeBlack,
+        publicBuildings,
+        TurnValidationContext{board,
+                              authoritativeWhite,
+                              authoritativeBlack,
+                              publicBuildings,
+                              turnSystem.getTurnNumber(),
+                              config},
+        uiManager,
+        config,
+        nullptr,
+        KingdomId::White,
+        InteractionPermissions{},
+        false,
+        false};
+    context.permissions.canIssueCommands = true;
+
+    InputHandler input;
+    input.reconcileSelection(InputSelectionBookmark{}, previewLowerPawn, nullptr, context);
+
+    expect(containsCell(input.getValidMoves(), {9, 11}),
+        "InputHandler should keep alternate green moves visible when reselecting an earlier moved piece whose blue origin is now occupied by a later queued move.");
+    expect(!input.isSelectedOriginSelectable(),
+        "InputHandler should mark the blue origin as non-selectable when cancelling the move would collide with another queued piece.");
+
+    InputSelectionBookmark blockedOriginBookmark;
+    blockedOriginBookmark.pieceId = authoritativeUpperPawn.id;
+    blockedOriginBookmark.selectedCell = sf::Vector2i{10, 11};
+    input.reconcileSelection(blockedOriginBookmark, nullptr, nullptr, context);
+
+    expect(input.getSelectedPieceId() == authoritativeUpperPawn.id,
+        "InputHandler should resolve the visible preview occupant on a blocked origin cell instead of swallowing the selection.");
+}
+
     void testPublicBuildingOccupationStateResolvesAllOutcomes() {
         Board board;
         board.init(5);
@@ -1311,6 +1411,49 @@ void testInputHandlerReconcileSelectionPrefersVisiblePieceOverPendingMoveOverrid
             "Queueing an upgrade must not remove the pawn's current orthogonal live move before commit.");
         expect(!containsCell(moveOptions.safeMoves, {7, 7}) && !containsCell(moveOptions.unsafeMoves, {7, 7}),
             "Queueing an upgrade must not grant bishop-style diagonal live moves before commit.");
+    }
+
+    void testSelectionMoveRulesKeepAlternateMovesWhenLaterQueuedMoveOccupiesOrigin() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 326, PieceType::King, KingdomId::White, {4, 4});
+        Piece& upperPawn = addPieceToBoard(white, board, 327, PieceType::Pawn, KingdomId::White, {10, 10});
+        Piece& lowerPawn = addPieceToBoard(white, board, 328, PieceType::Pawn, KingdomId::White, {10, 11});
+        addPieceToBoard(black, board, 424, PieceType::King, KingdomId::Black, {18, 18});
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+
+        const TurnCommand lowerMove = makeMoveCommand(lowerPawn.id, {10, 11}, {10, 12});
+        const TurnCommand upperMove = makeMoveCommand(upperPawn.id, {10, 10}, {10, 11});
+
+        expect(turnSystem.queueCommand(lowerMove, board, white, black, publicBuildings, config),
+            "The lower pawn move should queue successfully for the reselection occupancy regression.");
+        expect(turnSystem.queueCommand(upperMove, board, white, black, publicBuildings, config),
+            "The upper pawn move should queue successfully after the lower pawn vacates its origin.");
+
+        upperPawn.position = upperMove.destination;
+        lowerPawn.position = lowerMove.destination;
+
+        const SelectionMoveOptions moveOptions = SelectionMoveRules::classifyPieceMoves(
+            board,
+            white,
+            black,
+            publicBuildings,
+            1,
+            turnSystem.getPendingCommands(),
+            lowerPawn.id,
+            config);
+
+        expect(containsCell(moveOptions.safeMoves, {9, 11}),
+            "Reselecting an earlier queued move should still expose alternate destinations from its original queue slot even if a later move now occupies that origin in the final preview.");
+        expect(!moveOptions.originSelectable,
+            "The blue origin should remain informational only when cancelling the earlier move would leave a later queued piece colliding with that origin.");
     }
 
     void testTurnSystemAllowsMoveAfterQueuedUpgradeBeforeCommit() {
@@ -4861,6 +5004,68 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             "Moving the only supporting builder away should automatically remove the orphaned pending build.");
     }
 
+    void testTurnSystemReplaceMovePreservesOriginalQueueOrder() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 61101, PieceType::King, KingdomId::White, {4, 4});
+        Piece& upperPawn = addPieceToBoard(white, board, 61102, PieceType::Pawn, KingdomId::White, {10, 10});
+        Piece& lowerPawn = addPieceToBoard(white, board, 61103, PieceType::Pawn, KingdomId::White, {10, 11});
+        addPieceToBoard(black, board, 71101, PieceType::King, KingdomId::Black, {18, 18});
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+
+        expect(turnSystem.queueCommand(makeMoveCommand(lowerPawn.id, {10, 11}, {10, 12}),
+                                       board,
+                                       white,
+                                       black,
+                                       publicBuildings,
+                                       config),
+            "The lower pawn move should queue successfully before testing move replacement order.");
+        expect(turnSystem.queueCommand(makeMoveCommand(upperPawn.id, {10, 10}, {10, 11}),
+                                       board,
+                                       white,
+                                       black,
+                                       publicBuildings,
+                                       config),
+            "The upper pawn move should queue successfully after the lower pawn vacates its origin.");
+
+        expect(turnSystem.replaceMoveCommand(makeMoveCommand(lowerPawn.id, {10, 11}, {9, 11}),
+                                             board,
+                                             white,
+                                             black,
+                                             publicBuildings,
+                                             config),
+            "Replacing an earlier queued move should succeed without reordering it behind later dependent moves.");
+
+        const std::vector<TurnCommand>& pendingCommands = turnSystem.getPendingCommands();
+        expect(pendingCommands.size() == 2
+                   && pendingCommands[0].type == TurnCommand::Move
+                   && pendingCommands[0].pieceId == lowerPawn.id
+                   && pendingCommands[0].destination == sf::Vector2i(9, 11),
+               "Replacing a move should keep the edited move at its original queue position.");
+        expect(pendingCommands[1].type == TurnCommand::Move
+                   && pendingCommands[1].pieceId == upperPawn.id
+                   && pendingCommands[1].destination == sf::Vector2i(10, 11),
+               "Later queued moves should remain behind the edited move after replacement.");
+
+        const PendingTurnProjectionResult projection = PendingTurnProjection::project(
+            board,
+            white,
+            black,
+            publicBuildings,
+            1,
+            pendingCommands,
+            config);
+        expect(projection.valid,
+            "The full pending queue should stay valid after editing an earlier move in place.");
+    }
+
     void testTurnSystemQueueMoveDropsPendingBuildUnsupportedInFinalState() {
         GameConfig config;
         Board board;
@@ -7045,6 +7250,7 @@ int main() {
         {"input reconcile avoids distant piece jump", testInputHandlerReconcileSelectionDoesNotJumpToMismatchedPieceElsewhere},
         {"input reconcile fogged enemy piece", testInputHandlerReconcileSelectionDemotesFoggedEnemyPieceToTerrain},
         {"input reconcile prefers visible piece over pending override", testInputHandlerReconcileSelectionPrefersVisiblePieceOverPendingMoveOverride},
+        {"input pending origin blocked", testInputHandlerKeepsBlockedOriginInformationalOnly},
         {"public building occupation state", testPublicBuildingOccupationStateResolvesAllOutcomes},
         {"cell traversal water blocked", testCellTraversalTreatsWaterAsNotTraversable},
         {"weather visibility allies visible enemies concealed", testWeatherVisibilityKeepsAlliesVisibleAndConcealsEnemies},
@@ -7059,6 +7265,7 @@ int main() {
         {"selection move rules unsafe non-king selectable", testSelectionMoveRulesClassifyUnsafeNonKingMovesAsSelectable},
         {"selection move rules unsafe king selectable", testSelectionMoveRulesKeepUnsafeKingSquaresSelectable},
         {"selection move rules ignore queued upgrade live moves", testSelectionMoveRulesIgnoreQueuedUpgradeForLivePieceMoves},
+        {"selection move rules keep alternates when origin later occupied", testSelectionMoveRulesKeepAlternateMovesWhenLaterQueuedMoveOccupiesOrigin},
         {"turn system move after queued upgrade", testTurnSystemAllowsMoveAfterQueuedUpgradeBeforeCommit},
         {"hud layout net income wide", testHudLayoutKeepsNetIncomeWide},
         {"toolbar presentation switchers", testToolBarPresentationTracksSwitcherStates},
@@ -7111,6 +7318,7 @@ int main() {
         {"turn system cancel upgrade", testTurnSystemCancelsQueuedUpgradePerPiece},
         {"selection move rules pending build reselection", testSelectionMoveRulesKeepMovesWhenPendingBuildDependsOnCurrentMove},
         {"turn system replace move drops orphan build", testTurnSystemReplaceMoveDropsOrphanedPendingBuilds},
+        {"turn system replace move preserves order", testTurnSystemReplaceMovePreservesOriginalQueueOrder},
         {"turn system queue move drops final unsupported build", testTurnSystemQueueMoveDropsPendingBuildUnsupportedInFinalState},
         {"turn system queue move keeps final supported build", testTurnSystemQueueMoveKeepsPendingBuildWhenAnotherFinalBuilderSupportsIt},
         {"build overlay exposes occupied structure cells", testBuildOverlayRulesExposeOccupiedCellsForMultiCellStructure},

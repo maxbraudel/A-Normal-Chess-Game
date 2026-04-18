@@ -13,15 +13,16 @@
 
 namespace {
 
-const TurnCommand* findPendingMoveCommand(const std::vector<TurnCommand>& pendingCommands,
-                                          int pieceId) {
-    for (const TurnCommand& command : pendingCommands) {
+std::size_t findPendingMoveCommandIndex(const std::vector<TurnCommand>& pendingCommands,
+                                        int pieceId) {
+    for (std::size_t index = 0; index < pendingCommands.size(); ++index) {
+        const TurnCommand& command = pendingCommands[index];
         if (command.type == TurnCommand::Move && command.pieceId == pieceId) {
-            return &command;
+            return index;
         }
     }
 
-    return nullptr;
+    return pendingCommands.size();
 }
 
 std::vector<TurnCommand> pendingCommandsWithoutPieceLiveStateChanges(
@@ -45,32 +46,79 @@ std::vector<TurnCommand> pendingCommandsWithoutPieceLiveStateChanges(
     return filteredCommands;
 }
 
+std::vector<TurnCommand> pendingCommandsBeforeIndex(const std::vector<TurnCommand>& pendingCommands,
+                                                    std::size_t endIndex) {
+    if (endIndex > pendingCommands.size()) {
+        endIndex = pendingCommands.size();
+    }
+
+    return std::vector<TurnCommand>(pendingCommands.begin(), pendingCommands.begin() + endIndex);
+}
+
+void restorePendingMoveOrigins(Kingdom& activeKingdom,
+                               const std::vector<TurnCommand>& pendingCommands) {
+    for (const TurnCommand& command : pendingCommands) {
+        if (command.type != TurnCommand::Move) {
+            continue;
+        }
+
+        if (Piece* piece = activeKingdom.getPieceById(command.pieceId)) {
+            piece->position = command.origin;
+        }
+    }
+}
+
+TurnValidationContext makeSelectionContext(const TurnValidationContext& context,
+                                           const Kingdom& activeKingdom) {
+    return TurnValidationContext{
+        context.board,
+        activeKingdom,
+        context.enemyKingdom,
+        context.publicBuildings,
+        context.turnNumber,
+        context.config,
+        context.worldSeed,
+        context.xpSystemState};
+}
+
 PendingTurnProjectionResult projectSelectionState(const TurnValidationContext& context,
                                                   const std::vector<TurnCommand>& pendingCommands,
                                                   int pieceId) {
     PendingTurnProjectionResult result;
 
     Kingdom restoredActiveKingdom = context.activeKingdom;
-    if (const TurnCommand* pendingMove = findPendingMoveCommand(pendingCommands, pieceId)) {
-        if (Piece* restoredPiece = restoredActiveKingdom.getPieceById(pieceId)) {
-            restoredPiece->position = pendingMove->origin;
-        }
-    }
+    restorePendingMoveOrigins(restoredActiveKingdom, pendingCommands);
+
+    const std::size_t pendingMoveIndex = findPendingMoveCommandIndex(pendingCommands, pieceId);
+    const std::vector<TurnCommand> commandsToApply = pendingMoveIndex < pendingCommands.size()
+        ? pendingCommandsBeforeIndex(pendingCommands, pendingMoveIndex)
+        : pendingCommands;
 
     const PendingTurnNormalizationResult normalization = PendingTurnProjection::normalize(
-        TurnValidationContext{
-            context.board,
-            restoredActiveKingdom,
-            context.enemyKingdom,
-            context.publicBuildings,
-            context.turnNumber,
-            context.config},
-        pendingCommandsWithoutPieceLiveStateChanges(pendingCommands, pieceId),
-        PendingTurnInvalidCommandPolicy::DropInvalidBuilds);
+        makeSelectionContext(context, restoredActiveKingdom),
+        commandsToApply,
+        PendingTurnInvalidCommandPolicy::FailFast);
     result.snapshot = normalization.snapshot;
     result.valid = normalization.valid;
     result.errorMessage = normalization.errorMessage;
     return result;
+}
+
+bool isPendingMoveOriginSelectable(const TurnValidationContext& context,
+                                   const std::vector<TurnCommand>& pendingCommands,
+                                   int pieceId) {
+    if (findPendingMoveCommandIndex(pendingCommands, pieceId) >= pendingCommands.size()) {
+        return true;
+    }
+
+    Kingdom restoredActiveKingdom = context.activeKingdom;
+    restorePendingMoveOrigins(restoredActiveKingdom, pendingCommands);
+
+    const PendingTurnNormalizationResult normalization = PendingTurnProjection::normalize(
+        makeSelectionContext(context, restoredActiveKingdom),
+        pendingCommandsWithoutPieceLiveStateChanges(pendingCommands, pieceId),
+        PendingTurnInvalidCommandPolicy::DropInvalidBuilds);
+    return normalization.valid;
 }
 
 } // namespace
@@ -84,6 +132,7 @@ SelectionMoveOptions SelectionMoveRules::classifyPieceMoves(const TurnValidation
                                                             const std::vector<TurnCommand>& pendingCommands,
                                                             int pieceId) {
     SelectionMoveOptions moveOptions;
+    moveOptions.originSelectable = isPendingMoveOriginSelectable(context, pendingCommands, pieceId);
 
     const PendingTurnProjectionResult projection = projectSelectionState(
         context,

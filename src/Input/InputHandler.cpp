@@ -63,6 +63,7 @@ InputHandler::InputHandler()
     m_selectedBuildingRotationQuarterTurns(0),
     m_hasSelectedCell(false), m_selectedCell({0, 0}),
     m_selectedOriginDangerous(false),
+    m_selectedOriginSelectable(true),
     m_hasBuildPreview(false), m_buildPreviewType(BuildingType::Barracks),
     m_buildPreviewAnchorCell({0, 0}),
     m_buildPreviewRotationQuarterTurns(0),
@@ -93,6 +94,7 @@ sf::Vector2i InputHandler::getSelectionAnchorCell() const {
 const std::vector<sf::Vector2i>& InputHandler::getValidMoves() const { return m_validMoves; }
 const std::vector<sf::Vector2i>& InputHandler::getDangerMoves() const { return m_dangerMoves; }
 bool InputHandler::isSelectedOriginDangerous() const { return m_selectedOriginDangerous; }
+bool InputHandler::isSelectedOriginSelectable() const { return m_selectedOriginSelectable; }
 const std::set<int>& InputHandler::getCapturePreviewPieceIds() const { return m_capturePreviewPieceIds; }
 bool InputHandler::hasMovePreview() const { return !m_movePreviewOrigins.empty(); }
 
@@ -310,6 +312,7 @@ void InputHandler::clearSelection() {
     m_validMoves.clear();
     m_dangerMoves.clear();
     m_selectedOriginDangerous = false;
+    m_selectedOriginSelectable = true;
     clearSelectionCycle();
     // NOTE: does NOT clear queued move previews — call cancelLiveMove() / clearMovePreview() separately
     m_hasBuildPreview = false;
@@ -331,6 +334,7 @@ void InputHandler::selectCell(sf::Vector2i cellPos) {
     m_validMoves.clear();
     m_dangerMoves.clear();
     m_selectedOriginDangerous = false;
+    m_selectedOriginSelectable = true;
     setActiveSelectionMetadata(SelectionLayer::Terrain, cellPos);
 }
 
@@ -353,6 +357,7 @@ void InputHandler::activatePieceSelection(Piece* piece, sf::Vector2i cellPos,
         m_validMoves.clear();
         m_dangerMoves.clear();
         m_selectedOriginDangerous = false;
+        m_selectedOriginSelectable = true;
     }
     setActiveSelectionMetadata(SelectionLayer::Piece, cellPos);
 }
@@ -372,6 +377,7 @@ void InputHandler::activateBuildingSelection(Building* building, sf::Vector2i ce
     m_validMoves.clear();
     m_dangerMoves.clear();
     m_selectedOriginDangerous = false;
+    m_selectedOriginSelectable = true;
     setActiveSelectionMetadata(SelectionLayer::Building, cellPos);
 }
 
@@ -390,6 +396,7 @@ void InputHandler::activateMapObjectSelection(MapObject* mapObject, sf::Vector2i
     m_validMoves.clear();
     m_dangerMoves.clear();
     m_selectedOriginDangerous = false;
+    m_selectedOriginSelectable = true;
     setActiveSelectionMetadata(SelectionLayer::Object, cellPos);
 }
 
@@ -452,6 +459,11 @@ LayeredSelectionStack InputHandler::resolveSelectionStackAtCell(const InputConte
 
     Piece* pieceOverride = nullptr;
     bool suppressCellPiece = false;
+    const TurnCommand* cellPiecePendingMove = (cell.piece != nullptr)
+        ? context.turnSystem.getPendingMoveCommand(cell.piece->id)
+        : nullptr;
+    const bool cellPieceLeavesThisCell = cellPiecePendingMove != nullptr
+        && cellPiecePendingMove->origin == cellPos;
 
     for (const TurnCommand& command : context.turnSystem.getPendingCommands()) {
         if (command.type != TurnCommand::Move) {
@@ -459,7 +471,7 @@ LayeredSelectionStack InputHandler::resolveSelectionStackAtCell(const InputConte
         }
 
         if (cellPos == command.destination) {
-            if (cell.piece == nullptr) {
+            if (cell.piece == nullptr || cellPieceLeavesThisCell) {
                 pieceOverride = context.controlledKingdom.getPieceById(command.pieceId);
                 suppressCellPiece = (pieceOverride != nullptr);
             }
@@ -526,12 +538,14 @@ void InputHandler::cancelPieceSelectionContext(const InputContext& context) {
     m_validMoves.clear();
     m_dangerMoves.clear();
     m_selectedOriginDangerous = false;
+    m_selectedOriginSelectable = true;
 }
 
 void InputHandler::refreshPieceMoves(Piece* piece, const InputContext& context) {
     m_validMoves.clear();
     m_dangerMoves.clear();
     m_selectedOriginDangerous = false;
+    m_selectedOriginSelectable = true;
     if (!piece) {
         return;
     }
@@ -562,6 +576,7 @@ void InputHandler::refreshPieceMoves(Piece* piece, const InputContext& context) 
     m_validMoves = moveOptions.safeMoves;
     m_dangerMoves = moveOptions.unsafeMoves;
     m_selectedOriginDangerous = (piece->type == PieceType::King) && moveOptions.originUnsafe;
+    m_selectedOriginSelectable = moveOptions.originSelectable;
 }
 
 bool InputHandler::isSelectableMoveDestination(sf::Vector2i cellPos) const {
@@ -738,6 +753,12 @@ void InputHandler::handleSelectTool(const sf::Event& event, const InputContext& 
         if (Piece* selectedPiece = resolveSelectedPiece(context)) {
             const TurnCommand* pendingMove = context.turnSystem.getPendingMoveCommand(selectedPiece->id);
             if (pendingMove && cellPos == pendingMove->origin) {
+                if (!m_selectedOriginSelectable) {
+                    applyResolvedSelection(stack, stack.top(), context);
+                    armSelectionCycle(cellPos);
+                    return;
+                }
+
                 const sf::Vector2i pendingOrigin = pendingMove->origin;
                 Piece* restoredPiece = context.controlledKingdom.getPieceById(selectedPiece->id);
                 if (Piece* authoritativePiece = context.authoritativeControlledKingdom.getPieceById(selectedPiece->id)) {

@@ -457,16 +457,18 @@ bool TurnSystem::replaceMoveCommand(const TurnCommand& moveCommand,
 
     syncPointBudget(context.config, context.activeKingdom);
 
-    std::vector<TurnCommand> candidateCommands;
-    candidateCommands.reserve(m_pendingCommands.size() + 1);
-    for (const TurnCommand& pendingCommand : m_pendingCommands) {
+    std::vector<TurnCommand> candidateCommands = m_pendingCommands;
+    bool replacedExistingMove = false;
+    for (TurnCommand& pendingCommand : candidateCommands) {
         if (pendingCommand.type == TurnCommand::Move && pendingCommand.pieceId == moveCommand.pieceId) {
-            continue;
+            pendingCommand = moveCommand;
+            replacedExistingMove = true;
+            break;
         }
-
-        candidateCommands.push_back(pendingCommand);
     }
-    candidateCommands.push_back(moveCommand);
+    if (!replacedExistingMove) {
+        candidateCommands.push_back(moveCommand);
+    }
 
     const PendingTurnNormalizationResult projection = PendingTurnProjection::normalize(
         context,
