@@ -7,6 +7,7 @@
 #include "Buildings/Building.hpp"
 #include "Config/GameConfig.hpp"
 #include "Kingdom/Kingdom.hpp"
+#include "Systems/CheckResponseRules.hpp"
 #include "Systems/PendingTurnProjection.hpp"
 #include "Systems/TurnPointRules.hpp"
 #include "Units/Piece.hpp"
@@ -23,6 +24,16 @@ std::size_t findPendingMoveCommandIndex(const std::vector<TurnCommand>& pendingC
     }
 
     return pendingCommands.size();
+}
+
+const TurnCommand* findPendingMoveCommand(const std::vector<TurnCommand>& pendingCommands,
+                                          int pieceId) {
+    const std::size_t index = findPendingMoveCommandIndex(pendingCommands, pieceId);
+    if (index >= pendingCommands.size()) {
+        return nullptr;
+    }
+
+    return &pendingCommands[index];
 }
 
 std::vector<TurnCommand> pendingCommandsWithoutPieceLiveStateChanges(
@@ -104,6 +115,45 @@ PendingTurnProjectionResult projectSelectionState(const TurnValidationContext& c
     return result;
 }
 
+std::vector<TurnCommand> pendingCommandsWithCandidateMove(const std::vector<TurnCommand>& pendingCommands,
+                                                          const TurnCommand& candidateMove) {
+    std::vector<TurnCommand> candidateCommands = pendingCommands;
+    for (TurnCommand& pendingCommand : candidateCommands) {
+        if (pendingCommand.type == TurnCommand::Move && pendingCommand.pieceId == candidateMove.pieceId) {
+            pendingCommand = candidateMove;
+            return candidateCommands;
+        }
+    }
+
+    candidateCommands.push_back(candidateMove);
+    return candidateCommands;
+}
+
+bool candidateMoveKeepsKingSafe(const TurnValidationContext& context,
+                                const std::vector<TurnCommand>& pendingCommands,
+                                int pieceId,
+                                sf::Vector2i origin,
+                                sf::Vector2i destination) {
+    TurnCommand candidateMove;
+    candidateMove.type = TurnCommand::Move;
+    candidateMove.pieceId = pieceId;
+    candidateMove.origin = origin;
+    candidateMove.destination = destination;
+
+    const PendingTurnNormalizationResult normalization = PendingTurnProjection::normalize(
+        context,
+        pendingCommandsWithCandidateMove(pendingCommands, candidateMove),
+        PendingTurnInvalidCommandPolicy::DropInvalidBuilds);
+    if (!normalization.valid) {
+        return false;
+    }
+
+    const CheckTurnValidation validation = CheckResponseRules::validatePendingTurn(
+        context,
+        normalization.normalizedCommands);
+    return !validation.projectedKingInCheck;
+}
+
 bool isPendingMoveOriginSelectable(const TurnValidationContext& context,
                                    const std::vector<TurnCommand>& pendingCommands,
                                    int pieceId) {
@@ -160,15 +210,33 @@ SelectionMoveOptions SelectionMoveRules::classifyPieceMoves(const TurnValidation
         return moveOptions;
     }
 
+    const std::vector<sf::Vector2i> pseudoLegalMoves = ForwardModel::getPseudoLegalMoves(
+        projection.snapshot,
+        *projectedPiece,
+        context.config.getGlobalMaxRange());
+
+    const TurnCommand* pendingMove = findPendingMoveCommand(pendingCommands, pieceId);
+    const sf::Vector2i selectionOrigin = pendingMove != nullptr
+        ? pendingMove->origin
+        : projectedPiece->position;
+
+    if (moveOptions.originUnsafe) {
+        for (const sf::Vector2i& destination : pseudoLegalMoves) {
+            if (candidateMoveKeepsKingSafe(context, pendingCommands, pieceId, selectionOrigin, destination)) {
+                moveOptions.safeMoves.push_back(destination);
+            } else {
+                moveOptions.unsafeMoves.push_back(destination);
+            }
+        }
+
+        return moveOptions;
+    }
+
     moveOptions.safeMoves = ForwardModel::getLegalMoves(
         projection.snapshot,
         *projectedPiece,
         context.config.getGlobalMaxRange());
 
-    const std::vector<sf::Vector2i> pseudoLegalMoves = ForwardModel::getPseudoLegalMoves(
-        projection.snapshot,
-        *projectedPiece,
-        context.config.getGlobalMaxRange());
     for (const sf::Vector2i& destination : pseudoLegalMoves) {
         if (std::find(moveOptions.safeMoves.begin(), moveOptions.safeMoves.end(), destination)
             == moveOptions.safeMoves.end()) {

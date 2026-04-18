@@ -1467,6 +1467,146 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
             "Red king destinations should remain selectable even though they are unsafe.");
     }
 
+    void testSelectionMoveRulesKeepCheckResolvingNonKingMovesGreen() {
+        GameConfig config;
+        Board board;
+        board.init(8);
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+
+        addPieceToBoard(white, board, 330, PieceType::King, KingdomId::White, {8, 8});
+        Piece& whiteBishop = addPieceToBoard(white, board, 331, PieceType::Bishop, KingdomId::White, {7, 7});
+        addPieceToBoard(black, board, 430, PieceType::King, KingdomId::Black, {4, 4});
+        addPieceToBoard(black, board, 431, PieceType::Rook, KingdomId::Black, {8, 4});
+
+        const std::vector<Building> publicBuildings;
+        const SelectionMoveOptions moveOptions = SelectionMoveRules::classifyPieceMoves(
+            board, white, black, publicBuildings, 1, {}, whiteBishop.id, config);
+
+        expect(moveOptions.originUnsafe,
+            "Selection move rules should mark the origin kingdom as unsafe when the selected piece is responding to an active check.");
+        expect(containsCell(moveOptions.safeMoves, {8, 6}),
+            "A non-king move that blocks a rook check should stay green in the selection overlay.");
+        expect(containsCell(moveOptions.unsafeMoves, {6, 6}),
+            "A pseudo-legal move that does not resolve the active check should stay red in the selection overlay.");
+        expect(moveOptions.contains({8, 6}) && moveOptions.contains({6, 6}),
+            "Both resolving and non-resolving moves should remain selectable in the selection model while checked.");
+    }
+
+    void testSelectionMoveRulesKeepCheckResolvingKingMovesGreen() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+
+        addPieceToBoard(white, board, 340, PieceType::King, KingdomId::White, {4, 4});
+        addPieceToBoard(white, board, 341, PieceType::Rook, KingdomId::White, {10, 12});
+        Piece& blackKing = addPieceToBoard(black, board, 440, PieceType::King, KingdomId::Black, {10, 10});
+
+        const std::vector<Building> publicBuildings;
+        const SelectionMoveOptions moveOptions = SelectionMoveRules::classifyPieceMoves(
+            board, black, white, publicBuildings, 1, {}, blackKing.id, config);
+
+        expect(moveOptions.originUnsafe,
+            "Selection move rules should flag the king origin as unsafe while that king is in check.");
+        expect(containsCell(moveOptions.safeMoves, {9, 10}),
+            "A king sidestep that escapes the check should stay green in the selection overlay.");
+        expect(containsCell(moveOptions.unsafeMoves, {10, 11}),
+            "A king destination that remains attacked should stay red in the selection overlay.");
+    }
+
+    void testSelectionMoveRulesRefreshEarlierQueuedMoveAfterLaterKingEscape() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        Piece& whiteKing = addPieceToBoard(white, board, 350, PieceType::King, KingdomId::White, {8, 8});
+        Piece& whitePawn = addPieceToBoard(white, board, 351, PieceType::Pawn, KingdomId::White, {4, 4});
+        addPieceToBoard(black, board, 450, PieceType::King, KingdomId::Black, {18, 18});
+        addPieceToBoard(black, board, 451, PieceType::Rook, KingdomId::Black, {8, 4});
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+
+        const TurnCommand pawnMove = makeMoveCommand(whitePawn.id, {4, 4}, {4, 5});
+        const TurnCommand kingMove = makeMoveCommand(whiteKing.id, {8, 8}, {9, 8});
+
+        expect(turnSystem.queueCommand(pawnMove, board, white, black, publicBuildings, config),
+            "The distant pawn move should queue successfully before the king escape in the stale-color regression.");
+        expect(turnSystem.queueCommand(kingMove, board, white, black, publicBuildings, config),
+            "The later king escape should queue successfully in the stale-color regression.");
+
+        whitePawn.position = pawnMove.destination;
+        whiteKing.position = kingMove.destination;
+
+        const SelectionMoveOptions moveOptions = SelectionMoveRules::classifyPieceMoves(
+            board,
+            white,
+            black,
+            publicBuildings,
+            1,
+            turnSystem.getPendingCommands(),
+            whitePawn.id,
+            config);
+
+        expect(moveOptions.originUnsafe,
+            "Reselecting an earlier queued move should still evaluate from the original checked queue slot.");
+        expect(containsCell(moveOptions.safeMoves, pawnMove.destination),
+            "Once a later king move resolves the check, the earlier queued pawn destination should refresh to green on reselection.");
+        expect(!containsCell(moveOptions.unsafeMoves, pawnMove.destination),
+            "The refreshed pawn destination should no longer stay red after the later king escape has made the full pending turn safe.");
+    }
+
+    void testSelectionMoveRulesRefreshEarlierQueuedMoveAfterLaterBlockingResponse() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 360, PieceType::King, KingdomId::White, {8, 8});
+        Piece& whitePawn = addPieceToBoard(white, board, 361, PieceType::Pawn, KingdomId::White, {4, 4});
+        Piece& whiteBishop = addPieceToBoard(white, board, 362, PieceType::Bishop, KingdomId::White, {7, 7});
+        addPieceToBoard(black, board, 460, PieceType::King, KingdomId::Black, {18, 18});
+        addPieceToBoard(black, board, 461, PieceType::Rook, KingdomId::Black, {8, 4});
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+
+        const TurnCommand pawnMove = makeMoveCommand(whitePawn.id, {4, 4}, {4, 5});
+        const TurnCommand bishopBlock = makeMoveCommand(whiteBishop.id, {7, 7}, {8, 6});
+
+        expect(turnSystem.queueCommand(pawnMove, board, white, black, publicBuildings, config),
+            "The distant pawn move should queue successfully before the later blocking response.");
+        expect(turnSystem.queueCommand(bishopBlock, board, white, black, publicBuildings, config),
+            "The later blocking move should queue successfully in the stale-color regression.");
+
+        whitePawn.position = pawnMove.destination;
+        whiteBishop.position = bishopBlock.destination;
+
+        const SelectionMoveOptions moveOptions = SelectionMoveRules::classifyPieceMoves(
+            board,
+            white,
+            black,
+            publicBuildings,
+            1,
+            turnSystem.getPendingCommands(),
+            whitePawn.id,
+            config);
+
+        expect(moveOptions.originUnsafe,
+            "Reselecting an earlier queued move should still remember that the original queue slot was checked before the later blocker acted.");
+        expect(containsCell(moveOptions.safeMoves, pawnMove.destination),
+            "A later non-king blocking response should also refresh the earlier queued pawn destination to green.");
+        expect(!containsCell(moveOptions.unsafeMoves, pawnMove.destination),
+            "The refreshed pawn destination should not remain red once a later blocking move resolves the check.");
+    }
+
     void testSelectionMoveRulesAllowPawnToCaptureAutonomousUnitDiagonally() {
         GameConfig config;
         Board board;
@@ -7866,6 +8006,10 @@ int main() {
         {"check response rejects non-move", testCheckResponseRejectsNonMoveActionsWhileInCheck},
         {"selection move rules unsafe non-king selectable", testSelectionMoveRulesClassifyUnsafeNonKingMovesAsSelectable},
         {"selection move rules unsafe king selectable", testSelectionMoveRulesKeepUnsafeKingSquaresSelectable},
+        {"selection move rules checked non-king green responses", testSelectionMoveRulesKeepCheckResolvingNonKingMovesGreen},
+        {"selection move rules checked king green responses", testSelectionMoveRulesKeepCheckResolvingKingMovesGreen},
+        {"selection move rules refresh earlier queued move after king escape", testSelectionMoveRulesRefreshEarlierQueuedMoveAfterLaterKingEscape},
+        {"selection move rules refresh earlier queued move after blocking response", testSelectionMoveRulesRefreshEarlierQueuedMoveAfterLaterBlockingResponse},
         {"selection move rules pawn autonomous capture", testSelectionMoveRulesAllowPawnToCaptureAutonomousUnitDiagonally},
         {"selection move rules ignore queued upgrade live moves", testSelectionMoveRulesIgnoreQueuedUpgradeForLivePieceMoves},
         {"selection move rules keep alternates when origin later occupied", testSelectionMoveRulesKeepAlternateMovesWhenLaterQueuedMoveOccupiesOrigin},
