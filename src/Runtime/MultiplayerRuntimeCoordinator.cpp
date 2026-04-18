@@ -187,7 +187,7 @@ void MultiplayerRuntimeCoordinator::processServerEvent(const MultiplayerServer::
     }
     if (plan.pushSnapshotToRemote && callbacks.pushSnapshotToRemote) {
         std::string snapshotError;
-        if (!callbacks.pushSnapshotToRemote(&snapshotError)) {
+        if (!callbacks.pushSnapshotToRemote({}, &snapshotError)) {
             if (!snapshotError.empty()) {
                 m_engine.eventLog().log(m_engine.turnSystem().getTurnNumber(), KingdomId::Black, snapshotError);
             }
@@ -204,7 +204,7 @@ void MultiplayerRuntimeCoordinator::processServerEvent(const MultiplayerServer::
             m_engine.eventLog().log(m_engine.turnSystem().getTurnNumber(), KingdomId::Black,
                                     error.empty() ? "Rejected remote multiplayer turn." : error);
             if (callbacks.pushSnapshotToRemote) {
-                callbacks.pushSnapshotToRemote(nullptr);
+                callbacks.pushSnapshotToRemote({}, nullptr);
             }
         }
     }
@@ -250,6 +250,11 @@ void MultiplayerRuntimeCoordinator::processClientEvent(const MultiplayerClient::
             }
             if (callbacks.updateUI) {
                 callbacks.updateUI();
+            }
+            if (callbacks.showGameplayNotification) {
+                for (const GameplayNotification& notification : plan.snapshotNotifications) {
+                    callbacks.showGameplayNotification(notification);
+                }
             }
             break;
         }

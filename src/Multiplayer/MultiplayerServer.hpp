@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "Core/GameplayNotification.hpp"
 #include "Core/GameSessionConfig.hpp"
 #include "Multiplayer/Protocol.hpp"
 
@@ -39,6 +40,9 @@ public:
     Event popNextEvent();
 
     bool sendSnapshot(const std::string& serializedSaveData, std::string* errorMessage = nullptr);
+    bool sendSnapshot(const std::string& serializedSaveData,
+                      const std::vector<GameplayNotification>& notifications,
+                      std::string* errorMessage = nullptr);
     bool sendTurnRejected(const std::string& reason, std::string* errorMessage = nullptr);
     bool sendDisconnectNotice(const std::string& reason, std::string* errorMessage = nullptr);
 

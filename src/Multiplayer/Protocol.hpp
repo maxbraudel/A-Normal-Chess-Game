@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 
+#include "Core/GameplayNotification.hpp"
 #include "Core/GameSessionConfig.hpp"
 #include "Systems/TurnCommand.hpp"
 
@@ -38,6 +39,7 @@ struct MultiplayerJoinResponse {
 
 struct MultiplayerStateSnapshot {
     std::string serializedSaveData;
+    std::vector<GameplayNotification> notifications;
 };
 
 struct MultiplayerTurnSubmission {

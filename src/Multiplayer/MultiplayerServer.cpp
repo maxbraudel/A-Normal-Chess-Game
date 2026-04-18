@@ -114,13 +114,19 @@ bool MultiplayerServer::sendJoinResponse(bool accepted, const std::string& reaso
 }
 
 bool MultiplayerServer::sendSnapshot(const std::string& serializedSaveData, std::string* errorMessage) {
+    return sendSnapshot(serializedSaveData, {}, errorMessage);
+}
+
+bool MultiplayerServer::sendSnapshot(const std::string& serializedSaveData,
+                                     const std::vector<GameplayNotification>& notifications,
+                                     std::string* errorMessage) {
     if (!m_clientAuthenticated) {
         writeError(errorMessage, "Cannot send a multiplayer snapshot without an authenticated client.");
         return false;
     }
 
     sf::Packet packet = createPacket(MultiplayerMessageType::StateSnapshot);
-    writePacket(packet, MultiplayerStateSnapshot{serializedSaveData});
+    writePacket(packet, MultiplayerStateSnapshot{serializedSaveData, notifications});
     return sendPacket(packet, errorMessage);
 }
 

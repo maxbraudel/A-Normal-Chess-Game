@@ -49,7 +49,7 @@ void MultiplayerClient::handleTransportDisconnect(const std::string& message) {
 
     m_connected = false;
     m_authenticated = false;
-    pushEvent(Event{Event::Type::Disconnected, {}, message, {}});
+    pushEvent(Event{Event::Type::Disconnected, {}, message, {}, {}});
 }
 
 MultiplayerClient::Event MultiplayerClient::popNextEvent() {
@@ -104,7 +104,7 @@ bool MultiplayerClient::sendTurnSubmission(const std::vector<TurnCommand>& comma
 void MultiplayerClient::handlePacket(sf::Packet& packet) {
     MultiplayerMessageType type;
     if (!extractMessageType(packet, type)) {
-        pushEvent(Event{Event::Type::Error, {}, "Received an invalid multiplayer packet from the host.", {}});
+        pushEvent(Event{Event::Type::Error, {}, "Received an invalid multiplayer packet from the host.", {}, {}});
         return;
     }
 
@@ -112,45 +112,49 @@ void MultiplayerClient::handlePacket(sf::Packet& packet) {
         case MultiplayerMessageType::ServerInfoResponse: {
             MultiplayerServerInfo info;
             if (!readPacket(packet, info)) {
-                pushEvent(Event{Event::Type::Error, {}, "Received an invalid server info packet.", {}});
+                pushEvent(Event{Event::Type::Error, {}, "Received an invalid server info packet.", {}, {}});
                 return;
             }
-            pushEvent(Event{Event::Type::ServerInfoReceived, info, "", {}});
+            pushEvent(Event{Event::Type::ServerInfoReceived, info, "", {}, {}});
             break;
         }
 
         case MultiplayerMessageType::JoinResponse: {
             MultiplayerJoinResponse response;
             if (!readPacket(packet, response)) {
-                pushEvent(Event{Event::Type::Error, {}, "Received an invalid join response packet.", {}});
+                pushEvent(Event{Event::Type::Error, {}, "Received an invalid join response packet.", {}, {}});
                 return;
             }
 
             m_authenticated = response.accepted;
             pushEvent(Event{response.accepted ? Event::Type::JoinAccepted : Event::Type::JoinRejected,
-                            {}, response.reason, {}});
+                            {}, response.reason, {}, {}});
             break;
         }
 
         case MultiplayerMessageType::StateSnapshot: {
             MultiplayerStateSnapshot snapshot;
             if (!readPacket(packet, snapshot)) {
-                pushEvent(Event{Event::Type::Error, {}, "Received an invalid state snapshot packet.", {}});
+                pushEvent(Event{Event::Type::Error, {}, "Received an invalid state snapshot packet.", {}, {}});
                 return;
             }
 
-            pushEvent(Event{Event::Type::SnapshotReceived, {}, "", snapshot.serializedSaveData});
+            pushEvent(Event{Event::Type::SnapshotReceived,
+                            {},
+                            "",
+                            snapshot.serializedSaveData,
+                            snapshot.notifications});
             break;
         }
 
         case MultiplayerMessageType::TurnRejected: {
             MultiplayerTurnRejected rejection;
             if (!readPacket(packet, rejection)) {
-                pushEvent(Event{Event::Type::Error, {}, "Received an invalid turn rejection packet.", {}});
+                pushEvent(Event{Event::Type::Error, {}, "Received an invalid turn rejection packet.", {}, {}});
                 return;
             }
 
-            pushEvent(Event{Event::Type::TurnRejected, {}, rejection.reason, {}});
+            pushEvent(Event{Event::Type::TurnRejected, {}, rejection.reason, {}, {}});
             break;
         }
 
@@ -164,7 +168,7 @@ void MultiplayerClient::handlePacket(sf::Packet& packet) {
         }
 
         default:
-            pushEvent(Event{Event::Type::Error, {}, "Received an unexpected multiplayer packet type on the client.", {}});
+            pushEvent(Event{Event::Type::Error, {}, "Received an unexpected multiplayer packet type on the client.", {}, {}});
             break;
     }
 }

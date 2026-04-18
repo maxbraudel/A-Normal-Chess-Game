@@ -38,7 +38,7 @@ struct TurnLifecycleCallbacks {
     std::function<void()> ensureTurnDraftUpToDate;
     std::function<void()> refreshTurnPhase;
     std::function<void()> updateUI;
-    std::function<void()> persistLanHostSnapshot;
+    std::function<void(const std::vector<GameplayNotification>&)> persistLanHostSnapshot;
     std::function<void(const GameplayNotification&)> showGameplayNotification;
 };
 

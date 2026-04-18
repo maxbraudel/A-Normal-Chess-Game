@@ -76,6 +76,7 @@ MultiplayerClientEventPlan MultiplayerEventCoordinator::planClientEvent(
         case MultiplayerClient::Event::Type::SnapshotReceived:
             plan.type = MultiplayerClientEventPlan::Type::RestoreSnapshot;
             plan.serializedSaveData = event.serializedSaveData;
+            plan.snapshotNotifications = event.snapshotNotifications;
             break;
 
         case MultiplayerClient::Event::Type::TurnRejected:

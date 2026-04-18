@@ -110,7 +110,7 @@ void TurnLifecycleCoordinator::commitAuthoritativeTurn(bool lanHost,
         callbacks.reconcileSelectionBookmark(selectionBookmark);
     }
     if (plan.persistLanHostSnapshot && callbacks.persistLanHostSnapshot) {
-        callbacks.persistLanHostSnapshot();
+        callbacks.persistLanHostSnapshot(execution.notifications);
     }
     if (plan.updateUI && callbacks.updateUI) {
         callbacks.updateUI();

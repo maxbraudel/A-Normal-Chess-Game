@@ -2,6 +2,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "Multiplayer/MultiplayerClient.hpp"
 #include "Multiplayer/MultiplayerServer.hpp"
@@ -55,6 +56,7 @@ struct MultiplayerClientEventPlan {
 
     Type type = Type::None;
     std::string serializedSaveData;
+    std::vector<GameplayNotification> snapshotNotifications;
     std::string title;
     std::string message;
     std::optional<MultiplayerAlertPlan> alert;

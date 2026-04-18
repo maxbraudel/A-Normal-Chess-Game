@@ -2,6 +2,7 @@
 
 #include <string>
 
+#include "Core/LocalPlayerContext.hpp"
 #include "Kingdom/KingdomId.hpp"
 #include "Objects/MapObject.hpp"
 
@@ -24,6 +25,21 @@ inline std::string gameplayNotificationTitle(const GameplayNotification& notific
     return "Notification";
 }
 
+inline bool shouldShowGameplayNotificationForLocalPlayer(const GameplayNotification& notification,
+                                                         const LocalPlayerContext& localPlayerContext) {
+    return localPlayerContext.isLocallyControlled(notification.kingdom);
+}
+
+inline std::string gameplayNotificationRecipientLabel(const GameplayNotification& notification,
+                                                      const LocalPlayerContext& localPlayerContext) {
+    if (hasSingleLocallyControlledKingdom(localPlayerContext)
+        && localPlayerContext.isLocallyControlled(notification.kingdom)) {
+        return "You";
+    }
+
+    return (notification.kingdom == KingdomId::White) ? "White" : "Black";
+}
+
 inline std::string gameplayNotificationMessage(const GameplayNotification& notification) {
     const std::string kingdomName = (notification.kingdom == KingdomId::White) ? "White" : "Black";
     switch (notification.kind) {
@@ -34,6 +50,24 @@ inline std::string gameplayNotificationMessage(const GameplayNotification& notif
                 case ChestRewardType::MovementPointsMaxBonus:
                 case ChestRewardType::BuildPointsMaxBonus:
                     return kingdomName + " permanently gained " + describeChestReward(notification.chestReward) + ".";
+            }
+            break;
+    }
+
+    return "A gameplay event occurred.";
+}
+
+inline std::string gameplayNotificationMessage(const GameplayNotification& notification,
+                                               const LocalPlayerContext& localPlayerContext) {
+    const std::string recipientLabel = gameplayNotificationRecipientLabel(notification, localPlayerContext);
+    switch (notification.kind) {
+        case GameplayNotificationKind::ChestReward:
+            switch (notification.chestReward.type) {
+                case ChestRewardType::Gold:
+                    return recipientLabel + " gained " + describeChestReward(notification.chestReward) + ".";
+                case ChestRewardType::MovementPointsMaxBonus:
+                case ChestRewardType::BuildPointsMaxBonus:
+                    return recipientLabel + " permanently gained " + describeChestReward(notification.chestReward) + ".";
             }
             break;
     }

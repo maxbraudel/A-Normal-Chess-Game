@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 
+#include "Core/GameplayNotification.hpp"
 #include "Core/GameSessionConfig.hpp"
 #include "Multiplayer/MultiplayerClient.hpp"
 #include "Multiplayer/MultiplayerServer.hpp"
@@ -33,6 +34,10 @@ public:
     bool startHostIfNeeded(const GameSessionConfig& session,
                            const std::string& saveName,
                            std::string* errorMessage = nullptr);
+    bool pushSnapshotIfConnected(bool lanHost,
+                                 const std::string& serializedSaveData,
+                                 const std::vector<GameplayNotification>& notifications,
+                                 std::string* errorMessage = nullptr);
     bool pushSnapshotIfConnected(bool lanHost,
                                  const std::string& serializedSaveData,
                                  std::string* errorMessage = nullptr);

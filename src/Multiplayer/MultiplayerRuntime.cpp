@@ -155,12 +155,19 @@ bool MultiplayerRuntime::startHostIfNeeded(const GameSessionConfig& session,
 
 bool MultiplayerRuntime::pushSnapshotIfConnected(bool lanHost,
                                                  const std::string& serializedSaveData,
+                                                 const std::vector<GameplayNotification>& notifications,
                                                  std::string* errorMessage) {
     if (!lanHost || !m_server.hasAuthenticatedClient()) {
         return true;
     }
 
-    return m_server.sendSnapshot(serializedSaveData, errorMessage);
+    return m_server.sendSnapshot(serializedSaveData, notifications, errorMessage);
+}
+
+bool MultiplayerRuntime::pushSnapshotIfConnected(bool lanHost,
+                                                 const std::string& serializedSaveData,
+                                                 std::string* errorMessage) {
+    return pushSnapshotIfConnected(lanHost, serializedSaveData, {}, errorMessage);
 }
 
 bool MultiplayerRuntime::submitTurnSubmission(const std::vector<TurnCommand>& commands,

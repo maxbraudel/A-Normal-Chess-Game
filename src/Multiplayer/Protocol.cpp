@@ -70,6 +70,52 @@ bool readTurnCommand(sf::Packet& packet, TurnCommand& command) {
     return true;
 }
 
+bool writeChestReward(sf::Packet& packet, const ChestReward& reward) {
+    packet << static_cast<sf::Uint8>(reward.type)
+           << reward.amount;
+    return true;
+}
+
+bool readChestReward(sf::Packet& packet, ChestReward& reward) {
+    sf::Uint8 rewardType = 0;
+    if (!(packet >> rewardType >> reward.amount)) {
+        return false;
+    }
+
+    reward.type = static_cast<ChestRewardType>(rewardType);
+    return true;
+}
+
+bool writeGameplayNotification(sf::Packet& packet, const GameplayNotification& notification) {
+    packet << static_cast<sf::Uint8>(notification.kind)
+           << static_cast<sf::Uint8>(notification.kingdom);
+
+    switch (notification.kind) {
+        case GameplayNotificationKind::ChestReward:
+            return writeChestReward(packet, notification.chestReward);
+    }
+
+    return false;
+}
+
+bool readGameplayNotification(sf::Packet& packet, GameplayNotification& notification) {
+    sf::Uint8 notificationKind = 0;
+    sf::Uint8 kingdom = 0;
+    if (!(packet >> notificationKind >> kingdom)) {
+        return false;
+    }
+
+    notification.kind = static_cast<GameplayNotificationKind>(notificationKind);
+    notification.kingdom = static_cast<KingdomId>(kingdom);
+
+    switch (notification.kind) {
+        case GameplayNotificationKind::ChestReward:
+            return readChestReward(packet, notification.chestReward);
+    }
+
+    return false;
+}
+
 } // namespace
 
 sf::Packet createPacket(MultiplayerMessageType type) {
@@ -127,12 +173,33 @@ bool readPacket(sf::Packet& packet, MultiplayerJoinResponse& response) {
 }
 
 bool writePacket(sf::Packet& packet, const MultiplayerStateSnapshot& snapshot) {
-    packet << snapshot.serializedSaveData;
+    packet << snapshot.serializedSaveData
+           << static_cast<sf::Uint32>(snapshot.notifications.size());
+    for (const GameplayNotification& notification : snapshot.notifications) {
+        if (!writeGameplayNotification(packet, notification)) {
+            return false;
+        }
+    }
     return true;
 }
 
 bool readPacket(sf::Packet& packet, MultiplayerStateSnapshot& snapshot) {
-    return static_cast<bool>(packet >> snapshot.serializedSaveData);
+    sf::Uint32 notificationCount = 0;
+    if (!(packet >> snapshot.serializedSaveData >> notificationCount)) {
+        return false;
+    }
+
+    snapshot.notifications.clear();
+    snapshot.notifications.reserve(notificationCount);
+    for (sf::Uint32 index = 0; index < notificationCount; ++index) {
+        GameplayNotification notification;
+        if (!readGameplayNotification(packet, notification)) {
+            return false;
+        }
+        snapshot.notifications.push_back(notification);
+    }
+
+    return true;
 }
 
 bool writePacket(sf::Packet& packet, const MultiplayerTurnSubmission& submission) {

@@ -287,14 +287,12 @@ TurnLifecycleCallbacks Game::makeTurnLifecycleCallbacks() {
             invalidatePendingTurnValidation();
             updateUIState();
         },
-        [this]() {
+        [this](const std::vector<GameplayNotification>& notifications) {
             saveGame();
-            pushSnapshotToRemote(nullptr);
+            pushSnapshotToRemote(notifications, nullptr);
         },
         [this](const GameplayNotification& notification) {
-            m_uiManager.showMultiplayerAlert(
-                gameplayNotificationTitle(notification),
-                gameplayNotificationMessage(notification));
+            showGameplayNotification(notification);
         }};
 }
 
@@ -1040,9 +1038,14 @@ void Game::stopMultiplayer() {
 }
 
 bool Game::pushSnapshotToRemote(std::string* errorMessage) {
+    return pushSnapshotToRemote({}, errorMessage);
+}
+
+bool Game::pushSnapshotToRemote(const std::vector<GameplayNotification>& notifications,
+                               std::string* errorMessage) {
     m_engine.ensureWeatherMaskUpToDate(m_config);
     const std::string snapshot = m_saveManager.serialize(m_engine.createSaveData());
-    return m_multiplayer.pushSnapshotIfConnected(isLanHost(), snapshot, errorMessage);
+    return m_multiplayer.pushSnapshotIfConnected(isLanHost(), snapshot, notifications, errorMessage);
 }
 
 bool Game::joinMultiplayer(const JoinMultiplayerRequest& request, std::string* errorMessage) {
@@ -1059,8 +1062,8 @@ bool Game::reconnectToMultiplayerHost(std::string* errorMessage) {
 
 void Game::updateMultiplayer() {
     const MultiplayerRuntimeCallbacks callbacks{
-        [this](std::string* errorMessage) {
-            return pushSnapshotToRemote(errorMessage);
+        [this](const std::vector<GameplayNotification>& notifications, std::string* errorMessage) {
+            return pushSnapshotToRemote(notifications, errorMessage);
         },
         [this](const std::vector<TurnCommand>& commands, std::string* errorMessage) {
             return m_turnLifecycleCoordinator.applyRemoteTurnSubmission(
@@ -1083,6 +1086,9 @@ void Game::updateMultiplayer() {
             invalidatePendingTurnValidation();
             updateUIState();
         },
+        [this](const GameplayNotification& notification) {
+            showGameplayNotification(notification);
+        },
         [this]() {
             invalidateTurnDraft();
         },
@@ -1093,6 +1099,16 @@ void Game::updateMultiplayer() {
             return reconnectToMultiplayerHost(errorMessage);
         }};
     m_multiplayerRuntimeCoordinator.update(callbacks);
+}
+
+void Game::showGameplayNotification(const GameplayNotification& notification) {
+    if (!shouldShowGameplayNotificationForLocalPlayer(notification, m_localPlayerContext)) {
+        return;
+    }
+
+    m_uiManager.showMultiplayerAlert(
+        gameplayNotificationTitle(notification),
+        gameplayNotificationMessage(notification, m_localPlayerContext));
 }
 
 void Game::setupUICallbacks() {

@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "Core/GameplayNotification.hpp"
 #include "Multiplayer/Protocol.hpp"
 
 class MultiplayerClient {
@@ -26,6 +27,7 @@ public:
         MultiplayerServerInfo serverInfo;
         std::string message;
         std::string serializedSaveData;
+        std::vector<GameplayNotification> snapshotNotifications;
     };
 
     bool connect(const sf::IpAddress& address,

@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "Core/GameplayNotification.hpp"
 #include "Input/InputSelectionBookmark.hpp"
 #include "Runtime/MultiplayerEventCoordinator.hpp"
 #include "Systems/TurnCommand.hpp"
@@ -17,12 +18,13 @@ class SaveManager;
 struct LocalPlayerContext;
 
 struct MultiplayerRuntimeCallbacks {
-    std::function<bool(std::string*)> pushSnapshotToRemote;
+    std::function<bool(const std::vector<GameplayNotification>&, std::string*)> pushSnapshotToRemote;
     std::function<bool(const std::vector<TurnCommand>&, std::string*)> applyRemoteTurnSubmission;
     std::function<InputSelectionBookmark()> captureSelectionBookmark;
     std::function<void(const InputSelectionBookmark&)> reconcileSelectionBookmark;
     std::function<void()> refreshTurnPhase;
     std::function<void()> updateUI;
+    std::function<void(const GameplayNotification&)> showGameplayNotification;
     std::function<void()> invalidateTurnDraft;
     std::function<void()> returnToMainMenu;
     std::function<bool(std::string*)> reconnectToMultiplayerHost;

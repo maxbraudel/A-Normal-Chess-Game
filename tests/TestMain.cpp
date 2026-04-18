@@ -2764,6 +2764,30 @@ void testSessionValidatorRejectsInvalidOrdering() {
             "MultiplayerEventCoordinator should keep return-to-menu as the fallback disconnect action.");
     }
 
+    void testMultiplayerEventCoordinatorKeepsSnapshotNotifications() {
+        MultiplayerClient::Event clientEvent;
+        clientEvent.type = MultiplayerClient::Event::Type::SnapshotReceived;
+        clientEvent.serializedSaveData = "{\"snapshot\":true}";
+
+        GameplayNotification notification;
+        notification.kind = GameplayNotificationKind::ChestReward;
+        notification.kingdom = KingdomId::Black;
+        notification.chestReward.type = ChestRewardType::Gold;
+        notification.chestReward.amount = 23;
+        clientEvent.snapshotNotifications.push_back(notification);
+
+        const MultiplayerClientEventPlan plan = MultiplayerEventCoordinator::planClientEvent(clientEvent);
+        expect(plan.type == MultiplayerClientEventPlan::Type::RestoreSnapshot,
+            "MultiplayerEventCoordinator should keep snapshot events classified as snapshot restores when notifications are attached.");
+        expect(plan.serializedSaveData == clientEvent.serializedSaveData,
+            "MultiplayerEventCoordinator should preserve snapshot save payloads when notifications are attached.");
+        expect(plan.snapshotNotifications.size() == 1,
+            "MultiplayerEventCoordinator should preserve snapshot gameplay notifications for client-side display.");
+        expect(plan.snapshotNotifications[0].kingdom == KingdomId::Black
+                && plan.snapshotNotifications[0].chestReward.amount == 23,
+            "MultiplayerEventCoordinator should preserve notification payload contents across the client event plan.");
+    }
+
     void testMultiplayerEventCoordinatorRestoresSnapshotsAndClientState() {
         GameConfig config;
         GameEngine engine;
@@ -4246,6 +4270,80 @@ void testSaveManagerRoundTrip() {
             expect(digestA != digestC, "Password digests should change when the password changes.");
         }
 
+        void testGameplayNotificationUsesLocalRecipientWordingAndFiltering() {
+            GameplayNotification whiteGoldNotification;
+            whiteGoldNotification.kind = GameplayNotificationKind::ChestReward;
+            whiteGoldNotification.kingdom = KingdomId::White;
+            whiteGoldNotification.chestReward.type = ChestRewardType::Gold;
+            whiteGoldNotification.chestReward.amount = 25;
+
+            GameplayNotification blackBuildNotification;
+            blackBuildNotification.kind = GameplayNotificationKind::ChestReward;
+            blackBuildNotification.kingdom = KingdomId::Black;
+            blackBuildNotification.chestReward.type = ChestRewardType::BuildPointsMaxBonus;
+            blackBuildNotification.chestReward.amount = 1;
+
+            LocalPlayerContext hostContext;
+            hostContext.mode = LocalSessionMode::LanHost;
+            hostContext.localControl = {true, false};
+            hostContext.perspectiveKingdom = KingdomId::White;
+
+            const LocalPlayerContext clientContext = makeLanClientLocalPlayerContext();
+
+            LocalPlayerContext hotseatContext;
+            hotseatContext.mode = LocalSessionMode::LocalOnly;
+            hotseatContext.localControl = {true, true};
+            hotseatContext.perspectiveKingdom = KingdomId::White;
+
+            expect(shouldShowGameplayNotificationForLocalPlayer(whiteGoldNotification, hostContext),
+                "Gameplay notifications should be visible for the locally controlled host kingdom.");
+            expect(!shouldShowGameplayNotificationForLocalPlayer(blackBuildNotification, hostContext),
+                "Gameplay notifications should be hidden when they belong only to the remote LAN kingdom.");
+            expect(gameplayNotificationMessage(whiteGoldNotification, hostContext) == "You gained +25 gold.",
+                "Gameplay notification messages should use 'You' when exactly one local kingdom controls the rewarded side.");
+            expect(gameplayNotificationMessage(blackBuildNotification, clientContext)
+                    == "You permanently gained +1 max build point per turn.",
+                "Gameplay notification messages should keep permanent-reward wording while still using 'You' for the sole local LAN recipient.");
+            expect(gameplayNotificationMessage(whiteGoldNotification, hotseatContext) == "White gained +25 gold.",
+                "Gameplay notification messages should keep explicit kingdom names when both kingdoms are local on the same machine.");
+        }
+
+        void testMultiplayerStateSnapshotPacketRoundTrip() {
+            GameplayNotification whiteNotification;
+            whiteNotification.kind = GameplayNotificationKind::ChestReward;
+            whiteNotification.kingdom = KingdomId::White;
+            whiteNotification.chestReward.type = ChestRewardType::Gold;
+            whiteNotification.chestReward.amount = 12;
+
+            GameplayNotification blackNotification;
+            blackNotification.kind = GameplayNotificationKind::ChestReward;
+            blackNotification.kingdom = KingdomId::Black;
+            blackNotification.chestReward.type = ChestRewardType::MovementPointsMaxBonus;
+            blackNotification.chestReward.amount = 2;
+
+            sf::Packet packet = createPacket(MultiplayerMessageType::StateSnapshot);
+            expect(writePacket(packet, MultiplayerStateSnapshot{"{\"snapshot\":true}", {whiteNotification, blackNotification}}),
+                "Protocol should serialize snapshot packets with gameplay notifications.");
+
+            MultiplayerMessageType type = MultiplayerMessageType::ServerInfoRequest;
+            expect(extractMessageType(packet, type), "Protocol should decode snapshot packet types.");
+            expect(type == MultiplayerMessageType::StateSnapshot,
+                "Snapshot packets should preserve their multiplayer message type.");
+
+            MultiplayerStateSnapshot snapshot;
+            expect(readPacket(packet, snapshot), "Protocol should deserialize snapshot packets with gameplay notifications.");
+            expect(snapshot.serializedSaveData == "{\"snapshot\":true}",
+                "Snapshot packets should preserve the serialized save payload.");
+            expect(snapshot.notifications.size() == 2,
+                "Snapshot packets should preserve all serialized gameplay notifications.");
+            expect(snapshot.notifications[0].kingdom == KingdomId::White
+                    && snapshot.notifications[0].chestReward.amount == 12,
+                "Snapshot packets should preserve the first gameplay notification payload.");
+            expect(snapshot.notifications[1].kingdom == KingdomId::Black
+                    && snapshot.notifications[1].chestReward.type == ChestRewardType::MovementPointsMaxBonus,
+                "Snapshot packets should preserve the second gameplay notification payload.");
+        }
+
         void testMultiplayerTurnSubmissionPacketRoundTrip() {
             TurnCommand command;
             command.type = TurnCommand::Build;
@@ -4372,7 +4470,13 @@ void testSaveManagerRoundTrip() {
                 return joinAccepted && serverConnectedEvent;
             }), "Loopback multiplayer join handshake should complete.");
 
-            expect(server.sendSnapshot("{\"snapshot\":true}", &error),
+            GameplayNotification notification;
+            notification.kind = GameplayNotificationKind::ChestReward;
+            notification.kingdom = KingdomId::Black;
+            notification.chestReward.type = ChestRewardType::Gold;
+            notification.chestReward.amount = 31;
+
+            expect(server.sendSnapshot("{\"snapshot\":true}", {notification}, &error),
                    "Loopback multiplayer server should send snapshots after join.");
 
             bool receivedSnapshot = false;
@@ -4381,7 +4485,10 @@ void testSaveManagerRoundTrip() {
                 while (client.hasPendingEvent()) {
                     const auto event = client.popNextEvent();
                     if (event.type == MultiplayerClient::Event::Type::SnapshotReceived) {
-                        receivedSnapshot = (event.serializedSaveData == "{\"snapshot\":true}");
+                        receivedSnapshot = event.serializedSaveData == "{\"snapshot\":true}"
+                            && event.snapshotNotifications.size() == 1
+                            && event.snapshotNotifications[0].kingdom == KingdomId::Black
+                            && event.snapshotNotifications[0].chestReward.amount == 31;
                         return receivedSnapshot;
                     }
                 }
@@ -7693,6 +7800,7 @@ int main() {
         {"pending turn validation cache invalidation", testPendingTurnValidationCacheInvalidatesOnKeyChangesAndManualReset},
         {"frontend coordinator dashboard and panel presentation", testFrontendCoordinatorBuildsProjectedDashboardAndPiecePanel},
         {"multiplayer event coordinator plans", testMultiplayerEventCoordinatorPlansAlertsAndDisconnects},
+        {"multiplayer event coordinator snapshot notifications", testMultiplayerEventCoordinatorKeepsSnapshotNotifications},
         {"multiplayer event coordinator restore and cleanup", testMultiplayerEventCoordinatorRestoresSnapshotsAndClientState},
         {"multiplayer runtime coordinator dialog actions", testMultiplayerRuntimeCoordinatorBuildsDialogActions},
         {"input coordinator gameplay shortcuts", testInputCoordinatorPlansGameplayShortcuts},
@@ -7789,6 +7897,8 @@ int main() {
         {"save manager roundtrip", testSaveManagerRoundTrip},
         {"save manager string roundtrip", testSaveManagerStringRoundTrip},
         {"multiplayer password digest", testMultiplayerPasswordDigest},
+        {"gameplay notification local wording", testGameplayNotificationUsesLocalRecipientWordingAndFiltering},
+        {"multiplayer snapshot packet roundtrip", testMultiplayerStateSnapshotPacketRoundTrip},
         {"multiplayer turn packet roundtrip", testMultiplayerTurnSubmissionPacketRoundTrip},
         {"multiplayer turn rejection packet roundtrip", testMultiplayerTurnRejectedPacketRoundTrip},
         {"multiplayer loopback smoke", testMultiplayerLoopbackSmoke},

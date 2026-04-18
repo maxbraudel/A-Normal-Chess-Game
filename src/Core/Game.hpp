@@ -82,6 +82,8 @@ private:
     void updateMultiplayer();
     void commitAuthoritativeTurn();
     bool pushSnapshotToRemote(std::string* errorMessage = nullptr);
+    bool pushSnapshotToRemote(const std::vector<GameplayNotification>& notifications,
+                              std::string* errorMessage = nullptr);
     void centerCameraOnKingdom(KingdomId kingdom);
     void configureLocalPlayerContext(const GameSessionConfig& session);
     FrontendRuntimeState makeFrontendRuntimeState() const;
@@ -125,6 +127,7 @@ private:
     void captureHotseatFrontendState(KingdomId kingdom, const InputSelectionBookmark& bookmark);
     void restoreHotseatFrontendStateForActiveKingdom(const InputSelectionBookmark& fallbackBookmark);
     void reconcileSelectionBookmark(const InputSelectionBookmark& bookmark);
+    void showGameplayNotification(const GameplayNotification& notification);
     Piece* selectedDisplayedPiece();
     Building* selectedDisplayedBuilding();
     MapObject* selectedDisplayedMapObject();
