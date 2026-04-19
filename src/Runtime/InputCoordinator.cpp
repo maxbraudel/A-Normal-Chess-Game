@@ -45,7 +45,7 @@ InputPreGuiAction InputCoordinator::planPreGuiAction(const sf::Event& event,
         && event.type == sf::Event::KeyPressed
         && event.key.code == sf::Keyboard::Tab) {
         return {
-            state.inGameMenuOpen
+            state.inGameMenuOpen || !state.tacticalGridAllowed
                 ? InputPreGuiActionKind::SkipEvent
                 : InputPreGuiActionKind::ToggleTacticalGrid,
             {0u, 0u}

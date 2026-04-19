@@ -51,6 +51,7 @@
 #include "Runtime/PanelActionCoordinator.hpp"
 #include "Runtime/RenderCoordinator.hpp"
 #include "Runtime/SelectionQueryCoordinator.hpp"
+#include "Runtime/SessionMetadataService.hpp"
 #include "Runtime/SessionFlow.hpp"
 #include "Runtime/SessionPresentationCoordinator.hpp"
 #include "Runtime/SessionRuntimeCoordinator.hpp"
@@ -2784,6 +2785,7 @@ void testSessionValidatorRejectsInvalidOrdering() {
                              config,
                              tempDir.string());
             GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, saveName);
+            session.tacticalGridEnabled = true;
 
             std::string error;
             expect(flow.startNewSession(session, &error), error);
@@ -2807,6 +2809,8 @@ void testSessionValidatorRejectsInvalidOrdering() {
                    "Loading through SessionFlow should restore the saved session name.");
             expect(restoredEngine.turnSystem().getTurnNumber() == 1,
                    "Loading a freshly saved session through SessionFlow should restore the starting turn number.");
+                 expect(restoredEngine.sessionConfig().tacticalGridEnabled,
+                     "Loading through SessionFlow should restore Tactical Grid availability from save metadata.");
             expect(restoredEngine.validate(&error), error);
         } catch (...) {
             std::filesystem::remove_all(tempDir);
@@ -3402,6 +3406,7 @@ void testSessionValidatorRejectsInvalidOrdering() {
     void testInputCoordinatorPlansGameplayShortcuts() {
         InputFrameState state;
         state.gameState = GameState::Playing;
+        state.tacticalGridAllowed = true;
         state.permissions.canIssueCommands = true;
         state.permissions.canUseToolbar = true;
         state.permissions.canInspectWorld = true;
@@ -3442,6 +3447,12 @@ void testSessionValidatorRejectsInvalidOrdering() {
         sf::Event tabEvent{};
         tabEvent.type = sf::Event::KeyPressed;
         tabEvent.key.code = sf::Keyboard::Tab;
+        state.tacticalGridAllowed = false;
+        expect(InputCoordinator::planPreGuiAction(tabEvent, state).kind
+                   == InputPreGuiActionKind::SkipEvent,
+               "InputCoordinator should swallow Tab when the loaded save does not allow Tactical Grid.");
+
+        state.tacticalGridAllowed = true;
         expect(InputCoordinator::planPreGuiAction(tabEvent, state).kind
                    == InputPreGuiActionKind::ToggleTacticalGrid,
                "InputCoordinator should route Tab to Tactical Grid toggling during interactive gameplay states.");
@@ -4644,6 +4655,7 @@ void testSaveManagerRoundTrip() {
     data.activeKingdom = KingdomId::Black;
     data.mapRadius = 5;
     data.worldSeed = 123456789u;
+    data.tacticalGridEnabled = true;
     data.weatherSystemState.nextSpawnTurnStep = 19;
     data.weatherSystemState.hasActiveFront = true;
     data.weatherSystemState.rngCounter = 6u;
@@ -4746,6 +4758,8 @@ void testSaveManagerRoundTrip() {
            "Session participant names should round-trip through SaveManager.");
     expect(loaded.worldSeed == data.worldSeed,
         "World seed should round-trip through SaveManager.");
+    expect(loaded.tacticalGridEnabled == data.tacticalGridEnabled,
+        "Tactical Grid availability should round-trip through SaveManager.");
     expect(loaded.xpSystemState.rngCounter == data.xpSystemState.rngCounter,
         "XP RNG state should round-trip through SaveManager.");
     expect(loaded.weatherSystemState.nextSpawnTurnStep == data.weatherSystemState.nextSpawnTurnStep
@@ -4792,6 +4806,7 @@ void testSaveManagerRoundTrip() {
             data.activeKingdom = KingdomId::White;
             data.mapRadius = 4;
             data.worldSeed = 987654321u;
+            data.tacticalGridEnabled = true;
             data.sessionKingdoms = defaultKingdomParticipants(GameMode::HumanVsHuman);
             data.multiplayer.enabled = true;
             data.multiplayer.port = 41000;
@@ -4813,6 +4828,8 @@ void testSaveManagerRoundTrip() {
             expect(manager.deserialize(serialized, loaded), "SaveManager should deserialize save data from a string snapshot.");
             expect(loaded.gameName == data.gameName, "Serialized string snapshots should preserve the game name.");
             expect(loaded.worldSeed == data.worldSeed, "Serialized string snapshots should preserve the world seed.");
+            expect(loaded.tacticalGridEnabled == data.tacticalGridEnabled,
+                "Serialized string snapshots should preserve Tactical Grid availability.");
             expect(loaded.multiplayer.port == data.multiplayer.port, "Serialized string snapshots should preserve multiplayer metadata.");
             expect(loaded.weatherSystemState.revision == data.weatherSystemState.revision,
                 "Serialized string snapshots should preserve the weather revision used to validate authoritative weather masks.");
@@ -4820,6 +4837,110 @@ void testSaveManagerRoundTrip() {
                 && loaded.weatherMaskCache.alphaByCell == data.weatherMaskCache.alphaByCell
                 && loaded.weatherMaskCache.shadeByCell == data.weatherMaskCache.shadeByCell,
                 "Serialized string snapshots should preserve the exact authoritative weather mask payload.");
+        }
+
+        void testSessionMetadataServicePreparesCreateSessionsAndHashesLanPasswords() {
+            SessionFormRequest request;
+            request.session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, "session_metadata_create_test");
+            request.session.multiplayer.enabled = true;
+            request.session.multiplayer.port = 45000;
+            request.session.tacticalGridEnabled = true;
+            request.multiplayerPassword = "secret";
+
+            GameSessionConfig finalizedSession;
+            std::string error;
+            expect(SessionMetadataService::prepareSessionForStart(request, finalizedSession, &error), error);
+            expect(finalizedSession.tacticalGridEnabled,
+                "SessionMetadataService should preserve Tactical Grid availability when preparing a new session.");
+            expect(finalizedSession.multiplayer.enabled
+                    && finalizedSession.multiplayer.port == request.session.multiplayer.port,
+                "SessionMetadataService should preserve LAN enablement and port when preparing a new session.");
+            expect(!finalizedSession.multiplayer.passwordSalt.empty()
+                    && !finalizedSession.multiplayer.passwordHash.empty(),
+                "SessionMetadataService should hash a plaintext LAN password when preparing a new session.");
+            expect(finalizedSession.multiplayer.passwordHash
+                    == MultiplayerPasswordUtils::computePasswordDigest(
+                        request.multiplayerPassword,
+                        finalizedSession.multiplayer.passwordSalt),
+                "SessionMetadataService should derive the stored LAN password hash from the provided plaintext password.");
+        }
+
+        void testSessionMetadataServiceEditsAndRenamesSaveMetadata() {
+            GameConfig config;
+            GameEngine engine;
+            SaveManager saveManager;
+            const auto tempDir = std::filesystem::temp_directory_path()
+                / ("anormalchessgame_sessionedit_"
+                    + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+            std::filesystem::create_directories(tempDir);
+
+            try {
+                GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman,
+                                                                         "session_edit_original");
+                session.kingdoms[kingdomIndex(KingdomId::White)].participantName = "Alpha";
+                session.kingdoms[kingdomIndex(KingdomId::Black)].participantName = "Beta";
+                session.multiplayer.enabled = true;
+                session.multiplayer.port = 42000;
+                session.multiplayer.passwordSalt = "existing_salt";
+                session.multiplayer.passwordHash = MultiplayerPasswordUtils::computePasswordDigest(
+                    "secret",
+                    session.multiplayer.passwordSalt);
+                session.tacticalGridEnabled = false;
+
+                std::string error;
+                expect(engine.startNewSession(session, config, &error), error);
+
+                const std::filesystem::path originalPath = tempDir / "session_edit_original.json";
+                expect(saveManager.save(originalPath.string(), engine.createSaveData()),
+                    "SessionMetadataService edit test should persist the original save before editing it.");
+
+                SessionFormRequest request;
+                request.originalSaveName = session.saveName;
+                request.session = session;
+                request.session.saveName = "session_edit_renamed";
+                request.session.kingdoms[kingdomIndex(KingdomId::White)].participantName = "Gamma";
+                request.session.kingdoms[kingdomIndex(KingdomId::Black)].participantName = "Delta";
+                request.session.multiplayer.enabled = true;
+                request.session.multiplayer.port = 43000;
+                request.session.tacticalGridEnabled = true;
+
+                expect(SessionMetadataService::editSavedSession(request,
+                                                                saveManager,
+                                                                tempDir.string(),
+                                                                &error),
+                    error);
+
+                const std::filesystem::path renamedPath = tempDir / "session_edit_renamed.json";
+                expect(!std::filesystem::exists(originalPath),
+                    "Editing a save with a new name should remove the old save file after the rewrite succeeds.");
+                expect(std::filesystem::exists(renamedPath),
+                    "Editing a save with a new name should write the edited data under the new filename.");
+
+                SaveData editedData;
+                expect(saveManager.load(renamedPath.string(), editedData),
+                    "SessionMetadataService should leave behind a readable edited save file.");
+                expect(editedData.gameName == request.session.saveName,
+                    "Editing save metadata should keep the internal save name aligned with the renamed file.");
+                expect(editedData.sessionKingdoms[kingdomIndex(KingdomId::White)].participantName == "Gamma"
+                        && editedData.sessionKingdoms[kingdomIndex(KingdomId::Black)].participantName == "Delta",
+                    "Editing save metadata should update the stored player display names.");
+                expect(editedData.tacticalGridEnabled,
+                    "Editing save metadata should update Tactical Grid availability.");
+                expect(editedData.multiplayer.enabled && editedData.multiplayer.port == 43000,
+                    "Editing save metadata should update the stored LAN port while keeping the session networked.");
+                expect(editedData.multiplayer.passwordSalt == session.multiplayer.passwordSalt
+                        && editedData.multiplayer.passwordHash == session.multiplayer.passwordHash,
+                    "Leaving the LAN password blank in edit mode should preserve the existing password hash and salt.");
+                expect(editedData.turnNumber == 1
+                        && editedData.kingdoms[kingdomIndex(KingdomId::White)].pieces.size() == 1
+                        && editedData.kingdoms[kingdomIndex(KingdomId::Black)].pieces.size() == 1,
+                    "Editing save metadata should preserve the authoritative board state and kingdom pieces.");
+            } catch (...) {
+                std::filesystem::remove_all(tempDir);
+                throw;
+            }
+
+            std::filesystem::remove_all(tempDir);
         }
 
         void testMultiplayerPasswordDigest() {
@@ -8790,6 +8911,8 @@ int main() {
         {"single local hud modes", testSingleLocalHudModes},
         {"multiplayer runtime reconnect state", testMultiplayerRuntimeReconnectStateLifecycle},
         {"session flow roundtrip", testSessionFlowStartsSavesAndLoadsSession},
+        {"session metadata create prep", testSessionMetadataServicePreparesCreateSessionsAndHashesLanPasswords},
+        {"session metadata edit save", testSessionMetadataServiceEditsAndRenamesSaveMetadata},
         {"session runtime coordinator flow", testSessionRuntimeCoordinatorAppliesSessionEntryAndMainMenuTransitions},
         {"selection query coordinator bookmark fallback", testSelectionQueryCoordinatorResolvesBookmarkFallback},
         {"selection query coordinator autonomous id", testSelectionQueryCoordinatorResolvesAutonomousUnitById},
@@ -8823,6 +8946,7 @@ int main() {
         {"xp deterministic serialized sequence", testXPSystemUsesDeterministicSerializedSequence},
         {"xp forward model matches runtime capture", testForwardModelCaptureXPMatchesCommittedTurn},
         {"save manager roundtrip", testSaveManagerRoundTrip},
+        {"save manager string roundtrip", testSaveManagerStringRoundTrip},
         {"combat config destroyed-cell thresholds", testCombatConfigLoadsDestroyedCellThresholds},
         {"building destroys after configured threshold", testBuildingDestroysAfterConfiguredDestroyedCellThreshold},
         {"threshold-destroyed barracks removed on commit", testThresholdDestroyedBarracksIsRemovedOnCommit},
@@ -8912,7 +9036,6 @@ int main() {
         {"in-game hud kingdom presentation", testInGameViewModelUsesPresentedHudKingdom},
         {"overlay policy when selected visibility", testOverlayPolicyCanHideIndicatorsUntilSelected},
         {"overlay policy always visible", testOverlayPolicyAlwaysKeepsCurrentIndicatorsVisible},
-        {"save manager string roundtrip", testSaveManagerStringRoundTrip},
         {"multiplayer password digest", testMultiplayerPasswordDigest},
         {"gameplay notification local wording", testGameplayNotificationUsesLocalRecipientWordingAndFiltering},
         {"multiplayer snapshot packet roundtrip", testMultiplayerStateSnapshotPacketRoundTrip},

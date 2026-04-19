@@ -12,6 +12,7 @@ struct InputFrameState {
     GameState gameState = GameState::MainMenu;
     bool overlaysVisible = false;
     bool inGameMenuOpen = false;
+    bool tacticalGridAllowed = false;
     bool cheatcodeEnabled = false;
     sf::Keyboard::Key cheatcodeWeatherShortcut = sf::Keyboard::Unknown;
     sf::Keyboard::Key cheatcodeChestShortcut = sf::Keyboard::Unknown;

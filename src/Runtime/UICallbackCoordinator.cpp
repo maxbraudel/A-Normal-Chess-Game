@@ -9,6 +9,7 @@
 #include "Kingdom/Kingdom.hpp"
 #include "Runtime/FrontendCoordinator.hpp"
 #include "Runtime/PanelActionCoordinator.hpp"
+#include "Runtime/SessionMetadataService.hpp"
 #include "Save/SaveManager.hpp"
 #include "UI/MainMenuUI.hpp"
 #include "UI/UIManager.hpp"
@@ -52,9 +53,14 @@ UICallbackBindings UICallbackCoordinator::buildBindings(const UICallbackCoordina
             dependencies.closeWindow();
         }
     };
-    bindings.mainMenu.onCreateSave = [dependencies](const GameSessionConfig& session) {
+    bindings.mainMenu.onCreateSave = [dependencies](const SessionFormRequest& request) {
         std::string error;
-        if (dependencies.startNewGame && !dependencies.startNewGame(session, &error)) {
+        GameSessionConfig finalizedSession;
+        if (!SessionMetadataService::prepareSessionForStart(request, finalizedSession, &error)) {
+            return error;
+        }
+
+        if (dependencies.startNewGame && !dependencies.startNewGame(finalizedSession, &error)) {
             return error;
         }
         return std::string{};
@@ -79,6 +85,19 @@ UICallbackBindings UICallbackCoordinator::buildBindings(const UICallbackCoordina
         dependencies.saveManager.deleteSave(std::string{kSavesDirectory} + "/" + saveName + ".json");
         dependencies.uiManager.mainMenu().setSaves(
             dependencies.saveManager.listSaveSummaries(kSavesDirectory));
+    };
+    bindings.mainMenu.onEditSave = [dependencies](const SessionFormRequest& request) {
+        std::string error;
+        if (!SessionMetadataService::editSavedSession(request,
+                                                      dependencies.saveManager,
+                                                      kSavesDirectory,
+                                                      &error)) {
+            return error;
+        }
+
+        dependencies.uiManager.mainMenu().setSaves(
+            dependencies.saveManager.listSaveSummaries(kSavesDirectory));
+        return std::string{};
     };
 
     bindings.hud.onMenu = [dependencies]() {

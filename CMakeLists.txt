@@ -81,6 +81,7 @@ set(CORE_SOURCES
     src/Runtime/RenderCoordinator.cpp
     src/Runtime/SelectionQueryCoordinator.cpp
     src/Runtime/SessionFlow.cpp
+    src/Runtime/SessionMetadataService.cpp
     src/Runtime/SessionPresentationCoordinator.cpp
     src/Runtime/SessionRuntimeCoordinator.cpp
     src/Runtime/TurnCoordinator.cpp

@@ -56,6 +56,7 @@ struct GameSessionConfig {
     std::array<KingdomParticipantConfig, kNumKingdoms> kingdoms =
         defaultKingdomParticipants(GameMode::HumanVsHuman);
     MultiplayerConfig multiplayer{};
+    bool tacticalGridEnabled = false;
 };
 
 struct SaveSummary {
@@ -63,6 +64,7 @@ struct SaveSummary {
     std::array<KingdomParticipantConfig, kNumKingdoms> kingdoms =
         defaultKingdomParticipants(GameMode::HumanVsHuman);
     MultiplayerConfig multiplayer{};
+    bool tacticalGridEnabled = false;
 };
 
 inline GameSessionConfig makeDefaultGameSessionConfig(GameMode mode,

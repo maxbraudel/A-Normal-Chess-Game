@@ -26,6 +26,7 @@ struct SaveData {
     std::array<KingdomParticipantConfig, kNumKingdoms> sessionKingdoms =
         defaultKingdomParticipants(GameMode::HumanVsHuman);
     MultiplayerConfig multiplayer{};
+    bool tacticalGridEnabled = false;
 
     // Grid state
     struct CellData {

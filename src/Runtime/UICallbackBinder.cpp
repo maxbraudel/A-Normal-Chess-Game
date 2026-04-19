@@ -13,6 +13,7 @@ void UICallbackBinder::bind(UIManager& uiManager, const UICallbackBindings& bind
     uiManager.mainMenu().setOnPlaySave(bindings.mainMenu.onPlaySave);
     uiManager.mainMenu().setOnJoinMultiplayer(bindings.mainMenu.onJoinMultiplayer);
     uiManager.mainMenu().setOnDeleteSave(bindings.mainMenu.onDeleteSave);
+    uiManager.mainMenu().setOnEditSave(bindings.mainMenu.onEditSave);
 
     uiManager.hud().setOnMenu(bindings.hud.onMenu);
     uiManager.hud().setOnResetTurn(bindings.hud.onResetTurn);

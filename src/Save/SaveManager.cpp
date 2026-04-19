@@ -160,6 +160,7 @@ void SaveManager::writeJson(std::ostream& output, const SaveData& data) {
     output << "  \"activeKingdom\": " << static_cast<int>(data.activeKingdom) << ",\n";
     output << "  \"mapRadius\": " << data.mapRadius << ",\n";
     output << "  \"worldSeed\": " << data.worldSeed << ",\n";
+    output << "  \"tacticalGridEnabled\": " << (data.tacticalGridEnabled ? "true" : "false") << ",\n";
     output << "  \"sessionKingdoms\": [";
     for (int kingdomSlot = 0; kingdomSlot < kNumKingdoms; ++kingdomSlot) {
         if (kingdomSlot > 0) output << ", ";
@@ -740,6 +741,7 @@ bool SaveManager::deserialize(const std::string& json, SaveData& outData) {
     outData.activeKingdom = static_cast<KingdomId>(extractInt(json, "activeKingdom", 0));
     outData.mapRadius = extractInt(json, "mapRadius", 50);
     outData.worldSeed = static_cast<std::uint32_t>(std::max(0, extractInt(json, "worldSeed", 0)));
+    outData.tacticalGridEnabled = extractBool(json, "tacticalGridEnabled", false);
     outData.sessionKingdoms = defaultKingdomParticipants(GameMode::HumanVsHuman);
     const std::string participantsArray = extractArray(json, "sessionKingdoms");
     const auto participantElements = splitArrayElements(participantsArray);
@@ -921,6 +923,7 @@ std::vector<SaveSummary> SaveManager::listSaveSummaries(const std::string& saves
         if (load(entry.path().string(), data)) {
             summary.kingdoms = data.sessionKingdoms;
             summary.multiplayer = data.multiplayer;
+            summary.tacticalGridEnabled = data.tacticalGridEnabled;
         }
 
         std::error_code timeError;

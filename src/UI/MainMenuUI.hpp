@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "Core/GameSessionConfig.hpp"
+#include "Runtime/SessionFormRequest.hpp"
 
 class AssetManager;
 
@@ -19,7 +20,7 @@ struct JoinMultiplayerRequest {
 
 class MainMenuUI {
 public:
-    using CreateSaveCallback = std::function<std::string(const GameSessionConfig&)>;
+    using SubmitSessionCallback = std::function<std::string(const SessionFormRequest&)>;
     using JoinMultiplayerCallback = std::function<std::string(const JoinMultiplayerRequest&)>;
 
     void init(tgui::Gui& gui, const AssetManager& assets);
@@ -30,21 +31,30 @@ public:
 
     void setOnLoadSaves(std::function<void()> callback);
     void setOnExitGame(std::function<void()> callback);
-    void setOnCreateSave(CreateSaveCallback callback);
+    void setOnCreateSave(SubmitSessionCallback callback);
     void setOnPlaySave(std::function<void(const std::string&)> callback);
     void setOnDeleteSave(std::function<void(const std::string&)> callback);
+    void setOnEditSave(SubmitSessionCallback callback);
     void setOnJoinMultiplayer(JoinMultiplayerCallback callback);
 
 private:
+    enum class SessionDialogMode {
+        Create,
+        Edit
+    };
+
     void showMainScreen();
     void updateSaveButtons();
-    void updateCreateDialogLabels();
+    void updateSessionDialogLabels();
     void updateMultiplayerControlsVisibility();
     void openCreateDialog();
-    void closeCreateDialog();
+    void openEditDialog();
+    void closeSessionDialog();
     void openJoinDialog();
     void closeJoinDialog();
     std::string selectedSaveName() const;
+    const SaveSummary* selectedSaveSummary() const;
+    void submitSessionDialog();
 
     static std::string trimCopy(const std::string& value);
     static bool isValidSaveName(const std::string& value);
@@ -58,11 +68,13 @@ private:
     tgui::Panel::Ptr m_joinOverlay;
     tgui::ListBox::Ptr m_saveList;
     tgui::Button::Ptr m_deleteButton;
+    tgui::Button::Ptr m_editButton;
     tgui::Button::Ptr m_playButton;
     tgui::Label::Ptr m_emptyLabel;
     tgui::EditBox::Ptr m_saveNameEdit;
     tgui::Label::Ptr m_whiteRoleLabel;
     tgui::CheckBox::Ptr m_multiplayerCheckBox;
+    tgui::CheckBox::Ptr m_tacticalGridCheckBox;
     tgui::Label::Ptr m_multiplayerHintLabel;
     tgui::Label::Ptr m_multiplayerPortLabel;
     tgui::EditBox::Ptr m_multiplayerPortEdit;
@@ -81,11 +93,16 @@ private:
     JoinMultiplayerCallback m_onJoinMultiplayer;
     tgui::Label::Ptr m_blackHintLabel;
     tgui::Label::Ptr m_createErrorLabel;
+    tgui::Label::Ptr m_createTitleLabel;
+    tgui::Button::Ptr m_createConfirmButton;
     std::vector<SaveSummary> m_saves;
+    SessionDialogMode m_sessionDialogMode = SessionDialogMode::Create;
+    std::string m_originalSaveNameForEdit;
 
     std::function<void()> m_onLoadSaves;
     std::function<void()> m_onExitGame;
-    CreateSaveCallback m_onCreateSave;
+    SubmitSessionCallback m_onCreateSave;
     std::function<void(const std::string&)> m_onPlaySave;
     std::function<void(const std::string&)> m_onDeleteSave;
+    SubmitSessionCallback m_onEditSave;
 };

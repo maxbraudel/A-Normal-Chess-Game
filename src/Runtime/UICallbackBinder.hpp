@@ -4,6 +4,7 @@
 #include <string>
 
 #include "Core/GameSessionConfig.hpp"
+#include "Runtime/SessionFormRequest.hpp"
 
 struct JoinMultiplayerRequest;
 class UIManager;
@@ -17,10 +18,11 @@ struct GameMenuCallbackBindings {
 struct MainMenuCallbackBindings {
     std::function<void()> onLoadSaves;
     std::function<void()> onExitGame;
-    std::function<std::string(const GameSessionConfig&)> onCreateSave;
+    std::function<std::string(const SessionFormRequest&)> onCreateSave;
     std::function<void(const std::string&)> onPlaySave;
     std::function<std::string(const JoinMultiplayerRequest&)> onJoinMultiplayer;
     std::function<void(const std::string&)> onDeleteSave;
+    std::function<std::string(const SessionFormRequest&)> onEditSave;
 };
 
 struct HudCallbackBindings {

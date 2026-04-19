@@ -251,6 +251,7 @@ bool GameEngine::restoreFromSave(const SaveData& data,
     m_sessionConfig.worldSeed = (data.worldSeed != 0) ? data.worldSeed : deriveLegacyWorldSeed(data);
     m_sessionConfig.kingdoms = data.sessionKingdoms;
     m_sessionConfig.multiplayer = data.multiplayer;
+    m_sessionConfig.tacticalGridEnabled = data.tacticalGridEnabled;
 
     m_board.init(data.mapRadius);
     if (!data.grid.empty()) {
@@ -356,6 +357,7 @@ SaveData GameEngine::createSaveData() const {
     data.worldSeed = m_sessionConfig.worldSeed;
     data.sessionKingdoms = m_sessionConfig.kingdoms;
     data.multiplayer = m_sessionConfig.multiplayer;
+    data.tacticalGridEnabled = m_sessionConfig.tacticalGridEnabled;
 
     const int diameter = m_board.getDiameter();
     data.grid.resize(diameter);

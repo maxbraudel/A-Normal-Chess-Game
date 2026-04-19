@@ -1,7 +1,6 @@
 #include "UI/MainMenuUI.hpp"
 
 #include "Assets/AssetManager.hpp"
-#include "Multiplayer/PasswordUtils.hpp"
 #include "UI/FocusStyle.hpp"
 
 #include <cctype>
@@ -16,6 +15,9 @@ std::string buildSaveLabel(const SaveSummary& save) {
         + " | Black: " + black.participantName;
     if (save.multiplayer.enabled) {
         label += " | LAN";
+    }
+    if (save.tacticalGridEnabled) {
+        label += " | Tactical Grid";
     }
     return label;
 }
@@ -109,6 +111,16 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     });
     m_loadBox->add(m_deleteButton);
 
+    m_editButton = tgui::Button::create("Edit");
+    styleButton(m_editButton);
+    m_editButton->setPosition({"(&.width - width) / 2", "24%"});
+    m_editButton->setSize({190, 44});
+    m_editButton->setEnabled(false);
+    m_editButton->onPress([this]() {
+        openEditDialog();
+    });
+    m_loadBox->add(m_editButton);
+
     auto newSaveButton = tgui::Button::create("New Save");
     styleButton(newSaveButton);
     newSaveButton->setPosition({"(&.width + 620) / 2 - width", "24%"});
@@ -150,18 +162,18 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     m_createOverlay->setVisible(false);
     m_panel->add(m_createOverlay);
 
-    auto dialog = tgui::Panel::create({560, 640});
+    auto dialog = tgui::Panel::create({560, 704});
     dialog->setPosition({"(&.parent.width - width) / 2", "(&.parent.height - height) / 2"});
     dialog->getRenderer()->setBackgroundColor(tgui::Color(46, 46, 46, 245));
     dialog->getRenderer()->setBorderColor(tgui::Color(120, 120, 120));
     dialog->getRenderer()->setBorders(2);
     m_createOverlay->add(dialog);
 
-    auto createTitle = tgui::Label::create("Create New Save");
-    createTitle->setPosition({"(&.width - width) / 2", 18});
-    createTitle->setTextSize(26);
-    createTitle->getRenderer()->setTextColor(tgui::Color::White);
-    dialog->add(createTitle);
+    m_createTitleLabel = tgui::Label::create("Create New Save");
+    m_createTitleLabel->setPosition({"(&.width - width) / 2", 18});
+    m_createTitleLabel->setTextSize(26);
+    m_createTitleLabel->getRenderer()->setTextColor(tgui::Color::White);
+    dialog->add(m_createTitleLabel);
 
     auto saveNameLabel = tgui::Label::create("Save name");
     saveNameLabel->setPosition({36, 78});
@@ -266,8 +278,20 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     m_multiplayerPasswordEdit->setPasswordCharacter('*');
     dialog->add(m_multiplayerPasswordEdit);
 
+    m_tacticalGridCheckBox = tgui::CheckBox::create();
+    styleCheckBox(m_tacticalGridCheckBox);
+    m_tacticalGridCheckBox->setPosition({36, 584});
+    m_tacticalGridCheckBox->setText("Allow Tactical Grid (Tab)");
+    m_tacticalGridCheckBox->setTextSize(18);
+    m_tacticalGridCheckBox->onChange([this](bool) {
+        if (m_createErrorLabel) {
+            m_createErrorLabel->setText("");
+        }
+    });
+    dialog->add(m_tacticalGridCheckBox);
+
     m_createErrorLabel = tgui::Label::create("");
-    m_createErrorLabel->setPosition({36, 584});
+    m_createErrorLabel->setPosition({36, 620});
     m_createErrorLabel->setSize({280, 44});
     m_createErrorLabel->setAutoSize(false);
     m_createErrorLabel->setTextSize(15);
@@ -276,78 +300,21 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
 
     auto cancelButton = tgui::Button::create("Cancel");
     styleButton(cancelButton);
-    cancelButton->setPosition({332, 584});
+    cancelButton->setPosition({332, 650});
     cancelButton->setSize({92, 30});
     cancelButton->onPress([this]() {
-        closeCreateDialog();
+        closeSessionDialog();
     });
     dialog->add(cancelButton);
 
-    auto createButton = tgui::Button::create("Create");
-    styleButton(createButton);
-    createButton->setPosition({432, 584});
-    createButton->setSize({92, 30});
-    createButton->onPress([this]() {
-        GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman);
-        session.saveName = trimCopy(m_saveNameEdit->getText().toStdString());
-        session.kingdoms[kingdomIndex(KingdomId::White)].participantName =
-            trimCopy(m_whiteNameEdit->getText().toStdString());
-        session.kingdoms[kingdomIndex(KingdomId::Black)].participantName =
-            trimCopy(m_blackNameEdit->getText().toStdString());
-
-        if (session.saveName.empty()) {
-            m_createErrorLabel->setText("Save name is required.");
-            return;
-        }
-        if (!isValidSaveName(session.saveName)) {
-            m_createErrorLabel->setText("Save name contains invalid characters.");
-            return;
-        }
-        if (participantNameFor(session, KingdomId::White).empty()
-            || participantNameFor(session, KingdomId::Black).empty()) {
-            m_createErrorLabel->setText("Both participant names are required.");
-            return;
-        }
-        if (!isValidParticipantName(participantNameFor(session, KingdomId::White))
-            || !isValidParticipantName(participantNameFor(session, KingdomId::Black))) {
-            m_createErrorLabel->setText("Names cannot contain quotes or line breaks.");
-            return;
-        }
-
-        if (m_multiplayerCheckBox && m_multiplayerCheckBox->isChecked()) {
-            int port = 0;
-            if (!tryParsePort(m_multiplayerPortEdit ? m_multiplayerPortEdit->getText().toStdString() : std::string{}, port)
-                || !isValidMultiplayerPort(port)) {
-                m_createErrorLabel->setText("Enter a valid LAN port between 1 and 65535.");
-                return;
-            }
-
-            const std::string password = trimCopy(
-                m_multiplayerPasswordEdit ? m_multiplayerPasswordEdit->getText().toStdString() : std::string{});
-            if (password.empty()) {
-                m_createErrorLabel->setText("A multiplayer password is required.");
-                return;
-            }
-
-            session.multiplayer.enabled = true;
-            session.multiplayer.port = port;
-            session.multiplayer.passwordSalt = MultiplayerPasswordUtils::generateSalt();
-            session.multiplayer.passwordHash = MultiplayerPasswordUtils::computePasswordDigest(
-                password, session.multiplayer.passwordSalt);
-            session.multiplayer.protocolVersion = kCurrentMultiplayerProtocolVersion;
-        }
-
-        if (m_onCreateSave) {
-            const std::string error = m_onCreateSave(session);
-            if (!error.empty()) {
-                m_createErrorLabel->setText(error);
-                return;
-            }
-        }
-
-        closeCreateDialog();
+    m_createConfirmButton = tgui::Button::create("Create");
+    styleButton(m_createConfirmButton);
+    m_createConfirmButton->setPosition({432, 650});
+    m_createConfirmButton->setSize({92, 30});
+    m_createConfirmButton->onPress([this]() {
+        submitSessionDialog();
     });
-    dialog->add(createButton);
+    dialog->add(m_createConfirmButton);
 
     m_joinOverlay = tgui::Panel::create({"100%", "100%"});
     m_joinOverlay->getRenderer()->setBackgroundColor(tgui::Color(0, 0, 0, 170));
@@ -457,7 +424,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     });
     joinDialog->add(joinButton);
 
-    updateCreateDialogLabels();
+    updateSessionDialogLabels();
     updateSaveButtons();
     m_panel->setVisible(false);
 }
@@ -471,7 +438,7 @@ void MainMenuUI::show() {
 
 void MainMenuUI::hide() {
     if (m_panel) {
-        closeCreateDialog();
+        closeSessionDialog();
         closeJoinDialog();
         m_panel->setVisible(false);
     }
@@ -485,7 +452,7 @@ void MainMenuUI::showLoadMenu() {
     m_panel->setVisible(true);
     if (m_mainBox) m_mainBox->setVisible(false);
     if (m_loadBox) m_loadBox->setVisible(true);
-    closeCreateDialog();
+    closeSessionDialog();
     closeJoinDialog();
     updateSaveButtons();
 }
@@ -510,25 +477,27 @@ void MainMenuUI::setSaves(const std::vector<SaveSummary>& saves) {
 
 void MainMenuUI::setOnLoadSaves(std::function<void()> callback) { m_onLoadSaves = std::move(callback); }
 void MainMenuUI::setOnExitGame(std::function<void()> callback) { m_onExitGame = std::move(callback); }
-void MainMenuUI::setOnCreateSave(CreateSaveCallback callback) { m_onCreateSave = std::move(callback); }
+void MainMenuUI::setOnCreateSave(SubmitSessionCallback callback) { m_onCreateSave = std::move(callback); }
 void MainMenuUI::setOnPlaySave(std::function<void(const std::string&)> callback) { m_onPlaySave = std::move(callback); }
 void MainMenuUI::setOnDeleteSave(std::function<void(const std::string&)> callback) { m_onDeleteSave = std::move(callback); }
+void MainMenuUI::setOnEditSave(SubmitSessionCallback callback) { m_onEditSave = std::move(callback); }
 void MainMenuUI::setOnJoinMultiplayer(JoinMultiplayerCallback callback) { m_onJoinMultiplayer = std::move(callback); }
 
 void MainMenuUI::showMainScreen() {
     if (m_mainBox) m_mainBox->setVisible(true);
     if (m_loadBox) m_loadBox->setVisible(false);
-    closeCreateDialog();
+    closeSessionDialog();
     closeJoinDialog();
 }
 
 void MainMenuUI::updateSaveButtons() {
     const bool hasSelection = !selectedSaveName().empty();
     if (m_deleteButton) m_deleteButton->setEnabled(hasSelection);
+    if (m_editButton) m_editButton->setEnabled(hasSelection);
     if (m_playButton) m_playButton->setEnabled(hasSelection);
 }
 
-void MainMenuUI::updateCreateDialogLabels() {
+void MainMenuUI::updateSessionDialogLabels() {
     const std::array<KingdomParticipantConfig, kNumKingdoms> participants =
         defaultKingdomParticipants(GameMode::HumanVsHuman);
 
@@ -543,6 +512,14 @@ void MainMenuUI::updateCreateDialogLabels() {
     }
     if (m_blackNameLabel) {
         m_blackNameLabel->setText(participantNamePrompt(participants, KingdomId::Black));
+    }
+    if (m_createTitleLabel) {
+        m_createTitleLabel->setText(
+            m_sessionDialogMode == SessionDialogMode::Create ? "Create New Save" : "Edit Save");
+    }
+    if (m_createConfirmButton) {
+        m_createConfirmButton->setText(
+            m_sessionDialogMode == SessionDialogMode::Create ? "Create" : "Apply");
     }
     if (m_createErrorLabel) m_createErrorLabel->setText("");
     updateMultiplayerControlsVisibility();
@@ -562,7 +539,16 @@ void MainMenuUI::updateMultiplayerControlsVisibility() {
         && m_multiplayerCheckBox->isChecked();
 
     if (m_multiplayerCheckBox) m_multiplayerCheckBox->setVisible(multiplayerAvailable);
-    if (m_multiplayerHintLabel) m_multiplayerHintLabel->setVisible(multiplayerAvailable);
+    if (m_multiplayerHintLabel) {
+        m_multiplayerHintLabel->setVisible(multiplayerAvailable);
+        if (m_sessionDialogMode == SessionDialogMode::Edit) {
+            m_multiplayerHintLabel->setText(
+                "White hosts the LAN game. Leave password blank to keep the current one.");
+        } else {
+            m_multiplayerHintLabel->setText(
+                "White hosts the LAN game. Black joins from another machine.");
+        }
+    }
     if (m_multiplayerPortLabel) m_multiplayerPortLabel->setVisible(multiplayerEnabled);
     if (m_multiplayerPortEdit) m_multiplayerPortEdit->setVisible(multiplayerEnabled);
     if (m_multiplayerPasswordLabel) m_multiplayerPasswordLabel->setVisible(multiplayerEnabled);
@@ -574,6 +560,8 @@ void MainMenuUI::openCreateDialog() {
         return;
     }
 
+    m_sessionDialogMode = SessionDialogMode::Create;
+    m_originalSaveNameForEdit.clear();
     const auto defaults = defaultKingdomParticipants(GameMode::HumanVsHuman);
     if (m_saveNameEdit) m_saveNameEdit->setText("");
     if (m_whiteNameEdit) {
@@ -585,12 +573,54 @@ void MainMenuUI::openCreateDialog() {
     if (m_multiplayerCheckBox) m_multiplayerCheckBox->setChecked(false);
     if (m_multiplayerPortEdit) m_multiplayerPortEdit->setText("45000");
     if (m_multiplayerPasswordEdit) m_multiplayerPasswordEdit->setText("");
-    updateCreateDialogLabels();
+    if (m_tacticalGridCheckBox) m_tacticalGridCheckBox->setChecked(false);
+    updateSessionDialogLabels();
     closeJoinDialog();
     m_createOverlay->setVisible(true);
 }
 
-void MainMenuUI::closeCreateDialog() {
+void MainMenuUI::openEditDialog() {
+    if (!m_createOverlay) {
+        return;
+    }
+
+    const SaveSummary* selectedSave = selectedSaveSummary();
+    if (selectedSave == nullptr) {
+        return;
+    }
+
+    m_sessionDialogMode = SessionDialogMode::Edit;
+    m_originalSaveNameForEdit = selectedSave->saveName;
+    if (m_saveNameEdit) m_saveNameEdit->setText(selectedSave->saveName);
+    if (m_whiteNameEdit) {
+        m_whiteNameEdit->setText(
+            kingdomParticipantConfig(selectedSave->kingdoms, KingdomId::White).participantName);
+    }
+    if (m_blackNameEdit) {
+        m_blackNameEdit->setText(
+            kingdomParticipantConfig(selectedSave->kingdoms, KingdomId::Black).participantName);
+    }
+    if (m_multiplayerCheckBox) {
+        m_multiplayerCheckBox->setChecked(selectedSave->multiplayer.enabled);
+    }
+    if (m_multiplayerPortEdit) {
+        const int port = isValidMultiplayerPort(selectedSave->multiplayer.port)
+            ? selectedSave->multiplayer.port
+            : 45000;
+        m_multiplayerPortEdit->setText(std::to_string(port));
+    }
+    if (m_multiplayerPasswordEdit) {
+        m_multiplayerPasswordEdit->setText("");
+    }
+    if (m_tacticalGridCheckBox) {
+        m_tacticalGridCheckBox->setChecked(selectedSave->tacticalGridEnabled);
+    }
+    updateSessionDialogLabels();
+    closeJoinDialog();
+    m_createOverlay->setVisible(true);
+}
+
+void MainMenuUI::closeSessionDialog() {
     if (m_createOverlay) m_createOverlay->setVisible(false);
     if (m_createErrorLabel) m_createErrorLabel->setText("");
 }
@@ -604,7 +634,7 @@ void MainMenuUI::openJoinDialog() {
     if (m_joinPortEdit) m_joinPortEdit->setText("45000");
     if (m_joinPasswordEdit) m_joinPasswordEdit->setText("");
     if (m_joinErrorLabel) m_joinErrorLabel->setText("");
-    closeCreateDialog();
+    closeSessionDialog();
     m_joinOverlay->setVisible(true);
 }
 
@@ -619,6 +649,81 @@ std::string MainMenuUI::selectedSaveName() const {
     }
 
     return trimCopy(m_saveList->getSelectedItemId().toStdString());
+}
+
+const SaveSummary* MainMenuUI::selectedSaveSummary() const {
+    const std::string saveName = selectedSaveName();
+    if (saveName.empty()) {
+        return nullptr;
+    }
+
+    for (const SaveSummary& save : m_saves) {
+        if (save.saveName == saveName) {
+            return &save;
+        }
+    }
+
+    return nullptr;
+}
+
+void MainMenuUI::submitSessionDialog() {
+    SessionFormRequest request;
+    request.originalSaveName = m_originalSaveNameForEdit;
+    request.session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman);
+    request.session.saveName = trimCopy(m_saveNameEdit ? m_saveNameEdit->getText().toStdString() : std::string{});
+    request.session.kingdoms[kingdomIndex(KingdomId::White)].participantName =
+        trimCopy(m_whiteNameEdit ? m_whiteNameEdit->getText().toStdString() : std::string{});
+    request.session.kingdoms[kingdomIndex(KingdomId::Black)].participantName =
+        trimCopy(m_blackNameEdit ? m_blackNameEdit->getText().toStdString() : std::string{});
+    request.session.tacticalGridEnabled =
+        m_tacticalGridCheckBox != nullptr && m_tacticalGridCheckBox->isChecked();
+
+    if (request.session.saveName.empty()) {
+        m_createErrorLabel->setText("Save name is required.");
+        return;
+    }
+    if (!isValidSaveName(request.session.saveName)) {
+        m_createErrorLabel->setText("Save name contains invalid characters.");
+        return;
+    }
+    if (participantNameFor(request.session, KingdomId::White).empty()
+        || participantNameFor(request.session, KingdomId::Black).empty()) {
+        m_createErrorLabel->setText("Both participant names are required.");
+        return;
+    }
+    if (!isValidParticipantName(participantNameFor(request.session, KingdomId::White))
+        || !isValidParticipantName(participantNameFor(request.session, KingdomId::Black))) {
+        m_createErrorLabel->setText("Names cannot contain quotes or line breaks.");
+        return;
+    }
+
+    if (m_multiplayerCheckBox && m_multiplayerCheckBox->isChecked()) {
+        int port = 0;
+        if (!tryParsePort(m_multiplayerPortEdit ? m_multiplayerPortEdit->getText().toStdString() : std::string{}, port)
+            || !isValidMultiplayerPort(port)) {
+            m_createErrorLabel->setText("Enter a valid LAN port between 1 and 65535.");
+            return;
+        }
+
+        request.session.multiplayer.enabled = true;
+        request.session.multiplayer.port = port;
+        request.session.multiplayer.protocolVersion = kCurrentMultiplayerProtocolVersion;
+        request.multiplayerPassword = trimCopy(
+            m_multiplayerPasswordEdit ? m_multiplayerPasswordEdit->getText().toStdString() : std::string{});
+    }
+
+    const auto& submitCallback = m_sessionDialogMode == SessionDialogMode::Create
+        ? m_onCreateSave
+        : m_onEditSave;
+    if (submitCallback) {
+        const std::string error = submitCallback(request);
+        if (!error.empty()) {
+            m_createErrorLabel->setText(error);
+            return;
+        }
+    }
+
+    closeSessionDialog();
 }
 
 std::string MainMenuUI::trimCopy(const std::string& value) {

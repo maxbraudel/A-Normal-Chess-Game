@@ -842,6 +842,7 @@ void Game::handleInput() {
             m_state,
             m_uiManager.isMultiplayerAlertVisible() || m_uiManager.isMultiplayerWaitingOverlayVisible(),
             isInGameMenuOpen(),
+            m_engine.sessionConfig().tacticalGridEnabled,
             m_config.isCheatcodeEnabled(),
             m_config.getCheatcodeWeatherShortcut(),
             m_config.getCheatcodeChestShortcut(),
