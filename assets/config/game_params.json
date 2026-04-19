@@ -85,6 +85,11 @@
         "wood_wall_hp": 1,
         "stone_wall_hp": 3,
         "barracks_cell_hp": 1,
+        "wood_wall_destroyed_cells_required": 3,
+        "stone_wall_destroyed_cells_required": 3,
+        "barracks_destroyed_cells_required": 3,
+        "bridge_destroyed_cells_required": 3,
+        "arena_destroyed_cells_required": 3,
         "global_max_range": 8
     },
     "buildings": {

@@ -19,6 +19,7 @@ public:
     static bool isRepairableOwnedStructureType(BuildingType type);
     static bool shouldRemoveWhenFullyDestroyed(BuildingType type);
     static int defaultCellHP(BuildingType type, const GameConfig& config);
+    static int destroyedCellsRequired(BuildingType type, const GameConfig& config);
     static int repairCostPerCell(BuildingType type, const GameConfig& config);
 
     template <typename BuildingLike>
@@ -35,7 +36,7 @@ public:
                                                         int localX,
                                                         int localY,
                                                         const GameConfig& config) {
-        if (building.isNeutral || building.isCellDestroyed(localX, localY)) {
+        if (building.isNeutral || building.isDestroyed() || building.isCellDestroyed(localX, localY)) {
             return StructureOccupancyResult::None;
         }
 

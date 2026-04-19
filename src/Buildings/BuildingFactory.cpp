@@ -33,6 +33,7 @@ Building BuildingFactory::createBuilding(BuildingType type, KingdomId owner, sf:
     const int hp = StructureIntegrityRules::defaultCellHP(type, config);
     b.cellHP.assign(b.width * b.height, hp);
     b.cellBreachState.assign(b.width * b.height, 0);
+    b.setDestroyedCellsRequired(StructureIntegrityRules::destroyedCellsRequired(type, config));
     return b;
 }
 

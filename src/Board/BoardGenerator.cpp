@@ -321,6 +321,7 @@ Building makeNeutralPublicBuilding(int id,
     building.flipMask = flipMask;
     building.isNeutral = true;
     building.cellHP.assign(width * height, 999);
+    building.setDestroyedCellsRequired(1);
     building.isProducing = false;
     building.turnsRemaining = 0;
     return building;

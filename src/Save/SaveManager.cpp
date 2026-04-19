@@ -474,6 +474,7 @@ std::string SaveManager::serializeBuilding(const Building& b) {
     << ", \"rot\": " << b.rotationQuarterTurns
     << ", \"fm\": " << b.flipMask
          << ", \"state\": " << static_cast<int>(b.state)
+             << ", \"destroyedCellsRequired\": " << b.destroyedCellsRequired
        << ", \"isProducing\": " << (b.isProducing ? "true" : "false")
        << ", \"producingType\": " << b.producingType
        << ", \"turnsRemaining\": " << b.turnsRemaining
@@ -615,6 +616,7 @@ Building SaveManager::parseBuilding(const std::string& json) {
     b.state = (rawState == static_cast<int>(BuildingState::UnderConstruction))
         ? BuildingState::UnderConstruction
         : BuildingState::Completed;
+    b.destroyedCellsRequired = extractInt(json, "destroyedCellsRequired", -1);
     b.isProducing = extractBool(json, "isProducing", false);
     b.producingType = extractInt(json, "producingType", 0);
     b.turnsRemaining = extractInt(json, "turnsRemaining", 0);
@@ -650,6 +652,10 @@ Building SaveManager::parseBuilding(const std::string& json) {
 
     if (b.cellBreachState.size() < b.cellHP.size()) {
         b.cellBreachState.resize(b.cellHP.size(), 0);
+    }
+
+    if (b.destroyedCellsRequired > 0) {
+        b.setDestroyedCellsRequired(b.destroyedCellsRequired);
     }
 
     return b;

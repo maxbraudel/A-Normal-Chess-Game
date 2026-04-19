@@ -67,6 +67,7 @@ public:
     int getWoodWallHP() const;
     int getStoneWallHP() const;
     int getBarracksCellHP() const;
+    int getDestroyedCellsRequired(BuildingType type) const;
     int getGlobalMaxRange() const;
 
     // Buildings
@@ -212,6 +213,11 @@ private:
     int m_woodWallHP;
     int m_stoneWallHP;
     int m_barracksCellHP;
+    int m_woodWallDestroyedCellsRequired;
+    int m_stoneWallDestroyedCellsRequired;
+    int m_barracksDestroyedCellsRequired;
+    int m_bridgeDestroyedCellsRequired;
+    int m_arenaDestroyedCellsRequired;
     int m_globalMaxRange;
 
     // Buildings  

@@ -19,7 +19,21 @@ bool StructureIntegrityRules::isRepairableOwnedStructureType(BuildingType type) 
 }
 
 bool StructureIntegrityRules::shouldRemoveWhenFullyDestroyed(BuildingType type) {
-    return !isRepairableOwnedStructureType(type);
+    switch (type) {
+        case BuildingType::Church:
+        case BuildingType::Mine:
+        case BuildingType::Farm:
+            return false;
+
+        case BuildingType::Barracks:
+        case BuildingType::WoodWall:
+        case BuildingType::StoneWall:
+        case BuildingType::Bridge:
+        case BuildingType::Arena:
+            return true;
+    }
+
+    return true;
 }
 
 int StructureIntegrityRules::defaultCellHP(BuildingType type, const GameConfig& config) {
@@ -40,6 +54,10 @@ int StructureIntegrityRules::defaultCellHP(BuildingType type, const GameConfig& 
         default:
             return 1;
     }
+}
+
+int StructureIntegrityRules::destroyedCellsRequired(BuildingType type, const GameConfig& config) {
+    return config.getDestroyedCellsRequired(type);
 }
 
 int StructureIntegrityRules::repairCostPerCell(BuildingType type, const GameConfig& config) {

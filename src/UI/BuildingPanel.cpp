@@ -11,6 +11,44 @@ std::string formatIncomeLabel(const std::string& prefix, int income) {
     return prefix + ": +" + std::to_string(income) + " gold/turn";
 }
 
+int defaultCellHPForDisplay(const Building& building) {
+    switch (building.type) {
+        case BuildingType::StoneWall:
+            return 3;
+
+        default:
+            return 1;
+    }
+}
+
+int currentDurabilityHPForDisplay(const Building& building) {
+    const int remainingCellsToDestroy = std::max(
+        0,
+        building.effectiveDestroyedCellsRequired() - building.destroyedCellCount());
+    if (remainingCellsToDestroy <= 0) {
+        return 0;
+    }
+
+    std::vector<int> survivingCellHP;
+    survivingCellHP.reserve(building.cellHP.size());
+    for (int hp : building.cellHP) {
+        if (hp > 0) {
+            survivingCellHP.push_back(hp);
+        }
+    }
+
+    std::sort(survivingCellHP.begin(), survivingCellHP.end());
+
+    int durabilityHP = 0;
+    for (int index = 0;
+         index < remainingCellsToDestroy && index < static_cast<int>(survivingCellHP.size());
+         ++index) {
+        durabilityHP += survivingCellHP[static_cast<std::size_t>(index)];
+    }
+
+    return durabilityHP;
+}
+
 std::string publicOccupationOwnerLabel(PublicBuildingOccupationState state) {
     switch (state) {
         case PublicBuildingOccupationState::WhiteOccupied:
@@ -62,7 +100,7 @@ void BuildingPanel::init(const tgui::Panel::Ptr& parent) {
     HUDLayout::placeSidebarPanelBodyLabel(m_cellsLabel, 2);
     m_panel->add(m_cellsLabel);
 
-    m_hpLabel = tgui::Label::create("HP: ");
+    m_hpLabel = tgui::Label::create("Durability: ");
     HUDLayout::placeSidebarPanelBodyLabel(m_hpLabel, 3);
     m_panel->add(m_hpLabel);
 
@@ -123,14 +161,18 @@ void BuildingPanel::show(const Building& building,
     m_ownerLabel->setText("Owner: " + ownerLabel);
     m_cellsLabel->setText("Occupied Cells: " + std::to_string(building.width * building.height));
 
-    // Calculate total HP
-    int totalHP = 0;
-    int maxHP = 0;
-    for (int hp : building.cellHP) {
-        totalHP += hp;
-        maxHP += (building.type == BuildingType::StoneWall ? 3 : 1);
+    if (building.isPublic()) {
+        m_hpLabel->setText("Durability: Permanent");
+    } else {
+        const int maxDurabilityHP = building.effectiveDestroyedCellsRequired()
+            * defaultCellHPForDisplay(building);
+        const int currentDurabilityHP = currentDurabilityHPForDisplay(building);
+        m_hpLabel->setText(
+            "Durability: "
+            + std::to_string(currentDurabilityHP)
+            + "/"
+            + std::to_string(maxDurabilityHP));
     }
-    m_hpLabel->setText("HP: " + std::to_string(totalHP) + "/" + std::to_string(maxHP));
 
     if (building.isUnderConstruction()) {
         m_statusLabel->setText("Status: Under construction");

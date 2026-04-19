@@ -41,6 +41,7 @@ struct SnapBuilding {
     int rotationQuarterTurns = 0;
     int flipMask = 0;
     BuildingState state = BuildingState::Completed;
+    int destroyedCellsRequired = 1;
     std::vector<int> cellHP;
     std::vector<int> cellBreachState;
     bool isProducing = false;
@@ -67,8 +68,7 @@ struct SnapBuilding {
 
     bool isDestroyed() const {
         if (isNeutral) return false;
-        for (int hp : cellHP) if (hp > 0) return false;
-        return true;
+        return destroyedCellCount() >= effectiveDestroyedCellsRequired();
     }
 
     bool isUnderConstruction() const {
@@ -81,6 +81,22 @@ struct SnapBuilding {
 
     bool hasActiveGameplayEffects() const {
         return !isUnderConstruction() && !isDestroyed();
+    }
+
+    int destroyedCellCount() const {
+        return static_cast<int>(std::count_if(cellHP.begin(), cellHP.end(), [](int hp) {
+            return hp <= 0;
+        }));
+    }
+
+    int effectiveDestroyedCellsRequired() const {
+        const int maxDestroyedCells = std::max(1, static_cast<int>(cellHP.size()));
+        return std::clamp(destroyedCellsRequired, 1, maxDestroyedCells);
+    }
+
+    void setDestroyedCellsRequired(int required) {
+        const int maxDestroyedCells = std::max(1, static_cast<int>(cellHP.size()));
+        destroyedCellsRequired = std::clamp(required, 1, maxDestroyedCells);
     }
 
     bool isCellDestroyed(int localX, int localY) const {

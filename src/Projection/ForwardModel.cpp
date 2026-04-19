@@ -171,6 +171,7 @@ static SnapBuilding toSnapBuilding(const Building& b) {
     sb.rotationQuarterTurns = b.rotationQuarterTurns;
     sb.flipMask = b.flipMask;
     sb.state = b.state;
+    sb.destroyedCellsRequired = b.destroyedCellsRequired;
     sb.cellHP = b.cellHP;
     sb.cellBreachState = b.cellBreachState;
     sb.isProducing = b.isProducing;
@@ -565,6 +566,7 @@ bool ForwardModel::applyBuild(GameSnapshot& s, KingdomId k, BuildingType type,
     bld.state = BuildingState::UnderConstruction;
     bld.cellHP.assign(sourceWidth * sourceHeight, cellHPValue);
     bld.cellBreachState.assign(sourceWidth * sourceHeight, 0);
+    bld.setDestroyedCellsRequired(StructureIntegrityRules::destroyedCellsRequired(type, config));
     myK.buildings.push_back(bld);
     return true;
 }

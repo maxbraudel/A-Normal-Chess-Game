@@ -44,7 +44,7 @@ int getCellIndex(const Building& building, int localX, int localY) {
 Building::Building()
     : id(-1), type(BuildingType::Barracks), owner(KingdomId::White), isNeutral(false),
     origin(0, 0), width(0), height(0), rotationQuarterTurns(0), flipMask(0),
-    state(BuildingState::Completed),
+    state(BuildingState::Completed), destroyedCellsRequired(1),
       isProducing(false), producingType(0), turnsRemaining(0) {}
 
 bool Building::isPublic() const {
@@ -53,10 +53,7 @@ bool Building::isPublic() const {
 
 bool Building::isDestroyed() const {
     if (isPublic()) return false;
-    for (int hp : cellHP) {
-        if (hp > 0) return false;
-    }
-    return true;
+    return destroyedCellCount() >= effectiveDestroyedCellsRequired();
 }
 
 bool Building::isUnderConstruction() const {
@@ -69,6 +66,22 @@ bool Building::isUsable() const {
 
 bool Building::hasActiveGameplayEffects() const {
     return !isUnderConstruction() && !isDestroyed();
+}
+
+int Building::destroyedCellCount() const {
+    return static_cast<int>(std::count_if(cellHP.begin(), cellHP.end(), [](int hp) {
+        return hp <= 0;
+    }));
+}
+
+int Building::effectiveDestroyedCellsRequired() const {
+    const int maxDestroyedCells = std::max(1, static_cast<int>(cellHP.size()));
+    return std::clamp(destroyedCellsRequired, 1, maxDestroyedCells);
+}
+
+void Building::setDestroyedCellsRequired(int required) {
+    const int maxDestroyedCells = std::max(1, static_cast<int>(cellHP.size()));
+    destroyedCellsRequired = std::clamp(required, 1, maxDestroyedCells);
 }
 
 void Building::setConstructionState(BuildingState newState) {

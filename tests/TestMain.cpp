@@ -106,6 +106,9 @@ Building makeTestBarracks(int id, KingdomId owner, const sf::Vector2i& origin, c
     barracks.height = config.getBuildingHeight(BuildingType::Barracks);
     barracks.cellHP.assign(barracks.width * barracks.height, config.getBarracksCellHP());
     barracks.cellBreachState.assign(barracks.width * barracks.height, 0);
+    barracks.setDestroyedCellsRequired(StructureIntegrityRules::destroyedCellsRequired(
+        BuildingType::Barracks,
+        config));
     return barracks;
 }
 
@@ -120,6 +123,9 @@ Building makeTestStoneWall(int id, KingdomId owner, const sf::Vector2i& origin, 
     wall.height = config.getBuildingHeight(BuildingType::StoneWall);
     wall.cellHP.assign(wall.width * wall.height, config.getStoneWallHP());
     wall.cellBreachState.assign(wall.width * wall.height, 0);
+    wall.setDestroyedCellsRequired(StructureIntegrityRules::destroyedCellsRequired(
+        BuildingType::StoneWall,
+        config));
     return wall;
 }
 
@@ -132,7 +138,18 @@ Building makeTestPublicBuilding(BuildingType type, const sf::Vector2i& origin, i
     building.height = height;
     building.cellHP.assign(width * height, 1);
     building.cellBreachState.assign(width * height, 0);
+    building.setDestroyedCellsRequired(1);
     return building;
+}
+
+void destroyFirstBuildingCells(Building& building, int cellsToDestroy) {
+    int destroyedCells = 0;
+    for (int localY = 0; localY < building.height && destroyedCells < cellsToDestroy; ++localY) {
+        for (int localX = 0; localX < building.width && destroyedCells < cellsToDestroy; ++localX) {
+            building.destroyCellAt(localX, localY);
+            ++destroyedCells;
+        }
+    }
 }
 
 bool isBoardBorderCell(const Board& board, const sf::Vector2i& position) {
@@ -211,6 +228,27 @@ GameConfig makeWeatherTestConfig(const std::string& weatherJsonBody) {
     GameConfig config;
     expect(config.loadFromFile(tempPath.string()),
         "Weather test config helper should load a temporary weather override file.");
+    std::filesystem::remove(tempPath);
+    return config;
+}
+
+GameConfig makeCombatTestConfig(const std::string& combatJsonBody) {
+    const std::filesystem::path tempPath =
+        std::filesystem::temp_directory_path() / "anormalchess_combat_test_config.json";
+    {
+        std::ofstream out(tempPath);
+        out << "{\n"
+            << "  \"game\": {\n"
+            << "    \"combat\": {\n"
+            << combatJsonBody << "\n"
+            << "    }\n"
+            << "  }\n"
+            << "}\n";
+    }
+
+    GameConfig config;
+    expect(config.loadFromFile(tempPath.string()),
+        "Combat test config helper should load a temporary combat override file.");
     std::filesystem::remove(tempPath);
     return config;
 }
@@ -4616,6 +4654,7 @@ void testSaveManagerRoundTrip() {
     publicMine.rotationQuarterTurns = 3;
     publicMine.flipMask = 2;
     publicMine.cellHP.assign(publicMine.width * publicMine.height, 1);
+    publicMine.setDestroyedCellsRequired(1);
     data.publicBuildings.push_back(publicMine);
     data.events.push_back({7, KingdomId::Black, "AI said \"check\" and held {center}."});
     EventLog::Event moveEvent;
@@ -4677,6 +4716,8 @@ void testSaveManagerRoundTrip() {
         "Owned building rotations should round-trip through SaveManager.");
     expect(loaded.kingdoms[0].buildings[0].isUnderConstruction(),
         "Building construction state should round-trip through SaveManager.");
+    expect(loaded.kingdoms[0].buildings[0].destroyedCellsRequired == ownedBarracks.destroyedCellsRequired,
+        "Building destroyed-cell thresholds should round-trip through SaveManager.");
     expect(loaded.kingdoms[0].buildings[0].getCellHP(0, 0) == 0,
         "Destroyed owned building cells should round-trip through SaveManager.");
     expect(loaded.kingdoms[0].buildings[1].isCellBreached(0, 0),
@@ -4686,7 +4727,8 @@ void testSaveManagerRoundTrip() {
         "Kingdom bishop spawn memory should round-trip through SaveManager.");
     expect(loaded.publicBuildings.size() == 1
         && loaded.publicBuildings[0].flipMask == publicMine.flipMask
-        && loaded.publicBuildings[0].rotationQuarterTurns == publicMine.rotationQuarterTurns,
+        && loaded.publicBuildings[0].rotationQuarterTurns == publicMine.rotationQuarterTurns
+        && loaded.publicBuildings[0].destroyedCellsRequired == publicMine.destroyedCellsRequired,
         "Public building transforms should round-trip through SaveManager.");
 }
 
@@ -5293,6 +5335,74 @@ void testTurnSystemSkipsUnaffordableProduction() {
             "Income should still be collected after an unaffordable repair attempt is skipped, net of upkeep.");
     }
 
+    void testBuildingDestroysAfterConfiguredDestroyedCellThreshold() {
+        GameConfig config;
+        Building barracks = makeTestBarracks(810, KingdomId::White, {3, 3}, config);
+
+        const int requiredDestroyedCells = std::min(
+            config.getDestroyedCellsRequired(BuildingType::Barracks),
+            barracks.width * barracks.height);
+        expect(requiredDestroyedCells >= 1,
+            "The destroyed-cell threshold regression requires a positive barracks threshold.");
+
+        destroyFirstBuildingCells(barracks, requiredDestroyedCells - 1);
+        expect(!barracks.isDestroyed(),
+            "A building should stay alive until the configured destroyed-cell threshold is reached.");
+
+        destroyFirstBuildingCells(barracks, requiredDestroyedCells);
+        expect(barracks.destroyedCellCount() >= requiredDestroyedCells,
+            "The threshold regression should destroy enough barracks cells to reach the configured limit.");
+        expect(barracks.isDestroyed(),
+            "A building should be destroyed once the configured number of cells has been destroyed, even if other cells still have HP.");
+    }
+
+    void testThresholdDestroyedBarracksIsRemovedOnCommit() {
+        GameConfig config;
+        Board board;
+        board.init(10);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 1, PieceType::King, KingdomId::White, {0, 0});
+        addPieceToBoard(white, board, 2, PieceType::Pawn, KingdomId::White, {3, 3});
+        addPieceToBoard(white, board, 3, PieceType::Pawn, KingdomId::White, {4, 3});
+        addPieceToBoard(white, board, 4, PieceType::Pawn, KingdomId::White, {5, 3});
+        addPieceToBoard(black, board, 5, PieceType::King, KingdomId::Black, {9, 9});
+
+        black.addBuilding(makeTestBarracks(811, KingdomId::Black, {3, 3}, config));
+        Building& barracks = black.buildings.back();
+        const int requiredDestroyedCells = std::min(
+            config.getDestroyedCellsRequired(BuildingType::Barracks),
+            barracks.width * barracks.height);
+        linkBuildingOnBoard(barracks, board);
+        expect(requiredDestroyedCells == 3,
+            "The threshold-destruction regression expects barracks to use the configured three-cell destruction threshold.");
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+        EventLog eventLog;
+        PieceFactory pieceFactory;
+        BuildingFactory buildingFactory;
+
+        turnSystem.commitTurn(
+            board,
+            white,
+            black,
+            publicBuildings,
+            config,
+            eventLog,
+            pieceFactory,
+            buildingFactory);
+
+        expect(black.buildings.empty(),
+            "A barracks should be removed from its kingdom as soon as the configured number of occupied cells has been destroyed.");
+        expect(board.getCell(3, 3).building == nullptr
+            && board.getCell(4, 3).building == nullptr
+            && board.getCell(5, 3).building == nullptr,
+            "A threshold-destroyed barracks should also be removed from the board cell links immediately after commit.");
+    }
+
     void testStoneWallDestroysWhenEnemyStaysOnBreachedCellUntilNextCommit() {
         GameConfig config;
         Board board;
@@ -5327,6 +5437,26 @@ void testTurnSystemSkipsUnaffordableProduction() {
         expect(board.getCell(4, 4).building != nullptr,
             "A breached stone wall should remain on the board after the first commit.");
 
+
+    void testCombatConfigLoadsDestroyedCellThresholds() {
+        GameConfig config = makeCombatTestConfig(
+            "      \"wood_wall_destroyed_cells_required\": 6,\n"
+            "      \"stone_wall_destroyed_cells_required\": 5,\n"
+            "      \"barracks_destroyed_cells_required\": 4,\n"
+            "      \"bridge_destroyed_cells_required\": 3,\n"
+            "      \"arena_destroyed_cells_required\": 2");
+
+        expect(config.getDestroyedCellsRequired(BuildingType::WoodWall) == 6,
+            "Structured combat config should load the destroyed-cell threshold for wood walls.");
+        expect(config.getDestroyedCellsRequired(BuildingType::StoneWall) == 5,
+            "Structured combat config should load the destroyed-cell threshold for stone walls.");
+        expect(config.getDestroyedCellsRequired(BuildingType::Barracks) == 4,
+            "Structured combat config should load the destroyed-cell threshold for barracks.");
+        expect(config.getDestroyedCellsRequired(BuildingType::Bridge) == 3,
+            "Structured combat config should load the destroyed-cell threshold for bridges.");
+        expect(config.getDestroyedCellsRequired(BuildingType::Arena) == 2,
+            "Structured combat config should load the destroyed-cell threshold for arenas.");
+    }
         turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
 
         expect(black.buildings.empty(),
@@ -8638,6 +8768,10 @@ int main() {
         {"game engine cheatcode event triggers", testGameEngineCheatcodeTriggersSpawnEvents},
         {"xp deterministic serialized sequence", testXPSystemUsesDeterministicSerializedSequence},
         {"xp forward model matches runtime capture", testForwardModelCaptureXPMatchesCommittedTurn},
+        {"save manager roundtrip", testSaveManagerRoundTrip},
+        {"combat config destroyed-cell thresholds", testCombatConfigLoadsDestroyedCellThresholds},
+        {"building destroys after configured threshold", testBuildingDestroysAfterConfiguredDestroyedCellThreshold},
+        {"threshold-destroyed barracks removed on commit", testThresholdDestroyedBarracksIsRemovedOnCommit},
         {"infernal blood debt from captures", testInfernalBloodDebtAccumulatesFromCommittedCaptures},
         {"infernal spawn and hunt", testInfernalSystemSpawnsOnBorderAndStartsHunt},
         {"infernal spawn searching when prey fogged", testInfernalSystemSpawnsSearchingWhenOnlyFoggedTargetsRemain},
@@ -8724,7 +8858,6 @@ int main() {
         {"in-game hud kingdom presentation", testInGameViewModelUsesPresentedHudKingdom},
         {"overlay policy when selected visibility", testOverlayPolicyCanHideIndicatorsUntilSelected},
         {"overlay policy always visible", testOverlayPolicyAlwaysKeepsCurrentIndicatorsVisible},
-        {"save manager roundtrip", testSaveManagerRoundTrip},
         {"save manager string roundtrip", testSaveManagerStringRoundTrip},
         {"multiplayer password digest", testMultiplayerPasswordDigest},
         {"gameplay notification local wording", testGameplayNotificationUsesLocalRecipientWordingAndFiltering},

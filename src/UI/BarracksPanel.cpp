@@ -38,6 +38,34 @@ void updateProduceButton(const tgui::Button::Ptr& button,
         enabled);
 }
 
+int currentDurabilityHPForDisplay(const Building& building) {
+    const int remainingCellsToDestroy = std::max(
+        0,
+        building.effectiveDestroyedCellsRequired() - building.destroyedCellCount());
+    if (remainingCellsToDestroy <= 0) {
+        return 0;
+    }
+
+    std::vector<int> survivingCellHP;
+    survivingCellHP.reserve(building.cellHP.size());
+    for (int hp : building.cellHP) {
+        if (hp > 0) {
+            survivingCellHP.push_back(hp);
+        }
+    }
+
+    std::sort(survivingCellHP.begin(), survivingCellHP.end());
+
+    int durabilityHP = 0;
+    for (int index = 0;
+         index < remainingCellsToDestroy && index < static_cast<int>(survivingCellHP.size());
+         ++index) {
+        durabilityHP += survivingCellHP[static_cast<std::size_t>(index)];
+    }
+
+    return durabilityHP;
+}
+
     void updateAllProduceButtons(const GameConfig& config,
                      const Kingdom& kingdom,
                      bool allowProduce,
@@ -91,7 +119,7 @@ void BarracksPanel::init(const tgui::Panel::Ptr& parent) {
     HUDLayout::placeSidebarPanelBodyLabel(m_cellsLabel, 1);
     m_panel->add(m_cellsLabel);
 
-    m_hpLabel = tgui::Label::create("HP: 0/0");
+    m_hpLabel = tgui::Label::create("Durability: 0/0");
     HUDLayout::placeSidebarPanelBodyLabel(m_hpLabel, 2);
     m_panel->add(m_hpLabel);
 
@@ -166,15 +194,12 @@ void BarracksPanel::show(const Building& barracks,
     }
     m_currentBarracksId = barracks.id;
 
-    int totalHP = 0;
-    const int maxHP = static_cast<int>(barracks.cellHP.size()) * config.getBarracksCellHP();
-    for (int hp : barracks.cellHP) {
-        totalHP += hp;
-    }
+    const int totalHP = currentDurabilityHPForDisplay(barracks);
+    const int maxHP = barracks.effectiveDestroyedCellsRequired() * config.getBarracksCellHP();
 
     m_ownerLabel->setText("Owner: " + kingdomLabel(barracks.owner));
     m_cellsLabel->setText("Occupied Cells: " + std::to_string(barracks.width * barracks.height));
-    m_hpLabel->setText("HP: " + std::to_string(totalHP) + "/" + std::to_string(maxHP));
+    m_hpLabel->setText("Durability: " + std::to_string(totalHP) + "/" + std::to_string(maxHP));
 
     const bool canCancelConstruction = barracks.isUnderConstruction() && allowCancelConstruction;
     m_cancelConstructionBtn->setVisible(barracks.isUnderConstruction());

@@ -23,6 +23,7 @@ public:
     int rotationQuarterTurns;
     int flipMask;
     BuildingState state;
+    int destroyedCellsRequired;
     std::vector<int> cellHP;
     std::vector<int> cellBreachState;
 
@@ -37,6 +38,9 @@ public:
     bool isUnderConstruction() const;
     bool isUsable() const;
     bool hasActiveGameplayEffects() const;
+    int destroyedCellCount() const;
+    int effectiveDestroyedCellsRequired() const;
+    void setDestroyedCellsRequired(int required);
     void setConstructionState(BuildingState newState);
     int getFootprintWidth() const;
     int getFootprintHeight() const;

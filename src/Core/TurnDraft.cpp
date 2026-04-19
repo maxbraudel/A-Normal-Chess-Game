@@ -31,6 +31,8 @@ Building makeUnderConstructionBuilding(const TurnCommand& command,
     const int hp = StructureIntegrityRules::defaultCellHP(command.buildingType, config);
     building.cellHP.assign(building.width * building.height, hp);
     building.cellBreachState.assign(building.width * building.height, 0);
+    building.setDestroyedCellsRequired(
+        StructureIntegrityRules::destroyedCellsRequired(command.buildingType, config));
     return building;
 }
 

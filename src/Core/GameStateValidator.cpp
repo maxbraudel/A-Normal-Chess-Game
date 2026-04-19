@@ -35,6 +35,22 @@ bool isSavePositionInBounds(const SaveData& data, const sf::Vector2i& position) 
 bool validateAuthoritativeBuildingState(const Building& building,
                                         const std::string& scope,
                                         std::string* errorMessage) {
+    const bool allowLegacyDestroyedThreshold = scope.rfind("Save data", 0) == 0;
+    const int maxDestroyedCells = std::max(1, building.width * building.height);
+    if (building.destroyedCellsRequired < 0) {
+        if (!allowLegacyDestroyedThreshold) {
+            if (errorMessage) {
+                *errorMessage = scope + " contains a building with an invalid destroyed-cell threshold.";
+            }
+            return false;
+        }
+    } else if (building.destroyedCellsRequired == 0 || building.destroyedCellsRequired > maxDestroyedCells) {
+        if (errorMessage) {
+            *errorMessage = scope + " contains a building with an out-of-range destroyed-cell threshold.";
+        }
+        return false;
+    }
+
     if (!building.isUnderConstruction()) {
         return true;
     }

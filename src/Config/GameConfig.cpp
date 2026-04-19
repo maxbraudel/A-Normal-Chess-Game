@@ -58,6 +58,10 @@ int clampRangedConfigValue(const std::string& label, int value, int minValue, in
     return clampedValue;
 }
 
+int clampPositiveConfigValue(const std::string& label, int value) {
+    return clampRangedConfigValue(label, value, 1, 1024);
+}
+
 std::string trimAsciiWhitespace(std::string value) {
     const auto first = std::find_if_not(value.begin(), value.end(), [](unsigned char current) {
         return std::isspace(current) != 0;
@@ -257,6 +261,11 @@ void GameConfig::setDefaults() {
     m_woodWallHP = 1;
     m_stoneWallHP = 3;
     m_barracksCellHP = 1;
+    m_woodWallDestroyedCellsRequired = 3;
+    m_stoneWallDestroyedCellsRequired = 3;
+    m_barracksDestroyedCellsRequired = 3;
+    m_bridgeDestroyedCellsRequired = 3;
+    m_arenaDestroyedCellsRequired = 3;
     m_globalMaxRange = 8;
 
     m_barracksWidth = 4; m_barracksHeight = 3;
@@ -669,8 +678,44 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
         m_woodWallHP = extractInt(combatSec, "wood_wall_hp", m_woodWallHP);
         m_stoneWallHP = extractInt(combatSec, "stone_wall_hp", m_stoneWallHP);
         m_barracksCellHP = extractInt(combatSec, "barracks_cell_hp", m_barracksCellHP);
+        m_woodWallDestroyedCellsRequired = extractInt(
+            combatSec,
+            "wood_wall_destroyed_cells_required",
+            m_woodWallDestroyedCellsRequired);
+        m_stoneWallDestroyedCellsRequired = extractInt(
+            combatSec,
+            "stone_wall_destroyed_cells_required",
+            m_stoneWallDestroyedCellsRequired);
+        m_barracksDestroyedCellsRequired = extractInt(
+            combatSec,
+            "barracks_destroyed_cells_required",
+            m_barracksDestroyedCellsRequired);
+        m_bridgeDestroyedCellsRequired = extractInt(
+            combatSec,
+            "bridge_destroyed_cells_required",
+            m_bridgeDestroyedCellsRequired);
+        m_arenaDestroyedCellsRequired = extractInt(
+            combatSec,
+            "arena_destroyed_cells_required",
+            m_arenaDestroyedCellsRequired);
         m_globalMaxRange = extractInt(combatSec, "global_max_range", m_globalMaxRange);
     }
+
+    m_woodWallDestroyedCellsRequired = clampPositiveConfigValue(
+        "combat.wood_wall_destroyed_cells_required",
+        m_woodWallDestroyedCellsRequired);
+    m_stoneWallDestroyedCellsRequired = clampPositiveConfigValue(
+        "combat.stone_wall_destroyed_cells_required",
+        m_stoneWallDestroyedCellsRequired);
+    m_barracksDestroyedCellsRequired = clampPositiveConfigValue(
+        "combat.barracks_destroyed_cells_required",
+        m_barracksDestroyedCellsRequired);
+    m_bridgeDestroyedCellsRequired = clampPositiveConfigValue(
+        "combat.bridge_destroyed_cells_required",
+        m_bridgeDestroyedCellsRequired);
+    m_arenaDestroyedCellsRequired = clampPositiveConfigValue(
+        "combat.arena_destroyed_cells_required",
+        m_arenaDestroyedCellsRequired);
 
     std::string buildSec = extractSection(root, "buildings");
     if (!buildSec.empty()) {
@@ -1163,6 +1208,26 @@ int GameConfig::getXPThresholdToRook() const { return m_thresholdToRook; }
 int GameConfig::getWoodWallHP() const { return m_woodWallHP; }
 int GameConfig::getStoneWallHP() const { return m_stoneWallHP; }
 int GameConfig::getBarracksCellHP() const { return m_barracksCellHP; }
+int GameConfig::getDestroyedCellsRequired(BuildingType type) const {
+    switch (type) {
+        case BuildingType::WoodWall:
+            return m_woodWallDestroyedCellsRequired;
+        case BuildingType::StoneWall:
+            return m_stoneWallDestroyedCellsRequired;
+        case BuildingType::Barracks:
+            return m_barracksDestroyedCellsRequired;
+        case BuildingType::Bridge:
+            return m_bridgeDestroyedCellsRequired;
+        case BuildingType::Arena:
+            return m_arenaDestroyedCellsRequired;
+        case BuildingType::Church:
+        case BuildingType::Mine:
+        case BuildingType::Farm:
+            return 1;
+    }
+
+    return 1;
+}
 int GameConfig::getGlobalMaxRange() const { return m_globalMaxRange; }
 
 int GameConfig::getBuildingWidth(BuildingType type) const {

@@ -64,6 +64,7 @@ Building BuildSystem::place(BuildingType type, sf::Vector2i origin,
     const int hp = StructureIntegrityRules::defaultCellHP(type, config);
     b.cellHP.assign(b.width * b.height, hp);
     b.cellBreachState.assign(b.width * b.height, 0);
+    b.setDestroyedCellsRequired(StructureIntegrityRules::destroyedCellsRequired(type, config));
 
     return b;
 }

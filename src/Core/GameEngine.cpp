@@ -7,6 +7,7 @@
 #include "Board/BoardGenerator.hpp"
 #include "Config/GameConfig.hpp"
 #include "Core/GameStateValidator.hpp"
+#include "Systems/StructureIntegrityRules.hpp"
 #include "Systems/ChestSystem.hpp"
 #include "Systems/InfernalSystem.hpp"
 #include "Systems/WeatherSystem.hpp"
@@ -71,7 +72,9 @@ int halfTurnStep(const TurnSystem& turnSystem) {
         + kingdomIndex(turnSystem.getActiveKingdom());
 }
 
-void normalizeLoadedBuildingVisuals(std::vector<Building>& buildings, std::uint32_t worldSeed) {
+void normalizeLoadedBuildings(std::vector<Building>& buildings,
+                              std::uint32_t worldSeed,
+                              const GameConfig& config) {
     for (auto& building : buildings) {
         if (building.rotationQuarterTurns < 0) {
             building.rotationQuarterTurns = building.isPublic()
@@ -89,6 +92,13 @@ void normalizeLoadedBuildingVisuals(std::vector<Building>& buildings, std::uint3
             building.flipMask = 0;
         } else {
             building.flipMask &= (kFlipHorizontalMask | kFlipVerticalMask);
+        }
+
+        if (building.destroyedCellsRequired <= 0) {
+            building.setDestroyedCellsRequired(
+                StructureIntegrityRules::destroyedCellsRequired(building.type, config));
+        } else {
+            building.setDestroyedCellsRequired(building.destroyedCellsRequired);
         }
     }
 }
@@ -282,7 +292,10 @@ bool GameEngine::restoreFromSave(const SaveData& data,
         for (const auto& building : data.kingdoms[kingdomSlot].buildings) {
             m_kingdoms[kingdomSlot].addBuilding(building);
         }
-        normalizeLoadedBuildingVisuals(m_kingdoms[kingdomSlot].buildings, m_sessionConfig.worldSeed);
+        normalizeLoadedBuildings(
+            m_kingdoms[kingdomSlot].buildings,
+            m_sessionConfig.worldSeed,
+            config);
     }
 
     m_publicBuildings = data.publicBuildings;
@@ -293,7 +306,7 @@ bool GameEngine::restoreFromSave(const SaveData& data,
     m_weatherMaskCache = data.weatherMaskCache;
     m_xpSystemState = data.xpSystemState;
     m_infernalSystemState = data.infernalSystemState;
-    normalizeLoadedBuildingVisuals(m_publicBuildings, m_sessionConfig.worldSeed);
+    normalizeLoadedBuildings(m_publicBuildings, m_sessionConfig.worldSeed, config);
 
     m_turnSystem = TurnSystem();
     m_turnSystem.setActiveKingdom(data.activeKingdom);
