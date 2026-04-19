@@ -112,6 +112,7 @@ set(CORE_SOURCES
     src/Systems/TurnSystem.cpp
     src/Systems/WeatherSystem.cpp
     src/Systems/XPSystem.cpp
+    src/UI/AutonomousUnitPanel.cpp
     src/UI/BarracksPanel.cpp
     src/UI/BuildingPanel.cpp
     src/UI/BuildToolPanel.cpp

@@ -2,6 +2,7 @@
 #include "UI/MainMenuUI.hpp"
 #include "UI/HUD.hpp"
 #include "UI/GameMenuUI.hpp"
+#include "UI/AutonomousUnitPanel.hpp"
 #include "UI/PiecePanel.hpp"
 #include "UI/BuildingPanel.hpp"
 #include "UI/BarracksPanel.hpp"
@@ -26,6 +27,7 @@ class Building;
 class Kingdom;
 class GameConfig;
 class MapObject;
+struct AutonomousUnit;
 struct Cell;
 
 struct MultiplayerDialogAction {
@@ -47,18 +49,22 @@ public:
                         bool allowUpgrade,
                         bool allowDisband,
                         const TurnCommand* pendingUpgrade = nullptr,
-                        const TurnCommand* pendingDisband = nullptr);
+                        const TurnCommand* pendingDisband = nullptr,
+                        const std::string& title = "");
+    void showAutonomousUnitPanel(const AutonomousUnit& unit, const std::string& title);
     void showBuildingPanel(const Building& building,
                            bool allowCancelConstruction,
                            const std::optional<ResourceIncomeBreakdown>& resourceIncome = std::nullopt,
-                           const std::optional<PublicBuildingOccupationState>& publicOccupation = std::nullopt);
+                           const std::optional<PublicBuildingOccupationState>& publicOccupation = std::nullopt,
+                           const std::string& title = "");
     void showBarracksPanel(const Building& barracks, const Kingdom& kingdom, const GameConfig& config,
                            bool allowProduce,
                            bool allowCancelConstruction,
-                           const TurnCommand* pendingProduce = nullptr);
-    void showBuildToolPanel(const Kingdom& kingdom, const GameConfig& config, bool allowBuild);
-    void showMapObjectPanel(const MapObject& object);
-    void showCellPanel(const Cell& cell);
+                           const TurnCommand* pendingProduce = nullptr,
+                           const std::string& title = "");
+    void showBuildToolPanel(const Kingdom& kingdom, const GameConfig& config, bool allowBuild, const std::string& title);
+    void showMapObjectPanel(const MapObject& object, const std::string& title = "");
+    void showCellPanel(const Cell& cell, const std::string& title = "");
     void showSelectionEmptyState();
     void hideAllPanels();
     void update();
@@ -88,6 +94,7 @@ public:
     MainMenuUI&     mainMenu()        { return m_mainMenu; }
     HUD&            hud()             { return m_hud; }
     GameMenuUI&     gameMenu()        { return m_gameMenu; }
+    AutonomousUnitPanel& autonomousUnitPanel() { return m_autonomousUnitPanel; }
     PiecePanel&     piecePanel()      { return m_piecePanel; }
     BuildingPanel&  buildingPanel()   { return m_buildingPanel; }
     BarracksPanel&  barracksPanel()   { return m_barracksPanel; }
@@ -102,6 +109,7 @@ private:
     enum class LeftContextView {
         None,
         Piece,
+        AutonomousUnit,
         Building,
         Barracks,
         BuildTool,
@@ -117,6 +125,7 @@ private:
     MainMenuUI      m_mainMenu;
     HUD             m_hud;
     GameMenuUI      m_gameMenu;
+    AutonomousUnitPanel m_autonomousUnitPanel;
     PiecePanel      m_piecePanel;
     BuildingPanel   m_buildingPanel;
     BarracksPanel   m_barracksPanel;

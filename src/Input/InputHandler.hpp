@@ -35,6 +35,7 @@ public:
     void setTool(ToolState tool);
 
     int getSelectedPieceId() const;
+    int getSelectedAutonomousUnitId() const;
     int getSelectedBuildingId() const;
     int getSelectedMapObjectId() const;
     bool hasSelectedCell() const;
@@ -60,14 +61,27 @@ public:
     InputSelectionBookmark createSelectionBookmark() const;
     void reconcileSelection(const InputSelectionBookmark& bookmark,
                             Piece* selectedPiece,
+                            AutonomousUnit* selectedAutonomousUnit,
                             Building* selectedBuilding,
                             MapObject* selectedMapObject,
                             const InputContext& context);
     void reconcileSelection(const InputSelectionBookmark& bookmark,
                             Piece* selectedPiece,
                             Building* selectedBuilding,
+                            MapObject* selectedMapObject,
                             const InputContext& context) {
-        reconcileSelection(bookmark, selectedPiece, selectedBuilding, nullptr, context);
+        reconcileSelection(bookmark,
+                           selectedPiece,
+                           nullptr,
+                           selectedBuilding,
+                           selectedMapObject,
+                           context);
+    }
+    void reconcileSelection(const InputSelectionBookmark& bookmark,
+                            Piece* selectedPiece,
+                            Building* selectedBuilding,
+                            const InputContext& context) {
+        reconcileSelection(bookmark, selectedPiece, nullptr, selectedBuilding, nullptr, context);
     }
     void clearSelection();
 

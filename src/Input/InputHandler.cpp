@@ -88,6 +88,7 @@ void InputHandler::setTool(ToolState tool) {
 }
 
 int InputHandler::getSelectedPieceId() const { return m_selectedPieceId; }
+int InputHandler::getSelectedAutonomousUnitId() const { return m_selectedAutonomousUnitId; }
 int InputHandler::getSelectedBuildingId() const { return m_selectedBuildingId; }
 int InputHandler::getSelectedMapObjectId() const { return m_selectedMapObjectId; }
 bool InputHandler::hasSelectedCell() const { return m_hasSelectedCell; }
@@ -169,6 +170,7 @@ InputSelectionBookmark InputHandler::createSelectionBookmark() const {
 
 void InputHandler::reconcileSelection(const InputSelectionBookmark& bookmark,
                                       Piece* selectedPiece,
+                                      AutonomousUnit* selectedAutonomousUnit,
                                       Building* selectedBuilding,
                                       MapObject* selectedMapObject,
                                       const InputContext& context) {
@@ -255,6 +257,14 @@ void InputHandler::reconcileSelection(const InputSelectionBookmark& bookmark,
         restoreBuildPreviewState(bookmark);
         return true;
     };
+
+    // Autonomous units can move outside player-authored preview state, so follow
+    // the resolved identity before relying on the last bookmarked cell.
+    if (selectedAutonomousUnit) {
+        activateAutonomousSelection(selectedAutonomousUnit, selectedAutonomousUnit->position);
+        restoreBuildPreviewState(bookmark);
+        return;
+    }
 
     if (restoreSelectionAtBookmarkedCell()) {
         return;

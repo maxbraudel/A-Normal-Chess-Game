@@ -25,48 +25,44 @@ void CellPanel::init(const tgui::Panel::Ptr& parent) {
     HUDLayout::styleEmbeddedPanel(m_panel);
     parent->add(m_panel);
 
-    auto titleLabel = tgui::Label::create("Cell");
-    titleLabel->setPosition({10, 10});
-    HUDLayout::styleSidebarTitle(titleLabel);
-    m_panel->add(titleLabel);
+    m_titleLabel = tgui::Label::create("");
+    HUDLayout::placeSidebarPanelTitle(m_titleLabel);
+    m_panel->add(m_titleLabel);
 
     m_positionLabel = tgui::Label::create("Cell: 0, 0");
-    m_positionLabel->setPosition({10, 54});
-    m_positionLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_positionLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_positionLabel, 0);
     m_panel->add(m_positionLabel);
 
     m_terrainLabel = tgui::Label::create("Terrain: Grass");
-    m_terrainLabel->setPosition({10, 84});
-    m_terrainLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_terrainLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_terrainLabel, 1);
     m_panel->add(m_terrainLabel);
 
     m_zoneLabel = tgui::Label::create("Traversable: Yes");
-    m_zoneLabel->setPosition({10, 114});
-    m_zoneLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_zoneLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_zoneLabel, 2);
     m_panel->add(m_zoneLabel);
 
     m_statusLabel = tgui::Label::create("Status: Empty");
-    m_statusLabel->setPosition({10, 144});
-    m_statusLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_statusLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_statusLabel, 3);
     m_panel->add(m_statusLabel);
 
     m_panel->setVisible(false);
 }
 
-void CellPanel::show(const Cell& cell) {
+void CellPanel::show(const Cell& cell, const std::string& title) {
     if (!m_panel) {
         return;
     }
 
     m_panel->moveToFront();
+    if (m_titleLabel) {
+        m_titleLabel->setText(title);
+    }
 
     std::string status = "Empty";
     if (cell.piece) {
         status = "Occupied by piece";
+    } else if (cell.autonomousUnit) {
+        status = "Occupied by autonomous unit";
     } else if (cell.building) {
         status = "Occupied by building";
     } else if (cell.type == CellType::Water) {

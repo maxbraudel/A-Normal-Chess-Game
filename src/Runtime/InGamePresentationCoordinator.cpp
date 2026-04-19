@@ -1,5 +1,6 @@
 #include "Runtime/InGamePresentationCoordinator.hpp"
 
+#include "Autonomous/AutonomousUnit.hpp"
 #include "Board/Board.hpp"
 #include "Buildings/Building.hpp"
 #include "Config/GameConfig.hpp"
@@ -94,6 +95,7 @@ void InGamePresentationCoordinator::updateInGameUi(
         bindings.turnSystem,
         bindings.config,
         state.selectedPiece,
+        state.selectedAutonomousUnit,
         state.selectedBuilding,
         state.selectedMapObject,
         state.selectedCell
@@ -114,7 +116,8 @@ void InGamePresentationCoordinator::applyLeftPanelPresentation(
         case FrontendLeftPanelKind::BuildTool:
             uiManager.showBuildToolPanel(displayedKingdomForOwner(displayedKingdoms, presentation.viewedKingdom),
                                          config,
-                                         presentation.allowBuild);
+                                         presentation.allowBuild,
+                                         presentation.title);
             return;
 
         case FrontendLeftPanelKind::Piece:
@@ -124,7 +127,15 @@ void InGamePresentationCoordinator::applyLeftPanelPresentation(
                                          presentation.allowUpgrade,
                                          presentation.allowDisband,
                                          presentation.pendingUpgrade,
-                                         presentation.pendingDisband);
+                                         presentation.pendingDisband,
+                                         presentation.title);
+                return;
+            }
+            break;
+
+        case FrontendLeftPanelKind::AutonomousUnit:
+            if (presentation.autonomousUnit != nullptr) {
+                uiManager.showAutonomousUnitPanel(*presentation.autonomousUnit, presentation.title);
                 return;
             }
             break;
@@ -136,7 +147,8 @@ void InGamePresentationCoordinator::applyLeftPanelPresentation(
                                             config,
                                             presentation.allowProduce,
                                             presentation.allowCancelConstruction,
-                                            presentation.pendingProduce);
+                                            presentation.pendingProduce,
+                                            presentation.title);
                 return;
             }
             break;
@@ -146,21 +158,22 @@ void InGamePresentationCoordinator::applyLeftPanelPresentation(
                 uiManager.showBuildingPanel(*presentation.building,
                                             presentation.allowCancelConstruction,
                                             presentation.resourceIncome,
-                                            presentation.publicOccupation);
+                                            presentation.publicOccupation,
+                                            presentation.title);
                 return;
             }
             break;
 
         case FrontendLeftPanelKind::MapObject:
             if (presentation.mapObject != nullptr) {
-                uiManager.showMapObjectPanel(*presentation.mapObject);
+                uiManager.showMapObjectPanel(*presentation.mapObject, presentation.title);
                 return;
             }
             break;
 
         case FrontendLeftPanelKind::Cell:
             if (presentation.cell != nullptr) {
-                uiManager.showCellPanel(*presentation.cell);
+                uiManager.showCellPanel(*presentation.cell, presentation.title);
                 return;
             }
             break;

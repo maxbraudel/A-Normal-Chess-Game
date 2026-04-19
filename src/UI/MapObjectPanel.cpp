@@ -30,46 +30,40 @@ void MapObjectPanel::init(const tgui::Panel::Ptr& parent) {
     HUDLayout::styleEmbeddedPanel(m_panel);
     parent->add(m_panel);
 
-    auto titleLabel = tgui::Label::create("Map Object");
-    titleLabel->setPosition({10, 10});
-    HUDLayout::styleSidebarTitle(titleLabel);
-    m_panel->add(titleLabel);
+    m_titleLabel = tgui::Label::create("");
+    HUDLayout::placeSidebarPanelTitle(m_titleLabel);
+    m_panel->add(m_titleLabel);
 
     m_typeLabel = tgui::Label::create("Type: Chest");
-    m_typeLabel->setPosition({10, 54});
-    m_typeLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_typeLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_typeLabel, 0);
     m_panel->add(m_typeLabel);
 
     m_positionLabel = tgui::Label::create("Cell: 0, 0");
-    m_positionLabel->setPosition({10, 84});
-    m_positionLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_positionLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_positionLabel, 1);
     m_panel->add(m_positionLabel);
 
     m_statusLabel = tgui::Label::create("Status: Closed chest");
-    m_statusLabel->setPosition({10, 114});
-    m_statusLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_statusLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_statusLabel, 2);
     m_panel->add(m_statusLabel);
 
     m_hintLabel = tgui::Label::create("");
-    m_hintLabel->setPosition({10, 150});
-    m_hintLabel->setSize({316, 96});
-    m_hintLabel->setAutoSize(false);
-    m_hintLabel->setTextSize(14);
-    m_hintLabel->getRenderer()->setTextColor(tgui::Color(220, 220, 220));
+    m_hintLabel->setPosition({HUDLayout::kSidebarPanelInset, 146});
+    m_hintLabel->setSize({HUDLayout::kSidebarPanelBodyWidth, 96});
+    HUDLayout::styleSidebarHint(m_hintLabel);
     m_panel->add(m_hintLabel);
 
     m_panel->setVisible(false);
 }
 
-void MapObjectPanel::show(const MapObject& object) {
+void MapObjectPanel::show(const MapObject& object, const std::string& title) {
     if (!m_panel) {
         return;
     }
 
     m_panel->moveToFront();
+    if (m_titleLabel) {
+        m_titleLabel->setText(title);
+    }
     m_typeLabel->setText(std::string{"Type: "} + mapObjectTypeLabel(object.type));
     m_positionLabel->setText(
         "Cell: " + std::to_string(object.position.x) + ", " + std::to_string(object.position.y));

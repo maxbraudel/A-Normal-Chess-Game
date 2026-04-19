@@ -28,6 +28,7 @@ class GameConfig;
 class GameEngine;
 class Kingdom;
 class Piece;
+struct AutonomousUnit;
 class MapObject;
 struct TurnCommand;
 class TurnSystem;
@@ -79,6 +80,7 @@ struct FrontendPanelBindings {
     const TurnSystem& turnSystem;
     const GameConfig& config;
     const Piece* selectedPiece = nullptr;
+    const AutonomousUnit* selectedAutonomousUnit = nullptr;
     const Building* selectedBuilding = nullptr;
     const MapObject* selectedMapObject = nullptr;
     const Cell* selectedCell = nullptr;
@@ -87,6 +89,7 @@ struct FrontendPanelBindings {
 enum class FrontendLeftPanelKind {
     EmptyState,
     Piece,
+    AutonomousUnit,
     Building,
     Barracks,
     BuildTool,
@@ -96,7 +99,9 @@ enum class FrontendLeftPanelKind {
 
 struct FrontendLeftPanelPresentation {
     FrontendLeftPanelKind kind = FrontendLeftPanelKind::EmptyState;
+    std::string title;
     const Piece* piece = nullptr;
+    const AutonomousUnit* autonomousUnit = nullptr;
     const Building* building = nullptr;
     const MapObject* mapObject = nullptr;
     const Cell* cell = nullptr;
@@ -115,6 +120,7 @@ struct FrontendLeftPanelPresentation {
 
 class FrontendCoordinator {
 public:
+    static std::string leftPanelTitle(FrontendLeftPanelKind kind);
     static bool isLocalPlayerTurn(const FrontendRuntimeState& state);
     static KingdomId localPerspectiveKingdom(const FrontendRuntimeState& state);
     static bool isMultiplayerSessionReady(const FrontendRuntimeState& state);

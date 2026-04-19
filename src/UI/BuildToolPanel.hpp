@@ -2,6 +2,7 @@
 #include <TGUI/Backend/SFML-Graphics.hpp>
 #include <TGUI/AllWidgets.hpp>
 #include <functional>
+#include <string>
 #include <vector>
 
 #include "Buildings/BuildingType.hpp"
@@ -12,7 +13,7 @@ class GameConfig;
 class BuildToolPanel {
 public:
     void init(const tgui::Panel::Ptr& parent);
-    void show(const Kingdom& kingdom, const GameConfig& config, bool allowBuild);
+    void show(const Kingdom& kingdom, const GameConfig& config, bool allowBuild, const std::string& title = "");
     void hide();
     void setSelectedBuildType(BuildingType type);
 
@@ -25,6 +26,8 @@ private:
     };
 
     tgui::Panel::Ptr m_panel;
+    tgui::Label::Ptr m_titleLabel;
+    tgui::Label::Ptr m_descriptionLabel;
     std::vector<BuildOptionWidgets> m_options;
     BuildingType m_selectedType = BuildingType::Barracks;
     std::function<void(int)> m_onSelectBuildType;

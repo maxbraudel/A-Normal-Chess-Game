@@ -14,6 +14,7 @@ class GameConfig;
 class GameEngine;
 class Kingdom;
 class MapObject;
+struct AutonomousUnit;
 class UIManager;
 class TurnSystem;
 
@@ -34,6 +35,7 @@ struct InGamePresentationState {
     ToolState activeTool = ToolState::Select;
     bool overviewVisible = false;
     const Piece* selectedPiece = nullptr;
+    const AutonomousUnit* selectedAutonomousUnit = nullptr;
     const Building* selectedBuilding = nullptr;
     const MapObject* selectedMapObject = nullptr;
     const Cell* selectedCell = nullptr;

@@ -1,5 +1,6 @@
 #include "UI/UIManager.hpp"
 #include "Assets/AssetManager.hpp"
+#include "Autonomous/AutonomousUnit.hpp"
 #include "Board/Cell.hpp"
 #include "Units/Piece.hpp"
 #include "Buildings/Building.hpp"
@@ -45,7 +46,7 @@ void UIManager::init(tgui::Gui& gui, const AssetManager& assets) {
     HUDLayout::styleSidebarTitle(m_leftContextTitle);
     m_leftEmptyState->add(m_leftContextTitle);
 
-    m_leftContextHint = tgui::Label::create("Select a piece or building.");
+    m_leftContextHint = tgui::Label::create("Select a piece, infernal, building, or map object.");
     m_leftContextHint->setPosition({10, 48});
     m_leftContextHint->setSize({316, 120});
     m_leftContextHint->setAutoSize(false);
@@ -73,6 +74,7 @@ void UIManager::init(tgui::Gui& gui, const AssetManager& assets) {
     HUDLayout::styleSidebarSection(m_rightBalanceSection);
     m_rightSidebar->add(m_rightBalanceSection);
 
+    m_autonomousUnitPanel.init(m_leftSidebar);
     m_piecePanel.init(m_leftSidebar);
     m_buildingPanel.init(m_leftSidebar);
     m_barracksPanel.init(m_leftSidebar);
@@ -226,40 +228,51 @@ void UIManager::showPiecePanel(const Piece& piece,
                                bool allowUpgrade,
                                bool allowDisband,
                                const TurnCommand* pendingUpgrade,
-                               const TurnCommand* pendingDisband) {
+                               const TurnCommand* pendingDisband,
+                               const std::string& title) {
     activateLeftContext(LeftContextView::Piece);
-    m_piecePanel.show(piece, config, allowUpgrade, allowDisband, pendingUpgrade, pendingDisband);
+    m_piecePanel.show(piece, config, allowUpgrade, allowDisband, pendingUpgrade, pendingDisband, title);
+}
+
+void UIManager::showAutonomousUnitPanel(const AutonomousUnit& unit, const std::string& title) {
+    activateLeftContext(LeftContextView::AutonomousUnit);
+    m_autonomousUnitPanel.show(unit, title);
 }
 
 void UIManager::showBuildingPanel(const Building& building,
                                   bool allowCancelConstruction,
                                   const std::optional<ResourceIncomeBreakdown>& resourceIncome,
-                                  const std::optional<PublicBuildingOccupationState>& publicOccupation) {
+                                  const std::optional<PublicBuildingOccupationState>& publicOccupation,
+                                  const std::string& title) {
     activateLeftContext(LeftContextView::Building);
-    m_buildingPanel.show(building, allowCancelConstruction, resourceIncome, publicOccupation);
+    m_buildingPanel.show(building, allowCancelConstruction, resourceIncome, publicOccupation, title);
 }
 
 void UIManager::showBarracksPanel(const Building& barracks, const Kingdom& kingdom, const GameConfig& config,
                                   bool allowProduce,
                                   bool allowCancelConstruction,
-                                  const TurnCommand* pendingProduce) {
+                                  const TurnCommand* pendingProduce,
+                                  const std::string& title) {
     activateLeftContext(LeftContextView::Barracks);
-    m_barracksPanel.show(barracks, kingdom, config, allowProduce, allowCancelConstruction, pendingProduce);
+    m_barracksPanel.show(barracks, kingdom, config, allowProduce, allowCancelConstruction, pendingProduce, title);
 }
 
-void UIManager::showBuildToolPanel(const Kingdom& kingdom, const GameConfig& config, bool allowBuild) {
+void UIManager::showBuildToolPanel(const Kingdom& kingdom,
+                                   const GameConfig& config,
+                                   bool allowBuild,
+                                   const std::string& title) {
     activateLeftContext(LeftContextView::BuildTool);
-    m_buildToolPanel.show(kingdom, config, allowBuild);
+    m_buildToolPanel.show(kingdom, config, allowBuild, title);
 }
 
-void UIManager::showMapObjectPanel(const MapObject& object) {
+void UIManager::showMapObjectPanel(const MapObject& object, const std::string& title) {
     activateLeftContext(LeftContextView::MapObject);
-    m_mapObjectPanel.show(object);
+    m_mapObjectPanel.show(object, title);
 }
 
-void UIManager::showCellPanel(const Cell& cell) {
+void UIManager::showCellPanel(const Cell& cell, const std::string& title) {
     activateLeftContext(LeftContextView::Cell);
-    m_cellPanel.show(cell);
+    m_cellPanel.show(cell, title);
 }
 
 void UIManager::showSelectionEmptyState() {
@@ -492,6 +505,7 @@ void UIManager::activateLeftContext(LeftContextView view) {
 }
 
 void UIManager::hideLeftContextPanels() {
+    m_autonomousUnitPanel.hide();
     m_piecePanel.hide();
     m_buildingPanel.hide();
     m_barracksPanel.hide();

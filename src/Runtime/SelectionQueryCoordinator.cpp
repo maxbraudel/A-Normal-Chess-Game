@@ -33,6 +33,27 @@ Piece* SelectionQueryCoordinator::findPieceById(const SelectionQueryView& view, 
     return nullptr;
 }
 
+AutonomousUnit* SelectionQueryCoordinator::findAutonomousUnitById(const SelectionQueryView& view,
+                                                                  int autonomousUnitId) {
+    if (autonomousUnitId < 0) {
+        return nullptr;
+    }
+
+    for (AutonomousUnit& autonomousUnit : view.autonomousUnits) {
+        if (autonomousUnit.id == autonomousUnitId) {
+            return &autonomousUnit;
+        }
+    }
+
+    return nullptr;
+}
+
+AutonomousUnit* SelectionQueryCoordinator::findAutonomousUnitForBookmark(
+    const SelectionQueryView& view,
+    const InputSelectionBookmark& bookmark) {
+    return findAutonomousUnitById(view, bookmark.autonomousUnitId);
+}
+
 Building* SelectionQueryCoordinator::findBuildingById(const SelectionQueryView& view, int buildingId) {
     if (buildingId < 0) {
         return nullptr;

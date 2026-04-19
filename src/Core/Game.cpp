@@ -467,7 +467,12 @@ InputContext Game::buildInputContext(const InteractionPermissions& permissions) 
 }
 
 SelectionQueryView Game::makeSelectionQueryView() {
-    return SelectionQueryView{displayedKingdoms(), displayedPublicBuildings(), displayedMapObjects()};
+    return SelectionQueryView{
+        displayedKingdoms(),
+        displayedPublicBuildings(),
+        displayedMapObjects(),
+        displayedAutonomousUnits()
+    };
 }
 
 InputSelectionBookmark Game::captureSelectionBookmark() const {
@@ -522,6 +527,23 @@ Piece* Game::selectedDisplayedPiece() {
     return piece;
 }
 
+AutonomousUnit* Game::selectedDisplayedAutonomousUnit() {
+    AutonomousUnit* autonomousUnit = SelectionQueryCoordinator::findAutonomousUnitById(
+        makeSelectionQueryView(),
+        m_input.getSelectedAutonomousUnitId());
+    if (!autonomousUnit) {
+        return nullptr;
+    }
+
+    ensureWeatherMaskUpToDate();
+    if (WeatherVisibility::shouldHideAutonomousUnit(*autonomousUnit,
+                                                    m_engine.weatherMaskCache())) {
+        return nullptr;
+    }
+
+    return autonomousUnit;
+}
+
 Building* Game::selectedDisplayedBuilding() {
     Building* building = SelectionQueryCoordinator::findBuildingById(makeSelectionQueryView(),
                                                                      m_input.getSelectedBuildingId());
@@ -564,6 +586,16 @@ void Game::reconcileSelectionBookmark(const InputSelectionBookmark& bookmark) {
         }
     }
 
+    AutonomousUnit* bookmarkedAutonomousUnit =
+        SelectionQueryCoordinator::findAutonomousUnitForBookmark(queryView, bookmark);
+    if (bookmarkedAutonomousUnit != nullptr) {
+        ensureWeatherMaskUpToDate();
+        if (WeatherVisibility::shouldHideAutonomousUnit(*bookmarkedAutonomousUnit,
+                                                        m_engine.weatherMaskCache())) {
+            bookmarkedAutonomousUnit = nullptr;
+        }
+    }
+
     Building* bookmarkedBuilding = SelectionQueryCoordinator::findBuildingForBookmark(queryView, bookmark);
     if (bookmarkedBuilding != nullptr && bookmark.selectedCell.has_value()) {
         ensureWeatherMaskUpToDate();
@@ -578,6 +610,7 @@ void Game::reconcileSelectionBookmark(const InputSelectionBookmark& bookmark) {
 
     m_input.reconcileSelection(bookmark,
                                bookmarkedPiece,
+                               bookmarkedAutonomousUnit,
                                bookmarkedBuilding,
                                SelectionQueryCoordinator::findMapObjectForBookmark(queryView, bookmark),
                                inputContext);
@@ -1144,6 +1177,7 @@ void Game::updateUIState() {
             m_input.getCurrentTool(),
             m_uiManager.isRightSidebarVisible(),
             selectedDisplayedPiece(),
+            selectedDisplayedAutonomousUnit(),
             selectedDisplayedBuilding(),
             selectedDisplayedMapObject(),
             selectedCell

@@ -5,6 +5,7 @@
 #include <functional>
 
 #include <optional>
+#include <string>
 
 #include "Systems/EconomySystem.hpp"
 #include "Systems/PublicBuildingOccupation.hpp"
@@ -17,13 +18,15 @@ public:
     void show(const Building& building,
               bool allowCancelConstruction,
               const std::optional<ResourceIncomeBreakdown>& resourceIncome = std::nullopt,
-              const std::optional<PublicBuildingOccupationState>& publicOccupation = std::nullopt);
+              const std::optional<PublicBuildingOccupationState>& publicOccupation = std::nullopt,
+              const std::string& title = "");
     void hide();
 
     void setOnCancelConstruction(std::function<void(int buildingId)> callback);
 
 private:
     tgui::Panel::Ptr m_panel;
+    tgui::Label::Ptr m_titleLabel;
     tgui::Label::Ptr m_ownerLabel;
     tgui::Label::Ptr m_cellsLabel;
     tgui::Label::Ptr m_typeLabel;

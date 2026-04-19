@@ -41,6 +41,12 @@ inline constexpr float kEventLogTurnColumnWidth = 56.f;
 inline constexpr float kEventLogKingdomColumnWidth = 136.f;
 inline constexpr float kSidebarInnerMargin = 12.f;
 inline constexpr float kSidebarSectionGap = 12.f;
+inline constexpr float kSidebarPanelInset = 10.f;
+inline constexpr float kSidebarPanelTitleY = 10.f;
+inline constexpr float kSidebarPanelBodyWidth = 316.f;
+inline constexpr float kSidebarPanelBodyHeight = 22.f;
+inline constexpr float kSidebarPanelFirstRowY = 50.f;
+inline constexpr float kSidebarPanelRowGap = 30.f;
 
 inline std::string asLayoutValue(float value) {
     std::ostringstream stream;
@@ -296,6 +302,29 @@ inline void styleSidebarBody(const tgui::Label::Ptr& label, unsigned int textSiz
     label->setTextSize(textSize);
     label->setAutoSize(false);
     label->getRenderer()->setTextColor(tgui::Color(230, 230, 230));
+}
+
+inline float sidebarPanelRowY(int rowIndex) {
+    return kSidebarPanelFirstRowY + (kSidebarPanelRowGap * static_cast<float>(rowIndex));
+}
+
+inline void placeSidebarPanelTitle(const tgui::Label::Ptr& label) {
+    label->setPosition({kSidebarPanelInset, kSidebarPanelTitleY});
+    styleSidebarTitle(label);
+}
+
+inline void placeSidebarPanelBodyLabel(const tgui::Label::Ptr& label,
+                                       int rowIndex,
+                                       unsigned int textSize = 14) {
+    label->setPosition({kSidebarPanelInset, sidebarPanelRowY(rowIndex)});
+    label->setSize({kSidebarPanelBodyWidth, kSidebarPanelBodyHeight});
+    styleSidebarBody(label, textSize);
+}
+
+inline void styleSidebarHint(const tgui::Label::Ptr& label, unsigned int textSize = 14) {
+    label->setAutoSize(false);
+    label->setTextSize(textSize);
+    label->getRenderer()->setTextColor(tgui::Color(220, 220, 220));
 }
 
 } // namespace HUDLayout

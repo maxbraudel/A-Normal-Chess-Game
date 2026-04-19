@@ -129,6 +129,7 @@ private:
     void reconcileSelectionBookmark(const InputSelectionBookmark& bookmark);
     void showGameplayNotification(const GameplayNotification& notification);
     Piece* selectedDisplayedPiece();
+    AutonomousUnit* selectedDisplayedAutonomousUnit();
     Building* selectedDisplayedBuilding();
     MapObject* selectedDisplayedMapObject();
     void activateSelectTool();

@@ -2,6 +2,7 @@
 #include <TGUI/Backend/SFML-Graphics.hpp>
 #include <TGUI/AllWidgets.hpp>
 #include <functional>
+#include <string>
 
 struct TurnCommand;
 
@@ -16,7 +17,8 @@ public:
               bool allowUpgrade,
               bool allowDisband,
               const TurnCommand* pendingUpgrade = nullptr,
-              const TurnCommand* pendingDisband = nullptr);
+              const TurnCommand* pendingDisband = nullptr,
+              const std::string& title = "");
     void hide();
 
     void setOnUpgrade(std::function<void(int pieceId, int targetType)> callback);
@@ -24,6 +26,7 @@ public:
 
 private:
     tgui::Panel::Ptr m_panel;
+    tgui::Label::Ptr m_titleLabel;
     tgui::Label::Ptr m_ownerLabel;
     tgui::Label::Ptr m_positionLabel;
     tgui::Label::Ptr m_typeLabel;

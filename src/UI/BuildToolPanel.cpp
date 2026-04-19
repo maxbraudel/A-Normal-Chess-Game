@@ -33,18 +33,15 @@ void BuildToolPanel::init(const tgui::Panel::Ptr& parent) {
     HUDLayout::styleEmbeddedPanel(m_panel);
     parent->add(m_panel);
 
-    auto titleLabel = tgui::Label::create("Construction");
-    titleLabel->setPosition({10, 5});
-    HUDLayout::styleSidebarTitle(titleLabel);
-    m_panel->add(titleLabel);
+    m_titleLabel = tgui::Label::create("");
+    HUDLayout::placeSidebarPanelTitle(m_titleLabel);
+    m_panel->add(m_titleLabel);
 
-    auto descriptionLabel = tgui::Label::create("Choose a building for the current turn.");
-    descriptionLabel->setPosition({10, 32});
-    descriptionLabel->setSize({316, 36});
-    descriptionLabel->setAutoSize(false);
-    descriptionLabel->setTextSize(13);
-    descriptionLabel->getRenderer()->setTextColor(tgui::Color(210, 210, 210));
-    m_panel->add(descriptionLabel);
+    m_descriptionLabel = tgui::Label::create("Choose a building for the current turn.");
+    m_descriptionLabel->setPosition({HUDLayout::kSidebarPanelInset, 42});
+    m_descriptionLabel->setSize({HUDLayout::kSidebarPanelBodyWidth, 36});
+    HUDLayout::styleSidebarHint(m_descriptionLabel, 13);
+    m_panel->add(m_descriptionLabel);
 
     const std::vector<BuildingType> options = {
         BuildingType::Barracks,
@@ -72,12 +69,18 @@ void BuildToolPanel::init(const tgui::Panel::Ptr& parent) {
     m_panel->setVisible(false);
 }
 
-void BuildToolPanel::show(const Kingdom& kingdom, const GameConfig& config, bool allowBuild) {
+void BuildToolPanel::show(const Kingdom& kingdom,
+                         const GameConfig& config,
+                         bool allowBuild,
+                         const std::string& title) {
     if (!m_panel) {
         return;
     }
 
     m_panel->moveToFront();
+    if (m_titleLabel) {
+        m_titleLabel->setText(title);
+    }
 
     for (auto& option : m_options) {
         const int cost = buildingCost(option.type, config);

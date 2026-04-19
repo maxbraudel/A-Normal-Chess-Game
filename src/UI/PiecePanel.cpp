@@ -36,51 +36,36 @@ void PiecePanel::init(const tgui::Panel::Ptr& parent) {
     HUDLayout::styleEmbeddedPanel(m_panel);
     parent->add(m_panel);
 
-    auto titleLabel = tgui::Label::create("Selection");
-    titleLabel->setPosition({10, 10});
-    HUDLayout::styleSidebarTitle(titleLabel);
-    m_panel->add(titleLabel);
+    m_titleLabel = tgui::Label::create("");
+    HUDLayout::placeSidebarPanelTitle(m_titleLabel);
+    m_panel->add(m_titleLabel);
 
     m_ownerLabel = tgui::Label::create("Owner: White Kingdom");
-    m_ownerLabel->setPosition({10, 50});
-    m_ownerLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_ownerLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_ownerLabel, 0);
     m_panel->add(m_ownerLabel);
 
     m_positionLabel = tgui::Label::create("Cell: 0, 0");
-    m_positionLabel->setPosition({10, 80});
-    m_positionLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_positionLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_positionLabel, 1);
     m_panel->add(m_positionLabel);
 
     m_typeLabel = tgui::Label::create("Type: ");
-    m_typeLabel->setPosition({10, 110});
-    m_typeLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_typeLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_typeLabel, 2);
     m_panel->add(m_typeLabel);
 
     m_xpLabel = tgui::Label::create("XP: 0");
-    m_xpLabel->setPosition({10, 140});
-    m_xpLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_xpLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_xpLabel, 3);
     m_panel->add(m_xpLabel);
 
     m_levelLabel = tgui::Label::create("Level: 1");
-    m_levelLabel->setPosition({10, 170});
-    m_levelLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_levelLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_levelLabel, 4);
     m_panel->add(m_levelLabel);
 
     m_moveCostLabel = tgui::Label::create("Movement Cost: 0 points");
-    m_moveCostLabel->setPosition({10, 200});
-    m_moveCostLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_moveCostLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_moveCostLabel, 5);
     m_panel->add(m_moveCostLabel);
 
     m_upkeepLabel = tgui::Label::create("Upkeep: 0 gold/turn");
-    m_upkeepLabel->setPosition({10, 230});
-    m_upkeepLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_upkeepLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_upkeepLabel, 6);
     m_panel->add(m_upkeepLabel);
 
     m_primaryUpgradeBtn = tgui::Button::create("Upgrade");
@@ -121,9 +106,13 @@ void PiecePanel::show(const Piece& piece,
                       bool allowUpgrade,
                       bool allowDisband,
                       const TurnCommand* pendingUpgrade,
-                      const TurnCommand* pendingDisband) {
+                      const TurnCommand* pendingDisband,
+                      const std::string& title) {
     if (!m_panel) return;
     m_panel->moveToFront();
+    if (m_titleLabel) {
+        m_titleLabel->setText(title);
+    }
     m_currentPieceId = piece.id;
     m_ownerLabel->setText("Owner: " + kingdomLabel(piece.kingdom));
     m_positionLabel->setText("Cell: " + std::to_string(piece.position.x) + ", "

@@ -46,39 +46,28 @@ void BuildingPanel::init(const tgui::Panel::Ptr& parent) {
     HUDLayout::styleEmbeddedPanel(m_panel);
     parent->add(m_panel);
 
-    auto titleLabel = tgui::Label::create("Selection");
-    titleLabel->setPosition({10, 10});
-    HUDLayout::styleSidebarTitle(titleLabel);
-    m_panel->add(titleLabel);
+    m_titleLabel = tgui::Label::create("");
+    HUDLayout::placeSidebarPanelTitle(m_titleLabel);
+    m_panel->add(m_titleLabel);
 
     m_typeLabel = tgui::Label::create("Type: ");
-    m_typeLabel->setPosition({10, 50});
-    m_typeLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_typeLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_typeLabel, 0);
     m_panel->add(m_typeLabel);
 
     m_ownerLabel = tgui::Label::create("Owner: White Kingdom");
-    m_ownerLabel->setPosition({10, 80});
-    m_ownerLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_ownerLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_ownerLabel, 1);
     m_panel->add(m_ownerLabel);
 
     m_cellsLabel = tgui::Label::create("Occupied Cells: 0");
-    m_cellsLabel->setPosition({10, 110});
-    m_cellsLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_cellsLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_cellsLabel, 2);
     m_panel->add(m_cellsLabel);
 
     m_hpLabel = tgui::Label::create("HP: ");
-    m_hpLabel->setPosition({10, 140});
-    m_hpLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_hpLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_hpLabel, 3);
     m_panel->add(m_hpLabel);
 
     m_statusLabel = tgui::Label::create("Status: Completed");
-    m_statusLabel->setPosition({10, 170});
-    m_statusLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_statusLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_statusLabel, 4);
     m_panel->add(m_statusLabel);
 
     m_cancelConstructionBtn = tgui::Button::create("Cancel Construction");
@@ -119,9 +108,13 @@ void BuildingPanel::init(const tgui::Panel::Ptr& parent) {
 void BuildingPanel::show(const Building& building,
                          bool allowCancelConstruction,
                          const std::optional<ResourceIncomeBreakdown>& resourceIncome,
-                         const std::optional<PublicBuildingOccupationState>& publicOccupation) {
+                         const std::optional<PublicBuildingOccupationState>& publicOccupation,
+                         const std::string& title) {
     if (!m_panel) return;
     m_panel->moveToFront();
+    if (m_titleLabel) {
+        m_titleLabel->setText(title);
+    }
     m_currentBuildingId = building.id;
     m_typeLabel->setText("Type: " + buildingTypeName(building.type));
     const std::string ownerLabel = building.isPublic()

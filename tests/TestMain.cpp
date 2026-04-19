@@ -885,6 +885,54 @@ void testInputHandlerReconcileSelectionRestoresAutonomousSelection() {
         "Autonomous selections should keep the selected cell populated so the normal board selection frame can render.");
 }
 
+void testInputHandlerReconcileSelectionFollowsResolvedAutonomousUnitPosition() {
+    GameConfig config;
+    Board board;
+    board.init(12);
+
+    Kingdom white(KingdomId::White);
+    Kingdom black(KingdomId::Black);
+    addPieceToBoard(white, board, 1105, PieceType::King, KingdomId::White, {4, 4});
+    addPieceToBoard(black, board, 2105, PieceType::King, KingdomId::Black, {9, 9});
+
+    std::vector<AutonomousUnit> autonomousUnits;
+    autonomousUnits.push_back(makeTestInfernalUnit(5105, KingdomId::White, {7, 8}));
+    board.getCell(7, 8).autonomousUnit = &autonomousUnits.front();
+
+    TurnSystem turnSystem;
+    turnSystem.setActiveKingdom(KingdomId::White);
+    turnSystem.setTurnNumber(2);
+    BuildingFactory buildingFactory;
+    std::vector<Building> publicBuildings;
+    sf::RenderWindow window;
+    Camera camera;
+    UIManager uiManager;
+    InputContext context = makePassiveInputContext(window,
+                                                   camera,
+                                                   board,
+                                                   turnSystem,
+                                                   buildingFactory,
+                                                   white,
+                                                   black,
+                                                   publicBuildings,
+                                                   uiManager,
+                                                   config);
+    context.permissions.canIssueCommands = false;
+
+    InputSelectionBookmark bookmark;
+    bookmark.selectedCell = sf::Vector2i{6, 6};
+    bookmark.autonomousUnitId = 5105;
+
+    InputHandler input;
+    input.reconcileSelection(bookmark, nullptr, &autonomousUnits.front(), nullptr, nullptr, context);
+
+    const InputSelectionBookmark restoredBookmark = input.createSelectionBookmark();
+    expect(restoredBookmark.autonomousUnitId == 5105,
+        "InputHandler should keep autonomous selections attached to the same infernal id during reconciliation.");
+    expect(restoredBookmark.selectedCell.has_value() && *restoredBookmark.selectedCell == sf::Vector2i{7, 8},
+        "InputHandler should move the selected autonomous anchor to the infernal's resolved position when the bookmarked cell is stale.");
+}
+
 void testInputHandlerReconcileSelectionDoesNotJumpToMismatchedPieceElsewhere() {
     GameConfig config;
     Board initialBoard;
@@ -2895,12 +2943,124 @@ void testSessionValidatorRejectsInvalidOrdering() {
 
         expect(panelPresentation.kind == FrontendLeftPanelKind::Piece,
             "FrontendCoordinator should route a selected piece to the piece panel presentation.");
+        expect(panelPresentation.title == "Piece",
+            "FrontendCoordinator should expose a coherent piece-facing title instead of the generic Selection title.");
         expect(panelPresentation.piece == &selectedPiece,
             "FrontendCoordinator should preserve the selected piece pointer in the panel presentation.");
         expect(panelPresentation.allowUpgrade,
             "FrontendCoordinator should allow upgrades on a locally controlled selected piece when actions are unlocked.");
         expect(panelPresentation.allowDisband,
             "FrontendCoordinator should allow disband on a locally controlled non-king piece when no conflicting action is queued.");
+    }
+
+    void testFrontendCoordinatorRoutesAutonomousSelectionToAutonomousPanel() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+        turnSystem.setTurnNumber(1);
+
+        FrontendRuntimeState state;
+        state.gameState = GameState::Playing;
+        state.localPlayerContext.mode = LocalSessionMode::SingleLocalPlayer;
+        state.localPlayerContext.controlledKingdom = KingdomId::White;
+        state.activeKingdom = KingdomId::White;
+
+        InteractionPermissions permissions;
+        permissions.canIssueCommands = true;
+        permissions.canQueueNonMoveActions = true;
+
+        AutonomousUnit autonomousUnit = makeTestInfernalUnit(5550, KingdomId::Black, {5, 7}, PieceType::Bishop);
+        const FrontendPanelBindings panelBindings{
+            ToolState::Select,
+            board,
+            turnSystem,
+            config,
+            nullptr,
+            &autonomousUnit,
+            nullptr,
+            nullptr,
+            nullptr
+        };
+
+        const FrontendLeftPanelPresentation panelPresentation =
+            FrontendCoordinator::buildLeftPanelPresentation(state, panelBindings, permissions);
+
+        expect(panelPresentation.kind == FrontendLeftPanelKind::AutonomousUnit,
+            "FrontendCoordinator should route selected infernals to the autonomous-unit panel presentation.");
+        expect(panelPresentation.title == "Piece",
+            "FrontendCoordinator should expose infernals under the same piece title family as normal pieces.");
+        expect(panelPresentation.autonomousUnit == &autonomousUnit,
+            "FrontendCoordinator should preserve the selected autonomous-unit pointer in the panel presentation.");
+    }
+
+    void testFrontendCoordinatorUsesCoherentBuildingAndCellTitles() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+        turnSystem.setTurnNumber(1);
+
+        FrontendRuntimeState state;
+        state.gameState = GameState::Playing;
+        state.localPlayerContext.mode = LocalSessionMode::SingleLocalPlayer;
+        state.localPlayerContext.controlledKingdom = KingdomId::White;
+        state.activeKingdom = KingdomId::White;
+
+        InteractionPermissions permissions;
+        permissions.canIssueCommands = true;
+        permissions.canQueueNonMoveActions = true;
+
+        Building building;
+        building.id = 701;
+        building.type = BuildingType::Mine;
+        building.owner = KingdomId::White;
+        building.origin = {4, 5};
+        building.width = 2;
+        building.height = 2;
+        building.cellHP.assign(4, 1);
+        building.cellBreachState.assign(4, 0);
+
+        const FrontendPanelBindings buildingBindings{
+            ToolState::Select,
+            board,
+            turnSystem,
+            config,
+            nullptr,
+            nullptr,
+            &building,
+            nullptr,
+            nullptr
+        };
+        const FrontendLeftPanelPresentation buildingPresentation =
+            FrontendCoordinator::buildLeftPanelPresentation(state, buildingBindings, permissions);
+        expect(buildingPresentation.kind == FrontendLeftPanelKind::Building,
+            "FrontendCoordinator should keep generic non-barracks structures on the building panel.");
+        expect(buildingPresentation.title == "Building",
+            "FrontendCoordinator should expose a concrete building title instead of the generic Selection heading.");
+
+        const Cell& selectedCell = board.getCell(5, 5);
+        const FrontendPanelBindings cellBindings{
+            ToolState::Select,
+            board,
+            turnSystem,
+            config,
+            nullptr,
+            nullptr,
+            nullptr,
+            nullptr,
+            &selectedCell
+        };
+        const FrontendLeftPanelPresentation cellPresentation =
+            FrontendCoordinator::buildLeftPanelPresentation(state, cellBindings, permissions);
+        expect(cellPresentation.kind == FrontendLeftPanelKind::Cell,
+            "FrontendCoordinator should still route terrain-only inspection to the cell panel.");
+        expect(cellPresentation.title == "Cell",
+            "FrontendCoordinator should preserve the stable cell title for terrain inspection.");
     }
 
     void testMultiplayerEventCoordinatorPlansAlertsAndDisconnects() {
@@ -3993,6 +4153,24 @@ void testSessionValidatorRejectsInvalidOrdering() {
             "SelectionQueryCoordinator should recover a building selection from bookmark metadata when the cached building id is stale.");
         expect(SelectionQueryCoordinator::findBuildingById(view, trackedBuilding.id) == &kingdoms[0].buildings.front(),
             "SelectionQueryCoordinator should still resolve displayed building selections directly by stable id.");
+    }
+
+    void testSelectionQueryCoordinatorResolvesAutonomousUnitById() {
+        std::array<Kingdom, kNumKingdoms> kingdoms{Kingdom(KingdomId::White), Kingdom(KingdomId::Black)};
+        std::vector<Building> publicBuildings;
+        std::vector<MapObject> mapObjects;
+        std::vector<AutonomousUnit> autonomousUnits;
+        autonomousUnits.push_back(makeTestInfernalUnit(5441, KingdomId::Black, {8, 6}, PieceType::Rook));
+
+        InputSelectionBookmark bookmark;
+        bookmark.autonomousUnitId = 5441;
+        bookmark.selectedCell = sf::Vector2i{8, 6};
+
+        const SelectionQueryView view{kingdoms, publicBuildings, mapObjects, autonomousUnits};
+        expect(SelectionQueryCoordinator::findAutonomousUnitById(view, 5441) == &autonomousUnits.front(),
+            "SelectionQueryCoordinator should resolve displayed autonomous selections by stable id.");
+        expect(SelectionQueryCoordinator::findAutonomousUnitForBookmark(view, bookmark) == &autonomousUnits.front(),
+            "SelectionQueryCoordinator should reuse the autonomous selection id stored in selection bookmarks.");
     }
 
 void testGameEngineRestoresFactoryIds() {
@@ -8315,6 +8493,7 @@ int main() {
         {"session flow roundtrip", testSessionFlowStartsSavesAndLoadsSession},
         {"session runtime coordinator flow", testSessionRuntimeCoordinatorAppliesSessionEntryAndMainMenuTransitions},
         {"selection query coordinator bookmark fallback", testSelectionQueryCoordinatorResolvesBookmarkFallback},
+        {"selection query coordinator autonomous id", testSelectionQueryCoordinatorResolvesAutonomousUnitById},
         {"ui callback coordinator guards", testUICallbackCoordinatorGuardsHudAndToolbarActions},
         {"frontend coordinator hud and waiting lock", testFrontendCoordinatorBuildsHudAndLocksWaitingTurns},
         {"interactive permissions cache reuse", testInteractivePermissionsCacheReusesMatchingRuntimeState},
@@ -8322,6 +8501,8 @@ int main() {
         {"pending turn validation cache reuse", testPendingTurnValidationCacheReusesMatchingTurnState},
         {"pending turn validation cache invalidation", testPendingTurnValidationCacheInvalidatesOnKeyChangesAndManualReset},
         {"frontend coordinator dashboard and panel presentation", testFrontendCoordinatorBuildsProjectedDashboardAndPiecePanel},
+        {"frontend coordinator autonomous panel presentation", testFrontendCoordinatorRoutesAutonomousSelectionToAutonomousPanel},
+        {"frontend coordinator coherent building and cell titles", testFrontendCoordinatorUsesCoherentBuildingAndCellTitles},
         {"multiplayer event coordinator plans", testMultiplayerEventCoordinatorPlansAlertsAndDisconnects},
         {"multiplayer event coordinator snapshot notifications", testMultiplayerEventCoordinatorKeepsSnapshotNotifications},
         {"multiplayer event coordinator restore and cleanup", testMultiplayerEventCoordinatorRestoresSnapshotsAndClientState},
@@ -8375,6 +8556,7 @@ int main() {
         {"layered selection under construction building", testLayeredSelectionStackTreatsUnderConstructionBuildingAsNormalBuilding},
         {"input bookmarks active piece cell", testInputHandlerBookmarksActivePieceSelectionCell},
         {"input reconcile restores autonomous selection", testInputHandlerReconcileSelectionRestoresAutonomousSelection},
+        {"input reconcile follows resolved autonomous position", testInputHandlerReconcileSelectionFollowsResolvedAutonomousUnitPosition},
         {"input reconcile avoids distant piece jump", testInputHandlerReconcileSelectionDoesNotJumpToMismatchedPieceElsewhere},
         {"input reconcile fogged enemy piece", testInputHandlerReconcileSelectionDemotesFoggedEnemyPieceToTerrain},
         {"input reconcile prefers visible piece over pending override", testInputHandlerReconcileSelectionPrefersVisiblePieceOverPendingMoveOverride},

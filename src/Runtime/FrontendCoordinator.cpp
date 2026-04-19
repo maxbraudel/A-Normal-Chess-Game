@@ -1,5 +1,6 @@
 #include "Runtime/FrontendCoordinator.hpp"
 
+#include "Autonomous/AutonomousUnit.hpp"
 #include "Board/Board.hpp"
 #include "Core/GameEngine.hpp"
 #include "Buildings/Building.hpp"
@@ -189,6 +190,7 @@ FrontendLeftPanelPresentation FrontendCoordinator::buildLeftPanelPresentation(
                 presentation.kind = FrontendLeftPanelKind::BuildTool;
                 presentation.allowBuild = permissions.canQueueNonMoveActions;
             }
+            presentation.title = leftPanelTitle(presentation.kind);
             return presentation;
 
         case ToolState::Select:
@@ -211,6 +213,14 @@ FrontendLeftPanelPresentation FrontendCoordinator::buildLeftPanelPresentation(
             && (presentation.pendingDisband != nullptr
                 || (!bindings.turnSystem.hasPendingMoveForPiece(bindings.selectedPiece->id)
                     && presentation.pendingUpgrade == nullptr));
+        presentation.title = leftPanelTitle(presentation.kind);
+        return presentation;
+    }
+
+    if (bindings.selectedAutonomousUnit != nullptr) {
+        presentation.kind = FrontendLeftPanelKind::AutonomousUnit;
+        presentation.autonomousUnit = bindings.selectedAutonomousUnit;
+        presentation.title = leftPanelTitle(presentation.kind);
         return presentation;
     }
 
@@ -226,6 +236,7 @@ FrontendLeftPanelPresentation FrontendCoordinator::buildLeftPanelPresentation(
                 && !bindings.selectedBuilding->isUnderConstruction()
                 && bindings.selectedBuilding->owner == presentation.viewedKingdom;
             presentation.pendingProduce = bindings.turnSystem.getPendingProduceCommand(bindings.selectedBuilding->id);
+            presentation.title = leftPanelTitle(presentation.kind);
             return presentation;
         }
 
@@ -243,12 +254,14 @@ FrontendLeftPanelPresentation FrontendCoordinator::buildLeftPanelPresentation(
                 *bindings.selectedBuilding,
                 bindings.displayedBoard);
         }
+        presentation.title = leftPanelTitle(presentation.kind);
         return presentation;
     }
 
     if (bindings.selectedMapObject != nullptr) {
         presentation.kind = FrontendLeftPanelKind::MapObject;
         presentation.mapObject = bindings.selectedMapObject;
+        presentation.title = leftPanelTitle(presentation.kind);
         return presentation;
     }
 
@@ -257,7 +270,31 @@ FrontendLeftPanelPresentation FrontendCoordinator::buildLeftPanelPresentation(
         presentation.cell = bindings.selectedCell;
     }
 
+    presentation.title = leftPanelTitle(presentation.kind);
+
     return presentation;
+}
+
+std::string FrontendCoordinator::leftPanelTitle(FrontendLeftPanelKind kind) {
+    switch (kind) {
+        case FrontendLeftPanelKind::Piece:
+            return "Piece";
+        case FrontendLeftPanelKind::AutonomousUnit:
+            return "Piece";
+        case FrontendLeftPanelKind::Building:
+            return "Building";
+        case FrontendLeftPanelKind::Barracks:
+            return "Barracks";
+        case FrontendLeftPanelKind::BuildTool:
+            return "Construction";
+        case FrontendLeftPanelKind::MapObject:
+            return "Map Object";
+        case FrontendLeftPanelKind::Cell:
+            return "Cell";
+        case FrontendLeftPanelKind::EmptyState:
+        default:
+            return "Selection";
+    }
 }
 
 InputContext FrontendCoordinator::buildInputContext(FrontendRuntimeState state,

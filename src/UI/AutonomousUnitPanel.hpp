@@ -5,19 +5,21 @@
 
 #include <string>
 
-class MapObject;
+struct AutonomousUnit;
 
-class MapObjectPanel {
+class AutonomousUnitPanel {
 public:
     void init(const tgui::Panel::Ptr& parent);
-    void show(const MapObject& object, const std::string& title = "");
+    void show(const AutonomousUnit& unit, const std::string& title = "");
     void hide();
 
 private:
     tgui::Panel::Ptr m_panel;
     tgui::Label::Ptr m_titleLabel;
+    tgui::Label::Ptr m_ownerLabel;
     tgui::Label::Ptr m_typeLabel;
     tgui::Label::Ptr m_positionLabel;
-    tgui::Label::Ptr m_statusLabel;
+    tgui::Label::Ptr m_phaseLabel;
+    tgui::Label::Ptr m_manifestedTypeLabel;
     tgui::Label::Ptr m_hintLabel;
 };

@@ -2,6 +2,7 @@
 #include <TGUI/Backend/SFML-Graphics.hpp>
 #include <TGUI/AllWidgets.hpp>
 #include <functional>
+#include <string>
 
 struct TurnCommand;
 
@@ -15,7 +16,8 @@ public:
     void show(const Building& barracks, const Kingdom& kingdom, const GameConfig& config,
               bool allowProduce,
               bool allowCancelConstruction,
-              const TurnCommand* pendingProduce = nullptr);
+              const TurnCommand* pendingProduce = nullptr,
+              const std::string& title = "");
     void hide();
 
     void setOnProduce(std::function<void(int barracksId, int pieceType)> callback);
@@ -23,6 +25,7 @@ public:
 
 private:
     tgui::Panel::Ptr m_panel;
+    tgui::Label::Ptr m_titleLabel;
     tgui::Label::Ptr m_ownerLabel;
     tgui::Label::Ptr m_cellsLabel;
     tgui::Label::Ptr m_hpLabel;

@@ -79,38 +79,29 @@ void BarracksPanel::init(const tgui::Panel::Ptr& parent) {
     HUDLayout::styleEmbeddedPanel(m_panel);
     parent->add(m_panel);
 
-    auto titleLabel = tgui::Label::create("Selection");
-    titleLabel->setPosition({10, 10});
-    HUDLayout::styleSidebarTitle(titleLabel);
-    m_panel->add(titleLabel);
+    m_titleLabel = tgui::Label::create("");
+    HUDLayout::placeSidebarPanelTitle(m_titleLabel);
+    m_panel->add(m_titleLabel);
 
     m_ownerLabel = tgui::Label::create("Owner: White Kingdom");
-    m_ownerLabel->setPosition({10, 50});
-    m_ownerLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_ownerLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_ownerLabel, 0);
     m_panel->add(m_ownerLabel);
 
     m_cellsLabel = tgui::Label::create("Occupied Cells: 0");
-    m_cellsLabel->setPosition({10, 80});
-    m_cellsLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_cellsLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_cellsLabel, 1);
     m_panel->add(m_cellsLabel);
 
     m_hpLabel = tgui::Label::create("HP: 0/0");
-    m_hpLabel->setPosition({10, 110});
-    m_hpLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_hpLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_hpLabel, 2);
     m_panel->add(m_hpLabel);
 
     m_statusLabel = tgui::Label::create("Status: Idle");
-    m_statusLabel->setPosition({10, 140});
-    m_statusLabel->setSize({316, 22});
-    HUDLayout::styleSidebarBody(m_statusLabel);
+    HUDLayout::placeSidebarPanelBodyLabel(m_statusLabel, 3);
     m_panel->add(m_statusLabel);
 
     m_turnsLabel = tgui::Label::create("");
-    m_turnsLabel->setPosition({10, 168});
-    m_turnsLabel->setSize({316, 22});
+    m_turnsLabel->setPosition({HUDLayout::kSidebarPanelInset, 168});
+    m_turnsLabel->setSize({HUDLayout::kSidebarPanelBodyWidth, HUDLayout::kSidebarPanelBodyHeight});
     HUDLayout::styleSidebarBody(m_turnsLabel, 13);
     m_panel->add(m_turnsLabel);
 
@@ -166,9 +157,13 @@ void BarracksPanel::show(const Building& barracks,
                          const GameConfig& config,
                          bool allowProduce,
                          bool allowCancelConstruction,
-                         const TurnCommand* pendingProduce) {
+                         const TurnCommand* pendingProduce,
+                         const std::string& title) {
     if (!m_panel) return;
     m_panel->moveToFront();
+    if (m_titleLabel) {
+        m_titleLabel->setText(title);
+    }
     m_currentBarracksId = barracks.id;
 
     int totalHP = 0;

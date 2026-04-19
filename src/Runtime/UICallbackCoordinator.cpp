@@ -7,6 +7,7 @@
 #include "Core/ToolState.hpp"
 #include "Input/InputHandler.hpp"
 #include "Kingdom/Kingdom.hpp"
+#include "Runtime/FrontendCoordinator.hpp"
 #include "Runtime/PanelActionCoordinator.hpp"
 #include "Save/SaveManager.hpp"
 #include "UI/MainMenuUI.hpp"
@@ -131,7 +132,8 @@ UICallbackBindings UICallbackCoordinator::buildBindings(const UICallbackCoordina
         dependencies.uiManager.showBuildToolPanel(
             dependencies.displayedKingdom(viewedKingdomId),
             dependencies.config,
-            permissions.canQueueNonMoveActions);
+            permissions.canQueueNonMoveActions,
+            FrontendCoordinator::leftPanelTitle(FrontendLeftPanelKind::BuildTool));
     };
     bindings.toolBar.onOverview = [dependencies]() {
         if (!currentRuntimeState(dependencies).permissions.canUseToolbar) {
