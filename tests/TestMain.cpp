@@ -7732,6 +7732,85 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
              "Committing a queued sacrifice should clear the piece from the board.");
         }
 
+void testTurnSystemRelinksRemainingEnemyPiecePointersAfterCapture() {
+    GameConfig config;
+    Board board;
+    board.init(10);
+
+    Kingdom white(KingdomId::White);
+    Kingdom black(KingdomId::Black);
+    Piece& attackingRook = addPieceToBoard(white, board, 840, PieceType::Rook, KingdomId::White, {8, 8});
+    addPieceToBoard(white, board, 841, PieceType::King, KingdomId::White, {7, 8});
+    addPieceToBoard(black, board, 940, PieceType::King, KingdomId::Black, {2, 2});
+    addPieceToBoard(black, board, 941, PieceType::Pawn, KingdomId::Black, {8, 5});
+    addPieceToBoard(black, board, 942, PieceType::Bishop, KingdomId::Black, {9, 5});
+
+    TurnSystem turnSystem;
+    turnSystem.setActiveKingdom(KingdomId::White);
+    std::vector<Building> publicBuildings;
+    expect(turnSystem.queueCommand(makeMoveCommand(attackingRook.id, attackingRook.position, {8, 5}),
+                                   board,
+                                   white,
+                                   black,
+                                   publicBuildings,
+                                   config),
+        "The test capture should queue successfully before validating relink behavior.");
+
+    EventLog eventLog;
+    PieceFactory pieceFactory;
+    BuildingFactory buildingFactory;
+    turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+
+    Piece* survivingEnemy = black.getPieceById(942);
+    expect(survivingEnemy != nullptr,
+        "Capturing an enemy piece should not remove the surviving enemy piece that shares the same kingdom vector.");
+    expect(board.getCell(9, 5).piece == survivingEnemy,
+        "Capturing an enemy piece should relink the remaining enemy piece cell pointers after defender vector erasure.");
+    expect(black.getPieceById(941) == nullptr,
+        "The captured enemy piece should be removed from the defender kingdom.");
+    expect(board.getCell(8, 5).piece == white.getPieceById(attackingRook.id),
+        "The capturing piece should still occupy the destination cell after the relink.");
+}
+
+void testTurnSystemRelinksRemainingFriendlyPiecePointersAfterDisband() {
+    GameConfig config;
+    Board board;
+    board.init(10);
+
+    Kingdom white(KingdomId::White);
+    Kingdom black(KingdomId::Black);
+    addPieceToBoard(white, board, 850, PieceType::King, KingdomId::White, {8, 8});
+    Piece& doomedRook = addPieceToBoard(white, board, 851, PieceType::Rook, KingdomId::White, {7, 8});
+    addPieceToBoard(white, board, 852, PieceType::Bishop, KingdomId::White, {6, 8});
+    addPieceToBoard(black, board, 950, PieceType::King, KingdomId::Black, {2, 2});
+
+    TurnSystem turnSystem;
+    turnSystem.setActiveKingdom(KingdomId::White);
+    std::vector<Building> publicBuildings;
+    expect(turnSystem.queueCommand(makeDisbandCommand(doomedRook.id),
+                                   board,
+                                   white,
+                                   black,
+                                   publicBuildings,
+                                   config),
+        "The test disband should queue successfully before validating relink behavior.");
+
+    EventLog eventLog;
+    PieceFactory pieceFactory;
+    BuildingFactory buildingFactory;
+    turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+
+    Piece* survivingFriendly = white.getPieceById(852);
+    expect(survivingFriendly != nullptr,
+        "Disbanding one piece should leave the later allied piece in the kingdom vector.");
+    expect(board.getCell(6, 8).piece == survivingFriendly,
+        "Disbanding a piece should relink the remaining allied piece cell pointers after vector erasure.");
+    expect(white.getPieceById(doomedRook.id) == nullptr,
+        "The disbanded allied piece should be removed from the kingdom.");
+    expect(board.getCell(7, 8).piece == nullptr,
+        "The disbanded allied piece should no longer occupy its former board cell.");
+}
+
         void testInGameViewModelIncludesQueuedDisbandAction() {
          GameConfig config;
          GameEngine engine;
@@ -7849,6 +7928,50 @@ void testGameStateValidatorRejectsNegativeSaveGold() {
     GameEngine restored;
     expect(!restored.restoreFromSave(data, config, &error),
            "Restoring a save with negative gold should fail validation.");
+}
+
+void testGameStateValidatorRejectsOverlappingSavePieces() {
+    GameConfig config;
+    GameEngine engine;
+    GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, "overlapping_save_piece_test");
+
+    std::string error;
+    expect(engine.startNewSession(session, config, &error), error);
+
+    SaveData data = engine.createSaveData();
+    const sf::Vector2i sharedPosition = data.kingdoms[kingdomIndex(KingdomId::White)].pieces.front().position;
+    data.kingdoms[kingdomIndex(KingdomId::Black)].pieces.front().position = sharedPosition;
+
+    expect(!GameStateValidator::validateSaveData(data, &error),
+           "Save validation should reject overlapping same-cell pieces.");
+    expect(error.find("overlapping pieces") != std::string::npos,
+           "Save validation should explain overlapping piece failures with a specific error message.");
+
+    GameEngine restored;
+    expect(!restored.restoreFromSave(data, config, &error),
+           "Restoring a save with overlapping pieces should fail validation.");
+}
+
+void testGameEngineCreateValidatedSaveDataRejectsOverlappingRuntimePieces() {
+    GameConfig config;
+    GameEngine engine;
+    GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, "validated_save_overlap_runtime_test");
+
+    std::string error;
+    expect(engine.startNewSession(session, config, &error), error);
+
+    Piece* whiteKing = engine.kingdom(KingdomId::White).getKing();
+    Piece* blackKing = engine.kingdom(KingdomId::Black).getKing();
+    expect(whiteKing != nullptr && blackKing != nullptr,
+        "New sessions should start with one king per kingdom before corrupting runtime state for the save seam test.");
+
+    blackKing->position = whiteKing->position;
+
+    SaveData snapshot;
+    expect(!engine.createValidatedSaveData(snapshot, &error),
+        "Validated save creation should reject overlapping runtime pieces instead of serializing a corrupt snapshot.");
+    expect(error.find("overlapping pieces") != std::string::npos,
+        "Validated save creation should surface the overlapping piece diagnostic from runtime validation.");
 }
 
 void testGameStateValidatorRejectsNegativeRuntimeGold() {
@@ -8355,8 +8478,12 @@ int main() {
         {"under construction resources grant no income", testUnderConstructionResourceBuildingsDoNotGrantIncome},
         {"bankruptcy validation rejects negative ending gold", testBankruptcyValidationRejectsNegativeEndingGold},
         {"queued disband resolves bankruptcy", testQueuedDisbandResolvesBankruptcyAndCommitsRemoval},
+        {"turn system relinks surviving enemy piece pointers", testTurnSystemRelinksRemainingEnemyPiecePointersAfterCapture},
+        {"turn system relinks surviving friendly piece pointers", testTurnSystemRelinksRemainingFriendlyPiecePointersAfterDisband},
         {"in-game planned disband action", testInGameViewModelIncludesQueuedDisbandAction},
         {"save validator negative gold", testGameStateValidatorRejectsNegativeSaveGold},
+        {"save validator overlapping pieces", testGameStateValidatorRejectsOverlappingSavePieces},
+        {"validated save rejects overlapping runtime pieces", testGameEngineCreateValidatedSaveDataRejectsOverlappingRuntimePieces},
         {"runtime validator negative gold", testGameStateValidatorRejectsNegativeRuntimeGold},
         {"save validator under construction building", testGameStateValidatorRejectsUnderConstructionSaveBuilding},
         {"runtime validator under construction building", testGameStateValidatorRejectsUnderConstructionRuntimeBuilding},

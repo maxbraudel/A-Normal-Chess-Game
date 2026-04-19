@@ -1044,7 +1044,12 @@ bool Game::pushSnapshotToRemote(std::string* errorMessage) {
 bool Game::pushSnapshotToRemote(const std::vector<GameplayNotification>& notifications,
                                std::string* errorMessage) {
     m_engine.ensureWeatherMaskUpToDate(m_config);
-    const std::string snapshot = m_saveManager.serialize(m_engine.createSaveData());
+    SaveData snapshotData;
+    if (!m_engine.createValidatedSaveData(snapshotData, errorMessage)) {
+        return false;
+    }
+
+    const std::string snapshot = m_saveManager.serialize(snapshotData);
     return m_multiplayer.pushSnapshotIfConnected(isLanHost(), snapshot, notifications, errorMessage);
 }
 

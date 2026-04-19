@@ -1,11 +1,35 @@
 #include "Core/GameStateValidator.hpp"
 
 #include <algorithm>
+#include <map>
 #include <set>
 
 namespace {
+using CellPositionKey = std::pair<int, int>;
+
 bool isValidKingdomId(KingdomId id) {
     return id == KingdomId::White || id == KingdomId::Black;
+}
+
+CellPositionKey makeCellPositionKey(const sf::Vector2i& position) {
+    return {position.x, position.y};
+}
+
+std::string formatCellPosition(const sf::Vector2i& position) {
+    return "(" + std::to_string(position.x) + "," + std::to_string(position.y) + ")";
+}
+
+std::string formatKingdomName(KingdomId kingdom) {
+    return kingdom == KingdomId::White ? "White" : "Black";
+}
+
+std::string formatPieceLabel(KingdomId kingdom, int pieceId) {
+    return formatKingdomName(kingdom) + " piece " + std::to_string(pieceId);
+}
+
+bool isSavePositionInBounds(const SaveData& data, const sf::Vector2i& position) {
+    const int diameter = data.mapRadius * 2;
+    return position.x >= 0 && position.x < diameter && position.y >= 0 && position.y < diameter;
 }
 
 bool validateAuthoritativeBuildingState(const Building& building,
@@ -164,6 +188,7 @@ bool GameStateValidator::validateSaveData(const SaveData& data, std::string* err
 
     std::set<int> pieceIds;
     std::set<int> buildingIds;
+    std::map<CellPositionKey, std::pair<KingdomId, int>> piecePositions;
     for (int kingdomSlot = 0; kingdomSlot < kNumKingdoms; ++kingdomSlot) {
         const auto expectedKingdom = static_cast<KingdomId>(kingdomSlot);
         const auto& kingdom = data.kingdoms[kingdomSlot];
@@ -191,6 +216,23 @@ bool GameStateValidator::validateSaveData(const SaveData& data, std::string* err
                 writeError(errorMessage, "Save data contains duplicate piece IDs.");
                 return false;
             }
+            if (!isSavePositionInBounds(data, piece.position)) {
+                writeError(errorMessage,
+                    "Save data contains a piece outside board bounds: "
+                        + formatPieceLabel(piece.kingdom, piece.id) + " at "
+                        + formatCellPosition(piece.position) + ".");
+                return false;
+            }
+            const auto key = makeCellPositionKey(piece.position);
+            const auto existingPiece = piecePositions.find(key);
+            if (existingPiece != piecePositions.end()) {
+                writeError(errorMessage,
+                    "Save data contains overlapping pieces at " + formatCellPosition(piece.position)
+                        + ": " + formatPieceLabel(existingPiece->second.first, existingPiece->second.second)
+                        + " and " + formatPieceLabel(piece.kingdom, piece.id) + ".");
+                return false;
+            }
+            piecePositions.emplace(key, std::make_pair(piece.kingdom, piece.id));
             if (piece.type == PieceType::King) {
                 ++kingCount;
             }
@@ -213,6 +255,15 @@ bool GameStateValidator::validateSaveData(const SaveData& data, std::string* err
                 writeError(errorMessage, "Save data contains duplicate building IDs.");
                 return false;
             }
+            for (const auto& occupiedCell : building.getOccupiedCells()) {
+                if (!isSavePositionInBounds(data, occupiedCell)) {
+                    writeError(errorMessage,
+                        "Save data contains a building outside board bounds: building "
+                            + std::to_string(building.id) + " occupies "
+                            + formatCellPosition(occupiedCell) + ".");
+                    return false;
+                }
+            }
         }
     }
 
@@ -224,17 +275,44 @@ bool GameStateValidator::validateSaveData(const SaveData& data, std::string* err
             writeError(errorMessage, "Save data contains duplicate building IDs.");
             return false;
         }
+        for (const auto& occupiedCell : building.getOccupiedCells()) {
+            if (!isSavePositionInBounds(data, occupiedCell)) {
+                writeError(errorMessage,
+                    "Save data contains a public building outside board bounds: building "
+                        + std::to_string(building.id) + " occupies "
+                        + formatCellPosition(occupiedCell) + ".");
+                return false;
+            }
+        }
     }
 
     std::set<int> objectIds;
+    std::map<CellPositionKey, int> mapObjectPositions;
     for (const auto& object : data.mapObjects) {
         if (!objectIds.insert(object.id).second) {
             writeError(errorMessage, "Save data contains duplicate map object IDs.");
             return false;
         }
+        if (!isSavePositionInBounds(data, object.position)) {
+            writeError(errorMessage,
+                "Save data contains a map object outside board bounds: object "
+                    + std::to_string(object.id) + " at " + formatCellPosition(object.position) + ".");
+            return false;
+        }
+        const auto key = makeCellPositionKey(object.position);
+        const auto existingObject = mapObjectPositions.find(key);
+        if (existingObject != mapObjectPositions.end()) {
+            writeError(errorMessage,
+                "Save data contains overlapping map objects at " + formatCellPosition(object.position)
+                    + ": object " + std::to_string(existingObject->second)
+                    + " and object " + std::to_string(object.id) + ".");
+            return false;
+        }
+        mapObjectPositions.emplace(key, object.id);
     }
 
     std::set<int> autonomousUnitIds;
+    std::map<CellPositionKey, int> autonomousUnitPositions;
     for (const auto& autonomousUnit : data.autonomousUnits) {
         if (!isValidAutonomousUnitType(autonomousUnit.type)) {
             writeError(errorMessage, "Save data contains an invalid autonomous unit type.");
@@ -244,6 +322,24 @@ bool GameStateValidator::validateSaveData(const SaveData& data, std::string* err
             writeError(errorMessage, "Save data contains duplicate autonomous unit IDs.");
             return false;
         }
+        if (!isSavePositionInBounds(data, autonomousUnit.position)) {
+            writeError(errorMessage,
+                "Save data contains an autonomous unit outside board bounds: unit "
+                    + std::to_string(autonomousUnit.id) + " at "
+                    + formatCellPosition(autonomousUnit.position) + ".");
+            return false;
+        }
+        const auto key = makeCellPositionKey(autonomousUnit.position);
+        const auto existingUnit = autonomousUnitPositions.find(key);
+        if (existingUnit != autonomousUnitPositions.end()) {
+            writeError(errorMessage,
+                "Save data contains overlapping autonomous units at "
+                    + formatCellPosition(autonomousUnit.position) + ": unit "
+                    + std::to_string(existingUnit->second) + " and unit "
+                    + std::to_string(autonomousUnit.id) + ".");
+            return false;
+        }
+        autonomousUnitPositions.emplace(key, autonomousUnit.id);
         if (!isValidKingdomId(autonomousUnit.infernal.targetKingdom)) {
             writeError(errorMessage, "Save data contains an autonomous unit with an invalid target kingdom.");
             return false;
@@ -294,6 +390,7 @@ bool GameStateValidator::validateRuntimeState(const Board& board,
 
     std::set<int> pieceIds;
     std::set<int> buildingIds;
+    std::map<CellPositionKey, std::pair<KingdomId, int>> piecePositions;
     for (int kingdomSlot = 0; kingdomSlot < kNumKingdoms; ++kingdomSlot) {
         const auto expectedKingdom = static_cast<KingdomId>(kingdomSlot);
         const auto& kingdom = kingdoms[kingdomSlot];
@@ -325,9 +422,29 @@ bool GameStateValidator::validateRuntimeState(const Board& board,
                 writeError(errorMessage, "Runtime state contains duplicate piece IDs.");
                 return false;
             }
+            const auto key = makeCellPositionKey(piece.position);
+            const auto existingPiece = piecePositions.find(key);
+            if (existingPiece != piecePositions.end()) {
+                writeError(errorMessage,
+                    "Runtime state contains overlapping pieces at " + formatCellPosition(piece.position)
+                        + ": " + formatPieceLabel(existingPiece->second.first, existingPiece->second.second)
+                        + " and " + formatPieceLabel(piece.kingdom, piece.id) + ".");
+                return false;
+            }
+            piecePositions.emplace(key, std::make_pair(piece.kingdom, piece.id));
             const Cell& cell = board.getCell(piece.position.x, piece.position.y);
-            if (cell.piece == nullptr || cell.piece->id != piece.id) {
-                writeError(errorMessage, "Runtime board cell pointers are out of sync for a piece.");
+            if (cell.piece == nullptr) {
+                writeError(errorMessage,
+                    "Runtime board cell pointer is missing for "
+                        + formatPieceLabel(piece.kingdom, piece.id) + " at "
+                        + formatCellPosition(piece.position) + ".");
+                return false;
+            }
+            if (cell.piece->id != piece.id) {
+                writeError(errorMessage,
+                    "Runtime board cell pointer mismatch at " + formatCellPosition(piece.position)
+                        + ": expected " + formatPieceLabel(piece.kingdom, piece.id)
+                        + ", found " + formatPieceLabel(cell.piece->kingdom, cell.piece->id) + ".");
                 return false;
             }
             if (piece.type == PieceType::King) {
@@ -378,6 +495,7 @@ bool GameStateValidator::validateRuntimeState(const Board& board,
     }
 
     std::set<int> objectIds;
+    std::map<CellPositionKey, int> mapObjectPositions;
     for (const auto& object : mapObjects) {
         if (!board.isInBounds(object.position.x, object.position.y)) {
             writeError(errorMessage, "Runtime state contains a map object outside board bounds.");
@@ -387,14 +505,34 @@ bool GameStateValidator::validateRuntimeState(const Board& board,
             writeError(errorMessage, "Runtime state contains duplicate map object IDs.");
             return false;
         }
+        const auto key = makeCellPositionKey(object.position);
+        const auto existingObject = mapObjectPositions.find(key);
+        if (existingObject != mapObjectPositions.end()) {
+            writeError(errorMessage,
+                "Runtime state contains overlapping map objects at " + formatCellPosition(object.position)
+                    + ": object " + std::to_string(existingObject->second)
+                    + " and object " + std::to_string(object.id) + ".");
+            return false;
+        }
+        mapObjectPositions.emplace(key, object.id);
         const Cell& cell = board.getCell(object.position.x, object.position.y);
-        if (cell.mapObject == nullptr || cell.mapObject->id != object.id) {
-            writeError(errorMessage, "Runtime board cell pointers are out of sync for a map object.");
+        if (cell.mapObject == nullptr) {
+            writeError(errorMessage,
+                "Runtime board cell pointer is missing for map object "
+                    + std::to_string(object.id) + " at " + formatCellPosition(object.position) + ".");
+            return false;
+        }
+        if (cell.mapObject->id != object.id) {
+            writeError(errorMessage,
+                "Runtime board cell pointer mismatch at " + formatCellPosition(object.position)
+                    + ": expected map object " + std::to_string(object.id)
+                    + ", found map object " + std::to_string(cell.mapObject->id) + ".");
             return false;
         }
     }
 
     std::set<int> autonomousUnitIds;
+    std::map<CellPositionKey, int> autonomousUnitPositions;
     for (const auto& autonomousUnit : autonomousUnits) {
         if (!isValidAutonomousUnitType(autonomousUnit.type)) {
             writeError(errorMessage, "Runtime state contains an invalid autonomous unit type.");
@@ -416,10 +554,31 @@ bool GameStateValidator::validateRuntimeState(const Board& board,
             writeError(errorMessage, "Runtime state contains duplicate autonomous unit IDs.");
             return false;
         }
+        const auto key = makeCellPositionKey(autonomousUnit.position);
+        const auto existingUnit = autonomousUnitPositions.find(key);
+        if (existingUnit != autonomousUnitPositions.end()) {
+            writeError(errorMessage,
+                "Runtime state contains overlapping autonomous units at "
+                    + formatCellPosition(autonomousUnit.position) + ": unit "
+                    + std::to_string(existingUnit->second) + " and unit "
+                    + std::to_string(autonomousUnit.id) + ".");
+            return false;
+        }
+        autonomousUnitPositions.emplace(key, autonomousUnit.id);
 
         const Cell& cell = board.getCell(autonomousUnit.position.x, autonomousUnit.position.y);
-        if (cell.autonomousUnit == nullptr || cell.autonomousUnit->id != autonomousUnit.id) {
-            writeError(errorMessage, "Runtime board cell pointers are out of sync for an autonomous unit.");
+        if (cell.autonomousUnit == nullptr) {
+            writeError(errorMessage,
+                "Runtime board cell pointer is missing for autonomous unit "
+                    + std::to_string(autonomousUnit.id) + " at "
+                    + formatCellPosition(autonomousUnit.position) + ".");
+            return false;
+        }
+        if (cell.autonomousUnit->id != autonomousUnit.id) {
+            writeError(errorMessage,
+                "Runtime board cell pointer mismatch at " + formatCellPosition(autonomousUnit.position)
+                    + ": expected autonomous unit " + std::to_string(autonomousUnit.id)
+                    + ", found autonomous unit " + std::to_string(cell.autonomousUnit->id) + ".");
             return false;
         }
     }

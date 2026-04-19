@@ -58,6 +58,8 @@ public:
                          const GameConfig& config,
                          std::string* errorMessage = nullptr);
     SaveData createSaveData() const;
+    bool createValidatedSaveData(SaveData& outData,
+                                 std::string* errorMessage = nullptr);
     bool validate(std::string* errorMessage = nullptr) const;
     void resetPendingTurn();
     bool replacePendingCommands(const std::vector<TurnCommand>& commands,
@@ -127,6 +129,8 @@ public:
     std::string activeTurnLabel() const;
 
 private:
+    void relinkRuntimeState();
+    bool relinkAndValidateRuntimeState(std::string* errorMessage = nullptr);
     void syncFactoryIds();
     bool spawnChestIfDue(const GameConfig& config);
     bool spawnInfernalIfDue(const GameConfig& config,

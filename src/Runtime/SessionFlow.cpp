@@ -116,7 +116,11 @@ bool SessionFlow::saveAuthoritativeSession(bool allowSave,
     }
 
     m_engine.ensureWeatherMaskUpToDate(m_config);
-    const SaveData data = m_engine.createSaveData();
+    SaveData data;
+    if (!m_engine.createValidatedSaveData(data, errorMessage)) {
+        return false;
+    }
+
     if (!m_saveManager.save(buildSavePath(m_savesDirectory, m_engine.gameName()), data)) {
         writeError(errorMessage, "Failed to save game!");
         return false;

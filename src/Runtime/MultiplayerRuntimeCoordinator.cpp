@@ -230,6 +230,21 @@ void MultiplayerRuntimeCoordinator::processClientEvent(const MultiplayerClient::
                     m_config,
                     &restoreError)) {
                 std::cerr << restoreError << std::endl;
+                MultiplayerEventCoordinator::applyClientDisconnectState(
+                    m_runtime,
+                    m_engine,
+                    m_input,
+                    m_localPlayerContext,
+                    m_waitingForRemoteTurnResult);
+                if (callbacks.invalidateTurnDraft) {
+                    callbacks.invalidateTurnDraft();
+                }
+                showLanClientDisconnectAlert(
+                    m_runtime,
+                    m_uiManager,
+                    "Multiplayer Sync Failed",
+                    restoreError,
+                    callbacks);
                 return;
             }
 

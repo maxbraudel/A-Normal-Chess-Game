@@ -89,6 +89,46 @@ void relinkAllBuildings(Board& board,
     relinkBuildingContainer(board, enemyKingdom.buildings);
 }
 
+void relinkDynamicOccupants(Board& board,
+                           Kingdom& activeKingdom,
+                           Kingdom& enemyKingdom,
+                           std::vector<MapObject>& mapObjects,
+                           std::vector<AutonomousUnit>& autonomousUnits) {
+    auto& grid = board.getGrid();
+    for (auto& row : grid) {
+        for (auto& cell : row) {
+            cell.piece = nullptr;
+            cell.mapObject = nullptr;
+            cell.autonomousUnit = nullptr;
+        }
+    }
+
+    for (auto& piece : activeKingdom.pieces) {
+        if (board.isInBounds(piece.position.x, piece.position.y)) {
+            board.getCell(piece.position.x, piece.position.y).piece = &piece;
+        }
+    }
+
+    for (auto& piece : enemyKingdom.pieces) {
+        if (board.isInBounds(piece.position.x, piece.position.y)) {
+            board.getCell(piece.position.x, piece.position.y).piece = &piece;
+        }
+    }
+
+    for (auto& mapObject : mapObjects) {
+        if (board.isInBounds(mapObject.position.x, mapObject.position.y)) {
+            board.getCell(mapObject.position.x, mapObject.position.y).mapObject = &mapObject;
+        }
+    }
+
+    for (auto& autonomousUnit : autonomousUnits) {
+        if (board.isInBounds(autonomousUnit.position.x, autonomousUnit.position.y)) {
+            board.getCell(autonomousUnit.position.x, autonomousUnit.position.y).autonomousUnit =
+                &autonomousUnit;
+        }
+    }
+}
+
 void removeAutonomousUnitAtCell(std::vector<AutonomousUnit>& autonomousUnits,
                                 InfernalSystemState& infernalSystemState,
                                 Cell& cell) {
@@ -728,6 +768,18 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                         combatResult.capturedPieceType,
                         config.getInfernalBloodDebtForCapturedPiece(combatResult.capturedPieceType));
                 }
+                if (combatResult.capturedPieceId >= 0) {
+                    relinkDynamicOccupants(board, activeKingdom, enemyKingdom, mapObjects, autonomousUnits);
+                    piece = activeKingdom.getPieceById(cmd.pieceId);
+                    if (!piece) {
+                        break;
+                    }
+
+                    Cell& refreshedOldCell = board.getCell(cmd.origin.x, cmd.origin.y);
+                    if (refreshedOldCell.piece == piece) {
+                        refreshedOldCell.piece = nullptr;
+                    }
+                }
 
                 // Move
                 piece->position = cmd.destination;
@@ -742,6 +794,7 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                             "Captured " + capturedName + " at ("
                                 + std::to_string(cmd.destination.x) + ","
                                 + std::to_string(cmd.destination.y) + ")");
+                        relinkDynamicOccupants(board, activeKingdom, enemyKingdom, mapObjects, autonomousUnits);
                 }
 
                 if (std::optional<ChestClaimResult> chestClaim = ChestSystem::collectChestAtPosition(
@@ -754,6 +807,7 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                     log.log(m_turnNumber,
                             m_activeKingdom,
                             "Opened a chest and received " + describeChestReward(chestClaim->reward));
+                        relinkDynamicOccupants(board, activeKingdom, enemyKingdom, mapObjects, autonomousUnits);
                 }
 
                 log.log(m_turnNumber, m_activeKingdom, "Moved " +
@@ -831,6 +885,7 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
 
                 const PieceType removedType = piece->type;
                 activeKingdom.removePiece(piece->id);
+        relinkDynamicOccupants(board, activeKingdom, enemyKingdom, mapObjects, autonomousUnits);
                 log.log(m_turnNumber,
                         m_activeKingdom,
                         "Sacrificed " + std::string(pieceTypeDisplayName(removedType)));
@@ -888,7 +943,7 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                 if (spawnPos.x >= 0) {
                     Piece newPiece = pieceFactory.createPiece(pt, m_activeKingdom, spawnPos);
                     activeKingdom.addPiece(newPiece);
-                    board.getCell(spawnPos.x, spawnPos.y).piece = &activeKingdom.pieces.back();
+                    relinkDynamicOccupants(board, activeKingdom, enemyKingdom, mapObjects, autonomousUnits);
                     if (pt == PieceType::Bishop) {
                         activeKingdom.recordSuccessfulBishopSpawnParity(
                             ProductionSpawnRules::squareColorParity(spawnPos));

@@ -20,6 +20,7 @@ public:
         bool targetWasPiece;
         int xpGained;
         PieceType capturedPieceType;
+        int capturedPieceId;
     };
 
     static CombatResult resolve(

@@ -16,7 +16,9 @@ CombatSystem::CombatResult CombatSystem::resolve(
     XPSystemState& xpSystemState, std::uint32_t worldSeed,
     const GameConfig& config, EventLog& log, int turnNumber) {
 
-    CombatResult result{false, false, 0, PieceType::King};
+    (void)attackerKingdom;
+
+    CombatResult result{false, false, 0, PieceType::King, -1};
     Cell& targetCell = board.getCell(target.x, target.y);
 
     // Check if target has an enemy piece
@@ -29,6 +31,7 @@ CombatSystem::CombatResult CombatSystem::resolve(
         result.targetWasPiece = true;
         Piece* victim = targetCell.piece;
         result.capturedPieceType = victim->type;
+        result.capturedPieceId = victim->id;
         result.xpGained = XPSystem::grantKillXP(attacker, victim->type, xpSystemState, worldSeed, config);
 
         log.log(turnNumber, attacker.kingdom, "Captured enemy piece!");

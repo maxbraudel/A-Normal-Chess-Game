@@ -169,6 +169,15 @@ GameEngine::GameEngine()
     : m_kingdoms{Kingdom(KingdomId::White), Kingdom(KingdomId::Black)} {
 }
 
+void GameEngine::relinkRuntimeState() {
+    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
+}
+
+bool GameEngine::relinkAndValidateRuntimeState(std::string* errorMessage) {
+    relinkRuntimeState();
+    return validate(errorMessage);
+}
+
 bool GameEngine::startNewSession(const GameSessionConfig& session,
                                  const GameConfig& config,
                                  std::string* errorMessage) {
@@ -203,7 +212,7 @@ bool GameEngine::startNewSession(const GameSessionConfig& session,
     ChestSystem::initialize(m_chestSystemState, m_sessionConfig.worldSeed, 1, config);
     m_xpSystemState = XPSystemState{};
     InfernalSystem::initialize(m_infernalSystemState, 0, config);
-    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
+    relinkRuntimeState();
 
     m_turnSystem = TurnSystem();
     m_turnSystem.setActiveKingdom(KingdomId::White);
@@ -286,8 +295,6 @@ bool GameEngine::restoreFromSave(const SaveData& data,
     m_infernalSystemState = data.infernalSystemState;
     normalizeLoadedBuildingVisuals(m_publicBuildings, m_sessionConfig.worldSeed);
 
-    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
-
     m_turnSystem = TurnSystem();
     m_turnSystem.setActiveKingdom(data.activeKingdom);
     m_turnSystem.setTurnNumber(data.turnNumber);
@@ -324,7 +331,7 @@ bool GameEngine::restoreFromSave(const SaveData& data,
     }
 
     syncFactoryIds();
-    return validate(errorMessage);
+    return relinkAndValidateRuntimeState(errorMessage);
 }
 
 SaveData GameEngine::createSaveData() const {
@@ -371,6 +378,33 @@ SaveData GameEngine::createSaveData() const {
     data.infernalSystemState = m_infernalSystemState;
     data.events = m_eventLog.getEvents();
     return data;
+}
+
+bool GameEngine::createValidatedSaveData(SaveData& outData,
+                                         std::string* errorMessage) {
+    std::string runtimeError;
+    if (!relinkAndValidateRuntimeState(&runtimeError)) {
+        if (errorMessage) {
+            *errorMessage = runtimeError.empty()
+                ? "Cannot serialize an invalid authoritative runtime state."
+                : "Cannot serialize an invalid authoritative runtime state: " + runtimeError;
+        }
+        return false;
+    }
+
+    outData = createSaveData();
+
+    std::string saveError;
+    if (!GameStateValidator::validateSaveData(outData, &saveError)) {
+        if (errorMessage) {
+            *errorMessage = saveError.empty()
+                ? "Cannot serialize invalid authoritative save data."
+                : "Cannot serialize invalid authoritative save data: " + saveError;
+        }
+        return false;
+    }
+
+    return true;
 }
 
 void GameEngine::ensureWeatherMaskUpToDate(const GameConfig& config) {
@@ -465,7 +499,7 @@ bool GameEngine::triggerCheatcodeInfernalSpawn(const GameConfig& config) {
             config)) {
         m_nextAutonomousUnitId = std::max(m_nextAutonomousUnitId, spawnedInfernal->id + 1);
         m_autonomousUnits.push_back(*spawnedInfernal);
-        relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
+        relinkRuntimeState();
         return true;
     }
 
@@ -520,6 +554,7 @@ PendingTurnCommitResult GameEngine::commitPendingTurn(const GameConfig& config) 
                             result.notifications,
                             m_pieceFactory,
                             m_buildingFactory);
+    relinkRuntimeState();
     m_turnSystem.advanceTurn();
     const int currentHalfTurnStep = halfTurnStep(m_turnSystem);
 
@@ -578,7 +613,7 @@ PendingTurnCommitResult GameEngine::commitPendingTurn(const GameConfig& config) 
         config);
 
     if (infernalBoardChanged) {
-        relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
+        relinkRuntimeState();
     }
 
     result.committed = true;
@@ -656,13 +691,13 @@ bool GameEngine::spawnChestIfDue(const GameConfig& config) {
         m_nextMapObjectId,
         config);
     if (!spawnedChest.has_value()) {
-        relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
+        relinkRuntimeState();
         return false;
     }
 
     m_nextMapObjectId = std::max(m_nextMapObjectId, spawnedChest->id + 1);
     m_mapObjects.push_back(*spawnedChest);
-    relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
+    relinkRuntimeState();
     m_eventLog.log(m_turnSystem.getTurnNumber(), m_turnSystem.getActiveKingdom(), "A chest appeared on the map.");
     return true;
 }
@@ -682,7 +717,7 @@ bool GameEngine::spawnInfernalIfDue(const GameConfig& config,
             config)) {
         m_nextAutonomousUnitId = std::max(m_nextAutonomousUnitId, spawnedInfernal->id + 1);
         m_autonomousUnits.push_back(*spawnedInfernal);
-        relinkBoardState(m_board, m_kingdoms, m_publicBuildings, m_mapObjects, m_autonomousUnits);
+        relinkRuntimeState();
         return true;
     }
 
