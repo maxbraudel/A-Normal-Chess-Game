@@ -29,6 +29,7 @@ class MarriageSystem;
 class CheckSystem;
 class PieceFactory;
 class BuildingFactory;
+struct WeatherMaskCache;
 
 class TurnSystem {
 public:
@@ -132,7 +133,8 @@ public:
                     std::uint32_t worldSeed,
                     const GameConfig& config, EventLog& log,
                     std::vector<GameplayNotification>& gameplayNotifications,
-                    PieceFactory& pieceFactory, BuildingFactory& buildingFactory);
+                    PieceFactory& pieceFactory, BuildingFactory& buildingFactory,
+                    const WeatherMaskCache* weatherMaskCache = nullptr);
     void commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemyKingdom,
                     std::vector<Building>& publicBuildings,
                     const GameConfig& config, EventLog& log,
@@ -157,7 +159,8 @@ public:
                    log,
                    gameplayNotifications,
                    pieceFactory,
-                   buildingFactory);
+                   buildingFactory,
+                   nullptr);
     }
 
     void advanceTurn();

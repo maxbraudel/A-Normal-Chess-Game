@@ -327,7 +327,7 @@ bool GameEngine::restoreFromSave(const SaveData& data,
 
     m_eventLog.clear();
     for (const auto& event : data.events) {
-        m_eventLog.log(event.turnNumber, event.kingdom, event.message);
+        m_eventLog.log(event);
     }
 
     syncFactoryIds();
@@ -553,7 +553,8 @@ PendingTurnCommitResult GameEngine::commitPendingTurn(const GameConfig& config) 
                             m_eventLog,
                             result.notifications,
                             m_pieceFactory,
-                            m_buildingFactory);
+                            m_buildingFactory,
+                            &m_weatherMaskCache);
     relinkRuntimeState();
     m_turnSystem.advanceTurn();
     const int currentHalfTurnStep = halfTurnStep(m_turnSystem);

@@ -527,7 +527,16 @@ std::string SaveManager::serializeEvent(const EventLog::Event& e) {
     std::ostringstream ss;
     ss << "{ \"turn\": " << e.turnNumber
        << ", \"kingdom\": " << static_cast<int>(e.kingdom)
-       << ", \"msg\": \"" << escapeJsonString(e.message) << "\" }";
+       << ", \"msg\": \"" << escapeJsonString(e.message) << "\""
+       << ", \"kind\": " << static_cast<int>(e.kind)
+       << ", \"pieceType\": " << static_cast<int>(e.pieceType)
+       << ", \"dstX\": " << e.destinationCell.x
+       << ", \"dstY\": " << e.destinationCell.y
+       << ", \"hiddenWhite\": "
+       << (e.destinationHiddenByKingdom[kingdomIndex(KingdomId::White)] ? 1 : 0)
+       << ", \"hiddenBlack\": "
+       << (e.destinationHiddenByKingdom[kingdomIndex(KingdomId::Black)] ? 1 : 0)
+       << " }";
     return ss.str();
 }
 
@@ -536,6 +545,20 @@ EventLog::Event SaveManager::parseEvent(const std::string& json) {
     event.turnNumber = extractInt(json, "turn", 1);
     event.kingdom = static_cast<KingdomId>(extractInt(json, "kingdom", 0));
     event.message = extractString(json, "msg");
+    const int rawKind = extractInt(json, "kind", static_cast<int>(EventLog::Event::Kind::Message));
+    event.kind = (rawKind == static_cast<int>(EventLog::Event::Kind::Move))
+        ? EventLog::Event::Kind::Move
+        : EventLog::Event::Kind::Message;
+    event.pieceType = static_cast<PieceType>(extractInt(
+        json,
+        "pieceType",
+        static_cast<int>(PieceType::Pawn)));
+    event.destinationCell.x = extractInt(json, "dstX", 0);
+    event.destinationCell.y = extractInt(json, "dstY", 0);
+    event.destinationHiddenByKingdom[kingdomIndex(KingdomId::White)] =
+        extractInt(json, "hiddenWhite", 0) != 0;
+    event.destinationHiddenByKingdom[kingdomIndex(KingdomId::Black)] =
+        extractInt(json, "hiddenBlack", 0) != 0;
     return event;
 }
 

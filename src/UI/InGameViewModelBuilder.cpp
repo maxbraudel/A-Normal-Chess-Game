@@ -52,6 +52,22 @@ std::string cellLabel(sf::Vector2i cell) {
     return "(" + std::to_string(cell.x) + ", " + std::to_string(cell.y) + ")";
 }
 
+std::string compactCellLabel(sf::Vector2i cell) {
+    return "(" + std::to_string(cell.x) + "," + std::to_string(cell.y) + ")";
+}
+
+std::string formatEventActionLabel(const EventLog::Event& event, KingdomId observerKingdom) {
+    if (event.kind != EventLog::Event::Kind::Move) {
+        return event.message;
+    }
+
+    if (event.isDestinationHiddenFor(observerKingdom)) {
+        return "Moved something in the fog";
+    }
+
+    return "Moved " + pieceTypeName(event.pieceType) + " to " + compactCellLabel(event.destinationCell);
+}
+
 void appendPlannedActionRows(InGameViewModel& model,
                              const GameEngine& engine,
                              const GameConfig& config) {
@@ -182,7 +198,7 @@ InGameViewModel buildInGameViewModel(const GameEngine& engine,
         model.eventRows.push_back({
             event.turnNumber,
             actorLabelForEvent(engine, event.kingdom),
-            event.message
+            formatEventActionLabel(event, presentation.statsKingdom)
         });
     }
 

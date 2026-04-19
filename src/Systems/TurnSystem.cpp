@@ -1,5 +1,6 @@
 #include "Systems/TurnSystem.hpp"
 #include "Board/Board.hpp"
+#include <array>
 #include <algorithm>
 #include "Board/Cell.hpp"
 #include "Kingdom/Kingdom.hpp"
@@ -18,6 +19,7 @@
 #include "Systems/ChestSystem.hpp"
 #include "Systems/InfernalSystem.hpp"
 #include "Systems/TurnPointRules.hpp"
+#include "Runtime/WeatherVisibility.hpp"
 #include "Units/PieceFactory.hpp"
 #include "Buildings/BuildingFactory.hpp"
 
@@ -59,6 +61,23 @@ int getBuildCost(BuildingType type, const GameConfig& config) {
         default:
             return 0;
     }
+}
+
+std::array<bool, kNumKingdoms> moveDestinationHiddenByKingdom(
+    const Piece& piece,
+    const WeatherMaskCache* weatherMaskCache) {
+    std::array<bool, kNumKingdoms> hiddenByKingdom{};
+    if (weatherMaskCache == nullptr) {
+        return hiddenByKingdom;
+    }
+
+    for (int kingdomSlot = 0; kingdomSlot < kNumKingdoms; ++kingdomSlot) {
+        const KingdomId observer = static_cast<KingdomId>(kingdomSlot);
+        hiddenByKingdom[static_cast<std::size_t>(kingdomSlot)] =
+            WeatherVisibility::shouldHidePiece(piece, observer, *weatherMaskCache);
+    }
+
+    return hiddenByKingdom;
 }
 
 void clearBoardBuildingLinks(Board& board) {
@@ -724,7 +743,8 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                              std::uint32_t worldSeed,
                              const GameConfig& config, EventLog& log,
                              std::vector<GameplayNotification>& gameplayNotifications,
-                             PieceFactory& pieceFactory, BuildingFactory& buildingFactory) {
+                             PieceFactory& pieceFactory, BuildingFactory& buildingFactory,
+                             const WeatherMaskCache* weatherMaskCache) {
     std::vector<TurnCommand> deferredUpgrades;
     deferredUpgrades.reserve(m_pendingCommands.size());
 
@@ -810,9 +830,11 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                         relinkDynamicOccupants(board, activeKingdom, enemyKingdom, mapObjects, autonomousUnits);
                 }
 
-                log.log(m_turnNumber, m_activeKingdom, "Moved " +
-                    std::string(pieceTypeDisplayName(piece->type)) + " to (" +
-                        std::to_string(cmd.destination.x) + "," + std::to_string(cmd.destination.y) + ")");
+                log.logMove(m_turnNumber,
+                            m_activeKingdom,
+                            piece->type,
+                            cmd.destination,
+                            moveDestinationHiddenByKingdom(*piece, weatherMaskCache));
                 break;
             }
             case TurnCommand::Build: {

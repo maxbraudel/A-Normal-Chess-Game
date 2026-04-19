@@ -2354,10 +2354,110 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
 
          const auto& events = eventLog.getEvents();
          const bool foundMoveEvent = std::any_of(events.begin(), events.end(), [](const EventLog::Event& event) {
-             return event.message == "Moved Bishop to (6,6)";
+             return event.kind == EventLog::Event::Kind::Move
+                 && event.pieceType == PieceType::Bishop
+                 && event.destinationCell.x == 6
+                 && event.destinationCell.y == 6
+                 && !event.destinationHiddenByKingdom[kingdomIndex(KingdomId::White)]
+                 && !event.destinationHiddenByKingdom[kingdomIndex(KingdomId::Black)];
          });
          expect(foundMoveEvent,
-             "Move history entries should include the moved piece type.");
+             "Move history entries should store structured move metadata with visible destinations for both kingdoms when no fog is active.");
+        }
+
+        void testTurnSystemMoveLogCapturesFoggedDestinationByObserver() {
+         GameConfig config;
+         Board board;
+         board.init(8);
+
+         Kingdom white(KingdomId::White);
+         Kingdom black(KingdomId::Black);
+         addPieceToBoard(white, board, 160, PieceType::King, KingdomId::White, {2, 2});
+         Piece& bishop = addPieceToBoard(white, board, 161, PieceType::Bishop, KingdomId::White, {4, 4});
+         addPieceToBoard(black, board, 260, PieceType::King, KingdomId::Black, {12, 12});
+
+         std::vector<Building> publicBuildings;
+         std::vector<MapObject> mapObjects;
+         ChestSystemState chestSystemState{};
+         XPSystemState xpSystemState{};
+         std::vector<AutonomousUnit> autonomousUnits;
+         InfernalSystemState infernalSystemState{};
+         std::vector<GameplayNotification> gameplayNotifications;
+         const WeatherMaskCache weatherMaskCache = makeConcealingFogMask(board, {{6, 6}});
+
+         TurnSystem turnSystem;
+         turnSystem.setActiveKingdom(KingdomId::White);
+
+         TurnCommand moveCommand;
+         moveCommand.type = TurnCommand::Move;
+         moveCommand.pieceId = bishop.id;
+         moveCommand.origin = bishop.position;
+         moveCommand.destination = {6, 6};
+
+         expect(turnSystem.queueCommand(moveCommand, board, white, black, publicBuildings, config),
+             "Bishop move command should be accepted for fogged move-history regression coverage.");
+
+         EventLog eventLog;
+         PieceFactory pieceFactory;
+         BuildingFactory buildingFactory;
+         turnSystem.commitTurn(board,
+                               white,
+                               black,
+                               publicBuildings,
+                               mapObjects,
+                               chestSystemState,
+                               xpSystemState,
+                               autonomousUnits,
+                               infernalSystemState,
+                               0,
+                               config,
+                               eventLog,
+                               gameplayNotifications,
+                               pieceFactory,
+                               buildingFactory,
+                               &weatherMaskCache);
+
+         const auto& events = eventLog.getEvents();
+         const auto moveEvent = std::find_if(events.begin(), events.end(), [](const EventLog::Event& event) {
+             return event.kind == EventLog::Event::Kind::Move;
+         });
+         expect(moveEvent != events.end(),
+             "Fogged move commits should still append a structured move event to the history log.");
+         expect(!moveEvent->destinationHiddenByKingdom[kingdomIndex(KingdomId::White)],
+             "A kingdom should keep full visibility on its own committed move destinations even when the cell is fogged for the opponent.");
+         expect(moveEvent->destinationHiddenByKingdom[kingdomIndex(KingdomId::Black)],
+             "Move history should snapshot that a destination was hidden for the opposing kingdom when the move landed in concealing fog.");
+        }
+
+        void testInGameViewModelFormatsFoggedMoveHistoryPerObserver() {
+        GameConfig config;
+        GameEngine engine;
+        GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, "fog_history_view_model_test");
+
+        std::string error;
+        expect(engine.startNewSession(session, config, &error), error);
+
+        std::array<bool, kNumKingdoms> hiddenByKingdom{};
+        hiddenByKingdom[kingdomIndex(KingdomId::Black)] = true;
+        engine.eventLog().logMove(2, KingdomId::White, PieceType::Bishop, {6, 6}, hiddenByKingdom);
+
+        const InGameViewModel whiteModel = buildInGameViewModel(
+            engine,
+            config,
+            GameState::Playing,
+            true,
+            makeHudPresentation(KingdomId::White));
+        const InGameViewModel blackModel = buildInGameViewModel(
+            engine,
+            config,
+            GameState::Playing,
+            true,
+            makeHudPresentation(KingdomId::Black));
+
+        expect(!whiteModel.eventRows.empty() && whiteModel.eventRows.back().actionLabel == "Moved Bishop to (6,6)",
+            "Visible move history should keep the piece type and destination coordinates for the observing kingdom.");
+        expect(!blackModel.eventRows.empty() && blackModel.eventRows.back().actionLabel == "Moved something in the fog",
+            "Fogged move history should redact both the piece identity and destination coordinates for observers who could not see the destination.");
         }
 
     void testInGameViewModelShowsCheckAlertWhenActiveKingIsInCheck() {
@@ -4518,6 +4618,15 @@ void testSaveManagerRoundTrip() {
     publicMine.cellHP.assign(publicMine.width * publicMine.height, 1);
     data.publicBuildings.push_back(publicMine);
     data.events.push_back({7, KingdomId::Black, "AI said \"check\" and held {center}."});
+    EventLog::Event moveEvent;
+    moveEvent.turnNumber = 8;
+    moveEvent.kingdom = KingdomId::White;
+    moveEvent.message = "Moved Rook.";
+    moveEvent.kind = EventLog::Event::Kind::Move;
+    moveEvent.pieceType = PieceType::Rook;
+    moveEvent.destinationCell = {4, 5};
+    moveEvent.destinationHiddenByKingdom[kingdomIndex(KingdomId::Black)] = true;
+    data.events.push_back(moveEvent);
 
     SaveManager manager;
     const std::filesystem::path tempPath = std::filesystem::temp_directory_path() / "anormalchess_save_test.json";
@@ -4532,8 +4641,15 @@ void testSaveManagerRoundTrip() {
         expect(loaded.grid[0][0].terrainFlipMask == data.grid[0][0].terrainFlipMask
             && loaded.grid[1][1].terrainFlipMask == data.grid[1][1].terrainFlipMask,
             "Terrain flip masks should round-trip through SaveManager.");
-    expect(loaded.events.size() == 1 && loaded.events[0].message == data.events[0].message,
+    expect(loaded.events.size() == 2 && loaded.events[0].message == data.events[0].message,
            "Event messages should preserve escaped characters.");
+    expect(loaded.events[1].kind == EventLog::Event::Kind::Move
+        && loaded.events[1].pieceType == PieceType::Rook
+        && loaded.events[1].destinationCell.x == 4
+        && loaded.events[1].destinationCell.y == 5
+        && !loaded.events[1].destinationHiddenByKingdom[kingdomIndex(KingdomId::White)]
+        && loaded.events[1].destinationHiddenByKingdom[kingdomIndex(KingdomId::Black)],
+        "Structured move-history events should round-trip through SaveManager without losing per-kingdom fog visibility metadata.");
     expect(loaded.sessionKingdoms[0].participantName == data.sessionKingdoms[0].participantName,
            "Session participant names should round-trip through SaveManager.");
     expect(loaded.worldSeed == data.worldSeed,
@@ -8602,6 +8718,8 @@ int main() {
         {"interaction permissions unlock after queued response", testInteractionPermissionsUnlockNonMoveActionsAfterQueuedCheckResponse},
         {"interaction permissions game over navigation", testInteractionPermissionsKeepNavigationAvailableDuringGameOver},
         {"turn system move log piece type", testTurnSystemMoveLogIncludesPieceType},
+        {"turn system move log fog visibility", testTurnSystemMoveLogCapturesFoggedDestinationByObserver},
+        {"in-game view model fogged move history", testInGameViewModelFormatsFoggedMoveHistoryPerObserver},
         {"in-game view model check alert", testInGameViewModelShowsCheckAlertWhenActiveKingIsInCheck},
         {"in-game hud kingdom presentation", testInGameViewModelUsesPresentedHudKingdom},
         {"overlay policy when selected visibility", testOverlayPolicyCanHideIndicatorsUntilSelected},
