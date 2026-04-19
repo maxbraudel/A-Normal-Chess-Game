@@ -61,6 +61,7 @@ struct WorldRenderState {
     GameState gameState = GameState::MainMenu;
     ToolState activeTool = ToolState::Select;
     InteractionPermissions permissions{};
+    bool tacticalGridModeActive = false;
     bool usingConcretePendingState = false;
     KingdomId activeKingdom = KingdomId::White;
     const Piece* selectedPiece = nullptr;
@@ -79,6 +80,8 @@ struct WorldRenderState {
 
 struct WorldRenderPlan {
     bool renderWorld = false;
+    bool showTacticalGrid = false;
+    bool showOnlyBlockingBuildingOverlays = false;
     std::set<int> capturePreviewPieceIds;
     bool showOrientationCheckerboard = false;
     std::optional<OriginCellSpec> selectedOriginCell;

@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "Autonomous/AutonomousUnit.hpp"
+#include "Board/Cell.hpp"
 #include "Objects/MapObject.hpp"
 #include "Render/OverlayRenderer.hpp"
 #include "Kingdom/KingdomId.hpp"
@@ -37,6 +38,14 @@ public:
                                                  const std::array<Kingdom, kNumKingdoms>& kingdoms,
                                                  const std::vector<AutonomousUnit>& autonomousUnits);
     void drawTerrainLayer(sf::RenderWindow& window, const Camera& camera, const Board& board);
+    void drawTacticalGridBlockedTerrain(sf::RenderWindow& window,
+                                        const Camera& camera,
+                                        const Board& board);
+    void drawTacticalGridBlockedStructures(sf::RenderWindow& window,
+                                           const Camera& camera,
+                                           const Board& board,
+                                           KingdomId localPerspective,
+                                           const WeatherMaskCache& weatherMaskCache);
     void drawOccludableBuildings(sf::RenderWindow& window,
                                  const Camera& camera,
                                  const std::array<Kingdom, kNumKingdoms>& kingdoms,

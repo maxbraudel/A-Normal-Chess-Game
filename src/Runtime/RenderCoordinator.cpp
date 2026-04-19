@@ -4,6 +4,7 @@
 
 #include "Assets/AssetManager.hpp"
 #include "Board/Board.hpp"
+#include "Board/CellTraversal.hpp"
 #include "Buildings/Building.hpp"
 #include "Buildings/StructurePlacementProfile.hpp"
 #include "Config/GameConfig.hpp"
@@ -30,10 +31,29 @@ void drawStructureOverlaysForBuildings(sf::RenderWindow& window,
                                        const Building* selectedBuilding,
                                        const WeatherMaskCache& weatherMaskCache,
                                        KingdomId localPerspective,
-                                       bool drawOccludable) {
+                                       bool drawOccludable,
+                                       bool showOnlyBlockingBuildings) {
     for (const Building& building : buildings) {
         if (WeatherVisibility::isOccludableBuilding(building, localPerspective) != drawOccludable) {
             continue;
+        }
+        if (showOnlyBlockingBuildings) {
+            bool hasBlockingCell = false;
+            for (const sf::Vector2i& cellPos : building.getOccupiedCells()) {
+                if (!board.isInBounds(cellPos.x, cellPos.y)) {
+                    continue;
+                }
+
+                const Cell& cell = board.getCell(cellPos.x, cellPos.y);
+                if (cell.building == &building && !isCellTerrainTraversable(cell)) {
+                    hasBlockingCell = true;
+                    break;
+                }
+            }
+
+            if (!hasBlockingCell) {
+                continue;
+            }
         }
         if (drawOccludable
             && WeatherVisibility::shouldHideBuildingOverlay(building,
@@ -97,6 +117,8 @@ WorldRenderPlan RenderCoordinator::buildWorldRenderPlan(
         return plan;
     }
 
+    plan.showTacticalGrid = state.tacticalGridModeActive;
+    plan.showOnlyBlockingBuildingOverlays = state.tacticalGridModeActive;
     plan.capturePreviewPieceIds = state.capturePreviewPieceIds;
     plan.selectedBuilding = state.selectedBuilding;
 
@@ -106,7 +128,9 @@ WorldRenderPlan RenderCoordinator::buildWorldRenderPlan(
         && state.selectedPiece != nullptr
         && state.selectedPiece->kingdom == state.activeKingdom;
 
-    if (state.activeTool == ToolState::Select && state.selectedPiece != nullptr) {
+    if (!plan.showTacticalGrid
+        && state.activeTool == ToolState::Select
+        && state.selectedPiece != nullptr) {
         plan.showOrientationCheckerboard = true;
     }
 
@@ -218,25 +242,42 @@ void RenderCoordinator::renderWorldFrame(WorldRenderBindings& bindings,
 
     bindings.camera.applyTo(bindings.window);
     bindings.renderer.setSkipPieceIds(plan.capturePreviewPieceIds);
-    bindings.renderer.drawTerrainLayer(bindings.window,
-                                       bindings.camera,
-                                       bindings.displayedBoard);
-
-    bindings.renderer.drawOccludableBuildings(bindings.window,
-                                              bindings.camera,
-                                              bindings.displayedKingdoms,
-                                              bindings.localPerspectiveKingdom,
-                                              bindings.weatherMaskCache);
-
-    bindings.renderer.drawVisibleBuildings(bindings.window,
+    if (plan.showTacticalGrid) {
+        bindings.renderer.getOverlay().drawTacticalGridCheckerboard(
+            bindings.window,
+            bindings.displayedBoard,
+            bindings.config.getCellSizePx());
+        bindings.renderer.drawTacticalGridBlockedTerrain(
+            bindings.window,
+            bindings.camera,
+            bindings.displayedBoard);
+        bindings.renderer.drawTacticalGridBlockedStructures(
+            bindings.window,
+            bindings.camera,
+            bindings.displayedBoard,
+            bindings.localPerspectiveKingdom,
+            bindings.weatherMaskCache);
+    } else {
+        bindings.renderer.drawTerrainLayer(bindings.window,
                                            bindings.camera,
-                                           bindings.displayedKingdoms,
-                                           bindings.displayedPublicBuildings,
-                                           bindings.localPerspectiveKingdom);
+                                           bindings.displayedBoard);
 
-    bindings.renderer.drawMapObjectsLayer(bindings.window,
-                                          bindings.camera,
-                                          bindings.displayedMapObjects);
+        bindings.renderer.drawOccludableBuildings(bindings.window,
+                                                  bindings.camera,
+                                                  bindings.displayedKingdoms,
+                                                  bindings.localPerspectiveKingdom,
+                                                  bindings.weatherMaskCache);
+
+        bindings.renderer.drawVisibleBuildings(bindings.window,
+                                               bindings.camera,
+                                               bindings.displayedKingdoms,
+                                               bindings.displayedPublicBuildings,
+                                               bindings.localPerspectiveKingdom);
+
+        bindings.renderer.drawMapObjectsLayer(bindings.window,
+                                              bindings.camera,
+                                              bindings.displayedMapObjects);
+    }
 
     if (plan.showOrientationCheckerboard) {
         bindings.renderer.getOverlay().drawOrientationCheckerboard(
@@ -279,7 +320,8 @@ void RenderCoordinator::renderWorldFrame(WorldRenderBindings& bindings,
                                           plan.selectedBuilding,
                                           bindings.weatherMaskCache,
                                           bindings.localPerspectiveKingdom,
-                                          true);
+                                          true,
+                                          plan.showOnlyBlockingBuildingOverlays);
     }
 
     bindings.renderer.drawOccludablePieces(bindings.window,
@@ -308,7 +350,8 @@ void RenderCoordinator::renderWorldFrame(WorldRenderBindings& bindings,
                                       plan.selectedBuilding,
                                       bindings.weatherMaskCache,
                                       bindings.localPerspectiveKingdom,
-                                      false);
+                                      false,
+                                      plan.showOnlyBlockingBuildingOverlays);
     for (const Kingdom& kingdomState : bindings.displayedKingdoms) {
         drawStructureOverlaysForBuildings(bindings.window,
                                           bindings.renderer,
@@ -323,7 +366,8 @@ void RenderCoordinator::renderWorldFrame(WorldRenderBindings& bindings,
                                           plan.selectedBuilding,
                                           bindings.weatherMaskCache,
                                           bindings.localPerspectiveKingdom,
-                                          false);
+                                          false,
+                                          plan.showOnlyBlockingBuildingOverlays);
     }
     bindings.renderer.drawWeatherLayer(bindings.window,
                                        bindings.camera,

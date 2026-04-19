@@ -710,6 +710,7 @@ void Game::toggleInGameMenu() {
 
 void Game::returnToMainMenu() {
     invalidatePendingTurnValidation();
+    m_tacticalGridModeActive = false;
     m_sessionRuntimeCoordinator.returnToMainMenu(makeSessionRuntimeCallbacks());
 }
 
@@ -863,6 +864,10 @@ void Game::handleInput() {
                 permissionsCache.invalidate();
                 continue;
 
+            case InputPreGuiActionKind::ToggleTacticalGrid:
+                m_tacticalGridModeActive = !m_tacticalGridModeActive;
+                continue;
+
             case InputPreGuiActionKind::ExportDebugHistory:
                 m_debugRecorder.exportHistory(gameName(),
                                              turnSystem().getTurnNumber(),
@@ -968,6 +973,7 @@ void Game::render() {
         renderState.gameState = m_state;
         renderState.activeTool = m_input.getCurrentTool();
         renderState.permissions = renderPermissions;
+        renderState.tacticalGridModeActive = m_tacticalGridModeActive;
         renderState.usingConcretePendingState = usingConcretePendingState;
         renderState.activeKingdom = activeKingdom().id;
         renderState.selectedPiece = selectedDisplayedPiece();
@@ -1017,7 +1023,12 @@ void Game::render() {
 
 bool Game::startNewGame(const GameSessionConfig& session, std::string* errorMessage) {
     invalidatePendingTurnValidation();
-    return m_sessionRuntimeCoordinator.startNewGame(session, makeSessionRuntimeCallbacks(), errorMessage);
+    const bool started =
+        m_sessionRuntimeCoordinator.startNewGame(session, makeSessionRuntimeCallbacks(), errorMessage);
+    if (started) {
+        m_tacticalGridModeActive = false;
+    }
+    return started;
 }
 
 bool Game::loadGame(const std::string& saveName) {
@@ -1027,6 +1038,7 @@ bool Game::loadGame(const std::string& saveName) {
         std::cerr << "Failed to restore save: " << error << std::endl;
         return false;
     }
+    m_tacticalGridModeActive = false;
     return true;
 }
 
@@ -1088,14 +1100,23 @@ bool Game::pushSnapshotToRemote(const std::vector<GameplayNotification>& notific
 
 bool Game::joinMultiplayer(const JoinMultiplayerRequest& request, std::string* errorMessage) {
     invalidatePendingTurnValidation();
-    return m_sessionRuntimeCoordinator.joinMultiplayer(request, makeSessionRuntimeCallbacks(), errorMessage);
+    const bool joined =
+        m_sessionRuntimeCoordinator.joinMultiplayer(request, makeSessionRuntimeCallbacks(), errorMessage);
+    if (joined) {
+        m_tacticalGridModeActive = false;
+    }
+    return joined;
 }
 
 bool Game::reconnectToMultiplayerHost(std::string* errorMessage) {
     invalidatePendingTurnValidation();
-    return m_sessionRuntimeCoordinator.reconnectToMultiplayerHost(
+    const bool reconnected = m_sessionRuntimeCoordinator.reconnectToMultiplayerHost(
         makeSessionRuntimeCallbacks(),
         errorMessage);
+    if (reconnected) {
+        m_tacticalGridModeActive = false;
+    }
+    return reconnected;
 }
 
 void Game::updateMultiplayer() {

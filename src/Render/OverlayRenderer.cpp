@@ -31,37 +31,14 @@ constexpr float kOverlayMarginAboveBuilding = 8.f;
 constexpr unsigned int kOverlayTextSize = 13;
 const sf::Color kOrientationCheckerDarkColor(36, 36, 36, 96);
 const sf::Color kOrientationCheckerLightColor(255, 255, 255, 48);
-
-void drawDot(sf::RenderWindow& window, float x, float y, float diameter) {
-    sf::RectangleShape dot({diameter, diameter});
-    dot.setFillColor(kSelectionBlue);
-    dot.setPosition(x, y);
-    window.draw(dot);
-}
+const sf::Color kTacticalGridCheckerDarkColor(156, 156, 156, 255);
+const sf::Color kTacticalGridCheckerLightColor(236, 236, 236, 255);
 
 void drawDot(sf::RenderWindow& window, float x, float y, float diameter, const sf::Color& color) {
     sf::RectangleShape dot({diameter, diameter});
     dot.setFillColor(color);
     dot.setPosition(x, y);
     window.draw(dot);
-}
-
-void drawHorizontalDotRow(sf::RenderWindow& window, float startX, float endX,
-                          float y, float diameter, float gapLength) {
-    if (endX < startX) {
-        return;
-    }
-
-    const float step = diameter + gapLength;
-    float lastX = startX;
-    for (float x = startX; x <= endX; x += step) {
-        drawDot(window, x, y, diameter);
-        lastX = x;
-    }
-
-    if (endX - lastX > 0.5f) {
-        drawDot(window, endX, y, diameter);
-    }
 }
 
 void drawHorizontalDotRow(sf::RenderWindow& window, float startX, float endX,
@@ -79,24 +56,6 @@ void drawHorizontalDotRow(sf::RenderWindow& window, float startX, float endX,
 
     if (endX - lastX > 0.5f) {
         drawDot(window, endX, y, diameter, color);
-    }
-}
-
-void drawVerticalDotColumn(sf::RenderWindow& window, float x, float startY, float endY,
-                           float diameter, float gapLength) {
-    if (endY < startY) {
-        return;
-    }
-
-    const float step = diameter + gapLength;
-    float lastY = startY;
-    for (float y = startY; y <= endY; y += step) {
-        drawDot(window, x, y, diameter);
-        lastY = y;
-    }
-
-    if (endY - lastY > 0.5f) {
-        drawDot(window, x, endY, diameter);
     }
 }
 
@@ -394,6 +353,28 @@ void OverlayRenderer::drawOrientationCheckerboard(sf::RenderWindow& window,
             overlay.setFillColor(((x + y) % 2 == 0)
                 ? kOrientationCheckerDarkColor
                 : kOrientationCheckerLightColor);
+            overlay.setPosition(static_cast<float>(x * cellSize), static_cast<float>(y * cellSize));
+            window.draw(overlay);
+        }
+    }
+}
+
+void OverlayRenderer::drawTacticalGridCheckerboard(sf::RenderWindow& window,
+                                                   const Board& board,
+                                                   int cellSize) {
+    sf::RectangleShape overlay(sf::Vector2f(static_cast<float>(cellSize), static_cast<float>(cellSize)));
+
+    const int diameter = board.getDiameter();
+    for (int y = 0; y < diameter; ++y) {
+        for (int x = 0; x < diameter; ++x) {
+            const Cell& cell = board.getCell(x, y);
+            if (!cell.isInCircle) {
+                continue;
+            }
+
+            overlay.setFillColor(((x + y) % 2 == 0)
+                ? kTacticalGridCheckerDarkColor
+                : kTacticalGridCheckerLightColor);
             overlay.setPosition(static_cast<float>(x * cellSize), static_cast<float>(y * cellSize));
             window.draw(overlay);
         }

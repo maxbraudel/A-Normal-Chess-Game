@@ -233,6 +233,7 @@ private:
     BuildOverlayCache m_buildOverlayCache;
     HotseatFrontendStateStore m_hotseatFrontendState;
     mutable PendingTurnValidationCache m_pendingTurnValidationCache;
+    bool m_tacticalGridModeActive = false;
 
 #ifdef _WIN32
     WNDPROC m_originalWndProc = nullptr;

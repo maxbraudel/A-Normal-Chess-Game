@@ -5,6 +5,7 @@
 #include "Autonomous/AutonomousUnit.hpp"
 #include "Board/Board.hpp"
 #include "Board/Cell.hpp"
+#include "Board/CellTraversal.hpp"
 #include "Kingdom/Kingdom.hpp"
 #include "Kingdom/KingdomId.hpp"
 #include "Buildings/Building.hpp"
@@ -20,6 +21,8 @@ namespace {
 
 constexpr int kFlipHorizontalMask = 1;
 constexpr int kFlipVerticalMask = 2;
+const sf::Color kTacticalGridBlockedTerrainColor(86, 112, 146, 255);
+const sf::Color kTacticalGridBlockedStructureColor(54, 54, 54, 255);
 
 void configureSpriteForCell(sf::Sprite& sprite, int cellSize,
                             float cellX, float cellY,
@@ -103,6 +106,72 @@ void Renderer::drawPiecesLayer(sf::RenderWindow& window, const Camera& camera,
 void Renderer::drawTerrainLayer(sf::RenderWindow& window, const Camera& camera, const Board& board) {
     camera.applyTo(window);
     drawBoard(window, camera, board);
+}
+
+void Renderer::drawTacticalGridBlockedTerrain(sf::RenderWindow& window,
+                                              const Camera& camera,
+                                              const Board& board) {
+    camera.applyTo(window);
+
+    const sf::FloatRect viewBounds = camera.getViewBounds();
+    const int diameter = board.getDiameter();
+    const int minCol = std::max(0, static_cast<int>(viewBounds.left / m_cellSize));
+    const int maxCol = std::min(diameter - 1, static_cast<int>((viewBounds.left + viewBounds.width) / m_cellSize) + 1);
+    const int minRow = std::max(0, static_cast<int>(viewBounds.top / m_cellSize));
+    const int maxRow = std::min(diameter - 1, static_cast<int>((viewBounds.top + viewBounds.height) / m_cellSize) + 1);
+
+    sf::RectangleShape cellShape(sf::Vector2f(static_cast<float>(m_cellSize), static_cast<float>(m_cellSize)));
+    cellShape.setFillColor(kTacticalGridBlockedTerrainColor);
+
+    for (int y = minRow; y <= maxRow; ++y) {
+        for (int x = minCol; x <= maxCol; ++x) {
+            const Cell& cell = board.getCell(x, y);
+            if (!cell.isInCircle || cell.building != nullptr || isCellTerrainTraversable(cell)) {
+                continue;
+            }
+
+            cellShape.setPosition(static_cast<float>(x * m_cellSize), static_cast<float>(y * m_cellSize));
+            window.draw(cellShape);
+        }
+    }
+}
+
+void Renderer::drawTacticalGridBlockedStructures(sf::RenderWindow& window,
+                                                 const Camera& camera,
+                                                 const Board& board,
+                                                 KingdomId localPerspective,
+                                                 const WeatherMaskCache& weatherMaskCache) {
+    camera.applyTo(window);
+
+    const sf::FloatRect viewBounds = camera.getViewBounds();
+    const int diameter = board.getDiameter();
+    const int minCol = std::max(0, static_cast<int>(viewBounds.left / m_cellSize));
+    const int maxCol = std::min(diameter - 1, static_cast<int>((viewBounds.left + viewBounds.width) / m_cellSize) + 1);
+    const int minRow = std::max(0, static_cast<int>(viewBounds.top / m_cellSize));
+    const int maxRow = std::min(diameter - 1, static_cast<int>((viewBounds.top + viewBounds.height) / m_cellSize) + 1);
+
+    sf::RectangleShape cellShape(sf::Vector2f(static_cast<float>(m_cellSize), static_cast<float>(m_cellSize)));
+    cellShape.setFillColor(kTacticalGridBlockedStructureColor);
+
+    for (int y = minRow; y <= maxRow; ++y) {
+        for (int x = minCol; x <= maxCol; ++x) {
+            const Cell& cell = board.getCell(x, y);
+            if (!cell.isInCircle || cell.building == nullptr || isCellTerrainTraversable(cell)) {
+                continue;
+            }
+
+            if (WeatherVisibility::shouldHideBuildingCell(
+                    *cell.building,
+                    {x, y},
+                    localPerspective,
+                    weatherMaskCache)) {
+                continue;
+            }
+
+            cellShape.setPosition(static_cast<float>(x * m_cellSize), static_cast<float>(y * m_cellSize));
+            window.draw(cellShape);
+        }
+    }
 }
 
 void Renderer::drawOccludableBuildings(sf::RenderWindow& window,

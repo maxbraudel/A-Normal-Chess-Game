@@ -12,6 +12,7 @@ class Board;
 class OverlayRenderer {
 public:
     void drawOrientationCheckerboard(sf::RenderWindow& window, const Board& board, int cellSize);
+    void drawTacticalGridCheckerboard(sf::RenderWindow& window, const Board& board, int cellSize);
     void drawSelectionFrame(sf::RenderWindow& window, const Camera& camera,
                              const sf::View& hudView, sf::Vector2u windowSize,
                              sf::Vector2i origin, int width, int height, int cellSize);

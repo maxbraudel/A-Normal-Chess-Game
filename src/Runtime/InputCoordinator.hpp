@@ -24,6 +24,7 @@ enum class InputPreGuiActionKind {
     CloseWindow,
     ResizeWindow,
     ToggleInGameMenu,
+    ToggleTacticalGrid,
     ExportDebugHistory,
     CommitTurn,
     CenterCameraOnPerspective,

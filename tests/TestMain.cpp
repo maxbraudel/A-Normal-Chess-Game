@@ -3443,8 +3443,25 @@ void testSessionValidatorRejectsInvalidOrdering() {
         tabEvent.type = sf::Event::KeyPressed;
         tabEvent.key.code = sf::Keyboard::Tab;
         expect(InputCoordinator::planPreGuiAction(tabEvent, state).kind
+                   == InputPreGuiActionKind::ToggleTacticalGrid,
+               "InputCoordinator should route Tab to Tactical Grid toggling during interactive gameplay states.");
+
+        state.overlaysVisible = true;
+        expect(InputCoordinator::planPreGuiAction(tabEvent, state).kind
                    == InputPreGuiActionKind::SkipEvent,
-               "InputCoordinator should block GUI navigation keys before they leak into the gameplay loop.");
+               "InputCoordinator should suppress Tactical Grid toggling while modal overlays are visible.");
+
+        state.overlaysVisible = false;
+        state.inGameMenuOpen = true;
+        expect(InputCoordinator::planPreGuiAction(tabEvent, state).kind
+                   == InputPreGuiActionKind::SkipEvent,
+               "InputCoordinator should suppress Tactical Grid toggling while the in-game menu is open.");
+
+        state.inGameMenuOpen = false;
+        state.gameState = GameState::MainMenu;
+        expect(InputCoordinator::planPreGuiAction(tabEvent, state).kind
+                   == InputPreGuiActionKind::SkipEvent,
+               "InputCoordinator should continue blocking Tab outside interactive world states.");
     }
 
     void testInputCoordinatorPlansCheatcodeShortcuts() {
@@ -3551,6 +3568,10 @@ void testSessionValidatorRejectsInvalidOrdering() {
             "RenderCoordinator should render the world during interactive in-game states.");
         expect(plan.showOrientationCheckerboard,
             "RenderCoordinator should request the orientation checkerboard when a piece is selected in select mode.");
+        expect(!plan.showTacticalGrid,
+            "RenderCoordinator should keep Tactical Grid disabled unless the dedicated mode is active.");
+        expect(!plan.showOnlyBlockingBuildingOverlays,
+            "RenderCoordinator should keep full building overlays visible outside Tactical Grid.");
         expect(plan.capturePreviewPieceIds.count(999) == 1,
             "RenderCoordinator should preserve the capture-preview skip-piece set for the renderer.");
         expect(plan.selectedOriginCell.has_value()
@@ -3569,6 +3590,38 @@ void testSessionValidatorRejectsInvalidOrdering() {
         expect(plan.actionMarkers.size() == 1
                 && plan.actionMarkers.front().iconName == "move_ongoing",
             "RenderCoordinator should add move action markers for queued movement commands.");
+    }
+
+    void testRenderCoordinatorBuildsTacticalGridPlan() {
+        GameConfig config;
+
+        Piece selectedPiece(89, PieceType::King, KingdomId::White, {6, 6});
+        WorldRenderState state;
+        state.gameState = GameState::Playing;
+        state.activeTool = ToolState::Select;
+        state.permissions.canShowActionOverlays = true;
+        state.activeKingdom = KingdomId::White;
+        state.tacticalGridModeActive = true;
+        state.selectedPiece = &selectedPiece;
+
+        const WorldRenderPlan plan = RenderCoordinator::buildWorldRenderPlan(
+            state,
+            {},
+            {},
+            {},
+            config);
+
+        expect(plan.renderWorld,
+            "RenderCoordinator should keep rendering the world while Tactical Grid is active.");
+        expect(plan.showTacticalGrid,
+            "RenderCoordinator should surface the Tactical Grid flag when the mode is enabled.");
+        expect(plan.showOnlyBlockingBuildingOverlays,
+            "RenderCoordinator should restrict building overlays to blocking structures while Tactical Grid is active.");
+        expect(!plan.showOrientationCheckerboard,
+            "RenderCoordinator should suppress the selected-piece orientation checkerboard while Tactical Grid is active.");
+        expect(plan.selectionFrames.size() == 1
+                && plan.selectionFrames.front().origin == selectedPiece.position,
+            "RenderCoordinator should preserve selection frames while Tactical Grid is active.");
     }
 
     void testRenderCoordinatorPrefersAnchoredSelectionCellForPieceFrame() {
@@ -8757,6 +8810,7 @@ int main() {
         {"input coordinator cheatcode shortcuts", testInputCoordinatorPlansCheatcodeShortcuts},
         {"input coordinator world routing", testInputCoordinatorRoutesWorldInputAfterGuiFiltering},
         {"render coordinator move overlay plan", testRenderCoordinatorBuildsSelectionAndMoveOverlayPlan},
+        {"render coordinator tactical grid plan", testRenderCoordinatorBuildsTacticalGridPlan},
         {"weather config structured parameters", testWeatherConfigLoadsStructuredParameters},
         {"cheatcode config boolean and shortcuts", testCheatcodeConfigLoadsBooleanAndShortcuts},
         {"xp config structured profiles", testXPConfigLoadsStructuredProfiles},

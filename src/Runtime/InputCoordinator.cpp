@@ -43,6 +43,18 @@ InputPreGuiAction InputCoordinator::planPreGuiAction(const sf::Event& event,
     if (isInteractiveGameState(state)
         && !state.overlaysVisible
         && event.type == sf::Event::KeyPressed
+        && event.key.code == sf::Keyboard::Tab) {
+        return {
+            state.inGameMenuOpen
+                ? InputPreGuiActionKind::SkipEvent
+                : InputPreGuiActionKind::ToggleTacticalGrid,
+            {0u, 0u}
+        };
+    }
+
+    if (isInteractiveGameState(state)
+        && !state.overlaysVisible
+        && event.type == sf::Event::KeyPressed
         && isBlockedGameplayShortcutKey(event.key.code)) {
         if (event.key.code == sf::Keyboard::Escape) {
             return {InputPreGuiActionKind::ToggleInGameMenu, {0u, 0u}};
