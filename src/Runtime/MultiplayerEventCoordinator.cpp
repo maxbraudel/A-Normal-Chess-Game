@@ -29,11 +29,13 @@ MultiplayerServerEventPlan MultiplayerEventCoordinator::planServerEvent(
             plan.logMessage = event.message;
             plan.remoteSessionEstablished = false;
             plan.pushSnapshotToRemote = true;
+            plan.clearRemoteTurnPreview = true;
             break;
 
         case MultiplayerServer::Event::Type::ClientDisconnected:
             plan.logMessage = event.message;
             plan.remoteSessionEstablished = false;
+            plan.clearRemoteTurnPreview = true;
             if (state.remoteSessionEstablished) {
                 plan.alert = MultiplayerAlertPlan{
                     "Black Disconnected",
@@ -46,17 +48,24 @@ MultiplayerServerEventPlan MultiplayerEventCoordinator::planServerEvent(
 
         case MultiplayerServer::Event::Type::ClientConnectionInterrupted:
             plan.remoteSessionEstablished = false;
+            plan.clearRemoteTurnPreview = true;
             if (!event.message.empty()) {
                 plan.logMessage = event.message;
             }
             break;
 
+        case MultiplayerServer::Event::Type::TurnPreviewReceived:
+            plan.remoteTurnPreview = event.turnPreview;
+            break;
+
         case MultiplayerServer::Event::Type::TurnSubmitted:
             plan.applyRemoteTurnSubmission = true;
+            plan.clearRemoteTurnPreview = true;
             break;
 
         case MultiplayerServer::Event::Type::Error:
             plan.logMessage = event.message;
+            plan.clearRemoteTurnPreview = true;
             plan.alert = MultiplayerAlertPlan{
                 "LAN Host Error",
                 event.message.empty() ? "The LAN host encountered a network error." : event.message,
@@ -75,8 +84,14 @@ MultiplayerClientEventPlan MultiplayerEventCoordinator::planClientEvent(
     switch (event.type) {
         case MultiplayerClient::Event::Type::SnapshotReceived:
             plan.type = MultiplayerClientEventPlan::Type::RestoreSnapshot;
+            plan.clearRemoteTurnPreview = true;
             plan.serializedSaveData = event.serializedSaveData;
             plan.snapshotNotifications = event.snapshotNotifications;
+            break;
+
+        case MultiplayerClient::Event::Type::TurnPreviewReceived:
+            plan.type = MultiplayerClientEventPlan::Type::ApplyTurnPreview;
+            plan.remoteTurnPreview = event.turnPreview;
             break;
 
         case MultiplayerClient::Event::Type::TurnRejected:
@@ -93,6 +108,7 @@ MultiplayerClientEventPlan MultiplayerEventCoordinator::planClientEvent(
         case MultiplayerClient::Event::Type::Disconnected:
         case MultiplayerClient::Event::Type::Error:
             plan.type = MultiplayerClientEventPlan::Type::Disconnect;
+            plan.clearRemoteTurnPreview = true;
             plan.title = event.type == MultiplayerClient::Event::Type::Disconnected
                 ? "Host Disconnected"
                 : "Network Error";

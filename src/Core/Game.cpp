@@ -281,6 +281,9 @@ TurnLifecycleCallbacks Game::makeTurnLifecycleCallbacks() {
             ensureTurnDraftUpToDate();
         },
         [this]() {
+            clearRemoteTurnPreview();
+        },
+        [this]() {
             refreshTurnPhase();
         },
         [this]() {
@@ -396,6 +399,26 @@ bool Game::shouldUseTurnDraft() const {
     return TurnDraftCoordinator::shouldUseTurnDraft(makeTurnDraftRuntimeState());
 }
 
+bool Game::shouldUseRemoteTurnPreview() const {
+    return (m_state == GameState::Playing
+            || m_state == GameState::Paused
+            || m_state == GameState::GameOver)
+        && m_engine.sessionConfig().sharedTurnPreviewEnabled
+        && m_remoteTurnPreviewState.has_value()
+        && !m_remoteTurnPreviewState->commands.empty()
+        && !isLocalPlayerTurn();
+}
+
+bool Game::shouldDisplayRemoteTurnPreview() const {
+    return !shouldUseTurnDraft()
+        && shouldUseRemoteTurnPreview()
+        && m_remoteTurnPreviewDraft.isValid();
+}
+
+bool Game::usingProjectedDisplayState() const {
+    return (m_turnDraft.isValid() && shouldUseTurnDraft()) || shouldDisplayRemoteTurnPreview();
+}
+
 void Game::invalidateTurnDraft() {
     TurnDraftCoordinator::invalidate(m_turnDraft, m_lastTurnDraftRevision);
 }
@@ -414,6 +437,141 @@ void Game::ensureTurnDraftUpToDate() {
             [this](const InputSelectionBookmark& bookmark) {
                 reconcileSelectionBookmark(bookmark);
             }}});
+}
+
+void Game::invalidateRemoteTurnPreviewDraft() {
+    TurnDraftCoordinator::invalidate(m_remoteTurnPreviewDraft, m_lastRemoteTurnPreviewRevision);
+}
+
+void Game::ensureRemoteTurnPreviewDraftUpToDate() {
+    static const std::vector<TurnCommand> kEmptyCommands;
+    const std::uint64_t revision = m_remoteTurnPreviewState.has_value()
+        ? m_remoteTurnPreviewState->pendingStateRevision
+        : 0;
+    const std::vector<TurnCommand>& commands = m_remoteTurnPreviewState.has_value()
+        ? m_remoteTurnPreviewState->commands
+        : kEmptyCommands;
+
+    TurnDraftCoordinator::synchronizeDraft(shouldUseRemoteTurnPreview(),
+                                           revision,
+                                           commands,
+                                           m_engine,
+                                           m_remoteTurnPreviewDraft,
+                                           m_lastRemoteTurnPreviewRevision,
+                                           m_config,
+                                           TurnDraftSynchronizationCallbacks{
+                                               [this]() {
+                                                   return captureSelectionBookmark();
+                                               },
+                                               [this](const InputSelectionBookmark& bookmark) {
+                                                   reconcileSelectionBookmark(bookmark);
+                                               }});
+}
+
+void Game::clearRemoteTurnPreview() {
+    m_remoteTurnPreviewState.reset();
+    invalidateRemoteTurnPreviewDraft();
+}
+
+void Game::resetPublishedSharedTurnPreviewState() {
+    m_publishedSharedTurnPreviewState = {};
+}
+
+void Game::applyRemoteTurnPreview(const MultiplayerTurnPreview& preview) {
+    if (!m_engine.sessionConfig().sharedTurnPreviewEnabled) {
+        clearRemoteTurnPreview();
+        return;
+    }
+
+    if (m_remoteTurnPreviewState.has_value()
+        && (m_remoteTurnPreviewState->turnNumber != turnSystem().getTurnNumber()
+            || m_remoteTurnPreviewState->activeKingdom != turnSystem().getActiveKingdom()
+            || isLocalPlayerTurn())) {
+        clearRemoteTurnPreview();
+    }
+
+    if (isLocalPlayerTurn()) {
+        return;
+    }
+
+    if (preview.turnNumber != turnSystem().getTurnNumber()
+        || preview.activeKingdom != turnSystem().getActiveKingdom()) {
+        return;
+    }
+
+    if (m_remoteTurnPreviewState.has_value()
+        && preview.pendingStateRevision <= m_remoteTurnPreviewState->pendingStateRevision) {
+        return;
+    }
+
+    if (preview.commands.empty()) {
+        clearRemoteTurnPreview();
+        return;
+    }
+
+    m_remoteTurnPreviewState = preview;
+    invalidateRemoteTurnPreviewDraft();
+}
+
+bool Game::publishSharedTurnPreviewIfNeeded(std::string* errorMessage) {
+    const bool transportReady = isLanHost()
+        ? m_multiplayer.hostHasAuthenticatedClient()
+        : m_multiplayer.clientIsAuthenticated();
+    const bool canPublish = m_engine.sessionConfig().sharedTurnPreviewEnabled
+        && m_localPlayerContext.isNetworked()
+        && transportReady
+        && !m_waitingForRemoteTurnResult
+        && isLocalPlayerTurn()
+        && (m_state == GameState::Playing
+            || m_state == GameState::Paused
+            || m_state == GameState::GameOver);
+
+    if (!canPublish) {
+        if (transportReady
+            && m_publishedSharedTurnPreviewState.hasSentPreview
+            && m_publishedSharedTurnPreviewState.previewHadCommands) {
+            MultiplayerTurnPreview clearPreview;
+            clearPreview.turnNumber = turnSystem().getTurnNumber();
+            clearPreview.activeKingdom = turnSystem().getActiveKingdom();
+            clearPreview.pendingStateRevision = turnSystem().getPendingStateRevision();
+            if (!m_multiplayer.publishTurnPreview(isLanHost(), clearPreview, errorMessage)) {
+                return false;
+            }
+        }
+
+        resetPublishedSharedTurnPreviewState();
+        return true;
+    }
+
+    MultiplayerTurnPreview preview;
+    preview.turnNumber = turnSystem().getTurnNumber();
+    preview.activeKingdom = turnSystem().getActiveKingdom();
+    preview.pendingStateRevision = turnSystem().getPendingStateRevision();
+    preview.commands = turnSystem().getPendingCommands();
+
+    const bool hasCommands = !preview.commands.empty();
+    const bool shouldSend = hasCommands
+        ? !m_publishedSharedTurnPreviewState.hasSentPreview
+            || !m_publishedSharedTurnPreviewState.previewHadCommands
+            || m_publishedSharedTurnPreviewState.turnNumber != preview.turnNumber
+            || m_publishedSharedTurnPreviewState.activeKingdom != preview.activeKingdom
+            || m_publishedSharedTurnPreviewState.pendingStateRevision != preview.pendingStateRevision
+        : m_publishedSharedTurnPreviewState.hasSentPreview
+            && m_publishedSharedTurnPreviewState.previewHadCommands;
+    if (!shouldSend) {
+        return true;
+    }
+
+    if (!m_multiplayer.publishTurnPreview(isLanHost(), preview, errorMessage)) {
+        return false;
+    }
+
+    m_publishedSharedTurnPreviewState.hasSentPreview = true;
+    m_publishedSharedTurnPreviewState.previewHadCommands = hasCommands;
+    m_publishedSharedTurnPreviewState.turnNumber = preview.turnNumber;
+    m_publishedSharedTurnPreviewState.activeKingdom = preview.activeKingdom;
+    m_publishedSharedTurnPreviewState.pendingStateRevision = preview.pendingStateRevision;
+    return true;
 }
 
 KingdomId Game::localPerspectiveKingdom() const {
@@ -442,6 +600,7 @@ InteractionPermissions Game::currentInteractionPermissions(const CheckTurnValida
 
 InputContext Game::buildInputContext(const InteractionPermissions& permissions) {
     ensureWeatherMaskUpToDate();
+    ensureRemoteTurnPreviewDraftUpToDate();
     FrontendDisplayBindings bindings{
         m_window,
         m_camera,
@@ -463,7 +622,7 @@ InputContext Game::buildInputContext(const InteractionPermissions& permissions) 
         makeFrontendRuntimeState(),
         bindings,
         permissions,
-        shouldUseTurnDraft() && m_turnDraft.isValid());
+        usingProjectedDisplayState());
 }
 
 SelectionQueryView Game::makeSelectionQueryView() {
@@ -622,51 +781,131 @@ void Game::activateSelectTool() {
 }
 
 Board& Game::displayedBoard() {
-    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.board() : board();
+    if (m_turnDraft.isValid() && shouldUseTurnDraft()) {
+        return m_turnDraft.board();
+    }
+    if (shouldDisplayRemoteTurnPreview()) {
+        return m_remoteTurnPreviewDraft.board();
+    }
+    return board();
 }
 
 const Board& Game::displayedBoard() const {
-    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.board() : board();
+    if (m_turnDraft.isValid() && shouldUseTurnDraft()) {
+        return m_turnDraft.board();
+    }
+    if (shouldDisplayRemoteTurnPreview()) {
+        return m_remoteTurnPreviewDraft.board();
+    }
+    return board();
+}
+
+const std::vector<TurnCommand>& Game::displayedPendingCommands() const {
+    if (shouldDisplayRemoteTurnPreview()) {
+        return m_remoteTurnPreviewState->commands;
+    }
+
+    return turnSystem().getPendingCommands();
 }
 
 std::array<Kingdom, kNumKingdoms>& Game::displayedKingdoms() {
-    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.kingdoms() : kingdoms();
+    if (m_turnDraft.isValid() && shouldUseTurnDraft()) {
+        return m_turnDraft.kingdoms();
+    }
+    if (shouldDisplayRemoteTurnPreview()) {
+        return m_remoteTurnPreviewDraft.kingdoms();
+    }
+    return kingdoms();
 }
 
 const std::array<Kingdom, kNumKingdoms>& Game::displayedKingdoms() const {
-    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.kingdoms() : kingdoms();
+    if (m_turnDraft.isValid() && shouldUseTurnDraft()) {
+        return m_turnDraft.kingdoms();
+    }
+    if (shouldDisplayRemoteTurnPreview()) {
+        return m_remoteTurnPreviewDraft.kingdoms();
+    }
+    return kingdoms();
 }
 
 std::vector<Building>& Game::displayedPublicBuildings() {
-    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.publicBuildings() : publicBuildings();
+    if (m_turnDraft.isValid() && shouldUseTurnDraft()) {
+        return m_turnDraft.publicBuildings();
+    }
+    if (shouldDisplayRemoteTurnPreview()) {
+        return m_remoteTurnPreviewDraft.publicBuildings();
+    }
+    return publicBuildings();
 }
 
 const std::vector<Building>& Game::displayedPublicBuildings() const {
-    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.publicBuildings() : publicBuildings();
+    if (m_turnDraft.isValid() && shouldUseTurnDraft()) {
+        return m_turnDraft.publicBuildings();
+    }
+    if (shouldDisplayRemoteTurnPreview()) {
+        return m_remoteTurnPreviewDraft.publicBuildings();
+    }
+    return publicBuildings();
 }
 
 std::vector<MapObject>& Game::displayedMapObjects() {
-    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.mapObjects() : mapObjects();
+    if (m_turnDraft.isValid() && shouldUseTurnDraft()) {
+        return m_turnDraft.mapObjects();
+    }
+    if (shouldDisplayRemoteTurnPreview()) {
+        return m_remoteTurnPreviewDraft.mapObjects();
+    }
+    return mapObjects();
 }
 
 const std::vector<MapObject>& Game::displayedMapObjects() const {
-    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.mapObjects() : mapObjects();
+    if (m_turnDraft.isValid() && shouldUseTurnDraft()) {
+        return m_turnDraft.mapObjects();
+    }
+    if (shouldDisplayRemoteTurnPreview()) {
+        return m_remoteTurnPreviewDraft.mapObjects();
+    }
+    return mapObjects();
 }
 
 std::vector<AutonomousUnit>& Game::displayedAutonomousUnits() {
-    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.autonomousUnits() : autonomousUnits();
+    if (m_turnDraft.isValid() && shouldUseTurnDraft()) {
+        return m_turnDraft.autonomousUnits();
+    }
+    if (shouldDisplayRemoteTurnPreview()) {
+        return m_remoteTurnPreviewDraft.autonomousUnits();
+    }
+    return autonomousUnits();
 }
 
 const std::vector<AutonomousUnit>& Game::displayedAutonomousUnits() const {
-    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.autonomousUnits() : autonomousUnits();
+    if (m_turnDraft.isValid() && shouldUseTurnDraft()) {
+        return m_turnDraft.autonomousUnits();
+    }
+    if (shouldDisplayRemoteTurnPreview()) {
+        return m_remoteTurnPreviewDraft.autonomousUnits();
+    }
+    return autonomousUnits();
 }
 
 Kingdom& Game::displayedKingdom(KingdomId id) {
-    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.kingdom(id) : kingdom(id);
+    if (m_turnDraft.isValid() && shouldUseTurnDraft()) {
+        return m_turnDraft.kingdom(id);
+    }
+    if (shouldDisplayRemoteTurnPreview()) {
+        return m_remoteTurnPreviewDraft.kingdom(id);
+    }
+    return kingdom(id);
 }
 
 const Kingdom& Game::displayedKingdom(KingdomId id) const {
-    return (m_turnDraft.isValid() && shouldUseTurnDraft()) ? m_turnDraft.kingdom(id) : kingdom(id);
+    if (m_turnDraft.isValid() && shouldUseTurnDraft()) {
+        return m_turnDraft.kingdom(id);
+    }
+    if (shouldDisplayRemoteTurnPreview()) {
+        return m_remoteTurnPreviewDraft.kingdom(id);
+    }
+    return kingdom(id);
 }
 
 bool Game::isInGameMenuOpen() const {
@@ -711,6 +950,8 @@ void Game::toggleInGameMenu() {
 void Game::returnToMainMenu() {
     invalidatePendingTurnValidation();
     m_tacticalGridModeActive = false;
+    clearRemoteTurnPreview();
+    resetPublishedSharedTurnPreviewState();
     m_sessionRuntimeCoordinator.returnToMainMenu(makeSessionRuntimeCallbacks());
 }
 
@@ -939,6 +1180,7 @@ void Game::handleInput() {
 
 void Game::update() {
     ensureTurnDraftUpToDate();
+    ensureRemoteTurnPreviewDraftUpToDate();
     const FrameUpdatePlan updatePlan = UpdateCoordinator::planFrameUpdate(FrameUpdateState{
         m_state,
         currentInteractionPermissions().canMoveCamera,
@@ -966,8 +1208,9 @@ void Game::render() {
 
     if (RenderCoordinator::shouldRenderWorld(m_state)) {
         ensureTurnDraftUpToDate();
+        ensureRemoteTurnPreviewDraftUpToDate();
         ensureWeatherMaskUpToDate();
-        const bool usingConcretePendingState = shouldUseTurnDraft() && m_turnDraft.isValid();
+        const bool usingConcretePendingState = usingProjectedDisplayState();
         const InteractionPermissions renderPermissions = currentInteractionPermissions();
         refreshBuildableCellsOverlay(renderPermissions);
         WorldRenderState renderState;
@@ -976,6 +1219,8 @@ void Game::render() {
         renderState.permissions = renderPermissions;
         renderState.tacticalGridModeActive = m_tacticalGridModeActive;
         renderState.usingConcretePendingState = usingConcretePendingState;
+        renderState.showPendingCommandVisuals = shouldDisplayRemoteTurnPreview();
+        renderState.weatherMaskCache = &m_engine.weatherMaskCache();
         renderState.activeKingdom = activeKingdom().id;
         renderState.selectedPiece = selectedDisplayedPiece();
         renderState.selectedBuilding = selectedDisplayedBuilding();
@@ -1010,7 +1255,7 @@ void Game::render() {
         };
         const WorldRenderPlan renderPlan = RenderCoordinator::buildWorldRenderPlan(
             renderState,
-            turnSystem().getPendingCommands(),
+            displayedPendingCommands(),
             m_buildOverlayCache.validAnchorCells,
             m_buildOverlayCache.coverageCells,
             m_config);
@@ -1024,6 +1269,8 @@ void Game::render() {
 
 bool Game::startNewGame(const GameSessionConfig& session, std::string* errorMessage) {
     invalidatePendingTurnValidation();
+    clearRemoteTurnPreview();
+    resetPublishedSharedTurnPreviewState();
     const bool started =
         m_sessionRuntimeCoordinator.startNewGame(session, makeSessionRuntimeCallbacks(), errorMessage);
     if (started) {
@@ -1034,6 +1281,8 @@ bool Game::startNewGame(const GameSessionConfig& session, std::string* errorMess
 
 bool Game::loadGame(const std::string& saveName) {
     invalidatePendingTurnValidation();
+    clearRemoteTurnPreview();
+    resetPublishedSharedTurnPreviewState();
     std::string error;
     if (!m_sessionRuntimeCoordinator.loadGame(saveName, makeSessionRuntimeCallbacks(), &error)) {
         std::cerr << "Failed to restore save: " << error << std::endl;
@@ -1074,6 +1323,8 @@ void Game::resetPlayerTurn() {
 
 void Game::stopMultiplayer() {
     invalidatePendingTurnValidation();
+    clearRemoteTurnPreview();
+    resetPublishedSharedTurnPreviewState();
     m_multiplayer.resetConnections();
     m_waitingForRemoteTurnResult = false;
     m_localPlayerContext = LocalPlayerContext{};
@@ -1101,6 +1352,8 @@ bool Game::pushSnapshotToRemote(const std::vector<GameplayNotification>& notific
 
 bool Game::joinMultiplayer(const JoinMultiplayerRequest& request, std::string* errorMessage) {
     invalidatePendingTurnValidation();
+    clearRemoteTurnPreview();
+    resetPublishedSharedTurnPreviewState();
     const bool joined =
         m_sessionRuntimeCoordinator.joinMultiplayer(request, makeSessionRuntimeCallbacks(), errorMessage);
     if (joined) {
@@ -1111,6 +1364,8 @@ bool Game::joinMultiplayer(const JoinMultiplayerRequest& request, std::string* e
 
 bool Game::reconnectToMultiplayerHost(std::string* errorMessage) {
     invalidatePendingTurnValidation();
+    clearRemoteTurnPreview();
+    resetPublishedSharedTurnPreviewState();
     const bool reconnected = m_sessionRuntimeCoordinator.reconnectToMultiplayerHost(
         makeSessionRuntimeCallbacks(),
         errorMessage);
@@ -1122,6 +1377,9 @@ bool Game::reconnectToMultiplayerHost(std::string* errorMessage) {
 
 void Game::updateMultiplayer() {
     const MultiplayerRuntimeCallbacks callbacks{
+        [this](std::string* errorMessage) {
+            return publishSharedTurnPreviewIfNeeded(errorMessage);
+        },
         [this](const std::vector<GameplayNotification>& notifications, std::string* errorMessage) {
             return pushSnapshotToRemote(notifications, errorMessage);
         },
@@ -1131,6 +1389,12 @@ void Game::updateMultiplayer() {
                 commands,
                 makeTurnLifecycleCallbacks(),
                 errorMessage);
+        },
+        [this](const MultiplayerTurnPreview& preview) {
+            applyRemoteTurnPreview(preview);
+        },
+        [this]() {
+            clearRemoteTurnPreview();
         },
         [this]() {
             return captureSelectionBookmark();
@@ -1177,9 +1441,10 @@ void Game::setupUICallbacks() {
 
 void Game::updateUIState() {
     ensureTurnDraftUpToDate();
+    ensureRemoteTurnPreviewDraftUpToDate();
     turnSystem().syncPointBudget(m_config, activeKingdom());
     const FrontendRuntimeState runtimeState = makeFrontendRuntimeState();
-    const bool usingProjectedDisplayState = m_turnDraft.isValid() && shouldUseTurnDraft();
+    const bool usingProjectedDisplayState = this->usingProjectedDisplayState();
     const Board& currentDisplayedBoard = displayedBoard();
     const auto& currentDisplayedKingdoms = displayedKingdoms();
     const auto& currentDisplayedPublicBuildings = displayedPublicBuildings();

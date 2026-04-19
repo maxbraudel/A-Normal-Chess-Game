@@ -36,6 +36,7 @@ struct TurnLifecycleCallbacks {
     std::function<InputSelectionBookmark()> captureSelectionBookmark;
     std::function<void(const InputSelectionBookmark&)> reconcileSelectionBookmark;
     std::function<void()> ensureTurnDraftUpToDate;
+    std::function<void()> clearRemoteTurnPreview;
     std::function<void()> refreshTurnPhase;
     std::function<void()> updateUI;
     std::function<void(const std::vector<GameplayNotification>&)> persistLanHostSnapshot;

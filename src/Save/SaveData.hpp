@@ -27,6 +27,7 @@ struct SaveData {
         defaultKingdomParticipants(GameMode::HumanVsHuman);
     MultiplayerConfig multiplayer{};
     bool tacticalGridEnabled = false;
+    bool sharedTurnPreviewEnabled = false;
 
     // Grid state
     struct CellData {

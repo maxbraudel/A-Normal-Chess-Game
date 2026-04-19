@@ -16,7 +16,7 @@ enum class GameMode {
 
 inline constexpr int kMinMultiplayerPort = 1;
 inline constexpr int kMaxMultiplayerPort = 65535;
-inline constexpr std::uint32_t kCurrentMultiplayerProtocolVersion = 1;
+inline constexpr std::uint32_t kCurrentMultiplayerProtocolVersion = 2;
 
 struct MultiplayerConfig {
     bool enabled = false;
@@ -57,6 +57,7 @@ struct GameSessionConfig {
         defaultKingdomParticipants(GameMode::HumanVsHuman);
     MultiplayerConfig multiplayer{};
     bool tacticalGridEnabled = false;
+    bool sharedTurnPreviewEnabled = false;
 };
 
 struct SaveSummary {
@@ -65,6 +66,7 @@ struct SaveSummary {
         defaultKingdomParticipants(GameMode::HumanVsHuman);
     MultiplayerConfig multiplayer{};
     bool tacticalGridEnabled = false;
+    bool sharedTurnPreviewEnabled = false;
 };
 
 inline GameSessionConfig makeDefaultGameSessionConfig(GameMode mode,

@@ -41,6 +41,9 @@ public:
     bool pushSnapshotIfConnected(bool lanHost,
                                  const std::string& serializedSaveData,
                                  std::string* errorMessage = nullptr);
+    bool publishTurnPreview(bool lanHost,
+                            const MultiplayerTurnPreview& preview,
+                            std::string* errorMessage = nullptr);
     bool submitTurnSubmission(const std::vector<TurnCommand>& commands,
                               std::string* errorMessage = nullptr);
     bool sendTurnRejected(const std::string& reason,

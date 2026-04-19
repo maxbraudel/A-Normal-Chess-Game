@@ -43,6 +43,8 @@ struct MultiplayerServerEventPlan {
     bool hideAlert = false;
     bool pushSnapshotToRemote = false;
     bool applyRemoteTurnSubmission = false;
+    bool clearRemoteTurnPreview = false;
+    std::optional<MultiplayerTurnPreview> remoteTurnPreview;
     std::optional<MultiplayerAlertPlan> alert;
 };
 
@@ -50,13 +52,16 @@ struct MultiplayerClientEventPlan {
     enum class Type {
         None,
         RestoreSnapshot,
+        ApplyTurnPreview,
         ShowAlert,
         Disconnect
     };
 
     Type type = Type::None;
+    bool clearRemoteTurnPreview = false;
     std::string serializedSaveData;
     std::vector<GameplayNotification> snapshotNotifications;
+    MultiplayerTurnPreview remoteTurnPreview;
     std::string title;
     std::string message;
     std::optional<MultiplayerAlertPlan> alert;

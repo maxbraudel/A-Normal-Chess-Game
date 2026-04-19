@@ -38,36 +38,53 @@ void TurnDraftCoordinator::invalidate(TurnDraft& turnDraft, std::uint64_t& lastR
     lastRevision = 0;
 }
 
-void TurnDraftCoordinator::ensureUpToDate(const TurnDraftSynchronizationContext& context) {
-    const std::uint64_t revision = context.engine.turnSystem().getPendingStateRevision();
-    if (!shouldUseTurnDraft(context.runtimeState)) {
-        if (context.turnDraft.isValid()) {
-            const InputSelectionBookmark selectionBookmark = captureSelectionBookmark(context.callbacks);
-            context.turnDraft.clear();
-            context.lastRevision = revision;
-            reconcileSelectionBookmark(context.callbacks, selectionBookmark);
+void TurnDraftCoordinator::synchronizeDraft(bool shouldUseDraft,
+                                            std::uint64_t revision,
+                                            const std::vector<TurnCommand>& commands,
+                                            GameEngine& engine,
+                                            TurnDraft& turnDraft,
+                                            std::uint64_t& lastRevision,
+                                            const GameConfig& config,
+                                            const TurnDraftSynchronizationCallbacks& callbacks) {
+    if (!shouldUseDraft) {
+        if (turnDraft.isValid()) {
+            const InputSelectionBookmark selectionBookmark = captureSelectionBookmark(callbacks);
+            turnDraft.clear();
+            lastRevision = revision;
+            reconcileSelectionBookmark(callbacks, selectionBookmark);
         } else {
-            context.lastRevision = revision;
+            lastRevision = revision;
         }
         return;
     }
 
-    if (context.turnDraft.isValid() && context.lastRevision == revision) {
+    if (turnDraft.isValid() && lastRevision == revision) {
         return;
     }
 
-    const InputSelectionBookmark selectionBookmark = captureSelectionBookmark(context.callbacks);
+    const InputSelectionBookmark selectionBookmark = captureSelectionBookmark(callbacks);
     std::string errorMessage;
-    if (!context.turnDraft.rebuild(context.engine,
-                                   context.config,
-                                   context.engine.turnSystem().getPendingCommands(),
-                                   &errorMessage)) {
-        context.turnDraft.clear();
-        context.lastRevision = revision;
-        reconcileSelectionBookmark(context.callbacks, selectionBookmark);
+    if (!turnDraft.rebuild(engine,
+                           config,
+                           commands,
+                           &errorMessage)) {
+        turnDraft.clear();
+        lastRevision = revision;
+        reconcileSelectionBookmark(callbacks, selectionBookmark);
         return;
     }
 
-    context.lastRevision = revision;
-    reconcileSelectionBookmark(context.callbacks, selectionBookmark);
+    lastRevision = revision;
+    reconcileSelectionBookmark(callbacks, selectionBookmark);
+}
+
+void TurnDraftCoordinator::ensureUpToDate(const TurnDraftSynchronizationContext& context) {
+    synchronizeDraft(shouldUseTurnDraft(context.runtimeState),
+                     context.engine.turnSystem().getPendingStateRevision(),
+                     context.engine.turnSystem().getPendingCommands(),
+                     context.engine,
+                     context.turnDraft,
+                     context.lastRevision,
+                     context.config,
+                     context.callbacks);
 }

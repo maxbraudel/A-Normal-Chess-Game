@@ -18,8 +18,11 @@ class SaveManager;
 struct LocalPlayerContext;
 
 struct MultiplayerRuntimeCallbacks {
+    std::function<bool(std::string*)> publishLocalTurnPreview;
     std::function<bool(const std::vector<GameplayNotification>&, std::string*)> pushSnapshotToRemote;
     std::function<bool(const std::vector<TurnCommand>&, std::string*)> applyRemoteTurnSubmission;
+    std::function<void(const MultiplayerTurnPreview&)> applyRemoteTurnPreview;
+    std::function<void()> clearRemoteTurnPreview;
     std::function<InputSelectionBookmark()> captureSelectionBookmark;
     std::function<void(const InputSelectionBookmark&)> reconcileSelectionBookmark;
     std::function<void()> refreshTurnPhase;

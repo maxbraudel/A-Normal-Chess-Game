@@ -16,6 +16,39 @@ bool readBool(sf::Packet& packet, bool& value) {
     return true;
 }
 
+bool writeTurnCommand(sf::Packet& packet, const TurnCommand& command);
+bool readTurnCommand(sf::Packet& packet, TurnCommand& command);
+
+bool writeTurnCommandVector(sf::Packet& packet, const std::vector<TurnCommand>& commands) {
+    packet << static_cast<sf::Uint32>(commands.size());
+    for (const TurnCommand& command : commands) {
+        if (!writeTurnCommand(packet, command)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool readTurnCommandVector(sf::Packet& packet, std::vector<TurnCommand>& commands) {
+    sf::Uint32 commandCount = 0;
+    if (!(packet >> commandCount)) {
+        return false;
+    }
+
+    commands.clear();
+    commands.reserve(commandCount);
+    for (sf::Uint32 index = 0; index < commandCount; ++index) {
+        TurnCommand command;
+        if (!readTurnCommand(packet, command)) {
+            return false;
+        }
+        commands.push_back(command);
+    }
+
+    return true;
+}
+
 bool writeTurnCommand(sf::Packet& packet, const TurnCommand& command) {
     packet << static_cast<sf::Uint8>(command.type)
            << command.pieceId
@@ -203,33 +236,30 @@ bool readPacket(sf::Packet& packet, MultiplayerStateSnapshot& snapshot) {
 }
 
 bool writePacket(sf::Packet& packet, const MultiplayerTurnSubmission& submission) {
-    packet << static_cast<sf::Uint32>(submission.commands.size());
-    for (const auto& command : submission.commands) {
-        if (!writeTurnCommand(packet, command)) {
-            return false;
-        }
-    }
-
-    return true;
+    return writeTurnCommandVector(packet, submission.commands);
 }
 
 bool readPacket(sf::Packet& packet, MultiplayerTurnSubmission& submission) {
-    sf::Uint32 commandCount = 0;
-    if (!(packet >> commandCount)) {
+    return readTurnCommandVector(packet, submission.commands);
+}
+
+bool writePacket(sf::Packet& packet, const MultiplayerTurnPreview& preview) {
+    packet << preview.turnNumber
+           << static_cast<sf::Uint8>(preview.activeKingdom)
+           << static_cast<sf::Uint64>(preview.pendingStateRevision);
+    return writeTurnCommandVector(packet, preview.commands);
+}
+
+bool readPacket(sf::Packet& packet, MultiplayerTurnPreview& preview) {
+    sf::Uint8 activeKingdom = 0;
+    sf::Uint64 pendingStateRevision = 0;
+    if (!(packet >> preview.turnNumber >> activeKingdom >> pendingStateRevision)) {
         return false;
     }
 
-    submission.commands.clear();
-    submission.commands.reserve(commandCount);
-    for (sf::Uint32 index = 0; index < commandCount; ++index) {
-        TurnCommand command;
-        if (!readTurnCommand(packet, command)) {
-            return false;
-        }
-        submission.commands.push_back(command);
-    }
-
-    return true;
+    preview.activeKingdom = static_cast<KingdomId>(activeKingdom);
+    preview.pendingStateRevision = static_cast<std::uint64_t>(pendingStateRevision);
+    return readTurnCommandVector(packet, preview.commands);
 }
 
 bool writePacket(sf::Packet& packet, const MultiplayerTurnRejected& rejection) {

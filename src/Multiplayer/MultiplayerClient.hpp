@@ -18,6 +18,7 @@ public:
             JoinAccepted,
             JoinRejected,
             SnapshotReceived,
+            TurnPreviewReceived,
             TurnRejected,
             Disconnected,
             Error
@@ -28,6 +29,7 @@ public:
         std::string message;
         std::string serializedSaveData;
         std::vector<GameplayNotification> snapshotNotifications;
+        MultiplayerTurnPreview turnPreview;
     };
 
     bool connect(const sf::IpAddress& address,
@@ -40,6 +42,7 @@ public:
     bool requestServerInfo(std::string* errorMessage = nullptr);
     bool sendJoinRequest(const std::string& passwordDigest, std::string* errorMessage = nullptr);
     bool sendTurnSubmission(const std::vector<TurnCommand>& commands, std::string* errorMessage = nullptr);
+    bool sendTurnPreview(const MultiplayerTurnPreview& preview, std::string* errorMessage = nullptr);
 
     bool isConnected() const { return m_connected; }
     bool isAuthenticated() const { return m_authenticated; }

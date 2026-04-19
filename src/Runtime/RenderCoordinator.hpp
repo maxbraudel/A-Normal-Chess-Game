@@ -63,6 +63,8 @@ struct WorldRenderState {
     InteractionPermissions permissions{};
     bool tacticalGridModeActive = false;
     bool usingConcretePendingState = false;
+    bool showPendingCommandVisuals = false;
+    const WeatherMaskCache* weatherMaskCache = nullptr;
     KingdomId activeKingdom = KingdomId::White;
     const Piece* selectedPiece = nullptr;
     const Building* selectedBuilding = nullptr;

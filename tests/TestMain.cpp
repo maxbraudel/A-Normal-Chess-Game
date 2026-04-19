@@ -2786,6 +2786,7 @@ void testSessionValidatorRejectsInvalidOrdering() {
                              tempDir.string());
             GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman, saveName);
             session.tacticalGridEnabled = true;
+            session.sharedTurnPreviewEnabled = true;
 
             std::string error;
             expect(flow.startNewSession(session, &error), error);
@@ -2811,6 +2812,8 @@ void testSessionValidatorRejectsInvalidOrdering() {
                    "Loading a freshly saved session through SessionFlow should restore the starting turn number.");
                  expect(restoredEngine.sessionConfig().tacticalGridEnabled,
                      "Loading through SessionFlow should restore Tactical Grid availability from save metadata.");
+            expect(restoredEngine.sessionConfig().sharedTurnPreviewEnabled,
+                "Loading through SessionFlow should restore Shared Turn Preview availability from save metadata.");
             expect(restoredEngine.validate(&error), error);
         } catch (...) {
             std::filesystem::remove_all(tempDir);
@@ -3263,6 +3266,66 @@ void testSessionValidatorRejectsInvalidOrdering() {
         expect(plan.snapshotNotifications[0].kingdom == KingdomId::Black
                 && plan.snapshotNotifications[0].chestReward.amount == 23,
             "MultiplayerEventCoordinator should preserve notification payload contents across the client event plan.");
+    }
+
+    void testMultiplayerEventCoordinatorPlansTurnPreviewLifecycle() {
+        MultiplayerTurnPreview preview;
+        preview.turnNumber = 6;
+        preview.activeKingdom = KingdomId::Black;
+        preview.pendingStateRevision = 19;
+
+        TurnCommand moveCommand;
+        moveCommand.type = TurnCommand::Move;
+        moveCommand.pieceId = 71;
+        moveCommand.origin = {2, 3};
+        moveCommand.destination = {2, 4};
+        preview.commands.push_back(moveCommand);
+
+        MultiplayerServer::Event hostPreviewEvent;
+        hostPreviewEvent.type = MultiplayerServer::Event::Type::TurnPreviewReceived;
+        hostPreviewEvent.turnPreview = preview;
+
+        const MultiplayerServerEventPlan hostPreviewPlan = MultiplayerEventCoordinator::planServerEvent(
+            hostPreviewEvent,
+            MultiplayerHostEventState{6, true});
+        expect(hostPreviewPlan.remoteTurnPreview.has_value(),
+            "MultiplayerEventCoordinator should surface incoming host-side turn previews for application.");
+        expect(hostPreviewPlan.remoteTurnPreview->pendingStateRevision == preview.pendingStateRevision,
+            "MultiplayerEventCoordinator should preserve host-side turn preview revisions.");
+        expect(!hostPreviewPlan.clearRemoteTurnPreview,
+            "MultiplayerEventCoordinator should not clear an advisory preview when merely receiving a fresher one.");
+
+        MultiplayerServer::Event hostTurnSubmittedEvent;
+        hostTurnSubmittedEvent.type = MultiplayerServer::Event::Type::TurnSubmitted;
+        const MultiplayerServerEventPlan hostTurnSubmittedPlan = MultiplayerEventCoordinator::planServerEvent(
+            hostTurnSubmittedEvent,
+            MultiplayerHostEventState{6, true});
+        expect(hostTurnSubmittedPlan.applyRemoteTurnSubmission,
+            "MultiplayerEventCoordinator should still apply authoritative submitted turns on the host.");
+        expect(hostTurnSubmittedPlan.clearRemoteTurnPreview,
+            "MultiplayerEventCoordinator should clear advisory previews once an authoritative remote turn is submitted.");
+
+        MultiplayerClient::Event clientPreviewEvent;
+        clientPreviewEvent.type = MultiplayerClient::Event::Type::TurnPreviewReceived;
+        clientPreviewEvent.turnPreview = preview;
+
+        const MultiplayerClientEventPlan clientPreviewPlan = MultiplayerEventCoordinator::planClientEvent(clientPreviewEvent);
+        expect(clientPreviewPlan.type == MultiplayerClientEventPlan::Type::ApplyTurnPreview,
+            "MultiplayerEventCoordinator should classify client preview packets as preview applications.");
+        expect(clientPreviewPlan.remoteTurnPreview.turnNumber == preview.turnNumber
+                && clientPreviewPlan.remoteTurnPreview.commands.size() == 1,
+            "MultiplayerEventCoordinator should preserve client preview payload contents.");
+        expect(!clientPreviewPlan.clearRemoteTurnPreview,
+            "MultiplayerEventCoordinator should not clear an advisory client preview while applying a fresher one.");
+
+        MultiplayerClient::Event clientSnapshotEvent;
+        clientSnapshotEvent.type = MultiplayerClient::Event::Type::SnapshotReceived;
+        clientSnapshotEvent.serializedSaveData = "{\"snapshot\":true}";
+        const MultiplayerClientEventPlan clientSnapshotPlan = MultiplayerEventCoordinator::planClientEvent(clientSnapshotEvent);
+        expect(clientSnapshotPlan.type == MultiplayerClientEventPlan::Type::RestoreSnapshot,
+            "MultiplayerEventCoordinator should keep snapshot packets authoritative over preview packets.");
+        expect(clientSnapshotPlan.clearRemoteTurnPreview,
+            "MultiplayerEventCoordinator should clear advisory previews before restoring an authoritative snapshot.");
     }
 
     void testMultiplayerEventCoordinatorRestoresSnapshotsAndClientState() {
@@ -4656,6 +4719,7 @@ void testSaveManagerRoundTrip() {
     data.mapRadius = 5;
     data.worldSeed = 123456789u;
     data.tacticalGridEnabled = true;
+    data.sharedTurnPreviewEnabled = true;
     data.weatherSystemState.nextSpawnTurnStep = 19;
     data.weatherSystemState.hasActiveFront = true;
     data.weatherSystemState.rngCounter = 6u;
@@ -4760,6 +4824,8 @@ void testSaveManagerRoundTrip() {
         "World seed should round-trip through SaveManager.");
     expect(loaded.tacticalGridEnabled == data.tacticalGridEnabled,
         "Tactical Grid availability should round-trip through SaveManager.");
+    expect(loaded.sharedTurnPreviewEnabled == data.sharedTurnPreviewEnabled,
+        "Shared Turn Preview availability should round-trip through SaveManager.");
     expect(loaded.xpSystemState.rngCounter == data.xpSystemState.rngCounter,
         "XP RNG state should round-trip through SaveManager.");
     expect(loaded.weatherSystemState.nextSpawnTurnStep == data.weatherSystemState.nextSpawnTurnStep
@@ -4807,6 +4873,7 @@ void testSaveManagerRoundTrip() {
             data.mapRadius = 4;
             data.worldSeed = 987654321u;
             data.tacticalGridEnabled = true;
+            data.sharedTurnPreviewEnabled = true;
             data.sessionKingdoms = defaultKingdomParticipants(GameMode::HumanVsHuman);
             data.multiplayer.enabled = true;
             data.multiplayer.port = 41000;
@@ -4830,6 +4897,8 @@ void testSaveManagerRoundTrip() {
             expect(loaded.worldSeed == data.worldSeed, "Serialized string snapshots should preserve the world seed.");
             expect(loaded.tacticalGridEnabled == data.tacticalGridEnabled,
                 "Serialized string snapshots should preserve Tactical Grid availability.");
+            expect(loaded.sharedTurnPreviewEnabled == data.sharedTurnPreviewEnabled,
+                "Serialized string snapshots should preserve Shared Turn Preview availability.");
             expect(loaded.multiplayer.port == data.multiplayer.port, "Serialized string snapshots should preserve multiplayer metadata.");
             expect(loaded.weatherSystemState.revision == data.weatherSystemState.revision,
                 "Serialized string snapshots should preserve the weather revision used to validate authoritative weather masks.");
@@ -4845,6 +4914,7 @@ void testSaveManagerRoundTrip() {
             request.session.multiplayer.enabled = true;
             request.session.multiplayer.port = 45000;
             request.session.tacticalGridEnabled = true;
+            request.session.sharedTurnPreviewEnabled = true;
             request.multiplayerPassword = "secret";
 
             GameSessionConfig finalizedSession;
@@ -4852,6 +4922,8 @@ void testSaveManagerRoundTrip() {
             expect(SessionMetadataService::prepareSessionForStart(request, finalizedSession, &error), error);
             expect(finalizedSession.tacticalGridEnabled,
                 "SessionMetadataService should preserve Tactical Grid availability when preparing a new session.");
+            expect(finalizedSession.sharedTurnPreviewEnabled,
+                "SessionMetadataService should preserve Shared Turn Preview availability when preparing a new session.");
             expect(finalizedSession.multiplayer.enabled
                     && finalizedSession.multiplayer.port == request.session.multiplayer.port,
                 "SessionMetadataService should preserve LAN enablement and port when preparing a new session.");
@@ -4886,6 +4958,7 @@ void testSaveManagerRoundTrip() {
                     "secret",
                     session.multiplayer.passwordSalt);
                 session.tacticalGridEnabled = false;
+                session.sharedTurnPreviewEnabled = false;
 
                 std::string error;
                 expect(engine.startNewSession(session, config, &error), error);
@@ -4903,6 +4976,7 @@ void testSaveManagerRoundTrip() {
                 request.session.multiplayer.enabled = true;
                 request.session.multiplayer.port = 43000;
                 request.session.tacticalGridEnabled = true;
+                request.session.sharedTurnPreviewEnabled = true;
 
                 expect(SessionMetadataService::editSavedSession(request,
                                                                 saveManager,
@@ -4926,6 +5000,8 @@ void testSaveManagerRoundTrip() {
                     "Editing save metadata should update the stored player display names.");
                 expect(editedData.tacticalGridEnabled,
                     "Editing save metadata should update Tactical Grid availability.");
+                expect(editedData.sharedTurnPreviewEnabled,
+                    "Editing save metadata should update Shared Turn Preview availability.");
                 expect(editedData.multiplayer.enabled && editedData.multiplayer.port == 43000,
                     "Editing save metadata should update the stored LAN port while keeping the session networked.");
                 expect(editedData.multiplayer.passwordSalt == session.multiplayer.passwordSalt
@@ -5068,6 +5144,51 @@ void testSaveManagerRoundTrip() {
                 "Turn submission packets should preserve sacrifice commands.");
         }
 
+        void testMultiplayerTurnPreviewPacketRoundTrip() {
+            TurnCommand moveCommand;
+            moveCommand.type = TurnCommand::Move;
+            moveCommand.pieceId = 42;
+            moveCommand.origin = {1, 2};
+            moveCommand.destination = {3, 4};
+
+            TurnCommand buildCommand;
+            buildCommand.type = TurnCommand::Build;
+            buildCommand.buildingType = BuildingType::Barracks;
+            buildCommand.buildOrigin = {5, 6};
+            buildCommand.buildRotationQuarterTurns = 3;
+
+            MultiplayerTurnPreview preview;
+            preview.turnNumber = 9;
+            preview.activeKingdom = KingdomId::Black;
+            preview.pendingStateRevision = 27;
+            preview.commands = {moveCommand, buildCommand};
+
+            sf::Packet packet = createPacket(MultiplayerMessageType::TurnPreview);
+            expect(writePacket(packet, preview),
+                "Protocol should serialize shared turn preview packets.");
+
+            MultiplayerMessageType type = MultiplayerMessageType::ServerInfoRequest;
+            expect(extractMessageType(packet, type), "Protocol should decode shared turn preview packet types.");
+            expect(type == MultiplayerMessageType::TurnPreview,
+                "Shared turn preview packets should preserve their multiplayer message type.");
+
+            MultiplayerTurnPreview restoredPreview;
+            expect(readPacket(packet, restoredPreview), "Protocol should deserialize shared turn preview packets.");
+            expect(restoredPreview.turnNumber == preview.turnNumber
+                    && restoredPreview.activeKingdom == preview.activeKingdom,
+                "Shared turn preview packets should preserve turn identity metadata.");
+            expect(restoredPreview.pendingStateRevision == preview.pendingStateRevision,
+                "Shared turn preview packets should preserve pending-state revision metadata.");
+            expect(restoredPreview.commands.size() == 2,
+                "Shared turn preview packets should preserve all queued commands.");
+            expect(restoredPreview.commands[0].pieceId == moveCommand.pieceId
+                    && restoredPreview.commands[0].destination == moveCommand.destination,
+                "Shared turn preview packets should preserve queued move payloads.");
+            expect(restoredPreview.commands[1].buildOrigin == buildCommand.buildOrigin
+                    && restoredPreview.commands[1].buildRotationQuarterTurns == buildCommand.buildRotationQuarterTurns,
+                "Shared turn preview packets should preserve queued build payloads.");
+        }
+
         void testMultiplayerTurnRejectedPacketRoundTrip() {
             sf::Packet packet = createPacket(MultiplayerMessageType::TurnRejected);
             expect(writePacket(packet, MultiplayerTurnRejected{"Rejected test turn."}),
@@ -5204,6 +5325,94 @@ void testSaveManagerRoundTrip() {
 
                 return false;
             }), "Loopback multiplayer server should receive remote turn submissions.");
+
+            client.disconnect();
+            server.stop();
+        }
+
+        void testMultiplayerTurnPreviewLoopback() {
+            MultiplayerConfig config;
+            config.enabled = true;
+            config.passwordSalt = "preview_loopback_salt";
+            config.passwordHash = MultiplayerPasswordUtils::computePasswordDigest("secret", config.passwordSalt);
+
+            MultiplayerServer server;
+            const unsigned short port = startLoopbackServerOnFreePort(
+                server,
+                config,
+                "preview_loopback_save",
+                47100,
+                47200,
+                "Shared turn preview loopback test could not find a free local port.");
+
+            MultiplayerClient client;
+            connectAndAuthenticateLoopbackClient(
+                server,
+                client,
+                port,
+                "secret",
+                "Shared turn preview loopback test");
+
+            std::string error;
+            MultiplayerTurnPreview clientPreview;
+            clientPreview.turnNumber = 4;
+            clientPreview.activeKingdom = KingdomId::Black;
+            clientPreview.pendingStateRevision = 11;
+            TurnCommand clientMoveCommand;
+            clientMoveCommand.type = TurnCommand::Move;
+            clientMoveCommand.pieceId = 17;
+            clientMoveCommand.origin = {1, 1};
+            clientMoveCommand.destination = {2, 2};
+            clientPreview.commands.push_back(clientMoveCommand);
+
+            expect(client.sendTurnPreview(clientPreview, &error),
+                   "Loopback multiplayer client should send shared turn preview packets.");
+
+            bool hostReceivedPreview = false;
+            expect(waitUntil([&]() {
+                server.update();
+                while (server.hasPendingEvent()) {
+                    const auto event = server.popNextEvent();
+                    if (event.type == MultiplayerServer::Event::Type::TurnPreviewReceived) {
+                        hostReceivedPreview = event.turnPreview.pendingStateRevision == clientPreview.pendingStateRevision
+                            && event.turnPreview.commands.size() == 1
+                            && event.turnPreview.commands[0].destination == clientMoveCommand.destination;
+                        return hostReceivedPreview;
+                    }
+                }
+
+                return false;
+            }), "Loopback multiplayer server should receive shared turn preview packets from the client.");
+
+            MultiplayerTurnPreview serverPreview;
+            serverPreview.turnNumber = 4;
+            serverPreview.activeKingdom = KingdomId::White;
+            serverPreview.pendingStateRevision = 12;
+            TurnCommand serverBuildCommand;
+            serverBuildCommand.type = TurnCommand::Build;
+            serverBuildCommand.buildingType = BuildingType::Barracks;
+            serverBuildCommand.buildOrigin = {6, 7};
+            serverBuildCommand.buildRotationQuarterTurns = 1;
+            serverPreview.commands.push_back(serverBuildCommand);
+
+            expect(server.sendTurnPreview(serverPreview, &error),
+                   "Loopback multiplayer server should send shared turn preview packets back to the client.");
+
+            bool clientReceivedPreview = false;
+            expect(waitUntil([&]() {
+                client.update();
+                while (client.hasPendingEvent()) {
+                    const auto event = client.popNextEvent();
+                    if (event.type == MultiplayerClient::Event::Type::TurnPreviewReceived) {
+                        clientReceivedPreview = event.turnPreview.pendingStateRevision == serverPreview.pendingStateRevision
+                            && event.turnPreview.commands.size() == 1
+                            && event.turnPreview.commands[0].buildOrigin == serverBuildCommand.buildOrigin;
+                        return clientReceivedPreview;
+                    }
+                }
+
+                return false;
+            }), "Loopback multiplayer client should receive shared turn preview packets from the server.");
 
             client.disconnect();
             server.stop();
@@ -8927,6 +9136,7 @@ int main() {
         {"frontend coordinator coherent building and cell titles", testFrontendCoordinatorUsesCoherentBuildingAndCellTitles},
         {"multiplayer event coordinator plans", testMultiplayerEventCoordinatorPlansAlertsAndDisconnects},
         {"multiplayer event coordinator snapshot notifications", testMultiplayerEventCoordinatorKeepsSnapshotNotifications},
+        {"multiplayer event coordinator turn preview lifecycle", testMultiplayerEventCoordinatorPlansTurnPreviewLifecycle},
         {"multiplayer event coordinator restore and cleanup", testMultiplayerEventCoordinatorRestoresSnapshotsAndClientState},
         {"multiplayer runtime coordinator dialog actions", testMultiplayerRuntimeCoordinatorBuildsDialogActions},
         {"input coordinator gameplay shortcuts", testInputCoordinatorPlansGameplayShortcuts},
@@ -8956,6 +9166,8 @@ int main() {
         {"infernal retargets within same kingdom after fog loss", testInfernalSystemRetargetsVisiblePreyWithinSameKingdomWhenTargetEntersFog},
         {"infernal searches instead of returning when prey fogged", testInfernalSystemSearchesInsteadOfReturningWhenOnlyFoggedTargetsRemain},
         {"turn draft coordinator sync and keep while waiting", testTurnDraftCoordinatorSynchronizesAndKeepsProjectedDraftWhileWaiting},
+        {"multiplayer turn preview packet roundtrip", testMultiplayerTurnPreviewPacketRoundTrip},
+        {"multiplayer turn preview loopback", testMultiplayerTurnPreviewLoopback},
         {"infernal capture return despawn", testInfernalSystemCapturesTargetReturnsAndDespawns},
         {"infernal searching random move deterministic", testInfernalSearchingRandomMoveIsDeterministicForFixedSeedAndCounter},
         {"render coordinator anchored piece selection frame", testRenderCoordinatorPrefersAnchoredSelectionCellForPieceFrame},

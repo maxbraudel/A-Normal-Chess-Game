@@ -97,6 +97,49 @@ const TurnCommand* findPendingMoveForPiece(const std::vector<TurnCommand>& pendi
     return nullptr;
 }
 
+bool shouldFilterPendingCommandsForFog(const WorldRenderState& state) {
+    return state.showPendingCommandVisuals && state.weatherMaskCache != nullptr;
+}
+
+bool isCellHiddenByFog(const WorldRenderState& state, sf::Vector2i cellPos) {
+    if (!shouldFilterPendingCommandsForFog(state)) {
+        return false;
+    }
+
+    return WeatherVisibility::cellHasConcealingFog(*state.weatherMaskCache, cellPos);
+}
+
+bool isPendingBuildHiddenByFog(const WorldRenderState& state,
+                               const TurnCommand& pendingCommand,
+                               const GameConfig& config) {
+    if (!shouldFilterPendingCommandsForFog(state)) {
+        return false;
+    }
+
+    const int width = config.getBuildingWidth(pendingCommand.buildingType);
+    const int height = config.getBuildingHeight(pendingCommand.buildingType);
+    const int footprintWidth = Building::getFootprintWidthFor(
+        width,
+        height,
+        pendingCommand.buildRotationQuarterTurns);
+    const int footprintHeight = Building::getFootprintHeightFor(
+        width,
+        height,
+        pendingCommand.buildRotationQuarterTurns);
+
+    for (int offsetY = 0; offsetY < footprintHeight; ++offsetY) {
+        for (int offsetX = 0; offsetX < footprintWidth; ++offsetX) {
+            if (isCellHiddenByFog(
+                    state,
+                    {pendingCommand.buildOrigin.x + offsetX, pendingCommand.buildOrigin.y + offsetY})) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
 } // namespace
 
 bool RenderCoordinator::shouldRenderWorld(GameState state) {
@@ -123,6 +166,8 @@ WorldRenderPlan RenderCoordinator::buildWorldRenderPlan(
     plan.selectedBuilding = state.selectedBuilding;
 
     const bool showActionOverlays = state.permissions.canShowActionOverlays;
+    const bool showPendingCommandVisuals = state.permissions.canShowActionOverlays
+        || state.showPendingCommandVisuals;
     const bool showBuildPreview = state.permissions.canShowBuildPreview;
     const bool canShowSelectedPieceActions = showActionOverlays
         && state.selectedPiece != nullptr
@@ -191,9 +236,12 @@ WorldRenderPlan RenderCoordinator::buildWorldRenderPlan(
         };
     }
 
-    if (showActionOverlays && !state.usingConcretePendingState) {
+    if (showPendingCommandVisuals && !state.usingConcretePendingState) {
         for (const TurnCommand& pendingCommand : pendingCommands) {
             if (pendingCommand.type != TurnCommand::Build) {
+                continue;
+            }
+            if (isPendingBuildHiddenByFog(state, pendingCommand, config)) {
                 continue;
             }
 
@@ -216,9 +264,12 @@ WorldRenderPlan RenderCoordinator::buildWorldRenderPlan(
         }
     }
 
-    if (showActionOverlays) {
+    if (showPendingCommandVisuals) {
         for (const TurnCommand& pendingCommand : pendingCommands) {
             if (pendingCommand.type != TurnCommand::Move) {
+                continue;
+            }
+            if (isCellHiddenByFog(state, pendingCommand.destination)) {
                 continue;
             }
 

@@ -105,6 +105,14 @@ MultiplayerRuntimeCoordinator::MultiplayerRuntimeCoordinator(MultiplayerRuntime&
 
 void MultiplayerRuntimeCoordinator::update(const MultiplayerRuntimeCallbacks& callbacks) {
     if (m_localPlayerContext.mode == LocalSessionMode::LanHost) {
+        if (callbacks.publishLocalTurnPreview) {
+            std::string publishError;
+            if (!callbacks.publishLocalTurnPreview(&publishError) && !publishError.empty()) {
+                m_engine.eventLog().log(m_engine.turnSystem().getTurnNumber(),
+                                        m_engine.turnSystem().getActiveKingdom(),
+                                        publishError);
+            }
+        }
         m_runtime.update();
         while (m_runtime.hasPendingServerEvent()) {
             processServerEvent(m_runtime.popNextServerEvent(), callbacks);
@@ -112,6 +120,14 @@ void MultiplayerRuntimeCoordinator::update(const MultiplayerRuntimeCallbacks& ca
     }
 
     if (m_localPlayerContext.mode == LocalSessionMode::LanClient) {
+        if (callbacks.publishLocalTurnPreview) {
+            std::string publishError;
+            if (!callbacks.publishLocalTurnPreview(&publishError) && !publishError.empty()) {
+                m_engine.eventLog().log(m_engine.turnSystem().getTurnNumber(),
+                                        m_engine.turnSystem().getActiveKingdom(),
+                                        publishError);
+            }
+        }
         m_runtime.update();
         while (m_runtime.hasPendingClientEvent()) {
             processClientEvent(m_runtime.popNextClientEvent(), callbacks);
@@ -176,6 +192,10 @@ void MultiplayerRuntimeCoordinator::processServerEvent(const MultiplayerServer::
             m_engine.turnSystem().getTurnNumber(),
             m_runtime.lanHostRemoteSessionEstablished()});
 
+    if (plan.clearRemoteTurnPreview && callbacks.clearRemoteTurnPreview) {
+        callbacks.clearRemoteTurnPreview();
+    }
+
     if (plan.hideAlert) {
         m_uiManager.hideMultiplayerAlert();
     }
@@ -194,6 +214,9 @@ void MultiplayerRuntimeCoordinator::processServerEvent(const MultiplayerServer::
         } else {
             m_runtime.setLanHostRemoteSessionEstablished(true);
         }
+    }
+    if (plan.remoteTurnPreview.has_value() && callbacks.applyRemoteTurnPreview) {
+        callbacks.applyRemoteTurnPreview(*plan.remoteTurnPreview);
     }
     if (plan.applyRemoteTurnSubmission && callbacks.applyRemoteTurnSubmission) {
         std::string error;
@@ -216,6 +239,10 @@ void MultiplayerRuntimeCoordinator::processServerEvent(const MultiplayerServer::
 void MultiplayerRuntimeCoordinator::processClientEvent(const MultiplayerClient::Event& event,
                                                        const MultiplayerRuntimeCallbacks& callbacks) {
     const MultiplayerClientEventPlan plan = MultiplayerEventCoordinator::planClientEvent(event);
+    if (plan.clearRemoteTurnPreview && callbacks.clearRemoteTurnPreview) {
+        callbacks.clearRemoteTurnPreview();
+    }
+
     switch (plan.type) {
         case MultiplayerClientEventPlan::Type::RestoreSnapshot: {
             const InputSelectionBookmark selectionBookmark = callbacks.captureSelectionBookmark
@@ -273,6 +300,12 @@ void MultiplayerRuntimeCoordinator::processClientEvent(const MultiplayerClient::
             }
             break;
         }
+
+        case MultiplayerClientEventPlan::Type::ApplyTurnPreview:
+            if (callbacks.applyRemoteTurnPreview) {
+                callbacks.applyRemoteTurnPreview(plan.remoteTurnPreview);
+            }
+            break;
 
         case MultiplayerClientEventPlan::Type::ShowAlert:
             if (plan.alert.has_value()) {

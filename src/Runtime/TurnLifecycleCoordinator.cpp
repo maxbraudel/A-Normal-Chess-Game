@@ -97,6 +97,9 @@ void TurnLifecycleCoordinator::commitAuthoritativeTurn(bool lanHost,
     if (plan.clearMovePreview) {
         m_input.clearMovePreview();
     }
+    if (callbacks.clearRemoteTurnPreview) {
+        callbacks.clearRemoteTurnPreview();
+    }
     if (plan.clearWaitingForRemoteTurnResult) {
         m_waitingForRemoteTurnResult = false;
     }
@@ -150,6 +153,9 @@ bool TurnLifecycleCoordinator::applyRemoteTurnSubmission(bool lanHost,
         commitAuthoritativeTurn(lanHost, callbacks);
     } else if (result.shouldResetPendingCommands) {
         m_engine.turnSystem().resetPendingCommands();
+        if (callbacks.clearRemoteTurnPreview) {
+            callbacks.clearRemoteTurnPreview();
+        }
     }
 
     if (!result.accepted) {

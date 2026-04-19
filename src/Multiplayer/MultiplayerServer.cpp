@@ -72,8 +72,9 @@ void MultiplayerServer::handleClientTransportLoss(const std::string& authenticat
 
 void MultiplayerServer::pushEvent(Event::Type type,
                                   const std::string& message,
-                                  const std::vector<TurnCommand>& commands) {
-    m_events.push_back(Event{type, message, commands});
+                                  const std::vector<TurnCommand>& commands,
+                                  const MultiplayerTurnPreview& turnPreview) {
+    m_events.push_back(Event{type, message, commands, turnPreview});
 }
 
 bool MultiplayerServer::sendPacket(sf::Packet& packet, std::string* errorMessage) {
@@ -127,6 +128,17 @@ bool MultiplayerServer::sendSnapshot(const std::string& serializedSaveData,
 
     sf::Packet packet = createPacket(MultiplayerMessageType::StateSnapshot);
     writePacket(packet, MultiplayerStateSnapshot{serializedSaveData, notifications});
+    return sendPacket(packet, errorMessage);
+}
+
+bool MultiplayerServer::sendTurnPreview(const MultiplayerTurnPreview& preview, std::string* errorMessage) {
+    if (!m_clientAuthenticated) {
+        writeError(errorMessage, "Cannot send a turn preview without an authenticated client.");
+        return false;
+    }
+
+    sf::Packet packet = createPacket(MultiplayerMessageType::TurnPreview);
+    writePacket(packet, preview);
     return sendPacket(packet, errorMessage);
 }
 
@@ -201,6 +213,22 @@ void MultiplayerServer::handlePacket(sf::Packet& packet) {
             }
 
             pushEvent(Event::Type::TurnSubmitted, "Remote turn submitted.", submission.commands);
+            break;
+        }
+
+        case MultiplayerMessageType::TurnPreview: {
+            if (!m_clientAuthenticated) {
+                pushEvent(Event::Type::Error, "Rejected a turn preview from an unauthenticated client.");
+                return;
+            }
+
+            MultiplayerTurnPreview preview;
+            if (!readPacket(packet, preview)) {
+                pushEvent(Event::Type::Error, "Received an invalid turn preview packet.");
+                return;
+            }
+
+            pushEvent(Event::Type::TurnPreviewReceived, "Remote turn preview updated.", {}, preview);
             break;
         }
 

@@ -143,6 +143,7 @@ bool SessionMetadataService::editSavedSession(const SessionFormRequest& request,
     data.sessionKingdoms = finalizedSession.kingdoms;
     data.multiplayer = finalizedSession.multiplayer;
     data.tacticalGridEnabled = finalizedSession.tacticalGridEnabled;
+    data.sharedTurnPreviewEnabled = finalizedSession.sharedTurnPreviewEnabled;
 
     if (!GameStateValidator::validateSaveData(data, errorMessage)) {
         return false;

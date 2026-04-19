@@ -3,6 +3,7 @@
 #include <TGUI/Backend/SFML-Graphics.hpp>
 #include <TGUI/AllWidgets.hpp>
 #include <array>
+#include <optional>
 #include <vector>
 #include <string>
 
@@ -118,8 +119,17 @@ private:
     TurnValidationContext authoritativeTurnContext() const;
     InputContext buildInputContext(const InteractionPermissions& permissions);
     bool shouldUseTurnDraft() const;
+    bool shouldUseRemoteTurnPreview() const;
+    bool shouldDisplayRemoteTurnPreview() const;
+    bool usingProjectedDisplayState() const;
     void invalidateTurnDraft();
     void ensureTurnDraftUpToDate();
+    void invalidateRemoteTurnPreviewDraft();
+    void ensureRemoteTurnPreviewDraftUpToDate();
+    void clearRemoteTurnPreview();
+    void resetPublishedSharedTurnPreviewState();
+    void applyRemoteTurnPreview(const MultiplayerTurnPreview& preview);
+    bool publishSharedTurnPreviewIfNeeded(std::string* errorMessage = nullptr);
     SelectionQueryView makeSelectionQueryView();
     InputSelectionBookmark captureSelectionBookmark() const;
     bool usesLocalHotseatFrontendState() const;
@@ -140,6 +150,7 @@ private:
     void triggerCheatcodeInfernalSpawn();
     Board& displayedBoard();
     const Board& displayedBoard() const;
+    const std::vector<TurnCommand>& displayedPendingCommands() const;
     std::array<Kingdom, kNumKingdoms>& displayedKingdoms();
     const std::array<Kingdom, kNumKingdoms>& displayedKingdoms() const;
     std::vector<Building>& displayedPublicBuildings();
@@ -210,6 +221,9 @@ private:
     GameEngine m_engine;
     TurnDraft m_turnDraft;
     std::uint64_t m_lastTurnDraftRevision = 0;
+    std::optional<MultiplayerTurnPreview> m_remoteTurnPreviewState;
+    TurnDraft m_remoteTurnPreviewDraft;
+    std::uint64_t m_lastRemoteTurnPreviewRevision = 0;
     GameStateDebugRecorder m_debugRecorder;
 
     // Input/Render/UI
@@ -234,6 +248,15 @@ private:
     HotseatFrontendStateStore m_hotseatFrontendState;
     mutable PendingTurnValidationCache m_pendingTurnValidationCache;
     bool m_tacticalGridModeActive = false;
+
+    struct PublishedSharedTurnPreviewState {
+        bool hasSentPreview = false;
+        bool previewHadCommands = false;
+        int turnNumber = 1;
+        KingdomId activeKingdom = KingdomId::White;
+        std::uint64_t pendingStateRevision = 0;
+    };
+    PublishedSharedTurnPreviewState m_publishedSharedTurnPreviewState;
 
 #ifdef _WIN32
     WNDPROC m_originalWndProc = nullptr;

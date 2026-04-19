@@ -170,6 +170,25 @@ bool MultiplayerRuntime::pushSnapshotIfConnected(bool lanHost,
     return pushSnapshotIfConnected(lanHost, serializedSaveData, {}, errorMessage);
 }
 
+bool MultiplayerRuntime::publishTurnPreview(bool lanHost,
+                                            const MultiplayerTurnPreview& preview,
+                                            std::string* errorMessage) {
+    if (lanHost) {
+        if (!m_server.hasAuthenticatedClient()) {
+            return true;
+        }
+
+        return m_server.sendTurnPreview(preview, errorMessage);
+    }
+
+    if (!m_client.isAuthenticated()) {
+        writeMultiplayerError(errorMessage, "The multiplayer host connection is not authenticated.");
+        return false;
+    }
+
+    return m_client.sendTurnPreview(preview, errorMessage);
+}
+
 bool MultiplayerRuntime::submitTurnSubmission(const std::vector<TurnCommand>& commands,
                                               std::string* errorMessage) {
     if (!m_client.isAuthenticated()) {

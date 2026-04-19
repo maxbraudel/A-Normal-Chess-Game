@@ -18,6 +18,7 @@ public:
             ClientConnected,
             ClientDisconnected,
             ClientConnectionInterrupted,
+            TurnPreviewReceived,
             TurnSubmitted,
             Error
         };
@@ -25,6 +26,7 @@ public:
         Type type = Type::Error;
         std::string message;
         std::vector<TurnCommand> commands;
+        MultiplayerTurnPreview turnPreview;
     };
 
     bool start(unsigned short port,
@@ -43,6 +45,7 @@ public:
     bool sendSnapshot(const std::string& serializedSaveData,
                       const std::vector<GameplayNotification>& notifications,
                       std::string* errorMessage = nullptr);
+    bool sendTurnPreview(const MultiplayerTurnPreview& preview, std::string* errorMessage = nullptr);
     bool sendTurnRejected(const std::string& reason, std::string* errorMessage = nullptr);
     bool sendDisconnectNotice(const std::string& reason, std::string* errorMessage = nullptr);
 
@@ -50,7 +53,10 @@ private:
     void resetClientState();
     void handleClientTransportLoss(const std::string& authenticatedMessage,
                                    const std::string& interruptedMessage);
-    void pushEvent(Event::Type type, const std::string& message, const std::vector<TurnCommand>& commands = {});
+    void pushEvent(Event::Type type,
+                   const std::string& message,
+                   const std::vector<TurnCommand>& commands = {},
+                   const MultiplayerTurnPreview& turnPreview = {});
     bool sendPacket(sf::Packet& packet, std::string* errorMessage = nullptr);
     void handlePacket(sf::Packet& packet);
     bool sendServerInfo();

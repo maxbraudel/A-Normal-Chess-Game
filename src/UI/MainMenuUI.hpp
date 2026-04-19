@@ -75,6 +75,7 @@ private:
     tgui::Label::Ptr m_whiteRoleLabel;
     tgui::CheckBox::Ptr m_multiplayerCheckBox;
     tgui::CheckBox::Ptr m_tacticalGridCheckBox;
+    tgui::CheckBox::Ptr m_sharedTurnPreviewCheckBox;
     tgui::Label::Ptr m_multiplayerHintLabel;
     tgui::Label::Ptr m_multiplayerPortLabel;
     tgui::EditBox::Ptr m_multiplayerPortEdit;

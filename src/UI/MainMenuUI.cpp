@@ -19,6 +19,9 @@ std::string buildSaveLabel(const SaveSummary& save) {
     if (save.tacticalGridEnabled) {
         label += " | Tactical Grid";
     }
+    if (save.sharedTurnPreviewEnabled) {
+        label += " | Shared Turn Preview";
+    }
     return label;
 }
 }
@@ -162,7 +165,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     m_createOverlay->setVisible(false);
     m_panel->add(m_createOverlay);
 
-    auto dialog = tgui::Panel::create({560, 704});
+    auto dialog = tgui::Panel::create({560, 742});
     dialog->setPosition({"(&.parent.width - width) / 2", "(&.parent.height - height) / 2"});
     dialog->getRenderer()->setBackgroundColor(tgui::Color(46, 46, 46, 245));
     dialog->getRenderer()->setBorderColor(tgui::Color(120, 120, 120));
@@ -290,8 +293,20 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     });
     dialog->add(m_tacticalGridCheckBox);
 
+    m_sharedTurnPreviewCheckBox = tgui::CheckBox::create();
+    styleCheckBox(m_sharedTurnPreviewCheckBox);
+    m_sharedTurnPreviewCheckBox->setPosition({36, 618});
+    m_sharedTurnPreviewCheckBox->setText("Shared Turn Preview");
+    m_sharedTurnPreviewCheckBox->setTextSize(18);
+    m_sharedTurnPreviewCheckBox->onChange([this](bool) {
+        if (m_createErrorLabel) {
+            m_createErrorLabel->setText("");
+        }
+    });
+    dialog->add(m_sharedTurnPreviewCheckBox);
+
     m_createErrorLabel = tgui::Label::create("");
-    m_createErrorLabel->setPosition({36, 620});
+    m_createErrorLabel->setPosition({36, 654});
     m_createErrorLabel->setSize({280, 44});
     m_createErrorLabel->setAutoSize(false);
     m_createErrorLabel->setTextSize(15);
@@ -300,7 +315,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
 
     auto cancelButton = tgui::Button::create("Cancel");
     styleButton(cancelButton);
-    cancelButton->setPosition({332, 650});
+    cancelButton->setPosition({332, 688});
     cancelButton->setSize({92, 30});
     cancelButton->onPress([this]() {
         closeSessionDialog();
@@ -309,7 +324,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
 
     m_createConfirmButton = tgui::Button::create("Create");
     styleButton(m_createConfirmButton);
-    m_createConfirmButton->setPosition({432, 650});
+    m_createConfirmButton->setPosition({432, 688});
     m_createConfirmButton->setSize({92, 30});
     m_createConfirmButton->onPress([this]() {
         submitSessionDialog();
@@ -574,6 +589,7 @@ void MainMenuUI::openCreateDialog() {
     if (m_multiplayerPortEdit) m_multiplayerPortEdit->setText("45000");
     if (m_multiplayerPasswordEdit) m_multiplayerPasswordEdit->setText("");
     if (m_tacticalGridCheckBox) m_tacticalGridCheckBox->setChecked(false);
+    if (m_sharedTurnPreviewCheckBox) m_sharedTurnPreviewCheckBox->setChecked(false);
     updateSessionDialogLabels();
     closeJoinDialog();
     m_createOverlay->setVisible(true);
@@ -614,6 +630,9 @@ void MainMenuUI::openEditDialog() {
     }
     if (m_tacticalGridCheckBox) {
         m_tacticalGridCheckBox->setChecked(selectedSave->tacticalGridEnabled);
+    }
+    if (m_sharedTurnPreviewCheckBox) {
+        m_sharedTurnPreviewCheckBox->setChecked(selectedSave->sharedTurnPreviewEnabled);
     }
     updateSessionDialogLabels();
     closeJoinDialog();
@@ -677,6 +696,8 @@ void MainMenuUI::submitSessionDialog() {
         trimCopy(m_blackNameEdit ? m_blackNameEdit->getText().toStdString() : std::string{});
     request.session.tacticalGridEnabled =
         m_tacticalGridCheckBox != nullptr && m_tacticalGridCheckBox->isChecked();
+    request.session.sharedTurnPreviewEnabled =
+        m_sharedTurnPreviewCheckBox != nullptr && m_sharedTurnPreviewCheckBox->isChecked();
 
     if (request.session.saveName.empty()) {
         m_createErrorLabel->setText("Save name is required.");

@@ -16,6 +16,7 @@ enum class MultiplayerMessageType : sf::Uint8 {
     JoinResponse,
     StateSnapshot,
     TurnSubmission,
+    TurnPreview,
     TurnRejected,
     DisconnectNotice
 };
@@ -46,6 +47,13 @@ struct MultiplayerTurnSubmission {
     std::vector<TurnCommand> commands;
 };
 
+struct MultiplayerTurnPreview {
+    int turnNumber = 1;
+    KingdomId activeKingdom = KingdomId::White;
+    std::uint64_t pendingStateRevision = 0;
+    std::vector<TurnCommand> commands;
+};
+
 struct MultiplayerTurnRejected {
     std::string reason;
 };
@@ -71,6 +79,9 @@ bool readPacket(sf::Packet& packet, MultiplayerStateSnapshot& snapshot);
 
 bool writePacket(sf::Packet& packet, const MultiplayerTurnSubmission& submission);
 bool readPacket(sf::Packet& packet, MultiplayerTurnSubmission& submission);
+
+bool writePacket(sf::Packet& packet, const MultiplayerTurnPreview& preview);
+bool readPacket(sf::Packet& packet, MultiplayerTurnPreview& preview);
 
 bool writePacket(sf::Packet& packet, const MultiplayerTurnRejected& rejection);
 bool readPacket(sf::Packet& packet, MultiplayerTurnRejected& rejection);
