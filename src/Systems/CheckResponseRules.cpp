@@ -81,11 +81,7 @@ GameSnapshot simulateEndOfTurn(const GameSnapshot& snapshot,
                                KingdomId activeKingdom,
                                const GameConfig& config) {
     GameSnapshot simulatedSnapshot = snapshot.clone();
-    ForwardModel::advanceTurn(simulatedSnapshot,
-                              activeKingdom,
-                              config.getMineIncomePerCellPerTurn(),
-                              config.getFarmIncomePerCellPerTurn(),
-                              config);
+    ForwardModel::advanceTurn(simulatedSnapshot, activeKingdom, config);
     return simulatedSnapshot;
 }
 

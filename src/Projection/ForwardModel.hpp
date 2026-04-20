@@ -47,9 +47,7 @@ public:
     static bool applyMarriage(GameSnapshot& s, KingdomId k);
 
     // ---- Turn advancement (income, production tick, spawns) ----
-    static void advanceTurn(GameSnapshot& s, KingdomId k,
-                            int mineIncomePerCell, int farmIncomePerCell,
-                            const GameConfig& config);
+    static void advanceTurn(GameSnapshot& s, KingdomId k, const GameConfig& config);
 
     // ---- Tactical queries ----
     static ThreatMap buildThreatMap(const GameSnapshot& s, KingdomId attacker,

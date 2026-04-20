@@ -6,6 +6,7 @@
 #include <map>
 #include <SFML/Window/Keyboard.hpp>
 #include "Buildings/BuildingType.hpp"
+#include "Systems/ResourceIncomeProfile.hpp"
 #include "Systems/WeatherTypes.hpp"
 #include "Systems/XPTypes.hpp"
 #include "Units/PieceType.hpp"
@@ -36,8 +37,8 @@ public:
 
     // Economy
     int getStartingGold() const;
-    int getMineIncomePerCellPerTurn() const;
-    int getFarmIncomePerCellPerTurn() const;
+    ResourceIncomeProfile getMineIncomeProfile() const;
+    ResourceIncomeProfile getFarmIncomeProfile() const;
     int getBarracksCost() const;
     int getWoodWallCost() const;
     int getStoneWallCost() const;
@@ -156,8 +157,8 @@ private:
 
     // Economy
     int m_startingGold;
-    int m_mineIncomePerCellPerTurn;
-    int m_farmIncomePerCellPerTurn;
+    ResourceIncomeProfile m_mineIncomeProfile;
+    ResourceIncomeProfile m_farmIncomeProfile;
     int m_barracksCost;
     int m_woodWallCost;
     int m_stoneWallCost;

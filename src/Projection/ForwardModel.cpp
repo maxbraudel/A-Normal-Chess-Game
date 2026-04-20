@@ -624,12 +624,7 @@ sf::Vector2i ForwardModel::findSpawnCell(const GameSnapshot& s,
         preferredParity);
 }
 
-void ForwardModel::advanceTurn(GameSnapshot& s, KingdomId k,
-                               int mineIncomePerCell, int farmIncomePerCell,
-                               const GameConfig& config) {
-    (void)mineIncomePerCell;
-    (void)farmIncomePerCell;
-
+void ForwardModel::advanceTurn(GameSnapshot& s, KingdomId k, const GameConfig& config) {
     SnapKingdom& myK = s.kingdom(k);
 
     processEnemyStructureOccupancy(s, k, config);

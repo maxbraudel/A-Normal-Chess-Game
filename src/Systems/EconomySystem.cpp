@@ -9,18 +9,31 @@
 #include "Systems/EventLog.hpp"
 
 #include <algorithm>
+#include <optional>
 
 namespace {
 
-int incomePerCellForResource(BuildingType type, const GameConfig& config) {
+std::optional<ResourceIncomeProfile> incomeProfileForResource(BuildingType type, const GameConfig& config) {
     switch (type) {
         case BuildingType::Mine:
-            return config.getMineIncomePerCellPerTurn();
+            return config.getMineIncomeProfile();
         case BuildingType::Farm:
-            return config.getFarmIncomePerCellPerTurn();
+            return config.getFarmIncomeProfile();
         default:
-            return 0;
+            return std::nullopt;
     }
+}
+
+int calculateControlledIncome(int controlledCells, const ResourceIncomeProfile& incomeProfile) {
+    const int clampedControlledCells = std::max(0, controlledCells);
+    int totalIncome = 0;
+    for (int cellIndex = 0; cellIndex < clampedControlledCells; ++cellIndex) {
+        totalIncome += std::max(
+            incomeProfile.firstCellIncomePerTurn - (cellIndex * incomeProfile.additionalCellDecrement),
+            incomeProfile.minimumCellIncomePerTurn);
+    }
+
+    return totalIncome;
 }
 
 template <typename PieceRange>
@@ -47,14 +60,17 @@ TurnEconomyBreakdown buildTurnEconomyBreakdown(int currentGold, int grossIncome,
 
 ResourceIncomeBreakdown EconomySystem::calculateResourceIncomeFromOccupation(int whiteOccupiedCells,
                                                                              int blackOccupiedCells,
-                                                                             int incomePerCell) {
+                                                                             const ResourceIncomeProfile& incomeProfile) {
     ResourceIncomeBreakdown breakdown;
     breakdown.isResourceBuilding = true;
-    breakdown.incomePerCell = incomePerCell;
     breakdown.whiteOccupiedCells = std::max(0, whiteOccupiedCells);
     breakdown.blackOccupiedCells = std::max(0, blackOccupiedCells);
-    breakdown.whiteIncome = std::max(breakdown.whiteOccupiedCells - breakdown.blackOccupiedCells, 0) * incomePerCell;
-    breakdown.blackIncome = std::max(breakdown.blackOccupiedCells - breakdown.whiteOccupiedCells, 0) * incomePerCell;
+    breakdown.whiteIncome = calculateControlledIncome(
+        breakdown.whiteOccupiedCells - breakdown.blackOccupiedCells,
+        incomeProfile);
+    breakdown.blackIncome = calculateControlledIncome(
+        breakdown.blackOccupiedCells - breakdown.whiteOccupiedCells,
+        incomeProfile);
     return breakdown;
 }
 
@@ -84,10 +100,15 @@ ResourceIncomeBreakdown EconomySystem::calculateResourceIncomeBreakdown(const Bu
         }
     }
 
+    const std::optional<ResourceIncomeProfile> incomeProfile = incomeProfileForResource(building.type, config);
+    if (!incomeProfile.has_value()) {
+        return {};
+    }
+
     return calculateResourceIncomeFromOccupation(
         whiteOccupiedCells,
         blackOccupiedCells,
-        incomePerCellForResource(building.type, config));
+        incomeProfile.value());
 }
 
 int EconomySystem::calculateProjectedGrossIncome(const Kingdom& kingdom, const Board& board,
@@ -145,8 +166,8 @@ TurnEconomyBreakdown EconomySystem::calculateTurnEconomy(const GameSnapshot& sna
             continue;
         }
 
-        const int incomePerCell = incomePerCellForResource(building.type, config);
-        if (incomePerCell <= 0) {
+        const std::optional<ResourceIncomeProfile> incomeProfile = incomeProfileForResource(building.type, config);
+        if (!incomeProfile.has_value()) {
             continue;
         }
 
@@ -165,7 +186,7 @@ TurnEconomyBreakdown EconomySystem::calculateTurnEconomy(const GameSnapshot& sna
         const ResourceIncomeBreakdown breakdown = calculateResourceIncomeFromOccupation(
             whiteOccupiedCells,
             blackOccupiedCells,
-            incomePerCell);
+            incomeProfile.value());
         grossIncome += breakdown.incomeFor(kingdomId);
     }
 

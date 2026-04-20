@@ -47,6 +47,35 @@ int clampNonNegativeConfigValue(const char* label, int value) {
     return 0;
 }
 
+ResourceIncomeProfile clampResourceIncomeProfile(const char* label,
+                                                ResourceIncomeProfile profile) {
+    const std::string labelPrefix(label);
+    const std::string firstLabel = labelPrefix + ".first_cell_income_per_turn";
+    const std::string decrementLabel = labelPrefix + ".additional_cell_decrement";
+    const std::string minimumLabel = labelPrefix + ".minimum_cell_income_per_turn";
+
+    profile.firstCellIncomePerTurn = clampNonNegativeConfigValue(
+        firstLabel.c_str(), profile.firstCellIncomePerTurn);
+    profile.additionalCellDecrement = clampNonNegativeConfigValue(
+        decrementLabel.c_str(), profile.additionalCellDecrement);
+    profile.minimumCellIncomePerTurn = clampNonNegativeConfigValue(
+        minimumLabel.c_str(), profile.minimumCellIncomePerTurn);
+
+    if (profile.minimumCellIncomePerTurn <= profile.firstCellIncomePerTurn) {
+        return profile;
+    }
+
+    std::cerr << "GameConfig: Clamping " << minimumLabel << " value "
+              << profile.minimumCellIncomePerTurn
+              << " down to first-cell income " << profile.firstCellIncomePerTurn << ".\n";
+    profile.minimumCellIncomePerTurn = profile.firstCellIncomePerTurn;
+    return profile;
+}
+
+bool containsJsonKey(const std::string& json, const std::string& key) {
+    return json.find("\"" + key + "\"") != std::string::npos;
+}
+
 int clampRangedConfigValue(const std::string& label, int value, int minValue, int maxValue) {
     const int clampedValue = std::clamp(value, minValue, maxValue);
     if (clampedValue == value) {
@@ -201,8 +230,8 @@ void GameConfig::setDefaults() {
     m_lakeMaxRadius = 3;
 
     m_startingGold = 0;
-    m_mineIncomePerCellPerTurn = 10;
-    m_farmIncomePerCellPerTurn = 5;
+    m_mineIncomeProfile = ResourceIncomeProfile{10, 2, 4};
+    m_farmIncomeProfile = ResourceIncomeProfile{5, 1, 2};
     m_barracksCost = 50;
     m_woodWallCost = 20;
     m_stoneWallCost = 40;
@@ -458,8 +487,59 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
     std::string econSec = extractSection(root, "economy");
     if (!econSec.empty()) {
         m_startingGold = extractInt(econSec, "starting_gold", m_startingGold);
-        m_mineIncomePerCellPerTurn = extractInt(econSec, "mine_income_per_cell_per_turn", m_mineIncomePerCellPerTurn);
-        m_farmIncomePerCellPerTurn = extractInt(econSec, "farm_income_per_cell_per_turn", m_farmIncomePerCellPerTurn);
+
+        const bool hasMineIncomeProfileOverride = containsJsonKey(econSec, "mine_income_first_cell_per_turn")
+            || containsJsonKey(econSec, "mine_income_additional_cell_decrement")
+            || containsJsonKey(econSec, "mine_income_minimum_per_cell_per_turn");
+        if (hasMineIncomeProfileOverride) {
+            m_mineIncomeProfile.firstCellIncomePerTurn = extractInt(
+                econSec,
+                "mine_income_first_cell_per_turn",
+                m_mineIncomeProfile.firstCellIncomePerTurn);
+            m_mineIncomeProfile.additionalCellDecrement = extractInt(
+                econSec,
+                "mine_income_additional_cell_decrement",
+                m_mineIncomeProfile.additionalCellDecrement);
+            m_mineIncomeProfile.minimumCellIncomePerTurn = extractInt(
+                econSec,
+                "mine_income_minimum_per_cell_per_turn",
+                m_mineIncomeProfile.minimumCellIncomePerTurn);
+        } else if (containsJsonKey(econSec, "mine_income_per_cell_per_turn")) {
+            const int legacyMineIncome = extractInt(
+                econSec,
+                "mine_income_per_cell_per_turn",
+                m_mineIncomeProfile.firstCellIncomePerTurn);
+            m_mineIncomeProfile.firstCellIncomePerTurn = legacyMineIncome;
+            m_mineIncomeProfile.additionalCellDecrement = 0;
+            m_mineIncomeProfile.minimumCellIncomePerTurn = legacyMineIncome;
+        }
+
+        const bool hasFarmIncomeProfileOverride = containsJsonKey(econSec, "farm_income_first_cell_per_turn")
+            || containsJsonKey(econSec, "farm_income_additional_cell_decrement")
+            || containsJsonKey(econSec, "farm_income_minimum_per_cell_per_turn");
+        if (hasFarmIncomeProfileOverride) {
+            m_farmIncomeProfile.firstCellIncomePerTurn = extractInt(
+                econSec,
+                "farm_income_first_cell_per_turn",
+                m_farmIncomeProfile.firstCellIncomePerTurn);
+            m_farmIncomeProfile.additionalCellDecrement = extractInt(
+                econSec,
+                "farm_income_additional_cell_decrement",
+                m_farmIncomeProfile.additionalCellDecrement);
+            m_farmIncomeProfile.minimumCellIncomePerTurn = extractInt(
+                econSec,
+                "farm_income_minimum_per_cell_per_turn",
+                m_farmIncomeProfile.minimumCellIncomePerTurn);
+        } else if (containsJsonKey(econSec, "farm_income_per_cell_per_turn")) {
+            const int legacyFarmIncome = extractInt(
+                econSec,
+                "farm_income_per_cell_per_turn",
+                m_farmIncomeProfile.firstCellIncomePerTurn);
+            m_farmIncomeProfile.firstCellIncomePerTurn = legacyFarmIncome;
+            m_farmIncomeProfile.additionalCellDecrement = 0;
+            m_farmIncomeProfile.minimumCellIncomePerTurn = legacyFarmIncome;
+        }
+
         m_barracksCost = extractInt(econSec, "barracks_cost", m_barracksCost);
         m_woodWallCost = extractInt(econSec, "wood_wall_cost", m_woodWallCost);
         m_stoneWallCost = extractInt(econSec, "stone_wall_cost", m_stoneWallCost);
@@ -486,10 +566,8 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
     }
 
     m_startingGold = clampNonNegativeConfigValue("economy.starting_gold", m_startingGold);
-    m_mineIncomePerCellPerTurn = clampNonNegativeConfigValue(
-        "economy.mine_income_per_cell_per_turn", m_mineIncomePerCellPerTurn);
-    m_farmIncomePerCellPerTurn = clampNonNegativeConfigValue(
-        "economy.farm_income_per_cell_per_turn", m_farmIncomePerCellPerTurn);
+    m_mineIncomeProfile = clampResourceIncomeProfile("economy.mine_income", m_mineIncomeProfile);
+    m_farmIncomeProfile = clampResourceIncomeProfile("economy.farm_income", m_farmIncomeProfile);
     m_barracksCost = clampNonNegativeConfigValue("economy.barracks_cost", m_barracksCost);
     m_woodWallCost = clampNonNegativeConfigValue("economy.wood_wall_cost", m_woodWallCost);
     m_stoneWallCost = clampNonNegativeConfigValue("economy.stone_wall_cost", m_stoneWallCost);
@@ -1084,8 +1162,8 @@ int GameConfig::getLakeMinRadius() const { return m_lakeMinRadius; }
 int GameConfig::getLakeMaxRadius() const { return m_lakeMaxRadius; }
 
 int GameConfig::getStartingGold() const { return m_startingGold; }
-int GameConfig::getMineIncomePerCellPerTurn() const { return m_mineIncomePerCellPerTurn; }
-int GameConfig::getFarmIncomePerCellPerTurn() const { return m_farmIncomePerCellPerTurn; }
+ResourceIncomeProfile GameConfig::getMineIncomeProfile() const { return m_mineIncomeProfile; }
+ResourceIncomeProfile GameConfig::getFarmIncomeProfile() const { return m_farmIncomeProfile; }
 int GameConfig::getBarracksCost() const { return m_barracksCost; }
 int GameConfig::getWoodWallCost() const { return m_woodWallCost; }
 int GameConfig::getStoneWallCost() const { return m_stoneWallCost; }

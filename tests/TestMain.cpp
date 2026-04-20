@@ -5671,6 +5671,8 @@ void testTurnSystemSkipsUnaffordableProduction() {
         EventLog eventLog;
         PieceFactory pieceFactory;
         BuildingFactory buildingFactory;
+        const int expectedProjectedGrossIncome = EconomySystem::calculateProjectedGrossIncome(
+            white, board, publicBuildings, config);
 
         turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
 
@@ -5713,7 +5715,7 @@ void testTurnSystemSkipsUnaffordableProduction() {
         expect(white.buildings.front().getCellHP(0, 0) == 0,
             "Repairs must resolve before income, so post-income gold cannot repair a cell in the same commit.");
         expect(white.gold == config.getRepairCostPerCell(BuildingType::Barracks) - 1
-                    + config.getMineIncomePerCellPerTurn()
+                    + expectedProjectedGrossIncome
                     - (2 * config.getPieceUpkeepCost(PieceType::Pawn)),
             "Income should still be collected after an unaffordable repair attempt is skipped, net of upkeep.");
     }
@@ -6177,11 +6179,7 @@ void testForwardModelMatchesRuntimeBishopSpawnRule() {
 
     const sf::Vector2i runtimeSpawn = ProductionSystem::findSpawnCell(barracks, board, PieceType::Bishop, white);
     GameSnapshot snapshot = ForwardModel::createSnapshot(board, white, black, {}, 1);
-    ForwardModel::advanceTurn(snapshot,
-                              KingdomId::White,
-                              config.getMineIncomePerCellPerTurn(),
-                              config.getFarmIncomePerCellPerTurn(),
-                              config);
+    ForwardModel::advanceTurn(snapshot, KingdomId::White, config);
 
     expect(snapshot.white.pieces.size() == 1,
            "ForwardModel should spawn a produced bishop when runtime conditions allow it.");
@@ -8432,11 +8430,7 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
                                            KingdomId::White),
             "Under-construction barracks should reject production in the same simulated turn.");
 
-        ForwardModel::advanceTurn(snapshot,
-                                  KingdomId::White,
-                                  config.getMineIncomePerCellPerTurn(),
-                                  config.getFarmIncomePerCellPerTurn(),
-                                  config);
+        ForwardModel::advanceTurn(snapshot, KingdomId::White, config);
 
         SnapBuilding* barracks = snapshot.kingdom(KingdomId::White).getBuildingById(-43);
         expect(barracks != nullptr && !barracks->isUnderConstruction(),
@@ -8889,8 +8883,12 @@ void testGameConfigClampsNegativeEconomyValues() {
         out << "{\n"
             << "  \"economy\": {\n"
             << "    \"starting_gold\": -10,\n"
-            << "    \"mine_income_per_cell_per_turn\": -3,\n"
-            << "    \"farm_income_per_cell_per_turn\": -2,\n"
+            << "    \"mine_income_first_cell_per_turn\": -3,\n"
+            << "    \"mine_income_additional_cell_decrement\": -1,\n"
+            << "    \"mine_income_minimum_per_cell_per_turn\": -2,\n"
+            << "    \"farm_income_first_cell_per_turn\": -2,\n"
+            << "    \"farm_income_additional_cell_decrement\": -1,\n"
+            << "    \"farm_income_minimum_per_cell_per_turn\": -1,\n"
             << "    \"barracks_cost\": -50,\n"
             << "    \"wood_wall_cost\": -20,\n"
             << "    \"stone_wall_cost\": -40,\n"
@@ -8919,9 +8917,22 @@ void testGameConfigClampsNegativeEconomyValues() {
     expect(config.loadFromFile(tempPath.string()), "GameConfig should load a negative-economy override file.");
     std::filesystem::remove(tempPath);
 
+    const ResourceIncomeProfile mineIncome = config.getMineIncomeProfile();
+    const ResourceIncomeProfile farmIncome = config.getFarmIncomeProfile();
+
     expect(config.getStartingGold() == 0, "Negative starting gold should be clamped to zero.");
-    expect(config.getMineIncomePerCellPerTurn() == 0, "Negative mine income should be clamped to zero.");
-    expect(config.getFarmIncomePerCellPerTurn() == 0, "Negative farm income should be clamped to zero.");
+    expect(mineIncome.firstCellIncomePerTurn == 0,
+        "Negative mine first-cell income should be clamped to zero.");
+    expect(mineIncome.additionalCellDecrement == 0,
+        "Negative mine decrement should be clamped to zero.");
+    expect(mineIncome.minimumCellIncomePerTurn == 0,
+        "Negative mine minimum income should be clamped to zero.");
+    expect(farmIncome.firstCellIncomePerTurn == 0,
+        "Negative farm first-cell income should be clamped to zero.");
+    expect(farmIncome.additionalCellDecrement == 0,
+        "Negative farm decrement should be clamped to zero.");
+    expect(farmIncome.minimumCellIncomePerTurn == 0,
+        "Negative farm minimum income should be clamped to zero.");
     expect(config.getBarracksCost() == 0, "Negative barracks cost should be clamped to zero.");
     expect(config.getWoodWallCost() == 0, "Negative wood wall cost should be clamped to zero.");
     expect(config.getStoneWallCost() == 0, "Negative stone wall cost should be clamped to zero.");
@@ -8950,6 +8961,82 @@ void testGameConfigClampsNegativeEconomyValues() {
            "Negative upgrade costs should be clamped to zero.");
 }
 
+int calculateExpectedControlledIncome(int controlledCells, const ResourceIncomeProfile& incomeProfile) {
+    int totalIncome = 0;
+    for (int cellIndex = 0; cellIndex < std::max(0, controlledCells); ++cellIndex) {
+        totalIncome += std::max(
+            incomeProfile.firstCellIncomePerTurn - (cellIndex * incomeProfile.additionalCellDecrement),
+            incomeProfile.minimumCellIncomePerTurn);
+    }
+
+    return totalIncome;
+}
+
+void testGameConfigLoadsLegacyResourceIncomeKeys() {
+    const std::filesystem::path tempPath =
+        std::filesystem::temp_directory_path() / "anormalchess_legacy_resource_income_test.json";
+    {
+        std::ofstream out(tempPath);
+        out << "{\n"
+            << "  \"economy\": {\n"
+            << "    \"mine_income_per_cell_per_turn\": 13,\n"
+            << "    \"farm_income_per_cell_per_turn\": 7\n"
+            << "  }\n"
+            << "}\n";
+    }
+
+    GameConfig config;
+    expect(config.loadFromFile(tempPath.string()), "GameConfig should load legacy resource income keys.");
+    std::filesystem::remove(tempPath);
+
+    const ResourceIncomeProfile mineIncome = config.getMineIncomeProfile();
+    const ResourceIncomeProfile farmIncome = config.getFarmIncomeProfile();
+
+    expect(mineIncome.firstCellIncomePerTurn == 13,
+        "Legacy mine income should map to the first-cell income value.");
+    expect(mineIncome.additionalCellDecrement == 0,
+        "Legacy mine income should preserve flat payouts by using a zero decrement.");
+    expect(mineIncome.minimumCellIncomePerTurn == 13,
+        "Legacy mine income should map to the minimum floor to preserve fixed-rate behavior.");
+    expect(farmIncome.firstCellIncomePerTurn == 7,
+        "Legacy farm income should map to the first-cell income value.");
+    expect(farmIncome.additionalCellDecrement == 0,
+        "Legacy farm income should preserve flat payouts by using a zero decrement.");
+    expect(farmIncome.minimumCellIncomePerTurn == 7,
+        "Legacy farm income should map to the minimum floor to preserve fixed-rate behavior.");
+}
+
+void testGameConfigClampsResourceIncomeMinimumToFirstCell() {
+    const std::filesystem::path tempPath =
+        std::filesystem::temp_directory_path() / "anormalchess_resource_income_minimum_clamp_test.json";
+    {
+        std::ofstream out(tempPath);
+        out << "{\n"
+            << "  \"economy\": {\n"
+            << "    \"mine_income_first_cell_per_turn\": 4,\n"
+            << "    \"mine_income_additional_cell_decrement\": 1,\n"
+            << "    \"mine_income_minimum_per_cell_per_turn\": 9,\n"
+            << "    \"farm_income_first_cell_per_turn\": 3,\n"
+            << "    \"farm_income_additional_cell_decrement\": 2,\n"
+            << "    \"farm_income_minimum_per_cell_per_turn\": 8\n"
+            << "  }\n"
+            << "}\n";
+    }
+
+    GameConfig config;
+    expect(config.loadFromFile(tempPath.string()),
+        "GameConfig should load resource income profiles whose minimum exceeds the first-cell income.");
+    std::filesystem::remove(tempPath);
+
+    const ResourceIncomeProfile mineIncome = config.getMineIncomeProfile();
+    const ResourceIncomeProfile farmIncome = config.getFarmIncomeProfile();
+
+    expect(mineIncome.minimumCellIncomePerTurn == mineIncome.firstCellIncomePerTurn,
+        "Mine minimum income should be clamped down to the first-cell income when configured above it.");
+    expect(farmIncome.minimumCellIncomePerTurn == farmIncome.firstCellIncomePerTurn,
+        "Farm minimum income should be clamped down to the first-cell income when configured above it.");
+}
+
 void testProjectedIncomeHelper() {
     GameConfig config;
     Board board;
@@ -8966,18 +9053,20 @@ void testProjectedIncomeHelper() {
     addPieceToBoard(white, board, 2, PieceType::Pawn, KingdomId::White, {1, 2});
     addPieceToBoard(black, board, 3, PieceType::Pawn, KingdomId::Black, {2, 2});
 
+    const ResourceIncomeProfile mineIncomeProfile = config.getMineIncomeProfile();
+
     const ResourceIncomeBreakdown dominantIncome = EconomySystem::calculateResourceIncomeBreakdown(
      publicBuildings.front(), board, config);
     expect(dominantIncome.whiteOccupiedCells == 3 && dominantIncome.blackOccupiedCells == 1,
         "Resource breakdown should count occupied cells for both kingdoms on a public resource building.");
-    expect(dominantIncome.whiteIncome == 2 * config.getMineIncomePerCellPerTurn(),
-        "The leading kingdom should earn income from its net occupation advantage only.");
+    expect(dominantIncome.whiteIncome == calculateExpectedControlledIncome(2, mineIncomeProfile),
+        "The leading kingdom should earn diminishing income from its net occupation advantage only.");
     expect(dominantIncome.blackIncome == 0,
         "The trailing kingdom should be clamped to zero income on a contested public resource building.");
 
     const int projectedIncome = EconomySystem::calculateProjectedIncome(white, board, publicBuildings, config);
-    expect(projectedIncome == 2 * config.getMineIncomePerCellPerTurn(),
-        "Projected income should follow the public resource net occupation rule.");
+    expect(projectedIncome == calculateExpectedControlledIncome(2, mineIncomeProfile),
+        "Projected income should follow the public resource diminishing net occupation rule.");
 
     const int trailingIncome = EconomySystem::calculateProjectedIncome(black, board, publicBuildings, config);
     expect(trailingIncome == 0,
@@ -9003,15 +9092,22 @@ void testProjectedIncomeHelper() {
 void testResourceIncomeHelperSupportsBothResourceTypes() {
     GameConfig config;
 
-    const ResourceIncomeBreakdown farmIncome = EconomySystem::calculateResourceIncomeFromOccupation(
-     4, 1, config.getFarmIncomePerCellPerTurn());
-    const ResourceIncomeBreakdown mineIncome = EconomySystem::calculateResourceIncomeFromOccupation(
-     2, 0, config.getMineIncomePerCellPerTurn());
+    const ResourceIncomeProfile farmIncomeProfile = config.getFarmIncomeProfile();
+    const ResourceIncomeProfile mineIncomeProfile = config.getMineIncomeProfile();
 
-    expect(farmIncome.whiteIncome == 3 * config.getFarmIncomePerCellPerTurn(),
-        "Farm income helper should preserve the configured farm per-cell rate.");
-    expect(mineIncome.whiteIncome == 2 * config.getMineIncomePerCellPerTurn(),
-        "Mine income helper should preserve the configured mine per-cell rate.");
+    const ResourceIncomeBreakdown farmIncome = EconomySystem::calculateResourceIncomeFromOccupation(
+     4, 1, farmIncomeProfile);
+    const ResourceIncomeBreakdown mineIncome = EconomySystem::calculateResourceIncomeFromOccupation(
+     2, 0, mineIncomeProfile);
+    const ResourceIncomeBreakdown cappedMineIncome = EconomySystem::calculateResourceIncomeFromOccupation(
+     7, 0, mineIncomeProfile);
+
+    expect(farmIncome.whiteIncome == calculateExpectedControlledIncome(3, farmIncomeProfile),
+        "Farm income helper should apply the configured diminishing farm profile to net control.");
+    expect(mineIncome.whiteIncome == calculateExpectedControlledIncome(2, mineIncomeProfile),
+        "Mine income helper should apply the configured diminishing mine profile to net control.");
+    expect(cappedMineIncome.whiteIncome == calculateExpectedControlledIncome(7, mineIncomeProfile),
+        "Resource income helper should respect the configured minimum floor once the decrement bottoms out.");
 }
 
     void testStructureChunkRegistry() {
@@ -9311,6 +9407,8 @@ int main() {
         {"runtime validator under construction building", testGameStateValidatorRejectsUnderConstructionRuntimeBuilding},
         {"infernal save roundtrip manifested piece type", testInfernalAutonomousUnitManifestedTypePersistsAcrossSaveLoad},
         {"game config clamps negative economy", testGameConfigClampsNegativeEconomyValues},
+        {"game config legacy resource income", testGameConfigLoadsLegacyResourceIncomeKeys},
+        {"game config clamps resource income minimum", testGameConfigClampsResourceIncomeMinimumToFirstCell},
         {"projected income helper", testProjectedIncomeHelper},
         {"resource income helper resource types", testResourceIncomeHelperSupportsBothResourceTypes},
         {"structure chunk registry", testStructureChunkRegistry},

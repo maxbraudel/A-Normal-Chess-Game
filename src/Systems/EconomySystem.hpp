@@ -3,6 +3,7 @@
 #include <vector>
 
 #include "Kingdom/KingdomId.hpp"
+#include "Systems/ResourceIncomeProfile.hpp"
 
 class Kingdom;
 class Board;
@@ -13,7 +14,6 @@ struct GameSnapshot;
 
 struct ResourceIncomeBreakdown {
     bool isResourceBuilding = false;
-    int incomePerCell = 0;
     int whiteOccupiedCells = 0;
     int blackOccupiedCells = 0;
     int whiteIncome = 0;
@@ -44,7 +44,7 @@ class EconomySystem {
 public:
     static ResourceIncomeBreakdown calculateResourceIncomeFromOccupation(int whiteOccupiedCells,
                                                                         int blackOccupiedCells,
-                                                                        int incomePerCell);
+                                                                        const ResourceIncomeProfile& incomeProfile);
     static ResourceIncomeBreakdown calculateResourceIncomeBreakdown(const Building& building,
                                                                     const Board& board,
                                                                     const GameConfig& config);
