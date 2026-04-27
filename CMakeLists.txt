@@ -94,6 +94,7 @@ set(CORE_SOURCES
     src/Save/SaveManager.cpp
     src/Systems/BuildReachRules.cpp
     src/Systems/BuildSystem.cpp
+    src/Systems/ChestLootProgression.cpp
     src/Systems/ChestSystem.cpp
     src/Systems/CheckResponseRules.cpp
     src/Systems/CheckSystem.cpp

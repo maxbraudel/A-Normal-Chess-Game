@@ -235,6 +235,27 @@ GameConfig makeWeatherTestConfig(const std::string& weatherJsonBody) {
     return config;
 }
 
+GameConfig makeChestTestConfig(const std::string& chestJsonBody) {
+    const std::filesystem::path tempPath =
+        std::filesystem::temp_directory_path() / "anormalchess_chest_test_config.json";
+    {
+        std::ofstream out(tempPath);
+        out << "{\n"
+            << "  \"game\": {\n"
+            << "    \"chests\": {\n"
+            << chestJsonBody << "\n"
+            << "    }\n"
+            << "  }\n"
+            << "}\n";
+    }
+
+    GameConfig config;
+    expect(config.loadFromFile(tempPath.string()),
+        "Chest test config helper should load a temporary chest override file.");
+    std::filesystem::remove(tempPath);
+    return config;
+}
+
 GameConfig makeCombatTestConfig(const std::string& combatJsonBody) {
     const std::filesystem::path tempPath =
         std::filesystem::temp_directory_path() / "anormalchess_combat_test_config.json";
@@ -4775,6 +4796,15 @@ void testSaveManagerRoundTrip() {
     data.worldSeed = 123456789u;
     data.tacticalGridEnabled = true;
     data.sharedTurnPreviewEnabled = true;
+    data.chestSystemState.activeChestObjectId = -1;
+    data.chestSystemState.nextSpawnTurn = 14;
+    data.chestSystemState.rngCounter = 5u;
+    data.chestSystemState.rewardRngCounter = 3u;
+    data.chestSystemState.lootProgression.hasCurrentReward = true;
+    data.chestSystemState.lootProgression.currentRewardGeneration = 3;
+    data.chestSystemState.lootProgression.currentReward = ChestReward{ChestRewardType::BuildPointsMaxBonus, 1};
+    data.chestSystemState.lootProgression.lastCollectedGenerationByKingdom[kingdomIndex(KingdomId::White)] = 2;
+    data.chestSystemState.lootProgression.lastCollectedGenerationByKingdom[kingdomIndex(KingdomId::Black)] = 3;
     data.weatherSystemState.nextSpawnTurnStep = 19;
     data.weatherSystemState.hasActiveFront = true;
     data.weatherSystemState.rngCounter = 6u;
@@ -4897,6 +4927,16 @@ void testSaveManagerRoundTrip() {
         "Shared Turn Preview availability should round-trip through SaveManager.");
     expect(loaded.xpSystemState.rngCounter == data.xpSystemState.rngCounter,
         "XP RNG state should round-trip through SaveManager.");
+    expect(loaded.chestSystemState.nextSpawnTurn == data.chestSystemState.nextSpawnTurn
+        && loaded.chestSystemState.rngCounter == data.chestSystemState.rngCounter
+        && loaded.chestSystemState.rewardRngCounter == data.chestSystemState.rewardRngCounter,
+        "Chest scheduler and reward RNG state should round-trip through SaveManager.");
+    expect(loaded.chestSystemState.lootProgression.hasCurrentReward == data.chestSystemState.lootProgression.hasCurrentReward
+        && loaded.chestSystemState.lootProgression.currentRewardGeneration == data.chestSystemState.lootProgression.currentRewardGeneration
+        && loaded.chestSystemState.lootProgression.currentReward.type == data.chestSystemState.lootProgression.currentReward.type
+        && loaded.chestSystemState.lootProgression.currentReward.amount == data.chestSystemState.lootProgression.currentReward.amount
+        && loaded.chestSystemState.lootProgression.lastCollectedGenerationByKingdom == data.chestSystemState.lootProgression.lastCollectedGenerationByKingdom,
+        "Shared chest loot progression should round-trip through SaveManager.");
     expect(loaded.weatherSystemState.nextSpawnTurnStep == data.weatherSystemState.nextSpawnTurnStep
         && loaded.weatherSystemState.hasActiveFront == data.weatherSystemState.hasActiveFront
         && loaded.weatherSystemState.rngCounter == data.weatherSystemState.rngCounter,
@@ -4953,6 +4993,14 @@ void testSaveManagerRoundTrip() {
             data.multiplayer.port = 41000;
             data.multiplayer.passwordSalt = "salt";
             data.multiplayer.passwordHash = MultiplayerPasswordUtils::computePasswordDigest("secret", data.multiplayer.passwordSalt);
+            data.chestSystemState.nextSpawnTurn = 11;
+            data.chestSystemState.rngCounter = 4u;
+            data.chestSystemState.rewardRngCounter = 2u;
+            data.chestSystemState.lootProgression.hasCurrentReward = true;
+            data.chestSystemState.lootProgression.currentRewardGeneration = 2;
+            data.chestSystemState.lootProgression.currentReward = ChestReward{ChestRewardType::Gold, 35};
+            data.chestSystemState.lootProgression.lastCollectedGenerationByKingdom[kingdomIndex(KingdomId::White)] = 1;
+            data.chestSystemState.lootProgression.lastCollectedGenerationByKingdom[kingdomIndex(KingdomId::Black)] = 2;
             data.weatherSystemState.hasActiveFront = true;
             data.weatherSystemState.revision = 7;
             data.weatherMaskCache.revision = 7;
@@ -4974,6 +5022,10 @@ void testSaveManagerRoundTrip() {
             expect(loaded.sharedTurnPreviewEnabled == data.sharedTurnPreviewEnabled,
                 "Serialized string snapshots should preserve Shared Turn Preview availability.");
             expect(loaded.multiplayer.port == data.multiplayer.port, "Serialized string snapshots should preserve multiplayer metadata.");
+            expect(loaded.chestSystemState.rewardRngCounter == data.chestSystemState.rewardRngCounter
+                && loaded.chestSystemState.lootProgression.currentRewardGeneration == data.chestSystemState.lootProgression.currentRewardGeneration
+                && loaded.chestSystemState.lootProgression.lastCollectedGenerationByKingdom == data.chestSystemState.lootProgression.lastCollectedGenerationByKingdom,
+                "Serialized string snapshots should preserve shared chest loot progression state.");
             expect(loaded.weatherSystemState.revision == data.weatherSystemState.revision,
                 "Serialized string snapshots should preserve the weather revision used to validate authoritative weather masks.");
             expect(loaded.weatherMaskCache.revision == data.weatherMaskCache.revision
@@ -7350,6 +7402,145 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             "Structured weather config should load the configured log-normal density parameters.");
     }
 
+    void testChestConfigLoadsCurrentLootCatchUpToggle() {
+        GameConfig config = makeChestTestConfig(
+            "      \"current_loot_catch_up_enabled\": true");
+
+        expect(config.isChestCurrentLootCatchUpEnabled(),
+            "Structured chest config should enable current-loot catch-up when the JSON boolean is true.");
+    }
+
+    void testChestLootIsResolvedAtOpenWhenCatchUpDisabled() {
+        GameConfig config = makeChestTestConfig(
+            "      \"current_loot_catch_up_enabled\": false,\n"
+            "      \"early_gold_weight\": 1,\n"
+            "      \"early_movement_bonus_weight\": 0,\n"
+            "      \"early_build_bonus_weight\": 0,\n"
+            "      \"late_gold_weight\": 1,\n"
+            "      \"late_movement_bonus_weight\": 0,\n"
+            "      \"late_build_bonus_weight\": 0");
+
+        std::vector<MapObject> mapObjects;
+        MapObject chest;
+        chest.id = 17;
+        chest.type = MapObjectType::Chest;
+        chest.position = {4, 4};
+        chest.chest.reward = ChestReward{ChestRewardType::BuildPointsMaxBonus, 999};
+        mapObjects.push_back(chest);
+
+        ChestSystemState state{};
+        state.activeChestObjectId = chest.id;
+        Kingdom collector(KingdomId::White);
+
+        const std::optional<ChestClaimResult> claim = ChestSystem::collectChestAtPosition(
+            mapObjects,
+            state,
+            chest.position,
+            collector,
+            424242u,
+            3,
+            config);
+
+        expect(claim.has_value(),
+            "Chest collection should still succeed when open-time reward resolution is enabled.");
+        expect(claim->reward.type == ChestRewardType::Gold
+            && claim->reward.amount == config.getChestGoldRewardAmount(),
+            "When catch-up is disabled, a chest should still resolve its reward on open using the configured reward weights.");
+        expect(claim->reward.amount != chest.chest.reward.amount,
+            "Chest rewards should no longer be baked into the spawned chest object once loot is resolved at open time.");
+        expect(collector.gold == config.getChestGoldRewardAmount(),
+            "Open-time chest rewards should still be applied immediately to the collecting kingdom.");
+        expect(!state.lootProgression.hasCurrentReward
+            && state.lootProgression.currentRewardGeneration == 0,
+            "When current-loot catch-up is disabled, opening a chest should not mutate the shared loot progression state.");
+    }
+
+    void testChestLootCatchUpUsesCurrentSharedReward() {
+        GameConfig config = makeChestTestConfig(
+            "      \"current_loot_catch_up_enabled\": true,\n"
+            "      \"early_gold_weight\": 1,\n"
+            "      \"early_movement_bonus_weight\": 0,\n"
+            "      \"early_build_bonus_weight\": 0,\n"
+            "      \"late_gold_weight\": 1,\n"
+            "      \"late_movement_bonus_weight\": 0,\n"
+            "      \"late_build_bonus_weight\": 0");
+
+        ChestSystemState state{};
+        std::vector<MapObject> mapObjects;
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+
+        const auto collectChest = [&](int objectId,
+                                      const sf::Vector2i& position,
+                                      Kingdom& collector,
+                                      int currentTurn) {
+            mapObjects.clear();
+            MapObject chest;
+            chest.id = objectId;
+            chest.type = MapObjectType::Chest;
+            chest.position = position;
+            chest.chest.reward = ChestReward{ChestRewardType::BuildPointsMaxBonus, 999};
+            mapObjects.push_back(chest);
+            state.activeChestObjectId = objectId;
+            return ChestSystem::collectChestAtPosition(
+                mapObjects,
+                state,
+                position,
+                collector,
+                161803u,
+                currentTurn,
+                config);
+        };
+
+        const std::optional<ChestClaimResult> firstWhiteClaim = collectChest(1, {1, 1}, white, 4);
+        expect(firstWhiteClaim.has_value(),
+            "The first collector should be able to generate the first shared chest loot.");
+        expect(state.lootProgression.hasCurrentReward
+            && state.lootProgression.currentRewardGeneration == 1
+            && state.rewardRngCounter == 1
+            && state.lootProgression.lastCollectedGenerationByKingdom[kingdomIndex(KingdomId::White)] == 1
+            && state.lootProgression.lastCollectedGenerationByKingdom[kingdomIndex(KingdomId::Black)] == 0,
+            "The first chest opener should generate shared reward generation 1 and only acknowledge it for their kingdom.");
+
+        const std::optional<ChestClaimResult> firstBlackClaim = collectChest(2, {2, 2}, black, 5);
+        expect(firstBlackClaim.has_value(),
+            "The second kingdom should still be able to collect a chest while catching up to the shared reward.");
+        expect(firstBlackClaim->reward.type == firstWhiteClaim->reward.type
+            && firstBlackClaim->reward.amount == firstWhiteClaim->reward.amount,
+            "A kingdom that is behind on chest progression should receive the current shared reward instead of rolling a new one.");
+        expect(state.lootProgression.currentRewardGeneration == 1
+            && state.rewardRngCounter == 1
+            && state.lootProgression.lastCollectedGenerationByKingdom[kingdomIndex(KingdomId::Black)] == 1,
+            "Catching up to the shared reward should not advance the reward generation or consume extra reward RNG.");
+
+        const std::optional<ChestClaimResult> secondWhiteClaim = collectChest(3, {3, 3}, white, 6);
+        expect(secondWhiteClaim.has_value(),
+            "A kingdom that already received the current shared reward should force the next generation when opening again.");
+        expect(state.lootProgression.currentRewardGeneration == 2
+            && state.rewardRngCounter == 2
+            && state.lootProgression.lastCollectedGenerationByKingdom[kingdomIndex(KingdomId::White)] == 2,
+            "Reopening while already up to date should advance the shared chest reward generation.");
+
+        const std::optional<ChestClaimResult> thirdWhiteClaim = collectChest(4, {4, 4}, white, 7);
+        expect(thirdWhiteClaim.has_value(),
+            "The leading kingdom should be able to keep advancing the shared chest reward when it opens again first.");
+        expect(state.lootProgression.currentRewardGeneration == 3
+            && state.rewardRngCounter == 3
+            && state.lootProgression.lastCollectedGenerationByKingdom[kingdomIndex(KingdomId::White)] == 3,
+            "Repeated openings by the leading kingdom should keep advancing the current shared reward generation.");
+
+        const std::optional<ChestClaimResult> secondBlackClaim = collectChest(5, {5, 5}, black, 8);
+        expect(secondBlackClaim.has_value(),
+            "A lagging kingdom should still be able to claim the latest shared reward generation later on.");
+        expect(secondBlackClaim->reward.type == thirdWhiteClaim->reward.type
+            && secondBlackClaim->reward.amount == thirdWhiteClaim->reward.amount,
+            "A lagging kingdom should catch up directly to the latest shared reward rather than replaying skipped generations.");
+        expect(state.lootProgression.currentRewardGeneration == 3
+            && state.rewardRngCounter == 3
+            && state.lootProgression.lastCollectedGenerationByKingdom[kingdomIndex(KingdomId::Black)] == 3,
+            "Catching up to the latest shared reward should acknowledge the current generation without creating a new one.");
+    }
+
     void testWeatherSystemUsesDeterministicSerializedSequence() {
         GameConfig config = makeWeatherTestConfig(
             "      \"cooldown_min_turns\": 0,\n"
@@ -9521,9 +9712,12 @@ int main(int argc, char** argv) {
         {"input coordinator world routing", testInputCoordinatorRoutesWorldInputAfterGuiFiltering},
         {"render coordinator move overlay plan", testRenderCoordinatorBuildsSelectionAndMoveOverlayPlan},
         {"render coordinator tactical grid plan", testRenderCoordinatorBuildsTacticalGridPlan},
+        {"chest config current loot catch-up toggle", testChestConfigLoadsCurrentLootCatchUpToggle},
         {"weather config structured parameters", testWeatherConfigLoadsStructuredParameters},
         {"cheatcode config boolean and shortcuts", testCheatcodeConfigLoadsBooleanAndShortcuts},
         {"xp config structured profiles", testXPConfigLoadsStructuredProfiles},
+        {"chest loot resolved at open when catch-up disabled", testChestLootIsResolvedAtOpenWhenCatchUpDisabled},
+        {"chest loot catch-up uses current shared reward", testChestLootCatchUpUsesCurrentSharedReward},
         {"weather deterministic serialized sequence", testWeatherSystemUsesDeterministicSerializedSequence},
         {"weather configured speed blocks per 100 turns", testWeatherSystemUsesConfiguredSpeedBlocksPer100Turns},
         {"weather duration gamma overrides speed", testWeatherSystemUsesDurationGammaWhenEnabled},

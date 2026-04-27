@@ -92,6 +92,7 @@ public:
     int getChestLateGoldWeight() const;
     int getChestLateMovementBonusWeight() const;
     int getChestLateBuildBonusWeight() const;
+    bool isChestCurrentLootCatchUpEnabled() const;
 
     // Infernal pieces
     int getInfernalMinSpawnTurn() const;
@@ -246,6 +247,7 @@ private:
     int m_chestLateGoldWeight;
     int m_chestLateMovementBonusWeight;
     int m_chestLateBuildBonusWeight;
+    bool m_chestCurrentLootCatchUpEnabled;
 
     // Infernal pieces
     int m_infernalMinSpawnTurn;

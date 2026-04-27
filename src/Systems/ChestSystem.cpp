@@ -11,6 +11,7 @@
 #include "Board/CellType.hpp"
 #include "Config/GameConfig.hpp"
 #include "Kingdom/Kingdom.hpp"
+#include "Systems/ChestLootProgression.hpp"
 
 namespace {
 
@@ -42,34 +43,6 @@ int sampleSpawnDelay(ChestSystemState& state,
     std::weibull_distribution<double> distribution(shape, scale);
     const int randomDelay = std::max(0, static_cast<int>(std::lround(distribution(generator))));
     return std::max(config.getChestRespawnCooldownTurns(), randomDelay);
-}
-
-ChestReward sampleReward(ChestSystemState& state,
-                         std::uint32_t worldSeed,
-                         int currentTurn,
-                         const GameConfig& config) {
-    const bool lateGame = currentTurn >= config.getChestLateGameTurn();
-    const std::array<int, 3> weights{
-        lateGame ? config.getChestLateGoldWeight() : config.getChestEarlyGoldWeight(),
-        lateGame ? config.getChestLateMovementBonusWeight() : config.getChestEarlyMovementBonusWeight(),
-        lateGame ? config.getChestLateBuildBonusWeight() : config.getChestEarlyBuildBonusWeight()};
-
-    std::mt19937 generator = makeEventGenerator(state, worldSeed);
-    const int totalWeight = std::accumulate(weights.begin(), weights.end(), 0);
-    if (totalWeight <= 0) {
-        return ChestReward{ChestRewardType::Gold, config.getChestGoldRewardAmount()};
-    }
-
-    std::discrete_distribution<int> distribution(weights.begin(), weights.end());
-    switch (distribution(generator)) {
-        case 1:
-            return ChestReward{ChestRewardType::MovementPointsMaxBonus, config.getChestMovementBonusAmount()};
-        case 2:
-            return ChestReward{ChestRewardType::BuildPointsMaxBonus, config.getChestBuildBonusAmount()};
-        case 0:
-        default:
-            return ChestReward{ChestRewardType::Gold, config.getChestGoldRewardAmount()};
-    }
 }
 
 int spawnWeightForCell(const Board& board,
@@ -112,6 +85,8 @@ void ChestSystem::initialize(ChestSystemState& state,
     state.activeChestObjectId = -1;
     state.nextSpawnTurn = 0;
     state.rngCounter = 0;
+    state.rewardRngCounter = 0;
+    ChestLootProgression::reset(state.lootProgression);
     scheduleNextSpawn(state, worldSeed, std::max(1, currentTurn), config);
     state.nextSpawnTurn = std::max(state.nextSpawnTurn, config.getChestMinSpawnTurn());
 }
@@ -182,7 +157,6 @@ std::optional<MapObject> ChestSystem::trySpawnChest(ChestSystemState& state,
     object.id = nextObjectId;
     object.type = MapObjectType::Chest;
     object.position = chosen.position;
-    object.chest.reward = sampleReward(state, worldSeed, currentTurn, config);
     object.chest.spawnTurn = currentTurn;
     state.activeChestObjectId = object.id;
     return object;
@@ -191,7 +165,10 @@ std::optional<MapObject> ChestSystem::trySpawnChest(ChestSystemState& state,
 std::optional<ChestClaimResult> ChestSystem::collectChestAtPosition(std::vector<MapObject>& mapObjects,
                                                                     ChestSystemState& state,
                                                                     sf::Vector2i position,
-                                                                    Kingdom& collector) {
+                                                                    Kingdom& collector,
+                                                                    std::uint32_t worldSeed,
+                                                                    int currentTurn,
+                                                                    const GameConfig& config) {
     const auto it = std::find_if(mapObjects.begin(), mapObjects.end(), [&](const MapObject& object) {
         return object.position == position
             && object.type == MapObjectType::Chest
@@ -203,7 +180,13 @@ std::optional<ChestClaimResult> ChestSystem::collectChestAtPosition(std::vector<
 
     ChestClaimResult result;
     result.objectId = it->id;
-    result.reward = it->chest.reward;
+    result.reward = ChestLootProgression::resolveReward(
+        state.lootProgression,
+        state.rewardRngCounter,
+        collector.id,
+        worldSeed,
+        currentTurn,
+        config).reward;
 
     switch (result.reward.type) {
         case ChestRewardType::Gold:

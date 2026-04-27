@@ -7,6 +7,7 @@
 
 #include "Core/GameplayNotification.hpp"
 #include "Objects/MapObject.hpp"
+#include "Systems/ChestLootProgression.hpp"
 
 class Board;
 class GameConfig;
@@ -16,6 +17,8 @@ struct ChestSystemState {
     int activeChestObjectId = -1;
     int nextSpawnTurn = 0;
     std::uint32_t rngCounter = 0;
+    std::uint32_t rewardRngCounter = 0;
+    ChestLootProgressionState lootProgression{};
 };
 
 struct ChestClaimResult {
@@ -45,5 +48,8 @@ public:
     static std::optional<ChestClaimResult> collectChestAtPosition(std::vector<MapObject>& mapObjects,
                                                                   ChestSystemState& state,
                                                                   sf::Vector2i position,
-                                                                  Kingdom& collector);
+                                                                  Kingdom& collector,
+                                                                  std::uint32_t worldSeed,
+                                                                  int currentTurn,
+                                                                  const GameConfig& config);
 };

@@ -318,6 +318,7 @@ void GameConfig::setDefaults() {
     m_chestLateGoldWeight = 4;
     m_chestLateMovementBonusWeight = 6;
     m_chestLateBuildBonusWeight = 6;
+    m_chestCurrentLootCatchUpEnabled = false;
     m_infernalMinSpawnTurn = 3;
     m_infernalRespawnCooldownTurns = 4;
     m_infernalSpawnRetryTurns = 1;
@@ -836,6 +837,8 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
             chestSec, "late_movement_bonus_weight", m_chestLateMovementBonusWeight);
         m_chestLateBuildBonusWeight = extractInt(
             chestSec, "late_build_bonus_weight", m_chestLateBuildBonusWeight);
+        m_chestCurrentLootCatchUpEnabled = extractBool(
+            chestSec, "current_loot_catch_up_enabled", m_chestCurrentLootCatchUpEnabled);
     }
 
     m_chestMinSpawnTurn = clampNonNegativeConfigValue("chests.min_spawn_turn", m_chestMinSpawnTurn);
@@ -1355,6 +1358,7 @@ int GameConfig::getChestEarlyBuildBonusWeight() const { return m_chestEarlyBuild
 int GameConfig::getChestLateGoldWeight() const { return m_chestLateGoldWeight; }
 int GameConfig::getChestLateMovementBonusWeight() const { return m_chestLateMovementBonusWeight; }
 int GameConfig::getChestLateBuildBonusWeight() const { return m_chestLateBuildBonusWeight; }
+bool GameConfig::isChestCurrentLootCatchUpEnabled() const { return m_chestCurrentLootCatchUpEnabled; }
 
 int GameConfig::getInfernalMinSpawnTurn() const { return m_infernalMinSpawnTurn; }
 int GameConfig::getInfernalRespawnCooldownTurns() const { return m_infernalRespawnCooldownTurns; }

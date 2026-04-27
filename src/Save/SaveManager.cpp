@@ -295,7 +295,16 @@ void SaveManager::writeJson(std::ostream& output, const SaveData& data) {
     output << "  \"chestState\": {"
            << "\"activeChestObjectId\":" << data.chestSystemState.activeChestObjectId << ","
            << "\"nextSpawnTurn\":" << data.chestSystemState.nextSpawnTurn << ","
-           << "\"rngCounter\":" << data.chestSystemState.rngCounter
+            << "\"rngCounter\":" << data.chestSystemState.rngCounter << ","
+            << "\"rewardRngCounter\":" << data.chestSystemState.rewardRngCounter << ","
+            << "\"hasCurrentReward\":" << (data.chestSystemState.lootProgression.hasCurrentReward ? 1 : 0) << ","
+            << "\"currentRewardGeneration\":" << data.chestSystemState.lootProgression.currentRewardGeneration << ","
+            << "\"currentRewardType\":" << static_cast<int>(data.chestSystemState.lootProgression.currentReward.type) << ","
+            << "\"currentRewardAmount\":" << data.chestSystemState.lootProgression.currentReward.amount << ","
+            << "\"whiteLastCollectedGeneration\":"
+            << data.chestSystemState.lootProgression.lastCollectedGenerationByKingdom[kingdomIndex(KingdomId::White)] << ","
+            << "\"blackLastCollectedGeneration\":"
+            << data.chestSystemState.lootProgression.lastCollectedGenerationByKingdom[kingdomIndex(KingdomId::Black)]
            << "},\n";
 
         output << "  \"weatherState\": {"
@@ -875,6 +884,23 @@ bool SaveManager::deserialize(const std::string& json, SaveData& outData) {
     outData.chestSystemState.rngCounter = static_cast<std::uint32_t>(std::max(
         0,
         extractInt(chestStateSection, "rngCounter", 0)));
+    outData.chestSystemState.rewardRngCounter = static_cast<std::uint32_t>(std::max(
+        0,
+        extractInt(chestStateSection, "rewardRngCounter", 0)));
+    outData.chestSystemState.lootProgression.hasCurrentReward = extractInt(
+        chestStateSection, "hasCurrentReward", 0) != 0;
+    outData.chestSystemState.lootProgression.currentRewardGeneration = extractInt(
+        chestStateSection, "currentRewardGeneration", 0);
+    outData.chestSystemState.lootProgression.currentReward.type = static_cast<ChestRewardType>(std::clamp(
+        extractInt(chestStateSection, "currentRewardType", static_cast<int>(ChestRewardType::Gold)),
+        0,
+        static_cast<int>(ChestRewardType::BuildPointsMaxBonus)));
+    outData.chestSystemState.lootProgression.currentReward.amount = extractInt(
+        chestStateSection, "currentRewardAmount", 0);
+    outData.chestSystemState.lootProgression.lastCollectedGenerationByKingdom[kingdomIndex(KingdomId::White)] = extractInt(
+        chestStateSection, "whiteLastCollectedGeneration", 0);
+    outData.chestSystemState.lootProgression.lastCollectedGenerationByKingdom[kingdomIndex(KingdomId::Black)] = extractInt(
+        chestStateSection, "blackLastCollectedGeneration", 0);
 
     const std::string weatherStateSection = extractSection(json, "weatherState");
     outData.weatherSystemState.nextSpawnTurnStep = extractInt(

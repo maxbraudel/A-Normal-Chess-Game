@@ -861,7 +861,10 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                         mapObjects,
                         chestSystemState,
                         cmd.destination,
-                        activeKingdom)) {
+                    activeKingdom,
+                    worldSeed,
+                    m_turnNumber,
+                    config)) {
                     newCell.mapObject = nullptr;
                     gameplayNotifications.push_back(chestClaim->notification);
                     log.log(m_turnNumber,

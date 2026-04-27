@@ -171,6 +171,15 @@
             "target_weight_queen": 38,
             "searching_random_move_chance_times_1000": 333
         },
+        "chests": {
+            "current_loot_catch_up_enabled": true,
+            "early_gold_weight": 8,
+            "early_movement_bonus_weight": 3,
+            "early_build_bonus_weight": 3,
+            "late_gold_weight": 4,
+            "late_movement_bonus_weight": 6,
+            "late_build_bonus_weight": 6
+        },
         "weather": {
             "cooldown_min_turns": 0,
             "block_spawn_while_front_active": false,
