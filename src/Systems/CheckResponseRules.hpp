@@ -5,6 +5,8 @@
 
 #include <SFML/System/Vector2.hpp>
 
+#include "Projection/GameSnapshot.hpp"
+#include "Runtime/AsyncCancellation.hpp"
 #include "Systems/TurnCommand.hpp"
 #include "Systems/TurnValidationContext.hpp"
 
@@ -13,6 +15,7 @@ class Building;
 class GameConfig;
 class Kingdom;
 class Piece;
+class CheckEscapeSolver;
 
 struct CheckTurnValidation {
     bool valid = true;
@@ -53,7 +56,15 @@ public:
                                     const GameConfig& config);
 
     static CheckTurnValidation validatePendingTurn(const TurnValidationContext& context,
-                                                   const std::vector<TurnCommand>& pendingCommands);
+                                                   const std::vector<TurnCommand>& pendingCommands,
+                                                   CheckEscapeSolver* sharedEscapeSolver = nullptr);
+
+    static CheckTurnValidation validatePendingTurn(const GameSnapshot& currentSnapshot,
+                                                   KingdomId activeKingdom,
+                                                   const std::vector<TurnCommand>& pendingCommands,
+                                                   const GameConfig& config,
+                                                   CheckEscapeSolver* sharedEscapeSolver = nullptr,
+                                                   AsyncCancellationToken cancellation = {});
 
     static CheckTurnValidation validatePendingTurn(const Kingdom& activeKingdom,
                                                    const Kingdom& enemyKingdom,
@@ -61,5 +72,6 @@ public:
                                                    const std::vector<Building>& publicBuildings,
                                                    int turnNumber,
                                                    const std::vector<TurnCommand>& pendingCommands,
-                                                   const GameConfig& config);
+                                                   const GameConfig& config,
+                                                   CheckEscapeSolver* sharedEscapeSolver = nullptr);
 };

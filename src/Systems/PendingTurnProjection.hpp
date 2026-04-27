@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "Projection/GameSnapshot.hpp"
+#include "Runtime/AsyncCancellation.hpp"
 #include "Systems/TurnCommand.hpp"
 #include "Systems/TurnValidationContext.hpp"
 
@@ -46,6 +47,12 @@ public:
     static PendingTurnProjectionResult project(const TurnValidationContext& context,
                                                const std::vector<TurnCommand>& commands);
 
+    static PendingTurnProjectionResult project(const GameSnapshot& baseSnapshot,
+                                               KingdomId activeKingdom,
+                                               const std::vector<TurnCommand>& commands,
+                                               const GameConfig& config,
+                                               AsyncCancellationToken cancellation = {});
+
     static PendingTurnProjectionResult project(const Board& board,
                                                const Kingdom& activeKingdom,
                                                const Kingdom& enemyKingdom,
@@ -57,6 +64,13 @@ public:
     static PendingTurnNormalizationResult normalize(const TurnValidationContext& context,
                                                     const std::vector<TurnCommand>& commands,
                                                     PendingTurnInvalidCommandPolicy invalidCommandPolicy);
+
+    static PendingTurnNormalizationResult normalize(const GameSnapshot& baseSnapshot,
+                                                    KingdomId activeKingdom,
+                                                    const std::vector<TurnCommand>& commands,
+                                                    const GameConfig& config,
+                                                    PendingTurnInvalidCommandPolicy invalidCommandPolicy,
+                                                    AsyncCancellationToken cancellation = {});
 
     static PendingTurnNormalizationResult normalize(const Board& board,
                                                     const Kingdom& activeKingdom,

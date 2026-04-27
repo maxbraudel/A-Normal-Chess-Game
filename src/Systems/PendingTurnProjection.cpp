@@ -72,33 +72,33 @@ bool buildHasFinalBuilderCoverage(const TurnCommand& command,
 }
 
 PendingTurnNormalizationResult normalizeSequentialCommands(
-    const Board& board,
-    const Kingdom& activeKingdom,
-    const Kingdom& enemyKingdom,
-    const std::vector<Building>& publicBuildings,
-    int turnNumber,
-    std::uint32_t worldSeed,
-    XPSystemState xpSystemState,
+    const GameSnapshot& baseSnapshot,
+    KingdomId activeKingdom,
     const std::vector<TurnCommand>& commands,
     const GameConfig& config,
-    PendingTurnInvalidCommandPolicy invalidCommandPolicy) {
+    PendingTurnInvalidCommandPolicy invalidCommandPolicy,
+    AsyncCancellationToken cancellation = {}) {
     PendingTurnNormalizationResult result;
-    result.snapshot = createProjectionBaseSnapshot(
-        board,
-        activeKingdom,
-        enemyKingdom,
-        publicBuildings,
-        turnNumber,
-        worldSeed,
-        xpSystemState,
-        commands,
-        config);
+    if (cancellation.isCancellationRequested()) {
+        result.valid = false;
+        result.errorMessage = "Cancelled.";
+        return result;
+    }
+
+    result.snapshot = baseSnapshot.clone();
+    PendingTurnProjection::initializeBudgets(result.snapshot, activeKingdom, config);
     result.normalizedCommands.reserve(commands.size());
 
     for (std::size_t index = 0; index < commands.size(); ++index) {
+        if (cancellation.isCancellationRequested()) {
+            result.valid = false;
+            result.errorMessage = "Cancelled.";
+            return result;
+        }
+
         const TurnCommand& command = commands[index];
         std::string commandError;
-        if (applyProjectedCommand(result.snapshot, activeKingdom.id, command, config, &commandError)) {
+        if (applyProjectedCommand(result.snapshot, activeKingdom, command, config, &commandError)) {
             result.normalizedCommands.push_back(command);
             continue;
         }
@@ -353,10 +353,32 @@ void PendingTurnProjection::initializeBudgets(GameSnapshot& snapshot,
 PendingTurnProjectionResult PendingTurnProjection::project(
     const TurnValidationContext& context,
     const std::vector<TurnCommand>& commands) {
-    const PendingTurnNormalizationResult normalization = normalize(
-        context,
+    const GameSnapshot baseSnapshot = createProjectionBaseSnapshot(
+        context.board,
+        context.activeKingdom,
+        context.enemyKingdom,
+        context.publicBuildings,
+        context.turnNumber,
+        context.worldSeed,
+        context.xpSystemState,
         commands,
-        PendingTurnInvalidCommandPolicy::FailFast);
+        context.config);
+    return project(baseSnapshot, context.activeKingdom.id, commands, context.config);
+}
+
+PendingTurnProjectionResult PendingTurnProjection::project(
+    const GameSnapshot& baseSnapshot,
+    KingdomId activeKingdom,
+    const std::vector<TurnCommand>& commands,
+    const GameConfig& config,
+    AsyncCancellationToken cancellation) {
+    const PendingTurnNormalizationResult normalization = normalize(
+        baseSnapshot,
+        activeKingdom,
+        commands,
+        config,
+        PendingTurnInvalidCommandPolicy::FailFast,
+        cancellation);
 
     PendingTurnProjectionResult result;
     result.snapshot = normalization.snapshot;
@@ -382,7 +404,7 @@ PendingTurnNormalizationResult PendingTurnProjection::normalize(
     const TurnValidationContext& context,
     const std::vector<TurnCommand>& commands,
     PendingTurnInvalidCommandPolicy invalidCommandPolicy) {
-    PendingTurnNormalizationResult result = normalizeSequentialCommands(
+    const GameSnapshot baseSnapshot = createProjectionBaseSnapshot(
         context.board,
         context.activeKingdom,
         context.enemyKingdom,
@@ -391,34 +413,57 @@ PendingTurnNormalizationResult PendingTurnProjection::normalize(
         context.worldSeed,
         context.xpSystemState,
         commands,
+        context.config);
+    return normalize(
+        baseSnapshot,
+        context.activeKingdom.id,
+        commands,
         context.config,
         invalidCommandPolicy);
+}
+
+PendingTurnNormalizationResult PendingTurnProjection::normalize(
+    const GameSnapshot& baseSnapshot,
+    KingdomId activeKingdom,
+    const std::vector<TurnCommand>& commands,
+    const GameConfig& config,
+    PendingTurnInvalidCommandPolicy invalidCommandPolicy,
+    AsyncCancellationToken cancellation) {
+    PendingTurnNormalizationResult result = normalizeSequentialCommands(
+        baseSnapshot,
+        activeKingdom,
+        commands,
+        config,
+        invalidCommandPolicy,
+        cancellation);
     if (!result.valid || invalidCommandPolicy != PendingTurnInvalidCommandPolicy::DropInvalidBuilds) {
+        return result;
+    }
+
+    if (cancellation.isCancellationRequested()) {
+        result.valid = false;
+        result.errorMessage = "Cancelled.";
         return result;
     }
 
     std::vector<TurnCommand> finalCoverageCommands;
     std::vector<PendingTurnDroppedCommand> finalCoverageDrops = collectFinalCoverageDroppedBuilds(
         result.snapshot,
-        context.activeKingdom.id,
+        activeKingdom,
         result.normalizedCommands,
-        context.config,
+        config,
         &finalCoverageCommands);
     if (finalCoverageDrops.empty()) {
         return result;
     }
 
     PendingTurnNormalizationResult replay = normalizeSequentialCommands(
-        context.board,
-        context.activeKingdom,
-        context.enemyKingdom,
-        context.publicBuildings,
-        context.turnNumber,
-        context.worldSeed,
-        context.xpSystemState,
+        baseSnapshot,
+        activeKingdom,
         finalCoverageCommands,
-        context.config,
-        invalidCommandPolicy);
+        config,
+        invalidCommandPolicy,
+        cancellation);
     if (!replay.valid) {
         return replay;
     }

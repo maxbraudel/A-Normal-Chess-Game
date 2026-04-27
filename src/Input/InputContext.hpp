@@ -17,6 +17,8 @@ class GameConfig;
 class Kingdom;
 class Building;
 class BuildingFactory;
+class CheckEscapeSolver;
+class AsyncSelectionMoveService;
 
 struct InputContext {
     sf::RenderWindow& window;
@@ -34,6 +36,8 @@ struct InputContext {
     TurnValidationContext authoritativeTurnContext;
     UIManager& uiManager;
     const GameConfig& config;
+    CheckEscapeSolver* sharedCheckEscapeSolver = nullptr;
+    AsyncSelectionMoveService* asyncSelectionMoveService = nullptr;
     const WeatherMaskCache* weatherMaskCache = nullptr;
     KingdomId localPerspectiveKingdom = KingdomId::White;
     InteractionPermissions permissions;
