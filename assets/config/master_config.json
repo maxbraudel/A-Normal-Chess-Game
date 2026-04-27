@@ -176,6 +176,12 @@
             "early_gold_weight": 8,
             "early_movement_bonus_weight": 3,
             "early_build_bonus_weight": 3,
+            "gold_reward": {
+                "mean": 35,
+                "sigma_multiplier_times_100": 18,
+                "clamp_sigma_multiplier_times_100": 200,
+                "minimum": 1
+            },
             "late_gold_weight": 4,
             "late_movement_bonus_weight": 6,
             "late_build_bonus_weight": 6

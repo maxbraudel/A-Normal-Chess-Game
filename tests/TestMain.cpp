@@ -7410,9 +7410,34 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             "Structured chest config should enable current-loot catch-up when the JSON boolean is true.");
     }
 
+    void testChestConfigLoadsStructuredGoldRewardProfile() {
+        GameConfig config = makeChestTestConfig(
+            "      \"gold_reward\": {\n"
+            "        \"mean\": 41,\n"
+            "        \"sigma_multiplier_times_100\": 25,\n"
+            "        \"clamp_sigma_multiplier_times_100\": 150,\n"
+            "        \"minimum\": 9\n"
+            "      }");
+
+        const XPRewardProfile goldProfile = config.getChestGoldRewardProfile();
+        expect(goldProfile.mean == 41
+            && goldProfile.sigmaMultiplierTimes100 == 25
+            && goldProfile.clampSigmaMultiplierTimes100 == 150
+            && goldProfile.minimum == 9,
+            "Structured chest config should load the full truncated-normal profile for gold chest rewards.");
+        expect(config.getChestGoldRewardAmount() == 41,
+            "Legacy chest gold getter compatibility should expose the configured chest gold reward mean.");
+    }
+
     void testChestLootIsResolvedAtOpenWhenCatchUpDisabled() {
         GameConfig config = makeChestTestConfig(
             "      \"current_loot_catch_up_enabled\": false,\n"
+            "      \"gold_reward\": {\n"
+            "        \"mean\": 41,\n"
+            "        \"sigma_multiplier_times_100\": 0,\n"
+            "        \"clamp_sigma_multiplier_times_100\": 200,\n"
+            "        \"minimum\": 0\n"
+            "      },\n"
             "      \"early_gold_weight\": 1,\n"
             "      \"early_movement_bonus_weight\": 0,\n"
             "      \"early_build_bonus_weight\": 0,\n"
@@ -7444,11 +7469,11 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
         expect(claim.has_value(),
             "Chest collection should still succeed when open-time reward resolution is enabled.");
         expect(claim->reward.type == ChestRewardType::Gold
-            && claim->reward.amount == config.getChestGoldRewardAmount(),
+            && claim->reward.amount == 41,
             "When catch-up is disabled, a chest should still resolve its reward on open using the configured reward weights.");
         expect(claim->reward.amount != chest.chest.reward.amount,
             "Chest rewards should no longer be baked into the spawned chest object once loot is resolved at open time.");
-        expect(collector.gold == config.getChestGoldRewardAmount(),
+        expect(collector.gold == 41,
             "Open-time chest rewards should still be applied immediately to the collecting kingdom.");
         expect(!state.lootProgression.hasCurrentReward
             && state.lootProgression.currentRewardGeneration == 0,
@@ -7458,6 +7483,12 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
     void testChestLootCatchUpUsesCurrentSharedReward() {
         GameConfig config = makeChestTestConfig(
             "      \"current_loot_catch_up_enabled\": true,\n"
+            "      \"gold_reward\": {\n"
+            "        \"mean\": 37,\n"
+            "        \"sigma_multiplier_times_100\": 0,\n"
+            "        \"clamp_sigma_multiplier_times_100\": 200,\n"
+            "        \"minimum\": 0\n"
+            "      },\n"
             "      \"early_gold_weight\": 1,\n"
             "      \"early_movement_bonus_weight\": 0,\n"
             "      \"early_build_bonus_weight\": 0,\n"
@@ -7495,6 +7526,9 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
         const std::optional<ChestClaimResult> firstWhiteClaim = collectChest(1, {1, 1}, white, 4);
         expect(firstWhiteClaim.has_value(),
             "The first collector should be able to generate the first shared chest loot.");
+        expect(firstWhiteClaim->reward.type == ChestRewardType::Gold
+            && firstWhiteClaim->reward.amount == 37,
+            "The configured fixed gold profile should still produce the expected deterministic gold reward when sigma is zero.");
         expect(state.lootProgression.hasCurrentReward
             && state.lootProgression.currentRewardGeneration == 1
             && state.rewardRngCounter == 1
@@ -9713,6 +9747,7 @@ int main(int argc, char** argv) {
         {"render coordinator move overlay plan", testRenderCoordinatorBuildsSelectionAndMoveOverlayPlan},
         {"render coordinator tactical grid plan", testRenderCoordinatorBuildsTacticalGridPlan},
         {"chest config current loot catch-up toggle", testChestConfigLoadsCurrentLootCatchUpToggle},
+        {"chest config structured gold reward profile", testChestConfigLoadsStructuredGoldRewardProfile},
         {"weather config structured parameters", testWeatherConfigLoadsStructuredParameters},
         {"cheatcode config boolean and shortcuts", testCheatcodeConfigLoadsBooleanAndShortcuts},
         {"xp config structured profiles", testXPConfigLoadsStructuredProfiles},

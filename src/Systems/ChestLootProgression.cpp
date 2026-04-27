@@ -6,6 +6,7 @@
 #include <random>
 
 #include "Config/GameConfig.hpp"
+#include "Systems/RewardProfileSampling.hpp"
 
 namespace {
 
@@ -24,6 +25,13 @@ std::mt19937 makeRewardGenerator(std::uint32_t& rewardRngCounter, std::uint32_t 
     return std::mt19937(mixSeed(baseSeed, rewardRngCounter++));
 }
 
+int sampleGoldRewardAmount(std::mt19937& generator,
+                           const GameConfig& config) {
+    return RewardProfileSampling::sampleTruncatedNormal(
+        config.getChestGoldRewardProfile(),
+        generator);
+}
+
 ChestReward sampleReward(std::uint32_t& rewardRngCounter,
                          std::uint32_t worldSeed,
                          int currentTurn,
@@ -37,7 +45,7 @@ ChestReward sampleReward(std::uint32_t& rewardRngCounter,
     std::mt19937 generator = makeRewardGenerator(rewardRngCounter, worldSeed);
     const int totalWeight = std::accumulate(weights.begin(), weights.end(), 0);
     if (totalWeight <= 0) {
-        return ChestReward{ChestRewardType::Gold, config.getChestGoldRewardAmount()};
+        return ChestReward{ChestRewardType::Gold, sampleGoldRewardAmount(generator, config)};
     }
 
     std::discrete_distribution<int> distribution(weights.begin(), weights.end());
@@ -48,7 +56,7 @@ ChestReward sampleReward(std::uint32_t& rewardRngCounter,
             return ChestReward{ChestRewardType::BuildPointsMaxBonus, config.getChestBuildBonusAmount()};
         case 0:
         default:
-            return ChestReward{ChestRewardType::Gold, config.getChestGoldRewardAmount()};
+            return ChestReward{ChestRewardType::Gold, sampleGoldRewardAmount(generator, config)};
     }
 }
 

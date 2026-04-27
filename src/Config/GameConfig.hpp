@@ -82,6 +82,7 @@ public:
     int getChestWeibullShapeTimes100() const;
     int getChestWeibullScaleTurns() const;
     int getChestMinDistanceFromKings() const;
+    XPRewardProfile getChestGoldRewardProfile() const;
     int getChestGoldRewardAmount() const;
     int getChestMovementBonusAmount() const;
     int getChestBuildBonusAmount() const;
@@ -237,6 +238,7 @@ private:
     int m_chestWeibullShapeTimes100;
     int m_chestWeibullScaleTurns;
     int m_chestMinDistanceFromKings;
+    XPRewardProfile m_chestGoldRewardProfile;
     int m_chestGoldRewardAmount;
     int m_chestMovementBonusAmount;
     int m_chestBuildBonusAmount;

@@ -309,6 +309,7 @@ void GameConfig::setDefaults() {
     m_chestWeibullScaleTurns = 6;
     m_chestMinDistanceFromKings = 6;
     m_chestGoldRewardAmount = 35;
+    m_chestGoldRewardProfile = makeXPRewardProfile(m_chestGoldRewardAmount, 0, 200, 0);
     m_chestMovementBonusAmount = 1;
     m_chestBuildBonusAmount = 1;
     m_chestLateGameTurn = 10;
@@ -823,6 +824,26 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
         m_chestMinDistanceFromKings = extractInt(
             chestSec, "min_distance_from_kings", m_chestMinDistanceFromKings);
         m_chestGoldRewardAmount = extractInt(chestSec, "gold_reward_amount", m_chestGoldRewardAmount);
+        m_chestGoldRewardProfile.mean = m_chestGoldRewardAmount;
+        const std::string chestGoldRewardSec = extractSection(chestSec, "gold_reward");
+        if (!chestGoldRewardSec.empty()) {
+            m_chestGoldRewardProfile.mean = extractInt(
+                chestGoldRewardSec,
+                "mean",
+                m_chestGoldRewardProfile.mean);
+            m_chestGoldRewardProfile.sigmaMultiplierTimes100 = extractInt(
+                chestGoldRewardSec,
+                "sigma_multiplier_times_100",
+                m_chestGoldRewardProfile.sigmaMultiplierTimes100);
+            m_chestGoldRewardProfile.clampSigmaMultiplierTimes100 = extractInt(
+                chestGoldRewardSec,
+                "clamp_sigma_multiplier_times_100",
+                m_chestGoldRewardProfile.clampSigmaMultiplierTimes100);
+            m_chestGoldRewardProfile.minimum = extractInt(
+                chestGoldRewardSec,
+                "minimum",
+                m_chestGoldRewardProfile.minimum);
+        }
         m_chestMovementBonusAmount = extractInt(
             chestSec, "movement_bonus_amount", m_chestMovementBonusAmount);
         m_chestBuildBonusAmount = extractInt(chestSec, "build_bonus_amount", m_chestBuildBonusAmount);
@@ -852,6 +873,22 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
         "chests.weibull_scale_turns", m_chestWeibullScaleTurns);
     m_chestMinDistanceFromKings = clampNonNegativeConfigValue(
         "chests.min_distance_from_kings", m_chestMinDistanceFromKings);
+    m_chestGoldRewardProfile.mean = clampNonNegativeConfigValue(
+        "chests.gold_reward.mean", m_chestGoldRewardProfile.mean);
+    m_chestGoldRewardProfile.sigmaMultiplierTimes100 = clampRangedConfigValue(
+        "chests.gold_reward.sigma_multiplier_times_100",
+        m_chestGoldRewardProfile.sigmaMultiplierTimes100,
+        0,
+        1000);
+    m_chestGoldRewardProfile.clampSigmaMultiplierTimes100 = clampRangedConfigValue(
+        "chests.gold_reward.clamp_sigma_multiplier_times_100",
+        m_chestGoldRewardProfile.clampSigmaMultiplierTimes100,
+        0,
+        500);
+    m_chestGoldRewardProfile.minimum = clampNonNegativeConfigValue(
+        "chests.gold_reward.minimum",
+        m_chestGoldRewardProfile.minimum);
+    m_chestGoldRewardAmount = m_chestGoldRewardProfile.mean;
     m_chestGoldRewardAmount = clampNonNegativeConfigValue(
         "chests.gold_reward_amount", m_chestGoldRewardAmount);
     m_chestMovementBonusAmount = clampNonNegativeConfigValue(
@@ -1348,7 +1385,8 @@ int GameConfig::getChestSpawnRetryTurns() const { return m_chestSpawnRetryTurns;
 int GameConfig::getChestWeibullShapeTimes100() const { return m_chestWeibullShapeTimes100; }
 int GameConfig::getChestWeibullScaleTurns() const { return m_chestWeibullScaleTurns; }
 int GameConfig::getChestMinDistanceFromKings() const { return m_chestMinDistanceFromKings; }
-int GameConfig::getChestGoldRewardAmount() const { return m_chestGoldRewardAmount; }
+XPRewardProfile GameConfig::getChestGoldRewardProfile() const { return m_chestGoldRewardProfile; }
+int GameConfig::getChestGoldRewardAmount() const { return m_chestGoldRewardProfile.mean; }
 int GameConfig::getChestMovementBonusAmount() const { return m_chestMovementBonusAmount; }
 int GameConfig::getChestBuildBonusAmount() const { return m_chestBuildBonusAmount; }
 int GameConfig::getChestLateGameTurn() const { return m_chestLateGameTurn; }
