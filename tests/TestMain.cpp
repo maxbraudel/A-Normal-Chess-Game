@@ -1,5 +1,7 @@
+#include <algorithm>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -9259,7 +9261,7 @@ void testInGameViewModelBuilder() {
 
 }
 
-int main() {
+int main(int argc, char** argv) {
     const std::vector<std::pair<std::string, void(*)()>> tests = {
         {"session defaults", testSessionConfigDefaults},
         {"session validator", testSessionValidatorRejectsInvalidOrdering},
@@ -9472,7 +9474,32 @@ int main() {
         {"in-game planned actions", testInGameViewModelIncludesPlannedActionsAndAutomaticCoronation},
     };
 
+    std::vector<std::string> filters;
+    for (int index = 1; index < argc; ++index) {
+        filters.emplace_back(argv[index]);
+    }
+    if (const char* envFilter = std::getenv("ANORMALCHESS_TEST_FILTER"); envFilter != nullptr && *envFilter != '\0') {
+        filters.emplace_back(envFilter);
+    }
+
+    const auto shouldRun = [&filters](const std::string& name) {
+        if (filters.empty()) {
+            return true;
+        }
+
+        return std::any_of(filters.begin(), filters.end(), [&name](const std::string& filter) {
+            return !filter.empty() && name.find(filter) != std::string::npos;
+        });
+    };
+
+    bool ranAnyTest = false;
+
     for (const auto& [name, test] : tests) {
+        if (!shouldRun(name)) {
+            continue;
+        }
+
+        ranAnyTest = true;
         try {
             test();
             std::cout << "[PASS] " << name << '\n';
@@ -9480,6 +9507,11 @@ int main() {
             std::cerr << "[FAIL] " << name << ": " << ex.what() << '\n';
             return 1;
         }
+    }
+
+    if (!ranAnyTest) {
+        std::cerr << "[FAIL] no tests matched the requested filter.\n";
+        return 1;
     }
 
     return 0;
