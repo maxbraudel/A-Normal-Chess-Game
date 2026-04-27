@@ -108,6 +108,7 @@ public:
 
     // Weather
     int getWeatherCooldownMinTurns() const;
+    bool isWeatherSpawnBlockedWhileFrontActive() const;
     int getWeatherArrivalGammaShapeTimes100() const;
     int getWeatherArrivalGammaScaleTimes100() const;
     int getWeatherDurationGammaShapeTimes100() const;
@@ -269,6 +270,7 @@ private:
 
     // Weather
     int m_weatherCooldownMinTurns;
+    bool m_weatherBlockSpawnWhileFrontActive;
     int m_weatherArrivalGammaShapeTimes100;
     int m_weatherArrivalGammaScaleTimes100;
     int m_weatherDurationGammaShapeTimes100;

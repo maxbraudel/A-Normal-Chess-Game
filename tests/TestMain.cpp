@@ -4789,6 +4789,20 @@ void testSaveManagerRoundTrip() {
     data.weatherSystemState.activeFront.radiusAcrossTimes1000 = 11200;
     data.weatherSystemState.activeFront.shapeSeed = 101u;
     data.weatherSystemState.activeFront.densitySeed = 202u;
+    data.weatherSystemState.activeFronts.push_back(data.weatherSystemState.activeFront);
+    WeatherFrontDescriptor secondaryWeatherFront = data.weatherSystemState.activeFront;
+    secondaryWeatherFront.direction = WeatherDirection::NorthEast;
+    secondaryWeatherFront.currentTurnStep = 5;
+    secondaryWeatherFront.totalTurnSteps = 17;
+    secondaryWeatherFront.centerStartXTimes1000 = 8250;
+    secondaryWeatherFront.centerStartYTimes1000 = -6300;
+    secondaryWeatherFront.stepXTimes1000 = 450;
+    secondaryWeatherFront.stepYTimes1000 = -450;
+    secondaryWeatherFront.radiusAlongTimes1000 = 6800;
+    secondaryWeatherFront.radiusAcrossTimes1000 = 9100;
+    secondaryWeatherFront.shapeSeed = 303u;
+    secondaryWeatherFront.densitySeed = 404u;
+    data.weatherSystemState.activeFronts.push_back(secondaryWeatherFront);
     data.xpSystemState.rngCounter = 17u;
     data.sessionKingdoms = defaultKingdomParticipants(GameMode::HumanVsHuman);
     data.sessionKingdoms[0].participantName = "Player \"Alpha\"";
@@ -4892,6 +4906,11 @@ void testSaveManagerRoundTrip() {
         && loaded.weatherSystemState.activeFront.totalTurnSteps == data.weatherSystemState.activeFront.totalTurnSteps
         && loaded.weatherSystemState.activeFront.radiusAcrossTimes1000 == data.weatherSystemState.activeFront.radiusAcrossTimes1000,
         "Active weather front geometry should round-trip through SaveManager.");
+    expect(loaded.weatherSystemState.activeFronts.size() == data.weatherSystemState.activeFronts.size()
+        && loaded.weatherSystemState.activeFronts[1].direction == data.weatherSystemState.activeFronts[1].direction
+        && loaded.weatherSystemState.activeFronts[1].currentTurnStep == data.weatherSystemState.activeFronts[1].currentTurnStep
+        && loaded.weatherSystemState.activeFronts[1].radiusAlongTimes1000 == data.weatherSystemState.activeFronts[1].radiusAlongTimes1000,
+        "Multiple simultaneous weather fronts should round-trip through SaveManager.");
     expect(loaded.sessionKingdoms[0].controller == ControllerType::Human
             && loaded.sessionKingdoms[1].controller == ControllerType::Human,
        "Session participant controllers should remain human-only after save round-trips.");
@@ -7272,6 +7291,7 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
     void testWeatherConfigLoadsStructuredParameters() {
         GameConfig config = makeWeatherTestConfig(
             "      \"cooldown_min_turns\": 2,\n"
+            "      \"block_spawn_while_front_active\": false,\n"
             "      \"arrival_gamma_shape_times_100\": 150,\n"
             "      \"arrival_gamma_scale_times_100\": 125,\n"
             "      \"duration_gamma_shape_times_100\": 310,\n"
@@ -7305,6 +7325,8 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
         const std::array<int, kNumWeatherDirections> weights = config.getWeatherDirectionWeights();
         expect(config.getWeatherCooldownMinTurns() == 2,
             "Structured weather config should override the minimum cooldown between fog fronts.");
+        expect(!config.isWeatherSpawnBlockedWhileFrontActive(),
+            "Structured weather config should load whether active fronts block new fog spawns.");
         expect(config.getWeatherArrivalGammaShapeTimes100() == 150
             && config.getWeatherArrivalGammaScaleTimes100() == 125,
             "Structured weather config should override the arrival gamma parameters.");
@@ -7395,6 +7417,8 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
     void testWeatherSystemUsesConfiguredSpeedBlocksPer100Turns() {
         GameConfig config = makeWeatherTestConfig(
             "      \"cooldown_min_turns\": 0,\n"
+            "      \"duration_gamma_shape_times_100\": 0,\n"
+            "      \"duration_gamma_scale_times_100\": 0,\n"
             "      \"speed_blocks_per_100_turns\": 50,\n"
             "      \"direction_weights\": {\n"
             "        \"north\": 0,\n"
@@ -7428,9 +7452,92 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
             "A speed of 50 blocks per 100 turns should move the front center by about 1 block every 2 turns.");
     }
 
+    void testWeatherSystemUsesDurationGammaWhenEnabled() {
+        GameConfig slowConfig = makeWeatherTestConfig(
+            "      \"cooldown_min_turns\": 0,\n"
+            "      \"duration_gamma_shape_times_100\": 200,\n"
+            "      \"duration_gamma_scale_times_100\": 150,\n"
+            "      \"speed_blocks_per_100_turns\": 10,\n"
+            "      \"direction_weights\": {\n"
+            "        \"north\": 0,\n"
+            "        \"south\": 0,\n"
+            "        \"east\": 1,\n"
+            "        \"west\": 0,\n"
+            "        \"north_east\": 0,\n"
+            "        \"north_west\": 0,\n"
+            "        \"south_east\": 0,\n"
+            "        \"south_west\": 0\n"
+            "      },\n"
+            "      \"coverage_min_percent\": 30,\n"
+            "      \"coverage_max_percent\": 30,\n"
+            "      \"aspect_ratio_min_times_100\": 220,\n"
+            "      \"aspect_ratio_max_times_100\": 220");
+        GameConfig fastConfig = makeWeatherTestConfig(
+            "      \"cooldown_min_turns\": 0,\n"
+            "      \"duration_gamma_shape_times_100\": 200,\n"
+            "      \"duration_gamma_scale_times_100\": 150,\n"
+            "      \"speed_blocks_per_100_turns\": 1000,\n"
+            "      \"direction_weights\": {\n"
+            "        \"north\": 0,\n"
+            "        \"south\": 0,\n"
+            "        \"east\": 1,\n"
+            "        \"west\": 0,\n"
+            "        \"north_east\": 0,\n"
+            "        \"north_west\": 0,\n"
+            "        \"south_east\": 0,\n"
+            "        \"south_west\": 0\n"
+            "      },\n"
+            "      \"coverage_min_percent\": 30,\n"
+            "      \"coverage_max_percent\": 30,\n"
+            "      \"aspect_ratio_min_times_100\": 220,\n"
+            "      \"aspect_ratio_max_times_100\": 220");
+
+        Board board;
+        board.init(12);
+
+        WeatherSystemState slowState{};
+        WeatherSystemState fastState{};
+        slowState.nextSpawnTurnStep = 0;
+        fastState.nextSpawnTurnStep = 0;
+
+        expect(WeatherSystem::trySpawnFront(slowState, board, 808080u, 0, slowConfig),
+            "WeatherSystem should spawn a front for the duration-gamma regression with the low-speed config.");
+        expect(WeatherSystem::trySpawnFront(fastState, board, 808080u, 0, fastConfig),
+            "WeatherSystem should spawn a front for the duration-gamma regression with the high-speed config.");
+
+        expect(slowState.activeFront.totalTurnSteps == fastState.activeFront.totalTurnSteps,
+            "When duration gamma is enabled, the sampled weather lifetime should not depend on the legacy speed config anymore.");
+        const float slowStepMagnitude = std::sqrt(
+            static_cast<float>(slowState.activeFront.stepXTimes1000 * slowState.activeFront.stepXTimes1000
+                + slowState.activeFront.stepYTimes1000 * slowState.activeFront.stepYTimes1000)) / 1000.0f;
+        const float fastStepMagnitude = std::sqrt(
+            static_cast<float>(fastState.activeFront.stepXTimes1000 * fastState.activeFront.stepXTimes1000
+                + fastState.activeFront.stepYTimes1000 * fastState.activeFront.stepYTimes1000)) / 1000.0f;
+        expect(std::abs(slowStepMagnitude - 0.05f) <= 0.01f,
+            "When duration gamma is enabled, the slow weather config should still keep its configured traversal speed.");
+        expect(std::abs(fastStepMagnitude - 5.0f) <= 0.05f,
+            "When duration gamma is enabled, the fast weather config should still keep its configured traversal speed.");
+
+        const float slowRadiusAlong = static_cast<float>(slowState.activeFront.radiusAlongTimes1000) / 1000.0f;
+        const float slowRadiusAcross = static_cast<float>(slowState.activeFront.radiusAcrossTimes1000) / 1000.0f;
+        const float fastRadiusAlong = static_cast<float>(fastState.activeFront.radiusAlongTimes1000) / 1000.0f;
+        const float fastRadiusAcross = static_cast<float>(fastState.activeFront.radiusAcrossTimes1000) / 1000.0f;
+        expect(fastRadiusAlong > slowRadiusAlong,
+            "When duration gamma is enabled, faster fronts should achieve the same sampled lifetime by stretching farther along their travel direction.");
+        expect(fastRadiusAcross < slowRadiusAcross,
+            "When duration gamma is enabled, the longer traversal should come from reshaping the front instead of uniformly enlarging it.");
+
+        const float slowAreaProxy = slowRadiusAlong * slowRadiusAcross;
+        const float fastAreaProxy = fastRadiusAlong * fastRadiusAcross;
+        expect(std::abs(fastAreaProxy - slowAreaProxy) <= (slowAreaProxy * 0.2f),
+            "When duration gamma is enabled, reshaping the front should keep its overall coverage roughly stable.");
+    }
+
     void testWeatherSystemSpawnsFullyInvisibleBeforeEnteringBoard() {
         GameConfig config = makeWeatherTestConfig(
             "      \"cooldown_min_turns\": 0,\n"
+            "      \"duration_gamma_shape_times_100\": 0,\n"
+            "      \"duration_gamma_scale_times_100\": 0,\n"
             "      \"direction_weights\": {\n"
             "        \"north\": 0,\n"
             "        \"south\": 0,\n"
@@ -7481,6 +7588,8 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
     void testWeatherSystemDiagonalFrontAlsoStartsInvisible() {
         GameConfig config = makeWeatherTestConfig(
             "      \"cooldown_min_turns\": 0,\n"
+            "      \"duration_gamma_shape_times_100\": 0,\n"
+            "      \"duration_gamma_scale_times_100\": 0,\n"
             "      \"direction_weights\": {\n"
             "        \"north\": 0,\n"
             "        \"south\": 0,\n"
@@ -7526,6 +7635,8 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
     void testWeatherSystemKeepsFrontAliveUntilNextStepIsInvisible() {
         GameConfig config = makeWeatherTestConfig(
             "      \"cooldown_min_turns\": 0,\n"
+            "      \"duration_gamma_shape_times_100\": 0,\n"
+            "      \"duration_gamma_scale_times_100\": 0,\n"
             "      \"direction_weights\": {\n"
             "        \"north\": 0,\n"
             "        \"south\": 0,\n"
@@ -7573,6 +7684,121 @@ void testTurnSystemSkipsUnaffordableUpgrade() {
 
         expect(sawVisibleMask,
             "The exit regression should exercise a front that actually became visible before leaving the board.");
+    }
+
+    void testWeatherSystemBlockedPolicyPreventsImmediateRespawnAfterFrontEnds() {
+        GameConfig config = makeWeatherTestConfig(
+            "      \"cooldown_min_turns\": 0,\n"
+            "      \"block_spawn_while_front_active\": true,\n"
+            "      \"arrival_gamma_shape_times_100\": 100,\n"
+            "      \"arrival_gamma_scale_times_100\": 100,\n"
+            "      \"direction_weights\": {\n"
+            "        \"north\": 0,\n"
+            "        \"south\": 0,\n"
+            "        \"east\": 1,\n"
+            "        \"west\": 0,\n"
+            "        \"north_east\": 0,\n"
+            "        \"north_west\": 0,\n"
+            "        \"south_east\": 0,\n"
+            "        \"south_west\": 0\n"
+            "      }");
+
+        Board board;
+        board.init(12);
+
+        WeatherSystemState state{};
+        state.hasActiveFront = true;
+        state.nextSpawnTurnStep = 0;
+        state.activeFront.direction = WeatherDirection::East;
+        state.activeFront.totalTurnSteps = 1;
+        state.activeFront.currentTurnStep = 0;
+
+        expect(WeatherSystem::advanceFront(state, 314159u, 10, config),
+            "WeatherSystem should clear a front that has reached its last scheduled step.");
+        expect(!state.hasActiveFront,
+            "A finished weather front should leave the state with no active front remaining.");
+        expect(state.nextSpawnTurnStep > 10,
+            "When blocking is enabled, the next fog arrival should be rescheduled from the first clear-sky step.");
+        expect(!WeatherSystem::trySpawnFront(state, board, 314159u, 10, config),
+            "A blocked scheduler should not allow an immediate replacement front on the same step the previous front disappeared.");
+    }
+
+    void testWeatherSystemUnblockedPolicyAllowsImmediateRespawnAfterFrontEnds() {
+        GameConfig config = makeWeatherTestConfig(
+            "      \"cooldown_min_turns\": 0,\n"
+            "      \"block_spawn_while_front_active\": false,\n"
+            "      \"arrival_gamma_shape_times_100\": 100,\n"
+            "      \"arrival_gamma_scale_times_100\": 100,\n"
+            "      \"direction_weights\": {\n"
+            "        \"north\": 0,\n"
+            "        \"south\": 0,\n"
+            "        \"east\": 1,\n"
+            "        \"west\": 0,\n"
+            "        \"north_east\": 0,\n"
+            "        \"north_west\": 0,\n"
+            "        \"south_east\": 0,\n"
+            "        \"south_west\": 0\n"
+            "      }");
+
+        Board board;
+        board.init(12);
+
+        WeatherSystemState state{};
+        state.hasActiveFront = true;
+        state.nextSpawnTurnStep = 10;
+        state.activeFront.direction = WeatherDirection::East;
+        state.activeFront.totalTurnSteps = 1;
+        state.activeFront.currentTurnStep = 0;
+
+        expect(WeatherSystem::advanceFront(state, 271828u, 10, config),
+            "WeatherSystem should clear the finished front in the non-blocking scheduler regression.");
+        expect(!state.hasActiveFront,
+            "The finished front should leave the board empty before the deferred respawn is evaluated.");
+        expect(state.nextSpawnTurnStep <= 10,
+            "When blocking is disabled, an arrival that matured during the active front should still be due immediately after the board clears.");
+        expect(WeatherSystem::trySpawnFront(state, board, 271828u, 10, config),
+            "A non-blocking scheduler should allow the due next front to appear immediately after the previous front disappears.");
+    }
+
+    void testWeatherSystemUnblockedPolicyAllowsOverlappingFronts() {
+        GameConfig config = makeWeatherTestConfig(
+            "      \"cooldown_min_turns\": 0,\n"
+            "      \"block_spawn_while_front_active\": false,\n"
+            "      \"arrival_gamma_shape_times_100\": 100,\n"
+            "      \"arrival_gamma_scale_times_100\": 100,\n"
+            "      \"duration_gamma_shape_times_100\": 0,\n"
+            "      \"duration_gamma_scale_times_100\": 0,\n"
+            "      \"direction_weights\": {\n"
+            "        \"north\": 0,\n"
+            "        \"south\": 0,\n"
+            "        \"east\": 1,\n"
+            "        \"west\": 0,\n"
+            "        \"north_east\": 0,\n"
+            "        \"north_west\": 0,\n"
+            "        \"south_east\": 0,\n"
+            "        \"south_west\": 0\n"
+            "      }");
+
+        Board board;
+        board.init(12);
+
+        WeatherSystemState state{};
+        state.nextSpawnTurnStep = 0;
+
+        expect(WeatherSystem::trySpawnFront(state, board, 161803u, 0, config),
+            "A non-blocking scheduler should spawn the first due weather front.");
+        expect(state.activeFronts.size() == 1,
+            "The first non-blocking weather spawn should create exactly one active front.");
+
+        state.nextSpawnTurnStep = 1;
+        expect(WeatherSystem::advanceFront(state, 161803u, 1, config),
+            "The first non-blocking weather front should advance while remaining active.");
+        expect(WeatherSystem::trySpawnFront(state, board, 161803u, 1, config),
+            "A second due weather front should be allowed to spawn while the first one is still active when blocking is disabled.");
+        expect(state.activeFronts.size() >= 2,
+            "When blocking is disabled, the weather system should keep multiple active fronts at the same time instead of serializing them.");
+        expect(state.hasActiveFront,
+            "The legacy weather mirror flag should still report active fog while multiple fronts overlap.");
     }
 
     void testGameEngineCheatcodeTriggersSpawnEvents() {
@@ -9300,9 +9526,13 @@ int main(int argc, char** argv) {
         {"xp config structured profiles", testXPConfigLoadsStructuredProfiles},
         {"weather deterministic serialized sequence", testWeatherSystemUsesDeterministicSerializedSequence},
         {"weather configured speed blocks per 100 turns", testWeatherSystemUsesConfiguredSpeedBlocksPer100Turns},
+        {"weather duration gamma overrides speed", testWeatherSystemUsesDurationGammaWhenEnabled},
         {"weather spawns invisible before entering", testWeatherSystemSpawnsFullyInvisibleBeforeEnteringBoard},
         {"weather diagonal front starts invisible", testWeatherSystemDiagonalFrontAlsoStartsInvisible},
         {"weather front exits only after invisible next step", testWeatherSystemKeepsFrontAliveUntilNextStepIsInvisible},
+        {"weather blocked policy prevents immediate respawn", testWeatherSystemBlockedPolicyPreventsImmediateRespawnAfterFrontEnds},
+        {"weather unblocked policy allows immediate respawn", testWeatherSystemUnblockedPolicyAllowsImmediateRespawnAfterFrontEnds},
+        {"weather unblocked policy allows overlapping fronts", testWeatherSystemUnblockedPolicyAllowsOverlappingFronts},
         {"game engine cheatcode event triggers", testGameEngineCheatcodeTriggersSpawnEvents},
         {"xp deterministic serialized sequence", testXPSystemUsesDeterministicSerializedSequence},
         {"xp forward model matches runtime capture", testForwardModelCaptureXPMatchesCommittedTurn},

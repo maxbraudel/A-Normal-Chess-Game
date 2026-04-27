@@ -110,6 +110,65 @@ void writeUInt8Array(std::ostream& output, const std::vector<std::uint8_t>& valu
     output << "]";
 }
 
+void writeWeatherFront(std::ostream& output, const WeatherFrontDescriptor& front) {
+    output << "{"
+           << "\"direction\":" << static_cast<int>(front.direction) << ","
+           << "\"currentTurnStep\":" << front.currentTurnStep << ","
+           << "\"totalTurnSteps\":" << front.totalTurnSteps << ","
+           << "\"centerStartXTimes1000\":" << front.centerStartXTimes1000 << ","
+           << "\"centerStartYTimes1000\":" << front.centerStartYTimes1000 << ","
+           << "\"stepXTimes1000\":" << front.stepXTimes1000 << ","
+           << "\"stepYTimes1000\":" << front.stepYTimes1000 << ","
+           << "\"radiusAlongTimes1000\":" << front.radiusAlongTimes1000 << ","
+           << "\"radiusAcrossTimes1000\":" << front.radiusAcrossTimes1000 << ","
+           << "\"shapeSeed\":" << front.shapeSeed << ","
+           << "\"densitySeed\":" << front.densitySeed
+           << "}";
+}
+
+int extractLocalInt(const std::string& json, const std::string& key, int defaultVal) {
+    std::size_t pos = findValueStart(json, key);
+    if (pos == std::string::npos) {
+        return defaultVal;
+    }
+
+    std::size_t end = pos;
+    if (end < json.size() && (json[end] == '-' || json[end] == '+')) {
+        ++end;
+    }
+    while (end < json.size() && std::isdigit(static_cast<unsigned char>(json[end])) != 0) {
+        ++end;
+    }
+    if (end == pos) {
+        return defaultVal;
+    }
+
+    try {
+        return std::stoi(json.substr(pos, end - pos));
+    } catch (...) {
+        return defaultVal;
+    }
+}
+
+WeatherFrontDescriptor parseWeatherFront(const std::string& weatherFrontSection) {
+    WeatherFrontDescriptor front;
+    front.direction = static_cast<WeatherDirection>(std::clamp(
+        extractLocalInt(weatherFrontSection, "direction", static_cast<int>(WeatherDirection::East)),
+        0,
+        static_cast<int>(WeatherDirection::Count) - 1));
+    front.currentTurnStep = extractLocalInt(weatherFrontSection, "currentTurnStep", 0);
+    front.totalTurnSteps = extractLocalInt(weatherFrontSection, "totalTurnSteps", 0);
+    front.centerStartXTimes1000 = extractLocalInt(weatherFrontSection, "centerStartXTimes1000", 0);
+    front.centerStartYTimes1000 = extractLocalInt(weatherFrontSection, "centerStartYTimes1000", 0);
+    front.stepXTimes1000 = extractLocalInt(weatherFrontSection, "stepXTimes1000", 0);
+    front.stepYTimes1000 = extractLocalInt(weatherFrontSection, "stepYTimes1000", 0);
+    front.radiusAlongTimes1000 = extractLocalInt(weatherFrontSection, "radiusAlongTimes1000", 0);
+    front.radiusAcrossTimes1000 = extractLocalInt(weatherFrontSection, "radiusAcrossTimes1000", 0);
+    front.shapeSeed = static_cast<std::uint32_t>(std::max(0, extractLocalInt(weatherFrontSection, "shapeSeed", 0)));
+    front.densitySeed = static_cast<std::uint32_t>(std::max(0, extractLocalInt(weatherFrontSection, "densitySeed", 0)));
+    return front;
+}
+
 std::vector<std::uint8_t> parseUInt8Array(const std::string& arrayText) {
     std::vector<std::uint8_t> values;
     if (arrayText.size() < 2 || arrayText.front() != '[' || arrayText.back() != ']') {
@@ -244,19 +303,20 @@ void SaveManager::writeJson(std::ostream& output, const SaveData& data) {
             << "\"hasActiveFront\":" << (data.weatherSystemState.hasActiveFront ? 1 : 0) << ","
             << "\"rngCounter\":" << data.weatherSystemState.rngCounter << ","
             << "\"revision\":" << data.weatherSystemState.revision << ","
-            << "\"activeFront\": {"
-            << "\"direction\":" << static_cast<int>(data.weatherSystemState.activeFront.direction) << ","
-            << "\"currentTurnStep\":" << data.weatherSystemState.activeFront.currentTurnStep << ","
-            << "\"totalTurnSteps\":" << data.weatherSystemState.activeFront.totalTurnSteps << ","
-            << "\"centerStartXTimes1000\":" << data.weatherSystemState.activeFront.centerStartXTimes1000 << ","
-            << "\"centerStartYTimes1000\":" << data.weatherSystemState.activeFront.centerStartYTimes1000 << ","
-            << "\"stepXTimes1000\":" << data.weatherSystemState.activeFront.stepXTimes1000 << ","
-            << "\"stepYTimes1000\":" << data.weatherSystemState.activeFront.stepYTimes1000 << ","
-            << "\"radiusAlongTimes1000\":" << data.weatherSystemState.activeFront.radiusAlongTimes1000 << ","
-            << "\"radiusAcrossTimes1000\":" << data.weatherSystemState.activeFront.radiusAcrossTimes1000 << ","
-            << "\"shapeSeed\":" << data.weatherSystemState.activeFront.shapeSeed << ","
-            << "\"densitySeed\":" << data.weatherSystemState.activeFront.densitySeed
-            << "},"
+            << "\"activeFront\":";
+        writeWeatherFront(output, data.weatherSystemState.activeFront);
+        output << ",\"activeFronts\":[";
+        if (!data.weatherSystemState.activeFronts.empty()) {
+            for (std::size_t frontIndex = 0; frontIndex < data.weatherSystemState.activeFronts.size(); ++frontIndex) {
+                if (frontIndex > 0) {
+                    output << ",";
+                }
+                writeWeatherFront(output, data.weatherSystemState.activeFronts[frontIndex]);
+            }
+        } else if (data.weatherSystemState.hasActiveFront) {
+            writeWeatherFront(output, data.weatherSystemState.activeFront);
+        }
+        output << "],"
             << "\"mask\": {"
             << "\"revision\":" << data.weatherMaskCache.revision << ","
             << "\"diameter\":" << data.weatherMaskCache.diameter << ","
@@ -828,32 +888,20 @@ bool SaveManager::deserialize(const std::string& json, SaveData& outData) {
         0,
         extractInt(weatherStateSection, "revision", 0)));
     const std::string weatherFrontSection = extractSection(weatherStateSection, "activeFront");
-    outData.weatherSystemState.activeFront.direction = static_cast<WeatherDirection>(std::clamp(
-        extractInt(weatherFrontSection, "direction", static_cast<int>(WeatherDirection::East)),
-        0,
-        static_cast<int>(WeatherDirection::Count) - 1));
-    outData.weatherSystemState.activeFront.currentTurnStep = extractInt(
-        weatherFrontSection, "currentTurnStep", 0);
-    outData.weatherSystemState.activeFront.totalTurnSteps = extractInt(
-        weatherFrontSection, "totalTurnSteps", 0);
-    outData.weatherSystemState.activeFront.centerStartXTimes1000 = extractInt(
-        weatherFrontSection, "centerStartXTimes1000", 0);
-    outData.weatherSystemState.activeFront.centerStartYTimes1000 = extractInt(
-        weatherFrontSection, "centerStartYTimes1000", 0);
-    outData.weatherSystemState.activeFront.stepXTimes1000 = extractInt(
-        weatherFrontSection, "stepXTimes1000", 0);
-    outData.weatherSystemState.activeFront.stepYTimes1000 = extractInt(
-        weatherFrontSection, "stepYTimes1000", 0);
-    outData.weatherSystemState.activeFront.radiusAlongTimes1000 = extractInt(
-        weatherFrontSection, "radiusAlongTimes1000", 0);
-    outData.weatherSystemState.activeFront.radiusAcrossTimes1000 = extractInt(
-        weatherFrontSection, "radiusAcrossTimes1000", 0);
-    outData.weatherSystemState.activeFront.shapeSeed = static_cast<std::uint32_t>(std::max(
-        0,
-        extractInt(weatherFrontSection, "shapeSeed", 0)));
-    outData.weatherSystemState.activeFront.densitySeed = static_cast<std::uint32_t>(std::max(
-        0,
-        extractInt(weatherFrontSection, "densitySeed", 0)));
+    outData.weatherSystemState.activeFront = parseWeatherFront(weatherFrontSection);
+    const std::string activeFrontsArray = extractArray(weatherStateSection, "activeFronts");
+    for (const std::string& frontEntry : splitArrayElements(activeFrontsArray)) {
+        if (!frontEntry.empty() && frontEntry.front() == '{') {
+            outData.weatherSystemState.activeFronts.push_back(parseWeatherFront(frontEntry));
+        }
+    }
+    if (outData.weatherSystemState.activeFronts.empty() && outData.weatherSystemState.hasActiveFront) {
+        outData.weatherSystemState.activeFronts.push_back(outData.weatherSystemState.activeFront);
+    }
+    outData.weatherSystemState.hasActiveFront = !outData.weatherSystemState.activeFronts.empty();
+    outData.weatherSystemState.activeFront = outData.weatherSystemState.hasActiveFront
+        ? outData.weatherSystemState.activeFronts.front()
+        : WeatherFrontDescriptor{};
     const std::string weatherMaskSection = extractSection(weatherStateSection, "mask");
     outData.weatherMaskCache.revision = static_cast<std::uint32_t>(std::max(
         0,

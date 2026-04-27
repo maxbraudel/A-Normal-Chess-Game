@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <limits>
 #include <random>
+#include <utility>
 #include <vector>
 
 #include <SFML/System/Vector2.hpp>
@@ -47,6 +48,35 @@ std::uint32_t mixSeed(std::uint32_t seed, std::uint32_t value) {
 std::mt19937 makeEventGenerator(WeatherSystemState& state, std::uint32_t worldSeed) {
     const std::uint32_t baseSeed = (worldSeed == 0) ? 1u : worldSeed;
     return std::mt19937(mixSeed(baseSeed, state.rngCounter++));
+}
+
+bool stateHasAnyActiveFront(const WeatherSystemState& state) {
+    return !state.activeFronts.empty() || state.hasActiveFront;
+}
+
+void materializeLegacyFront(WeatherSystemState& state) {
+    if (state.activeFronts.empty() && state.hasActiveFront) {
+        state.activeFronts.push_back(state.activeFront);
+    }
+}
+
+void syncLegacyFrontMirror(WeatherSystemState& state) {
+    state.hasActiveFront = !state.activeFronts.empty();
+    state.activeFront = state.hasActiveFront ? state.activeFronts.front() : WeatherFrontDescriptor{};
+}
+
+template <typename Callback>
+void forEachActiveFront(const WeatherSystemState& state, Callback&& callback) {
+    if (!state.activeFronts.empty()) {
+        for (const WeatherFrontDescriptor& front : state.activeFronts) {
+            callback(front);
+        }
+        return;
+    }
+
+    if (state.hasActiveFront) {
+        callback(state.activeFront);
+    }
 }
 
 float hashUnitFloat(std::uint32_t seed, int x, int y, std::uint32_t salt = 0u) {
@@ -106,6 +136,11 @@ float sampleGammaTurns(std::mt19937& generator,
     const double scale = std::max(0.01, static_cast<double>(scaleTimes100) / 100.0);
     std::gamma_distribution<double> distribution(shape, scale);
     return static_cast<float>(minimumTurns + static_cast<int>(std::ceil(distribution(generator))));
+}
+
+bool usesGammaFrontDuration(const GameConfig& config) {
+    return config.getWeatherDurationGammaShapeTimes100() > 0
+        && config.getWeatherDurationGammaScaleTimes100() > 0;
 }
 
 EntryEdge randomElement(const std::array<EntryEdge, 2>& edges, std::mt19937& generator) {
@@ -430,10 +465,11 @@ void WeatherSystem::initialize(WeatherSystemState& state,
 }
 
 bool WeatherSystem::hasActiveFront(const WeatherSystemState& state) {
-    return state.hasActiveFront;
+    return stateHasAnyActiveFront(state);
 }
 
 void WeatherSystem::clearActiveFront(WeatherSystemState& state) {
+    state.activeFronts.clear();
     state.hasActiveFront = false;
     state.activeFront = WeatherFrontDescriptor{};
     bumpRevision(state);
@@ -458,7 +494,9 @@ bool WeatherSystem::trySpawnFront(WeatherSystemState& state,
                                   std::uint32_t worldSeed,
                                   int currentTurnStep,
                                   const GameConfig& config) {
-    if (state.hasActiveFront || currentTurnStep < state.nextSpawnTurnStep) {
+    materializeLegacyFront(state);
+    if ((config.isWeatherSpawnBlockedWhileFrontActive() && !state.activeFronts.empty())
+        || currentTurnStep < state.nextSpawnTurnStep) {
         return false;
     }
 
@@ -484,52 +522,144 @@ bool WeatherSystem::trySpawnFront(WeatherSystemState& state,
     const std::uint32_t shapeSeed = generator();
     const std::uint32_t densitySeed = generator();
 
-    const float entryHiddenDistance = findNearestHiddenDistance(
-        board,
-        validCells,
-        boundaryCenter,
-        normalizedDirection,
-        direction,
-        radiusAlong,
-        radiusAcross,
-        shapeSeed,
-        densitySeed,
-        config,
-        0.0f,
-        -1.0f);
-    const float boardCrossDistance = exitDistanceForRay(boundaryCenter, normalizedDirection, board.getDiameter());
-    const float exitHiddenDistance = findNearestHiddenDistance(
-        board,
-        validCells,
-        boundaryCenter,
-        normalizedDirection,
-        direction,
-        radiusAlong,
-        radiusAcross,
-        shapeSeed,
-        densitySeed,
-        config,
-        boardCrossDistance,
-        1.0f);
-    const float totalTravelDistance = entryHiddenDistance + exitHiddenDistance;
+    struct FrontTravelGeometry {
+        float entryHiddenDistance = 0.0f;
+        float exitHiddenDistance = 0.0f;
+        float totalTravelDistance = 0.0f;
+    };
+
+    const auto computeTravelGeometry = [&](float currentRadiusAlong, float currentRadiusAcross) {
+        FrontTravelGeometry geometry;
+        geometry.entryHiddenDistance = findNearestHiddenDistance(
+            board,
+            validCells,
+            boundaryCenter,
+            normalizedDirection,
+            direction,
+            currentRadiusAlong,
+            currentRadiusAcross,
+            shapeSeed,
+            densitySeed,
+            config,
+            0.0f,
+            -1.0f);
+        const float boardCrossDistance = exitDistanceForRay(
+            boundaryCenter,
+            normalizedDirection,
+            board.getDiameter());
+        geometry.exitHiddenDistance = findNearestHiddenDistance(
+            board,
+            validCells,
+            boundaryCenter,
+            normalizedDirection,
+            direction,
+            currentRadiusAlong,
+            currentRadiusAcross,
+            shapeSeed,
+            densitySeed,
+            config,
+            boardCrossDistance,
+            1.0f);
+        geometry.totalTravelDistance = geometry.entryHiddenDistance + geometry.exitHiddenDistance;
+        return geometry;
+    };
+
+    float adjustedRadiusAlong = radiusAlong;
+    float adjustedRadiusAcross = radiusAcross;
+    FrontTravelGeometry geometry = computeTravelGeometry(adjustedRadiusAlong, adjustedRadiusAcross);
 
     const float distancePerStep = weatherDistancePerStep(config);
+    if (usesGammaFrontDuration(config)) {
+        const int visibleTurnCount = std::max(
+            1,
+            static_cast<int>(sampleGammaTurns(
+                generator,
+                0,
+                config.getWeatherDurationGammaShapeTimes100(),
+                config.getWeatherDurationGammaScaleTimes100())));
+        const int targetTurnSteps = std::max(2, (visibleTurnCount * kStepsPerTurn) + 1);
+        const float targetTravelDistance = std::max(
+            distancePerStep * 2.0f,
+            distancePerStep * static_cast<float>(targetTurnSteps));
+        const float preservedArea = std::max(0.03125f, kPi * radiusAlong * radiusAcross);
+        const auto geometryForElongation = [&](float alongScale) {
+            const float safeAlongScale = std::max(0.05f, alongScale);
+            const float candidateRadiusAlong = std::max(0.1f, radiusAlong * safeAlongScale);
+            const float candidateRadiusAcross = std::max(
+                0.1f,
+                preservedArea / (kPi * candidateRadiusAlong));
+            return std::pair{computeTravelGeometry(candidateRadiusAlong, candidateRadiusAcross),
+                             std::pair{candidateRadiusAlong, candidateRadiusAcross}};
+        };
+
+        float lowScale = 1.0f;
+        float highScale = 1.0f;
+        auto lowResult = geometryForElongation(lowScale);
+        auto highResult = lowResult;
+
+        if (targetTravelDistance > lowResult.first.totalTravelDistance) {
+            while (highResult.first.totalTravelDistance < targetTravelDistance && highScale < 64.0f) {
+                lowScale = highScale;
+                lowResult = highResult;
+                highScale *= 2.0f;
+                highResult = geometryForElongation(highScale);
+            }
+        } else if (targetTravelDistance < lowResult.first.totalTravelDistance) {
+            lowScale = 0.05f;
+            lowResult = geometryForElongation(lowScale);
+            while (lowScale > 0.001f && lowResult.first.totalTravelDistance > targetTravelDistance) {
+                highScale = lowScale;
+                highResult = lowResult;
+                lowScale *= 0.5f;
+                lowResult = geometryForElongation(lowScale);
+            }
+        }
+
+        if (lowResult.first.totalTravelDistance <= targetTravelDistance
+            && highResult.first.totalTravelDistance >= targetTravelDistance) {
+            for (int iteration = 0; iteration < 20; ++iteration) {
+                const float midScale = (lowScale + highScale) * 0.5f;
+                const auto midResult = geometryForElongation(midScale);
+                if (midResult.first.totalTravelDistance < targetTravelDistance) {
+                    lowScale = midScale;
+                    lowResult = midResult;
+                } else {
+                    highScale = midScale;
+                    highResult = midResult;
+                }
+            }
+
+            geometry = highResult.first;
+            adjustedRadiusAlong = highResult.second.first;
+            adjustedRadiusAcross = highResult.second.second;
+        }
+    }
+
     const int totalTurnSteps = std::max(
         2,
-        static_cast<int>(std::ceil(totalTravelDistance / distancePerStep)));
+        static_cast<int>(std::ceil(geometry.totalTravelDistance / distancePerStep)));
 
-    state.hasActiveFront = true;
-    state.activeFront.direction = direction;
-    state.activeFront.currentTurnStep = 0;
-    state.activeFront.totalTurnSteps = totalTurnSteps;
-    state.activeFront.centerStartXTimes1000 = toFixed(boundaryCenter.x - (normalizedDirection.x * entryHiddenDistance));
-    state.activeFront.centerStartYTimes1000 = toFixed(boundaryCenter.y - (normalizedDirection.y * entryHiddenDistance));
-    state.activeFront.stepXTimes1000 = toFixed(normalizedDirection.x * distancePerStep);
-    state.activeFront.stepYTimes1000 = toFixed(normalizedDirection.y * distancePerStep);
-    state.activeFront.radiusAlongTimes1000 = toFixed(radiusAlong);
-    state.activeFront.radiusAcrossTimes1000 = toFixed(radiusAcross);
-    state.activeFront.shapeSeed = shapeSeed;
-    state.activeFront.densitySeed = densitySeed;
+    WeatherFrontDescriptor spawnedFront;
+    spawnedFront.direction = direction;
+    spawnedFront.currentTurnStep = 0;
+    spawnedFront.totalTurnSteps = totalTurnSteps;
+    spawnedFront.centerStartXTimes1000 = toFixed(
+        boundaryCenter.x - (normalizedDirection.x * geometry.entryHiddenDistance));
+    spawnedFront.centerStartYTimes1000 = toFixed(
+        boundaryCenter.y - (normalizedDirection.y * geometry.entryHiddenDistance));
+    spawnedFront.stepXTimes1000 = toFixed(normalizedDirection.x * distancePerStep);
+    spawnedFront.stepYTimes1000 = toFixed(normalizedDirection.y * distancePerStep);
+    spawnedFront.radiusAlongTimes1000 = toFixed(adjustedRadiusAlong);
+    spawnedFront.radiusAcrossTimes1000 = toFixed(adjustedRadiusAcross);
+    spawnedFront.shapeSeed = shapeSeed;
+    spawnedFront.densitySeed = densitySeed;
+    state.activeFronts.push_back(spawnedFront);
+    syncLegacyFrontMirror(state);
+
+    if (!config.isWeatherSpawnBlockedWhileFrontActive()) {
+        scheduleNextSpawn(state, worldSeed, currentTurnStep, config);
+    }
+
     bumpRevision(state);
     return true;
 }
@@ -538,16 +668,30 @@ bool WeatherSystem::advanceFront(WeatherSystemState& state,
                                  std::uint32_t worldSeed,
                                  int currentTurnStep,
                                  const GameConfig& config) {
-    if (!state.hasActiveFront) {
+    materializeLegacyFront(state);
+    if (state.activeFronts.empty()) {
+        syncLegacyFrontMirror(state);
         return false;
     }
 
-    ++state.activeFront.currentTurnStep;
-    if (state.activeFront.currentTurnStep >= state.activeFront.totalTurnSteps) {
-        state.hasActiveFront = false;
-        state.activeFront = WeatherFrontDescriptor{};
+    for (WeatherFrontDescriptor& front : state.activeFronts) {
+        ++front.currentTurnStep;
+    }
+
+    state.activeFronts.erase(
+        std::remove_if(
+            state.activeFronts.begin(),
+            state.activeFronts.end(),
+            [](const WeatherFrontDescriptor& front) {
+                return front.currentTurnStep >= front.totalTurnSteps;
+            }),
+        state.activeFronts.end());
+
+    const bool allFrontsCleared = state.activeFronts.empty();
+    syncLegacyFrontMirror(state);
+
+    if (allFrontsCleared && config.isWeatherSpawnBlockedWhileFrontActive()) {
         scheduleNextSpawn(state, worldSeed, currentTurnStep, config);
-        bumpRevision(state);
         return true;
     }
 
@@ -566,11 +710,11 @@ void WeatherSystem::rebuildMask(const Board& board,
     const int diameter = board.getDiameter();
     cache.revision = state.revision;
     cache.diameter = diameter;
-    cache.hasActiveFront = state.hasActiveFront;
+    cache.hasActiveFront = stateHasAnyActiveFront(state);
     cache.alphaByCell.assign(static_cast<std::size_t>(diameter * diameter), 0);
     cache.shadeByCell.assign(static_cast<std::size_t>(diameter * diameter), 0);
 
-    if (!state.hasActiveFront) {
+    if (!cache.hasActiveFront) {
         return;
     }
 
@@ -581,19 +725,21 @@ void WeatherSystem::rebuildMask(const Board& board,
                 continue;
             }
 
-            const float alpha = concealmentAlpha(state.activeFront, board, x, y, config);
-            const std::uint8_t encoded = encodedAlpha(alpha);
-            if (encoded == 0) {
-                continue;
-            }
-
             const std::size_t index = static_cast<std::size_t>((y * diameter) + x);
-            cache.alphaByCell[index] = encoded;
-            cache.shadeByCell[index] = concealmentShade(
-                cache.alphaByCell[index],
-                state.activeFront.shapeSeed,
-                x,
-                y);
+            std::uint8_t bestAlpha = 0;
+            std::uint8_t bestShade = 0;
+            forEachActiveFront(state, [&](const WeatherFrontDescriptor& front) {
+                const std::uint8_t encoded = encodedAlpha(concealmentAlpha(front, board, x, y, config));
+                if (encoded <= bestAlpha) {
+                    return;
+                }
+
+                bestAlpha = encoded;
+                bestShade = concealmentShade(encoded, front.shapeSeed, x, y);
+            });
+
+            cache.alphaByCell[index] = bestAlpha;
+            cache.shadeByCell[index] = bestShade;
         }
     }
 }

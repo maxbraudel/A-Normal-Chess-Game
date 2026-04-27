@@ -41,6 +41,7 @@ struct WeatherSystemState {
     int nextSpawnTurnStep = 0;
     bool hasActiveFront = false;
     WeatherFrontDescriptor activeFront{};
+    std::vector<WeatherFrontDescriptor> activeFronts;
     std::uint32_t rngCounter = 0;
     std::uint32_t revision = 0;
 };

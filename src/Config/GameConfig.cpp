@@ -338,9 +338,10 @@ void GameConfig::setDefaults() {
     m_infernalTargetWeightQueen = 38;
     m_infernalSearchingRandomMoveChanceTimes1000 = 333;
 
-    m_weatherCooldownMinTurns = 5;
-    m_weatherArrivalGammaShapeTimes100 = 240;
-    m_weatherArrivalGammaScaleTimes100 = 220;
+    m_weatherCooldownMinTurns = 0;
+    m_weatherBlockSpawnWhileFrontActive = true;
+    m_weatherArrivalGammaShapeTimes100 = 320;
+    m_weatherArrivalGammaScaleTimes100 = 240;
     m_weatherDurationGammaShapeTimes100 = 260;
     m_weatherDurationGammaScaleTimes100 = 180;
     m_weatherSpeedBlocksPer100Turns = 50;
@@ -949,6 +950,10 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
     if (!weatherSec.empty()) {
         m_weatherCooldownMinTurns = extractInt(
             weatherSec, "cooldown_min_turns", m_weatherCooldownMinTurns);
+        m_weatherBlockSpawnWhileFrontActive = extractBool(
+            weatherSec,
+            "block_spawn_while_front_active",
+            m_weatherBlockSpawnWhileFrontActive);
         m_weatherArrivalGammaShapeTimes100 = extractInt(
             weatherSec,
             "arrival_gamma_shape_times_100",
@@ -1406,6 +1411,9 @@ int GameConfig::getInfernalSearchingRandomMoveChanceTimes1000() const {
 }
 
 int GameConfig::getWeatherCooldownMinTurns() const { return m_weatherCooldownMinTurns; }
+bool GameConfig::isWeatherSpawnBlockedWhileFrontActive() const {
+    return m_weatherBlockSpawnWhileFrontActive;
+}
 int GameConfig::getWeatherArrivalGammaShapeTimes100() const { return m_weatherArrivalGammaShapeTimes100; }
 int GameConfig::getWeatherArrivalGammaScaleTimes100() const { return m_weatherArrivalGammaScaleTimes100; }
 int GameConfig::getWeatherDurationGammaShapeTimes100() const { return m_weatherDurationGammaShapeTimes100; }

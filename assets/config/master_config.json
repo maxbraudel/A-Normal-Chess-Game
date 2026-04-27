@@ -172,12 +172,13 @@
             "searching_random_move_chance_times_1000": 333
         },
         "weather": {
-            "cooldown_min_turns": 5,
-            "arrival_gamma_shape_times_100": 240,
-            "arrival_gamma_scale_times_100": 220,
+            "cooldown_min_turns": 0,
+            "block_spawn_while_front_active": false,
+            "arrival_gamma_shape_times_100": 300,
+            "arrival_gamma_scale_times_100": 2000,
             "duration_gamma_shape_times_100": 260,
             "duration_gamma_scale_times_100": 180,
-            "speed_blocks_per_100_turns": 50,
+            "speed_blocks_per_100_turns": 200,
             "direction_weights": {
                 "north": 1,
                 "south": 1,
