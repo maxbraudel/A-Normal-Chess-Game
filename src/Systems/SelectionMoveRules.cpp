@@ -140,6 +140,16 @@ bool candidateMoveKeepsKingSafe(const TurnValidationContext& context,
     candidateMove.origin = origin;
     candidateMove.destination = destination;
 
+    const CheckTurnValidation currentValidation = CheckResponseRules::validatePendingTurn(
+        context,
+        pendingCommands);
+    if (currentValidation.activeKingInCheck) {
+        const CheckTurnValidation validation = CheckResponseRules::validatePendingTurn(
+            context,
+            pendingCommandsWithCandidateMove(pendingCommands, candidateMove));
+        return validation.valid && !validation.projectedKingInCheck;
+    }
+
     const PendingTurnNormalizationResult normalization = PendingTurnProjection::normalize(
         context,
         pendingCommandsWithCandidateMove(pendingCommands, candidateMove),
@@ -184,6 +194,11 @@ SelectionMoveOptions SelectionMoveRules::classifyPieceMoves(const TurnValidation
     SelectionMoveOptions moveOptions;
     moveOptions.originSelectable = isPendingMoveOriginSelectable(context, pendingCommands, pieceId);
 
+    const CheckTurnValidation turnValidation = CheckResponseRules::validatePendingTurn(
+        context,
+        pendingCommands);
+    const bool singleResponseMode = turnValidation.activeKingInCheck && turnValidation.hasAnyLegalResponse;
+
     const PendingTurnProjectionResult projection = projectSelectionState(
         context,
         pendingCommands,
@@ -197,17 +212,24 @@ SelectionMoveOptions SelectionMoveRules::classifyPieceMoves(const TurnValidation
         return moveOptions;
     }
 
+    const TurnCommand* pendingMove = findPendingMoveCommand(pendingCommands, pieceId);
+    if (singleResponseMode && turnValidation.hasQueuedMove && pendingMove == nullptr) {
+        return moveOptions;
+    }
+
     moveOptions.originUnsafe = ForwardModel::isInCheck(
         projection.snapshot,
         context.activeKingdom.id,
         context.config.getGlobalMaxRange());
 
-    const SnapTurnBudget& budget = projection.snapshot.turnBudget(context.activeKingdom.id);
-    if (budget.moveCountForPiece(pieceId) >= TurnPointRules::moveAllowance(projectedPiece->type, context.config)) {
-        return moveOptions;
-    }
-    if (budget.movementPointsRemaining < TurnPointRules::movementCost(projectedPiece->type, context.config)) {
-        return moveOptions;
+    if (!singleResponseMode) {
+        const SnapTurnBudget& budget = projection.snapshot.turnBudget(context.activeKingdom.id);
+        if (budget.moveCountForPiece(pieceId) >= TurnPointRules::moveAllowance(projectedPiece->type, context.config)) {
+            return moveOptions;
+        }
+        if (budget.movementPointsRemaining < TurnPointRules::movementCost(projectedPiece->type, context.config)) {
+            return moveOptions;
+        }
     }
 
     const std::vector<sf::Vector2i> pseudoLegalMoves = ForwardModel::getPseudoLegalMoves(
@@ -215,10 +237,19 @@ SelectionMoveOptions SelectionMoveRules::classifyPieceMoves(const TurnValidation
         *projectedPiece,
         context.config.getGlobalMaxRange());
 
-    const TurnCommand* pendingMove = findPendingMoveCommand(pendingCommands, pieceId);
     const sf::Vector2i selectionOrigin = pendingMove != nullptr
         ? pendingMove->origin
         : projectedPiece->position;
+
+    if (singleResponseMode) {
+        for (const sf::Vector2i& destination : pseudoLegalMoves) {
+            if (candidateMoveKeepsKingSafe(context, pendingCommands, pieceId, selectionOrigin, destination)) {
+                moveOptions.safeMoves.push_back(destination);
+            }
+        }
+
+        return moveOptions;
+    }
 
     if (moveOptions.originUnsafe) {
         for (const sf::Vector2i& destination : pseudoLegalMoves) {

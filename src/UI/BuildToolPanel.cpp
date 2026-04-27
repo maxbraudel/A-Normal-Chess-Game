@@ -72,7 +72,8 @@ void BuildToolPanel::init(const tgui::Panel::Ptr& parent) {
 void BuildToolPanel::show(const Kingdom& kingdom,
                          const GameConfig& config,
                          bool allowBuild,
-                         const std::string& title) {
+                         const std::string& title,
+                         const std::string& description) {
     if (!m_panel) {
         return;
     }
@@ -80,6 +81,12 @@ void BuildToolPanel::show(const Kingdom& kingdom,
     m_panel->moveToFront();
     if (m_titleLabel) {
         m_titleLabel->setText(title);
+    }
+    if (m_descriptionLabel) {
+        m_descriptionLabel->setText(
+            description.empty()
+                ? "Choose a building for the current turn."
+                : description);
     }
 
     for (auto& option : m_options) {

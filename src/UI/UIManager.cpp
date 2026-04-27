@@ -260,9 +260,10 @@ void UIManager::showBarracksPanel(const Building& barracks, const Kingdom& kingd
 void UIManager::showBuildToolPanel(const Kingdom& kingdom,
                                    const GameConfig& config,
                                    bool allowBuild,
-                                   const std::string& title) {
+                                   const std::string& title,
+                                   const std::string& description) {
     activateLeftContext(LeftContextView::BuildTool);
-    m_buildToolPanel.show(kingdom, config, allowBuild, title);
+    m_buildToolPanel.show(kingdom, config, allowBuild, title, description);
 }
 
 void UIManager::showMapObjectPanel(const MapObject& object, const std::string& title) {

@@ -22,6 +22,7 @@ struct CheckTurnValidation {
     bool activeKingInCheck = false;
     bool projectedKingInCheck = false;
     bool hasAnyLegalResponse = false;
+    bool requiresSingleResponseMove = false;
     bool hasQueuedMove = false;
     bool bankrupt = false;
     int projectedEndingGold = 0;

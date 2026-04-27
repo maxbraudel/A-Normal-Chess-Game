@@ -114,6 +114,7 @@ struct FrontendLeftPanelPresentation {
     const TurnCommand* pendingUpgrade = nullptr;
     const TurnCommand* pendingDisband = nullptr;
     const TurnCommand* pendingProduce = nullptr;
+    std::string buildDescription;
     std::optional<ResourceIncomeBreakdown> resourceIncome;
     std::optional<PublicBuildingOccupationState> publicOccupation;
 };
@@ -138,7 +139,8 @@ public:
     static FrontendLeftPanelPresentation buildLeftPanelPresentation(
         const FrontendRuntimeState& state,
         const FrontendPanelBindings& bindings,
-        const InteractionPermissions& permissions);
+        const InteractionPermissions& permissions,
+        const CheckTurnValidation* validation = nullptr);
     static InputContext buildInputContext(FrontendRuntimeState state,
                                           FrontendDisplayBindings& bindings,
                                           const InteractionPermissions& permissions,

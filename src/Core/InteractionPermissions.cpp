@@ -28,7 +28,9 @@ InteractionPermissions computeInteractionPermissions(const InteractionPermission
         && !checkmated;
 
     permissions.canIssueCommands = canIssueCommands;
-    permissions.canQueueNonMoveActions = canIssueCommands && !inputs.projectedKingInCheck;
+    permissions.canQueueNonMoveActions = canIssueCommands
+        && !inputs.activeKingInCheck
+        && !inputs.projectedKingInCheck;
     permissions.canShowActionOverlays = canIssueCommands;
     permissions.canShowBuildPreview = permissions.canInspectWorld;
     return permissions;

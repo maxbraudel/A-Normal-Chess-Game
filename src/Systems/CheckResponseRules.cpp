@@ -11,6 +11,7 @@
 #include "Systems/PendingTurnProjection.hpp"
 #include "Systems/CheckSystem.hpp"
 #include "Systems/EconomySystem.hpp"
+#include "Systems/TurnPointRules.hpp"
 #include "Units/MovementRules.hpp"
 #include "Units/Piece.hpp"
 
@@ -66,23 +67,68 @@ bool hasAnySnapshotLegalResponse(const GameSnapshot& snapshot,
     return false;
 }
 
-bool automaticCoronationResolvesCheck(const GameSnapshot& snapshot,
-                                      KingdomId activeKingdom,
-                                      int globalMaxRange) {
-    GameSnapshot simulatedSnapshot = snapshot.clone();
-    if (!MarriageSystem::applyChurchCoronation(simulatedSnapshot, activeKingdom)) {
-        return false;
-    }
-
-    return !ForwardModel::isInCheck(simulatedSnapshot, activeKingdom, globalMaxRange);
-}
-
 GameSnapshot simulateEndOfTurn(const GameSnapshot& snapshot,
                                KingdomId activeKingdom,
                                const GameConfig& config) {
     GameSnapshot simulatedSnapshot = snapshot.clone();
     ForwardModel::advanceTurn(simulatedSnapshot, activeKingdom, config);
     return simulatedSnapshot;
+}
+
+PendingTurnProjectionResult projectSingleCheckResponseMove(const GameSnapshot& currentSnapshot,
+                                                           KingdomId activeKingdom,
+                                                           const TurnCommand& command,
+                                                           const GameConfig& config) {
+    PendingTurnProjectionResult result;
+    result.snapshot = currentSnapshot.clone();
+
+    if (command.type != TurnCommand::Move) {
+        result.valid = false;
+        result.errorMessage = "Check: exactly one move is allowed to escape.";
+        return result;
+    }
+
+    SnapPiece* piece = result.snapshot.kingdom(activeKingdom).getPieceById(command.pieceId);
+    if (!piece) {
+        result.valid = false;
+        result.errorMessage = "The queued response move references a piece that no longer exists.";
+        return result;
+    }
+
+    if (piece->position != command.origin) {
+        result.valid = false;
+        result.errorMessage = "The queued response move no longer matches the piece position.";
+        return result;
+    }
+
+    const std::vector<sf::Vector2i> pseudoLegalMoves = ForwardModel::getPseudoLegalMoves(
+        result.snapshot,
+        *piece,
+        config.getGlobalMaxRange());
+    if (std::find(pseudoLegalMoves.begin(), pseudoLegalMoves.end(), command.destination)
+        == pseudoLegalMoves.end()) {
+        result.valid = false;
+        result.errorMessage = "The queued response move is not geometrically legal.";
+        return result;
+    }
+
+    PendingTurnProjection::initializeBudgets(result.snapshot, activeKingdom, config);
+    SnapTurnBudget& budget = result.snapshot.turnBudget(activeKingdom);
+    budget.movementPointsRemaining = std::max(
+        budget.movementPointsRemaining,
+        TurnPointRules::movementCost(piece->type, config));
+
+    if (!ForwardModel::applyMove(result.snapshot,
+                                 command.pieceId,
+                                 command.destination,
+                                 activeKingdom,
+                                 config)) {
+        result.valid = false;
+        result.errorMessage = "The queued response move could not be applied.";
+        return result;
+    }
+
+    return result;
 }
 
 } // namespace
@@ -174,7 +220,10 @@ bool CheckResponseRules::hasAnyLegalResponse(Kingdom& kingdom,
 }
 
 CheckTurnValidation CheckResponseRules::validatePendingTurn(const TurnValidationContext& context,
-                                                            const std::vector<TurnCommand>& pendingCommands) {
+                                                            const std::vector<TurnCommand>& pendingCommands,
+                                                            CheckEscapeSolver* sharedEscapeSolver) {
+    (void) sharedEscapeSolver;
+
     CheckTurnValidation validation;
     Kingdom restoredActiveKingdom = context.activeKingdom;
     Kingdom restoredEnemyKingdom = context.enemyKingdom;
@@ -193,14 +242,62 @@ CheckTurnValidation CheckResponseRules::validatePendingTurn(const TurnValidation
         currentSnapshot, context.activeKingdom.id, context.config.getGlobalMaxRange());
     validation.projectedKingInCheck = validation.activeKingInCheck;
     validation.hasAnyLegalResponse = hasAnySnapshotLegalResponse(
-        currentSnapshot, context.activeKingdom.id, context.config.getGlobalMaxRange())
-        || automaticCoronationResolvesCheck(
-            currentSnapshot, context.activeKingdom.id, context.config.getGlobalMaxRange());
+        currentSnapshot, context.activeKingdom.id, context.config.getGlobalMaxRange());
+    validation.requiresSingleResponseMove = validation.activeKingInCheck && validation.hasAnyLegalResponse;
     validation.hasQueuedMove = hasQueuedMoveCommand(pendingCommands);
 
     if (validation.activeKingInCheck && !validation.hasAnyLegalResponse) {
         validation.valid = false;
         validation.errorMessage = "Checkmate: the active kingdom has no legal response move.";
+        return validation;
+    }
+
+    if (validation.activeKingInCheck) {
+        if (pendingCommands.empty()) {
+            validation.valid = false;
+            validation.errorMessage = "Check: queue exactly one move to escape.";
+            return validation;
+        }
+
+        if (pendingCommands.size() != 1 || pendingCommands.front().type != TurnCommand::Move) {
+            validation.valid = false;
+            validation.errorMessage = "Check: exactly one move is allowed to escape.";
+            return validation;
+        }
+
+        const PendingTurnProjectionResult responseProjection = projectSingleCheckResponseMove(
+            currentSnapshot,
+            context.activeKingdom.id,
+            pendingCommands.front(),
+            context.config);
+        if (!responseProjection.valid) {
+            validation.valid = false;
+            validation.errorMessage = responseProjection.errorMessage;
+            return validation;
+        }
+
+        validation.projectedKingInCheck = ForwardModel::isInCheck(
+            responseProjection.snapshot,
+            context.activeKingdom.id,
+            context.config.getGlobalMaxRange());
+        if (validation.projectedKingInCheck) {
+            validation.valid = false;
+            validation.errorMessage = "The selected move does not get the king out of check.";
+            return validation;
+        }
+
+        const GameSnapshot endOfTurnSnapshot = simulateEndOfTurn(
+            responseProjection.snapshot,
+            context.activeKingdom.id,
+            context.config);
+        validation.projectedEndingGold = endOfTurnSnapshot.kingdom(context.activeKingdom.id).gold;
+        validation.bankrupt = validation.projectedEndingGold < 0;
+        if (validation.bankrupt) {
+            validation.valid = false;
+            validation.errorMessage = "Bankruptcy: the kingdom would end the turn at "
+                + std::to_string(validation.projectedEndingGold) + " gold.";
+        }
+
         return validation;
     }
 
@@ -236,9 +333,7 @@ CheckTurnValidation CheckResponseRules::validatePendingTurn(const TurnValidation
 
     validation.projectedKingInCheck = projectedKingInCheck;
 
-    if (projectedKingInCheck
-        && !automaticCoronationResolvesCheck(
-            *finalSnapshot, context.activeKingdom.id, context.config.getGlobalMaxRange())) {
+    if (projectedKingInCheck) {
         validation.valid = false;
         validation.errorMessage = validation.activeKingInCheck
             ? "The queued turn still leaves the king in check."
@@ -263,13 +358,15 @@ CheckTurnValidation CheckResponseRules::validatePendingTurn(const TurnValidation
 }
 
 CheckTurnValidation CheckResponseRules::validatePendingTurn(const Kingdom& activeKingdom,
-                                                            const Kingdom& enemyKingdom,
-                                                            const Board& board,
-                                                            const std::vector<Building>& publicBuildings,
-                                                            int turnNumber,
-                                                            const std::vector<TurnCommand>& pendingCommands,
-                                                            const GameConfig& config) {
+                                const Kingdom& enemyKingdom,
+                                const Board& board,
+                                const std::vector<Building>& publicBuildings,
+                                int turnNumber,
+                                const std::vector<TurnCommand>& pendingCommands,
+                                const GameConfig& config,
+                                CheckEscapeSolver* sharedEscapeSolver) {
     return validatePendingTurn(
         TurnValidationContext{board, activeKingdom, enemyKingdom, publicBuildings, turnNumber, config},
-        pendingCommands);
+    pendingCommands,
+    sharedEscapeSolver);
 }

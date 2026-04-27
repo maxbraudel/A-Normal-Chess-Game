@@ -46,7 +46,11 @@ std::vector<InGameAlert> buildInGameAlerts(const FrontendRuntimeState& state,
     }
 
     if (validation.activeKingInCheck) {
-        alerts.push_back(InGameAlert{"Check", InGameAlertTone::Danger});
+        if (validation.valid && validation.hasQueuedMove && !validation.projectedKingInCheck) {
+            alerts.push_back(InGameAlert{"Check - Response move ready. End turn.", InGameAlertTone::Warning});
+        } else {
+            alerts.push_back(InGameAlert{"Check - Make one move to escape.", InGameAlertTone::Danger});
+        }
     }
     if (validation.bankrupt) {
         alerts.push_back(InGameAlert{
@@ -172,6 +176,11 @@ InGameViewModel FrontendCoordinator::buildDashboardViewModel(const FrontendRunti
             bindings.config);
     }
 
+    if (validation.activeKingInCheck) {
+        viewModel.activeMovementPointsText = "Only one move allowed";
+        viewModel.activeBuildPointsText = "No construction allowed in check";
+    }
+
     viewModel.alerts = buildInGameAlerts(state, validation);
     viewModel.canEndTurn = permissions.canIssueCommands && validation.valid;
     return viewModel;
@@ -180,7 +189,8 @@ InGameViewModel FrontendCoordinator::buildDashboardViewModel(const FrontendRunti
 FrontendLeftPanelPresentation FrontendCoordinator::buildLeftPanelPresentation(
     const FrontendRuntimeState& state,
     const FrontendPanelBindings& bindings,
-    const InteractionPermissions& permissions) {
+    const InteractionPermissions& permissions,
+    const CheckTurnValidation* validation) {
     FrontendLeftPanelPresentation presentation;
     presentation.viewedKingdom = permissions.canIssueCommands ? state.activeKingdom : localPerspectiveKingdom(state);
 
@@ -189,6 +199,9 @@ FrontendLeftPanelPresentation FrontendCoordinator::buildLeftPanelPresentation(
             if (permissions.canOpenBuildPanel) {
                 presentation.kind = FrontendLeftPanelKind::BuildTool;
                 presentation.allowBuild = permissions.canQueueNonMoveActions;
+                if (validation != nullptr && validation->activeKingInCheck) {
+                    presentation.buildDescription = "No construction allowed while your king is in check.";
+                }
             }
             presentation.title = leftPanelTitle(presentation.kind);
             return presentation;
@@ -330,6 +343,8 @@ InputContext FrontendCoordinator::buildInputContext(FrontendRuntimeState state,
         bindings.authoritativeTurnContext,
         bindings.uiManager,
         bindings.config,
+        nullptr,
+        nullptr,
         &bindings.weatherMaskCache,
         perspectiveKingdom,
         permissions,

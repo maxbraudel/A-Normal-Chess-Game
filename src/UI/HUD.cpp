@@ -265,14 +265,20 @@ void HUD::update(const InGameViewModel& model) {
     if (m_metricLabels[3]) m_metricLabels[3]->setText(metricText(3, model.activeIncome));
     m_showTurnPointIndicators = model.showTurnPointIndicators;
     if (m_pointLabels[1]) {
-        m_pointLabels[1]->setText(pointText("Build Points",
-                                            model.activeBuildPointsAvailable,
-                                            model.activeBuildPointsTotal));
+        m_pointLabels[1]->setText(
+            model.activeBuildPointsText.empty()
+                ? pointText("Build Points",
+                            model.activeBuildPointsAvailable,
+                            model.activeBuildPointsTotal)
+                : model.activeBuildPointsText);
     }
     if (m_pointLabels[0]) {
-        m_pointLabels[0]->setText(pointText("Movement Points",
-                                            model.activeMovementPointsAvailable,
-                                            model.activeMovementPointsTotal));
+        m_pointLabels[0]->setText(
+            model.activeMovementPointsText.empty()
+                ? pointText("Movement Points",
+                            model.activeMovementPointsAvailable,
+                            model.activeMovementPointsTotal)
+                : model.activeMovementPointsText);
     }
 
     if (m_statusLabel) {

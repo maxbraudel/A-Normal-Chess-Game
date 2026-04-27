@@ -13,7 +13,11 @@ class GameConfig;
 class BuildToolPanel {
 public:
     void init(const tgui::Panel::Ptr& parent);
-    void show(const Kingdom& kingdom, const GameConfig& config, bool allowBuild, const std::string& title = "");
+    void show(const Kingdom& kingdom,
+              const GameConfig& config,
+              bool allowBuild,
+              const std::string& title = "",
+              const std::string& description = "");
     void hide();
     void setSelectedBuildType(BuildingType type);
 

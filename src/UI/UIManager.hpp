@@ -62,7 +62,11 @@ public:
                            bool allowCancelConstruction,
                            const TurnCommand* pendingProduce = nullptr,
                            const std::string& title = "");
-    void showBuildToolPanel(const Kingdom& kingdom, const GameConfig& config, bool allowBuild, const std::string& title);
+    void showBuildToolPanel(const Kingdom& kingdom,
+                           const GameConfig& config,
+                           bool allowBuild,
+                           const std::string& title,
+                           const std::string& description = "");
     void showMapObjectPanel(const MapObject& object, const std::string& title = "");
     void showCellPanel(const Cell& cell, const std::string& title = "");
     void showSelectionEmptyState();

@@ -102,7 +102,7 @@ void InGamePresentationCoordinator::updateInGameUi(
     };
     applyLeftPanelPresentation(
         uiManager,
-        FrontendCoordinator::buildLeftPanelPresentation(state.runtimeState, panelBindings, permissions),
+        FrontendCoordinator::buildLeftPanelPresentation(state.runtimeState, panelBindings, permissions, &validation),
         bindings.displayedKingdoms,
         bindings.config);
 }
@@ -117,7 +117,8 @@ void InGamePresentationCoordinator::applyLeftPanelPresentation(
             uiManager.showBuildToolPanel(displayedKingdomForOwner(displayedKingdoms, presentation.viewedKingdom),
                                          config,
                                          presentation.allowBuild,
-                                         presentation.title);
+                                         presentation.title,
+                                         presentation.buildDescription);
             return;
 
         case FrontendLeftPanelKind::Piece:

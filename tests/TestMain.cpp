@@ -254,6 +254,27 @@ GameConfig makeCombatTestConfig(const std::string& combatJsonBody) {
     return config;
 }
 
+GameConfig makeTurnPointTestConfig(const std::string& turnPointJsonBody) {
+    const std::filesystem::path tempPath =
+        std::filesystem::temp_directory_path() / "anormalchess_turn_point_test_config.json";
+    {
+        std::ofstream out(tempPath);
+        out << "{\n"
+            << "  \"game\": {\n"
+            << "    \"turn_points\": {\n"
+            << turnPointJsonBody << "\n"
+            << "    }\n"
+            << "  }\n"
+            << "}\n";
+    }
+
+    GameConfig config;
+    expect(config.loadFromFile(tempPath.string()),
+        "Turn point test config helper should load a temporary turn-point override file.");
+    std::filesystem::remove(tempPath);
+    return config;
+}
+
 WeatherMaskCache makeConcealingFogMask(const Board& board,
                                        const std::vector<sf::Vector2i>& foggedCells) {
     WeatherMaskCache weatherMaskCache;
@@ -1542,6 +1563,56 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
                "Build and other non-move commands must be rejected while the active kingdom is in check.");
     }
 
+    void testCheckResponseAllowsSingleEscapeMoveBeyondMovementBudget() {
+        GameConfig config = makeTurnPointTestConfig("      \"movement_points_per_turn\": 1");
+        Board board;
+        board.init(8);
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+
+        addPieceToBoard(white, board, 135, PieceType::King, KingdomId::White, {8, 8});
+        Piece& whiteQueen = addPieceToBoard(white, board, 136, PieceType::Queen, KingdomId::White, {7, 7});
+        addPieceToBoard(black, board, 235, PieceType::Rook, KingdomId::Black, {8, 4});
+
+        const TurnCommand queenBlock = makeMoveCommand(whiteQueen.id, {7, 7}, {8, 7});
+        const std::vector<Building> publicBuildings;
+
+        const CheckTurnValidation validation = CheckResponseRules::validatePendingTurn(
+            white, black, board, publicBuildings, 1, {queenBlock}, config);
+        expect(validation.valid && !validation.projectedKingInCheck,
+            "A single check-response move should stay valid even when its normal movement-point cost exceeds the current budget.");
+
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+        expect(turnSystem.queueCommand(queenBlock, board, white, black, publicBuildings, config),
+            "TurnSystem should queue the single emergency response move even when the piece would normally cost too many movement points.");
+    }
+
+    void testCheckResponseRejectsSecondMoveWhileInCheck() {
+        GameConfig config;
+        Board board;
+        board.init(8);
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+
+        addPieceToBoard(white, board, 137, PieceType::King, KingdomId::White, {8, 8});
+        Piece& whiteBishop = addPieceToBoard(white, board, 138, PieceType::Bishop, KingdomId::White, {7, 7});
+        Piece& whitePawn = addPieceToBoard(white, board, 139, PieceType::Pawn, KingdomId::White, {4, 4});
+        addPieceToBoard(black, board, 237, PieceType::Rook, KingdomId::Black, {8, 4});
+
+        const std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+
+        const TurnCommand bishopBlock = makeMoveCommand(whiteBishop.id, {7, 7}, {8, 6});
+        const TurnCommand pawnMove = makeMoveCommand(whitePawn.id, {4, 4}, {4, 5});
+
+        expect(turnSystem.queueCommand(bishopBlock, board, white, black, publicBuildings, config),
+            "The first response move should queue while the kingdom is checked.");
+        expect(!turnSystem.queueCommand(pawnMove, board, white, black, publicBuildings, config),
+            "The checked kingdom should not be allowed to queue a second move after the single legal response move.");
+    }
+
     void testSelectionMoveRulesClassifyUnsafeNonKingMovesAsSelectable() {
         GameConfig config;
         Board board;
@@ -1609,10 +1680,10 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
             "Selection move rules should mark the origin kingdom as unsafe when the selected piece is responding to an active check.");
         expect(containsCell(moveOptions.safeMoves, {8, 6}),
             "A non-king move that blocks a rook check should stay green in the selection overlay.");
-        expect(containsCell(moveOptions.unsafeMoves, {6, 6}),
-            "A pseudo-legal move that does not resolve the active check should stay red in the selection overlay.");
-        expect(moveOptions.contains({8, 6}) && moveOptions.contains({6, 6}),
-            "Both resolving and non-resolving moves should remain selectable in the selection model while checked.");
+        expect(moveOptions.unsafeMoves.empty(),
+            "Checked move selection should stop exposing non-resolving destinations once only a single response move is allowed.");
+        expect(!moveOptions.contains({6, 6}),
+            "A pseudo-legal move that does not resolve the active check should no longer remain selectable while checked.");
     }
 
     void testSelectionMoveRulesKeepCheckResolvingKingMovesGreen() {
@@ -1634,19 +1705,20 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
             "Selection move rules should flag the king origin as unsafe while that king is in check.");
         expect(containsCell(moveOptions.safeMoves, {9, 10}),
             "A king sidestep that escapes the check should stay green in the selection overlay.");
-        expect(containsCell(moveOptions.unsafeMoves, {10, 11}),
-            "A king destination that remains attacked should stay red in the selection overlay.");
+        expect(moveOptions.unsafeMoves.empty(),
+            "Checked king move selection should no longer keep attacked destinations selectable once only a single response move is allowed.");
     }
 
-    void testSelectionMoveRulesRefreshEarlierQueuedMoveAfterLaterKingEscape() {
+    void testSelectionMoveRulesBlockOtherPieceMovesAfterQueuedCheckResponse() {
         GameConfig config;
         Board board;
         board.init(12);
 
         Kingdom white(KingdomId::White);
         Kingdom black(KingdomId::Black);
-        Piece& whiteKing = addPieceToBoard(white, board, 350, PieceType::King, KingdomId::White, {8, 8});
+        addPieceToBoard(white, board, 350, PieceType::King, KingdomId::White, {8, 8});
         Piece& whitePawn = addPieceToBoard(white, board, 351, PieceType::Pawn, KingdomId::White, {4, 4});
+        Piece& whiteBishop = addPieceToBoard(white, board, 352, PieceType::Bishop, KingdomId::White, {7, 7});
         addPieceToBoard(black, board, 450, PieceType::King, KingdomId::Black, {18, 18});
         addPieceToBoard(black, board, 451, PieceType::Rook, KingdomId::Black, {8, 4});
 
@@ -1654,16 +1726,10 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
         TurnSystem turnSystem;
         turnSystem.setActiveKingdom(KingdomId::White);
 
-        const TurnCommand pawnMove = makeMoveCommand(whitePawn.id, {4, 4}, {4, 5});
-        const TurnCommand kingMove = makeMoveCommand(whiteKing.id, {8, 8}, {9, 8});
+        const TurnCommand bishopBlock = makeMoveCommand(whiteBishop.id, {7, 7}, {8, 6});
 
-        expect(turnSystem.queueCommand(pawnMove, board, white, black, publicBuildings, config),
-            "The distant pawn move should queue successfully before the king escape in the stale-color regression.");
-        expect(turnSystem.queueCommand(kingMove, board, white, black, publicBuildings, config),
-            "The later king escape should queue successfully in the stale-color regression.");
-
-        whitePawn.position = pawnMove.destination;
-        whiteKing.position = kingMove.destination;
+        expect(turnSystem.queueCommand(bishopBlock, board, white, black, publicBuildings, config),
+            "The single queued response move should be accepted while the kingdom is checked.");
 
         const SelectionMoveOptions moveOptions = SelectionMoveRules::classifyPieceMoves(
             board,
@@ -1675,15 +1741,11 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
             whitePawn.id,
             config);
 
-        expect(moveOptions.originUnsafe,
-            "Reselecting an earlier queued move should still evaluate from the original checked queue slot.");
-        expect(containsCell(moveOptions.safeMoves, pawnMove.destination),
-            "Once a later king move resolves the check, the earlier queued pawn destination should refresh to green on reselection.");
-        expect(!containsCell(moveOptions.unsafeMoves, pawnMove.destination),
-            "The refreshed pawn destination should no longer stay red after the later king escape has made the full pending turn safe.");
+        expect(moveOptions.safeMoves.empty() && moveOptions.unsafeMoves.empty(),
+            "Once a single response move is already queued during check, other pieces should no longer expose any selectable destinations.");
     }
 
-    void testSelectionMoveRulesRefreshEarlierQueuedMoveAfterLaterBlockingResponse() {
+    void testSelectionMoveRulesAllowReplacingQueuedCheckResponse() {
         GameConfig config;
         Board board;
         board.init(12);
@@ -1691,8 +1753,7 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
         Kingdom white(KingdomId::White);
         Kingdom black(KingdomId::Black);
         addPieceToBoard(white, board, 360, PieceType::King, KingdomId::White, {8, 8});
-        Piece& whitePawn = addPieceToBoard(white, board, 361, PieceType::Pawn, KingdomId::White, {4, 4});
-        Piece& whiteBishop = addPieceToBoard(white, board, 362, PieceType::Bishop, KingdomId::White, {7, 7});
+        Piece& whiteBishop = addPieceToBoard(white, board, 361, PieceType::Bishop, KingdomId::White, {7, 7});
         addPieceToBoard(black, board, 460, PieceType::King, KingdomId::Black, {18, 18});
         addPieceToBoard(black, board, 461, PieceType::Rook, KingdomId::Black, {8, 4});
 
@@ -1700,16 +1761,10 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
         TurnSystem turnSystem;
         turnSystem.setActiveKingdom(KingdomId::White);
 
-        const TurnCommand pawnMove = makeMoveCommand(whitePawn.id, {4, 4}, {4, 5});
         const TurnCommand bishopBlock = makeMoveCommand(whiteBishop.id, {7, 7}, {8, 6});
 
-        expect(turnSystem.queueCommand(pawnMove, board, white, black, publicBuildings, config),
-            "The distant pawn move should queue successfully before the later blocking response.");
         expect(turnSystem.queueCommand(bishopBlock, board, white, black, publicBuildings, config),
-            "The later blocking move should queue successfully in the stale-color regression.");
-
-        whitePawn.position = pawnMove.destination;
-        whiteBishop.position = bishopBlock.destination;
+            "The first queued response move should be accepted while checked.");
 
         const SelectionMoveOptions moveOptions = SelectionMoveRules::classifyPieceMoves(
             board,
@@ -1718,15 +1773,13 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
             publicBuildings,
             1,
             turnSystem.getPendingCommands(),
-            whitePawn.id,
+            whiteBishop.id,
             config);
 
-        expect(moveOptions.originUnsafe,
-            "Reselecting an earlier queued move should still remember that the original queue slot was checked before the later blocker acted.");
-        expect(containsCell(moveOptions.safeMoves, pawnMove.destination),
-            "A later non-king blocking response should also refresh the earlier queued pawn destination to green.");
-        expect(!containsCell(moveOptions.unsafeMoves, pawnMove.destination),
-            "The refreshed pawn destination should not remain red once a later blocking move resolves the check.");
+        expect(containsCell(moveOptions.safeMoves, {8, 6}),
+            "The piece that already holds the queued response move should keep that legal response destination selectable for replacement or confirmation.");
+        expect(moveOptions.unsafeMoves.empty(),
+            "The queued responder should still only expose legal escape moves while checked.");
     }
 
     void testSelectionMoveRulesAllowPawnToCaptureAutonomousUnitDiagonally() {
@@ -2325,7 +2378,7 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
              "The build panel should remain openable while in check so the UI can show disabled actions.");
         }
 
-        void testInteractionPermissionsUnlockNonMoveActionsAfterQueuedCheckResponse() {
+        void testInteractionPermissionsKeepNonMoveActionsLockedAfterQueuedCheckResponse() {
          InteractionPermissionInputs inputs;
          inputs.gameState = GameState::Playing;
          inputs.multiplayerSessionReady = true;
@@ -2337,8 +2390,8 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
          const InteractionPermissions permissions = computeInteractionPermissions(inputs);
          expect(permissions.canIssueCommands,
              "The active kingdom should still be actionable while it is assembling a legal response to check.");
-         expect(permissions.canQueueNonMoveActions,
-             "Non-move actions should reopen once the queued move sequence has already resolved the check in projection.");
+         expect(!permissions.canQueueNonMoveActions,
+             "Non-move actions should remain locked for the whole turn once the authoritative kingdom started that turn in check.");
         }
 
         void testInteractionPermissionsKeepNavigationAvailableDuringGameOver() {
@@ -9308,12 +9361,14 @@ int main() {
         {"check response allows blocking move", testCheckResponseAllowsBlockingMove},
         {"check response rejects pass", testCheckResponseRejectsPassWhileInCheck},
         {"check response rejects non-move", testCheckResponseRejectsNonMoveActionsWhileInCheck},
+        {"check response allows over-budget escape", testCheckResponseAllowsSingleEscapeMoveBeyondMovementBudget},
+        {"check response rejects second move", testCheckResponseRejectsSecondMoveWhileInCheck},
         {"selection move rules unsafe non-king selectable", testSelectionMoveRulesClassifyUnsafeNonKingMovesAsSelectable},
         {"selection move rules unsafe king selectable", testSelectionMoveRulesKeepUnsafeKingSquaresSelectable},
         {"selection move rules checked non-king green responses", testSelectionMoveRulesKeepCheckResolvingNonKingMovesGreen},
         {"selection move rules checked king green responses", testSelectionMoveRulesKeepCheckResolvingKingMovesGreen},
-        {"selection move rules refresh earlier queued move after king escape", testSelectionMoveRulesRefreshEarlierQueuedMoveAfterLaterKingEscape},
-        {"selection move rules refresh earlier queued move after blocking response", testSelectionMoveRulesRefreshEarlierQueuedMoveAfterLaterBlockingResponse},
+        {"selection move rules block other piece after response", testSelectionMoveRulesBlockOtherPieceMovesAfterQueuedCheckResponse},
+        {"selection move rules replace queued response", testSelectionMoveRulesAllowReplacingQueuedCheckResponse},
         {"selection move rules pawn autonomous capture", testSelectionMoveRulesAllowPawnToCaptureAutonomousUnitDiagonally},
         {"selection move rules ignore queued upgrade live moves", testSelectionMoveRulesIgnoreQueuedUpgradeForLivePieceMoves},
         {"selection move rules keep alternates when origin later occupied", testSelectionMoveRulesKeepAlternateMovesWhenLaterQueuedMoveOccupiesOrigin},
@@ -9335,7 +9390,7 @@ int main() {
         {"check response true edge checkmate", testCheckResponseDetectsTrueEdgeCheckmate},
         {"interaction permissions read-only outside turn", testInteractionPermissionsAllowReadOnlyInspectionOutsideTurn},
         {"interaction permissions check build panel", testInteractionPermissionsKeepBuildPanelReadOnlyDuringCheck},
-        {"interaction permissions unlock after queued response", testInteractionPermissionsUnlockNonMoveActionsAfterQueuedCheckResponse},
+        {"interaction permissions keep lock after queued response", testInteractionPermissionsKeepNonMoveActionsLockedAfterQueuedCheckResponse},
         {"interaction permissions game over navigation", testInteractionPermissionsKeepNavigationAvailableDuringGameOver},
         {"turn system move log piece type", testTurnSystemMoveLogIncludesPieceType},
         {"turn system move log fog visibility", testTurnSystemMoveLogCapturesFoggedDestinationByObserver},

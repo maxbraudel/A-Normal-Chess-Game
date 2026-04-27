@@ -14,6 +14,7 @@
 #include "Systems/ProductionSystem.hpp"
 #include "Systems/ProductionSpawnRules.hpp"
 #include "Systems/StructureIntegrityRules.hpp"
+#include "Systems/CheckResponseRules.hpp"
 #include "Systems/MarriageSystem.hpp"
 #include "Systems/PendingTurnProjection.hpp"
 #include "Systems/ChestSystem.hpp"
@@ -400,6 +401,27 @@ bool TurnSystem::queueCommand(const TurnCommand& cmd,
             break;
     }
 
+    const CheckTurnValidation activeValidation = CheckResponseRules::validatePendingTurn(
+        context,
+        m_pendingCommands);
+    if (activeValidation.activeKingInCheck) {
+        std::vector<TurnCommand> candidateCommands = m_pendingCommands;
+        candidateCommands.push_back(queuedCommand);
+
+        const CheckTurnValidation candidateValidation = CheckResponseRules::validatePendingTurn(
+            context,
+            candidateCommands);
+        if (!candidateValidation.valid) {
+            return false;
+        }
+
+        m_pendingCommands = std::move(candidateCommands);
+        rebuildQueuedSpecialState();
+        refreshProjectedBudgetState(context);
+        markPendingStateChanged();
+        return true;
+    }
+
     std::string errorMessage;
     if (!PendingTurnProjection::canAppendCommand(
             context, m_pendingCommands, queuedCommand, &errorMessage)) {
@@ -527,6 +549,24 @@ bool TurnSystem::replaceMoveCommand(const TurnCommand& moveCommand,
     }
     if (!replacedExistingMove) {
         candidateCommands.push_back(moveCommand);
+    }
+
+    const CheckTurnValidation activeValidation = CheckResponseRules::validatePendingTurn(
+        context,
+        m_pendingCommands);
+    if (activeValidation.activeKingInCheck) {
+        const CheckTurnValidation candidateValidation = CheckResponseRules::validatePendingTurn(
+            context,
+            candidateCommands);
+        if (!candidateValidation.valid) {
+            return false;
+        }
+
+        m_pendingCommands = std::move(candidateCommands);
+        rebuildQueuedSpecialState();
+        refreshProjectedBudgetState(context);
+        markPendingStateChanged();
+        return true;
     }
 
     const PendingTurnNormalizationResult projection = PendingTurnProjection::normalize(

@@ -73,6 +73,8 @@ struct InGameViewModel {
     int activeMovementPointsTotal = 0;
     int activeBuildPointsAvailable = 0;
     int activeBuildPointsTotal = 0;
+    std::string activeMovementPointsText;
+    std::string activeBuildPointsText;
     bool allowCommands = false;
     bool canEndTurn = false;
     bool showTurnPointIndicators = true;
