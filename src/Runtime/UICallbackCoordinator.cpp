@@ -5,6 +5,7 @@
 #include "Buildings/BuildingType.hpp"
 #include "Config/GameConfig.hpp"
 #include "Core/ToolState.hpp"
+#include "Data/GameDataRecorder.hpp"
 #include "Input/InputHandler.hpp"
 #include "Kingdom/Kingdom.hpp"
 #include "Runtime/FrontendCoordinator.hpp"
@@ -18,6 +19,7 @@
 namespace {
 
 constexpr const char* kSavesDirectory = "saves";
+constexpr const char* kDataDirectory = "Data";
 
 UICallbackRuntimeState currentRuntimeState(const UICallbackCoordinatorDependencies& dependencies) {
     if (dependencies.runtimeState) {
@@ -82,6 +84,7 @@ UICallbackBindings UICallbackCoordinator::buildBindings(const UICallbackCoordina
             return;
         }
 
+        GameDataRecorder::deleteCompanion(kDataDirectory, saveName);
         dependencies.saveManager.deleteSave(std::string{kSavesDirectory} + "/" + saveName + ".json");
         dependencies.uiManager.mainMenu().setSaves(
             dependencies.saveManager.listSaveSummaries(kSavesDirectory));

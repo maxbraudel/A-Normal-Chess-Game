@@ -2,22 +2,26 @@
 
 #include "Config/GameConfig.hpp"
 #include "Core/GameEngine.hpp"
+#include "Data/GameDataRecorder.hpp"
 #include "Debug/GameStateDebugRecorder.hpp"
 #include "Multiplayer/MultiplayerRuntime.hpp"
 
 TurnCoordinator::TurnCoordinator(GameEngine& engine,
                                  MultiplayerRuntime& multiplayer,
                                  GameStateDebugRecorder& debugRecorder,
+                                 GameDataRecorder& dataRecorder,
                                  const GameConfig& config)
     : m_engine(engine)
     , m_multiplayer(multiplayer)
     , m_debugRecorder(debugRecorder)
+    , m_dataRecorder(dataRecorder)
     , m_config(config) {}
 
 AuthoritativeTurnExecution TurnCoordinator::executeAuthoritativeTurn() {
     AuthoritativeTurnExecution execution;
     execution.committedActiveKingdom = m_engine.turnSystem().getActiveKingdom();
     execution.committedTurnNumber = m_engine.turnSystem().getTurnNumber();
+    const std::vector<TurnCommand> queuedCommands = m_engine.turnSystem().getPendingCommands();
 
     const PendingTurnCommitResult commitResult = m_engine.commitPendingTurn(m_config);
     execution.committed = commitResult.committed;
@@ -33,6 +37,19 @@ AuthoritativeTurnExecution TurnCoordinator::executeAuthoritativeTurn() {
                                        execution.committedActiveKingdom,
                                        m_engine.kingdoms(),
                                        "after_player_commit");
+
+        if (m_dataRecorder.isEnabled()) {
+            m_dataRecorder.recordCommittedTurn(
+                queuedCommands,
+                execution.committedTurnNumber,
+                execution.committedActiveKingdom,
+                commitResult.activeValidation,
+                commitResult.nextTurnValidation,
+                commitResult.gameOver,
+                commitResult.winner,
+                commitResult.notifications,
+                m_engine.createSaveData());
+        }
     }
 
     return execution;

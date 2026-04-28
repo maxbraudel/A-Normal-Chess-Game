@@ -58,6 +58,7 @@ struct GameSessionConfig {
     MultiplayerConfig multiplayer{};
     bool tacticalGridEnabled = false;
     bool sharedTurnPreviewEnabled = false;
+    bool dataCollectionEnabled = false;
 };
 
 struct SaveSummary {
@@ -67,6 +68,7 @@ struct SaveSummary {
     MultiplayerConfig multiplayer{};
     bool tacticalGridEnabled = false;
     bool sharedTurnPreviewEnabled = false;
+    bool dataCollectionEnabled = false;
 };
 
 inline GameSessionConfig makeDefaultGameSessionConfig(GameMode mode,

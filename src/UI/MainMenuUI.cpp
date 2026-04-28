@@ -165,7 +165,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     m_createOverlay->setVisible(false);
     m_panel->add(m_createOverlay);
 
-    auto dialog = tgui::Panel::create({560, 742});
+    auto dialog = tgui::Panel::create({560, 782});
     dialog->setPosition({"(&.parent.width - width) / 2", "(&.parent.height - height) / 2"});
     dialog->getRenderer()->setBackgroundColor(tgui::Color(46, 46, 46, 245));
     dialog->getRenderer()->setBorderColor(tgui::Color(120, 120, 120));
@@ -305,8 +305,20 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     });
     dialog->add(m_sharedTurnPreviewCheckBox);
 
+    m_dataCollectionCheckBox = tgui::CheckBox::create();
+    styleCheckBox(m_dataCollectionCheckBox);
+    m_dataCollectionCheckBox->setPosition({36, 652});
+    m_dataCollectionCheckBox->setText("Generate Data");
+    m_dataCollectionCheckBox->setTextSize(18);
+    m_dataCollectionCheckBox->onChange([this](bool) {
+        if (m_createErrorLabel) {
+            m_createErrorLabel->setText("");
+        }
+    });
+    dialog->add(m_dataCollectionCheckBox);
+
     m_createErrorLabel = tgui::Label::create("");
-    m_createErrorLabel->setPosition({36, 654});
+    m_createErrorLabel->setPosition({36, 686});
     m_createErrorLabel->setSize({280, 44});
     m_createErrorLabel->setAutoSize(false);
     m_createErrorLabel->setTextSize(15);
@@ -315,7 +327,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
 
     auto cancelButton = tgui::Button::create("Cancel");
     styleButton(cancelButton);
-    cancelButton->setPosition({332, 688});
+    cancelButton->setPosition({332, 730});
     cancelButton->setSize({92, 30});
     cancelButton->onPress([this]() {
         closeSessionDialog();
@@ -324,7 +336,7 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
 
     m_createConfirmButton = tgui::Button::create("Create");
     styleButton(m_createConfirmButton);
-    m_createConfirmButton->setPosition({432, 688});
+    m_createConfirmButton->setPosition({432, 730});
     m_createConfirmButton->setSize({92, 30});
     m_createConfirmButton->onPress([this]() {
         submitSessionDialog();
@@ -590,6 +602,7 @@ void MainMenuUI::openCreateDialog() {
     if (m_multiplayerPasswordEdit) m_multiplayerPasswordEdit->setText("");
     if (m_tacticalGridCheckBox) m_tacticalGridCheckBox->setChecked(false);
     if (m_sharedTurnPreviewCheckBox) m_sharedTurnPreviewCheckBox->setChecked(false);
+    if (m_dataCollectionCheckBox) m_dataCollectionCheckBox->setChecked(false);
     updateSessionDialogLabels();
     closeJoinDialog();
     m_createOverlay->setVisible(true);
@@ -633,6 +646,9 @@ void MainMenuUI::openEditDialog() {
     }
     if (m_sharedTurnPreviewCheckBox) {
         m_sharedTurnPreviewCheckBox->setChecked(selectedSave->sharedTurnPreviewEnabled);
+    }
+    if (m_dataCollectionCheckBox) {
+        m_dataCollectionCheckBox->setChecked(selectedSave->dataCollectionEnabled);
     }
     updateSessionDialogLabels();
     closeJoinDialog();
@@ -698,6 +714,8 @@ void MainMenuUI::submitSessionDialog() {
         m_tacticalGridCheckBox != nullptr && m_tacticalGridCheckBox->isChecked();
     request.session.sharedTurnPreviewEnabled =
         m_sharedTurnPreviewCheckBox != nullptr && m_sharedTurnPreviewCheckBox->isChecked();
+    request.session.dataCollectionEnabled =
+        m_dataCollectionCheckBox != nullptr && m_dataCollectionCheckBox->isChecked();
 
     if (request.session.saveName.empty()) {
         m_createErrorLabel->setText("Save name is required.");

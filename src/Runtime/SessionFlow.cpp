@@ -4,12 +4,15 @@
 
 #include "Config/GameConfig.hpp"
 #include "Core/GameEngine.hpp"
+#include "Data/GameDataRecorder.hpp"
 #include "Debug/GameStateDebugRecorder.hpp"
 #include "Multiplayer/MultiplayerRuntime.hpp"
 #include "Save/SaveData.hpp"
 #include "Save/SaveManager.hpp"
 
 namespace {
+
+constexpr const char* kDataDirectory = "Data";
 
 void writeError(std::string* errorMessage, const std::string& message) {
     if (errorMessage) {
@@ -27,12 +30,14 @@ SessionFlow::SessionFlow(GameEngine& engine,
                          SaveManager& saveManager,
                          MultiplayerRuntime& multiplayer,
                          GameStateDebugRecorder& debugRecorder,
+                         GameDataRecorder& dataRecorder,
                          const GameConfig& config,
                          std::string savesDirectory)
     : m_engine(engine)
     , m_saveManager(saveManager)
     , m_multiplayer(multiplayer)
     , m_debugRecorder(debugRecorder)
+    , m_dataRecorder(dataRecorder)
     , m_config(config)
     , m_savesDirectory(std::move(savesDirectory)) {}
 
@@ -65,6 +70,11 @@ bool SessionFlow::startNewSession(const GameSessionConfig& session,
                                    m_engine.turnSystem().getActiveKingdom(),
                                    m_engine.kingdoms(),
                                    "initial_state_new_game");
+    if (session.dataCollectionEnabled) {
+        m_dataRecorder.beginNewSession(session, m_engine.createSaveData());
+    } else {
+        m_dataRecorder.reset();
+    }
     return true;
 }
 
@@ -105,6 +115,11 @@ bool SessionFlow::loadSession(const std::string& saveName,
                                    m_engine.turnSystem().getActiveKingdom(),
                                    m_engine.kingdoms(),
                                    "initial_state_loaded_game");
+    m_dataRecorder.resumeOrBootstrapFromSave(
+        m_engine.sessionConfig(),
+        m_engine.createSaveData(),
+        GameDataRecorder::buildCompanionPath(kDataDirectory, saveName),
+        m_saveManager);
     return true;
 }
 
@@ -123,6 +138,15 @@ bool SessionFlow::saveAuthoritativeSession(bool allowSave,
 
     if (!m_saveManager.save(buildSavePath(m_savesDirectory, m_engine.gameName()), data)) {
         writeError(errorMessage, "Failed to save game!");
+        return false;
+    }
+
+    if (m_engine.sessionConfig().dataCollectionEnabled
+        && !m_dataRecorder.saveToFile(
+            GameDataRecorder::buildCompanionPath(kDataDirectory, m_engine.gameName()),
+            m_config,
+            m_saveManager,
+            errorMessage)) {
         return false;
     }
 

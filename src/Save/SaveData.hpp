@@ -28,6 +28,7 @@ struct SaveData {
     MultiplayerConfig multiplayer{};
     bool tacticalGridEnabled = false;
     bool sharedTurnPreviewEnabled = false;
+    bool dataCollectionEnabled = false;
 
     // Grid state
     struct CellData {

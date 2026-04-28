@@ -5,6 +5,7 @@
 #include "Core/GameSessionConfig.hpp"
 
 class GameConfig;
+class GameDataRecorder;
 class GameEngine;
 class GameStateDebugRecorder;
 class MultiplayerRuntime;
@@ -16,6 +17,7 @@ public:
                 SaveManager& saveManager,
                 MultiplayerRuntime& multiplayer,
                 GameStateDebugRecorder& debugRecorder,
+                GameDataRecorder& dataRecorder,
                 const GameConfig& config,
                 std::string savesDirectory = "saves");
 
@@ -31,6 +33,7 @@ private:
     SaveManager& m_saveManager;
     MultiplayerRuntime& m_multiplayer;
     GameStateDebugRecorder& m_debugRecorder;
+    GameDataRecorder& m_dataRecorder;
     const GameConfig& m_config;
     std::string m_savesDirectory;
 };

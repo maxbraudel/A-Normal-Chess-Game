@@ -22,6 +22,7 @@
 #include "Core/MacOSTrackpadAdapter.hpp"
 #include "Core/TurnDraft.hpp"
 #include "Config/GameConfig.hpp"
+#include "Data/GameDataRecorder.hpp"
 #include "Debug/GameStateDebugRecorder.hpp"
 #include "Systems/CheckSystem.hpp"
 #include "Input/InputHandler.hpp"
@@ -225,6 +226,7 @@ private:
     TurnDraft m_remoteTurnPreviewDraft;
     std::uint64_t m_lastRemoteTurnPreviewRevision = 0;
     GameStateDebugRecorder m_debugRecorder;
+    GameDataRecorder m_dataRecorder;
 
     // Input/Render/UI
     InputHandler m_input;

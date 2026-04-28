@@ -82,6 +82,7 @@ private:
     tgui::Label::Ptr m_multiplayerPasswordLabel;
     tgui::EditBox::Ptr m_multiplayerPasswordEdit;
     tgui::Label::Ptr m_blackRoleLabel;
+    tgui::CheckBox::Ptr m_dataCollectionCheckBox;
     tgui::EditBox::Ptr m_joinHostEdit;
     tgui::EditBox::Ptr m_joinPortEdit;
     tgui::EditBox::Ptr m_joinPasswordEdit;

@@ -10,6 +10,7 @@
 #include "Kingdom/KingdomId.hpp"
 
 class GameConfig;
+class GameDataRecorder;
 class GameEngine;
 class GameStateDebugRecorder;
 class MultiplayerRuntime;
@@ -58,6 +59,7 @@ public:
     TurnCoordinator(GameEngine& engine,
                     MultiplayerRuntime& multiplayer,
                     GameStateDebugRecorder& debugRecorder,
+                    GameDataRecorder& dataRecorder,
                     const GameConfig& config);
 
     AuthoritativeTurnExecution executeAuthoritativeTurn();
@@ -74,5 +76,6 @@ private:
     GameEngine& m_engine;
     MultiplayerRuntime& m_multiplayer;
     GameStateDebugRecorder& m_debugRecorder;
+    GameDataRecorder& m_dataRecorder;
     const GameConfig& m_config;
 };

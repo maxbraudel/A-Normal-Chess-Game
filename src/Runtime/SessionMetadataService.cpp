@@ -3,6 +3,7 @@
 #include <filesystem>
 
 #include "Core/GameStateValidator.hpp"
+#include "Data/GameDataRecorder.hpp"
 #include "Multiplayer/PasswordUtils.hpp"
 #include "Save/SaveData.hpp"
 #include "Save/SaveManager.hpp"
@@ -10,6 +11,7 @@
 namespace {
 
 namespace fs = std::filesystem;
+constexpr const char* kDataDirectory = "Data";
 
 bool isValidSaveNameForFileSystem(const std::string& value) {
     return !value.empty()
@@ -144,6 +146,7 @@ bool SessionMetadataService::editSavedSession(const SessionFormRequest& request,
     data.multiplayer = finalizedSession.multiplayer;
     data.tacticalGridEnabled = finalizedSession.tacticalGridEnabled;
     data.sharedTurnPreviewEnabled = finalizedSession.sharedTurnPreviewEnabled;
+    data.dataCollectionEnabled = finalizedSession.dataCollectionEnabled;
 
     if (!GameStateValidator::validateSaveData(data, errorMessage)) {
         return false;
@@ -164,6 +167,17 @@ bool SessionMetadataService::editSavedSession(const SessionFormRequest& request,
         saveManager.deleteSave(targetPath);
         writeError(errorMessage, "Failed to replace the original save file.");
         return false;
+    }
+
+    if (finalizedSession.dataCollectionEnabled) {
+        GameDataRecorder::renameCompanion(kDataDirectory,
+                                          request.originalSaveName,
+                                          finalizedSession.saveName);
+    } else {
+        GameDataRecorder::deleteCompanion(kDataDirectory, request.originalSaveName);
+        if (finalizedSession.saveName != request.originalSaveName) {
+            GameDataRecorder::deleteCompanion(kDataDirectory, finalizedSession.saveName);
+        }
     }
 
     return true;

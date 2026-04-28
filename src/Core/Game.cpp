@@ -68,9 +68,9 @@ LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 
 Game::Game()
     : m_state(GameState::MainMenu)
-    , m_sessionFlow(m_engine, m_saveManager, m_multiplayer, m_debugRecorder, m_config)
+    , m_sessionFlow(m_engine, m_saveManager, m_multiplayer, m_debugRecorder, m_dataRecorder, m_config)
     , m_multiplayerJoinCoordinator(m_engine, m_multiplayer, m_saveManager, m_input, m_config)
-    , m_turnCoordinator(m_engine, m_multiplayer, m_debugRecorder, m_config)
+    , m_turnCoordinator(m_engine, m_multiplayer, m_debugRecorder, m_dataRecorder, m_config)
     , m_sessionRuntimeCoordinator(
           m_state,
           m_waitingForRemoteTurnResult,
@@ -85,7 +85,7 @@ Game::Game()
           m_engine,
           m_turnCoordinator,
           m_input,
-            m_uiManager)
+                    m_uiManager)
     , m_panelActionCoordinator(m_engine, m_input, m_config)
     , m_multiplayerRuntimeCoordinator(
           m_multiplayer,

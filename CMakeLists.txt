@@ -40,6 +40,7 @@ FetchContent_MakeAvailable(TGUI)
 
 # Explicit source list keeps module membership intentional and avoids silent build drift.
 set(CORE_SOURCES
+    src/Data/GameDataRecorder.cpp
     src/Projection/ForwardModel.cpp
     src/Assets/AssetManager.cpp
     src/Board/Board.cpp
@@ -207,6 +208,11 @@ add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}Assets)
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory
     $<TARGET_FILE_DIR:${PROJECT_NAME}>/saves
+)
+
+add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory
+    $<TARGET_FILE_DIR:${PROJECT_NAME}>/Data
 )
 
 if(WIN32)

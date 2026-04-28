@@ -222,6 +222,8 @@ void SaveManager::writeJson(std::ostream& output, const SaveData& data) {
     output << "  \"tacticalGridEnabled\": " << (data.tacticalGridEnabled ? "true" : "false") << ",\n";
         output << "  \"sharedTurnPreviewEnabled\": "
             << (data.sharedTurnPreviewEnabled ? "true" : "false") << ",\n";
+        output << "  \"dataCollectionEnabled\": "
+            << (data.dataCollectionEnabled ? "true" : "false") << ",\n";
     output << "  \"sessionKingdoms\": [";
     for (int kingdomSlot = 0; kingdomSlot < kNumKingdoms; ++kingdomSlot) {
         if (kingdomSlot > 0) output << ", ";
@@ -814,6 +816,7 @@ bool SaveManager::deserialize(const std::string& json, SaveData& outData) {
     outData.worldSeed = static_cast<std::uint32_t>(std::max(0, extractInt(json, "worldSeed", 0)));
     outData.tacticalGridEnabled = extractBool(json, "tacticalGridEnabled", false);
     outData.sharedTurnPreviewEnabled = extractBool(json, "sharedTurnPreviewEnabled", false);
+    outData.dataCollectionEnabled = extractBool(json, "dataCollectionEnabled", false);
     outData.sessionKingdoms = defaultKingdomParticipants(GameMode::HumanVsHuman);
     const std::string participantsArray = extractArray(json, "sessionKingdoms");
     const auto participantElements = splitArrayElements(participantsArray);
@@ -1002,6 +1005,7 @@ std::vector<SaveSummary> SaveManager::listSaveSummaries(const std::string& saves
             summary.multiplayer = data.multiplayer;
             summary.tacticalGridEnabled = data.tacticalGridEnabled;
             summary.sharedTurnPreviewEnabled = data.sharedTurnPreviewEnabled;
+            summary.dataCollectionEnabled = data.dataCollectionEnabled;
         }
 
         std::error_code timeError;
