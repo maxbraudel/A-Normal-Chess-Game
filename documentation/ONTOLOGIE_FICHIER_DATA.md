@@ -685,7 +685,9 @@ Exemples de types actuellement presents:
 - `xp_granted`
 - `piece_spawned`, `piece_moved`, `piece_upgraded`, `piece_removed`
 - `building_placed`, `building_removed`, `production_started`, `production_completed`
-- `chest_spawned`, `infernal_spawned`, `weather_front_spawned` selon les diffs observes
+- `chest_spawned`, `chest_opened`
+- `infernal_spawned`, `infernal_moved`, `infernal_phase_changed`, `infernal_removed`
+- `weather_front_spawned`, `weather_front_ended`
 
 Regle de lecture:
 
@@ -1040,6 +1042,7 @@ Leur structure de haut niveau est la suivante:
 | `tacticalGridEnabled` | booleen | option active |
 | `sharedTurnPreviewEnabled` | booleen | option active |
 | `dataCollectionEnabled` | booleen | option Data active |
+| `behavioralTelemetryEnabled` | booleen | option de telemetrie comportementale active |
 | `grid[][]` | matrice | etat complet du terrain |
 | `kingdoms[]` | tableau | etat complet des royaumes |
 | `publicBuildings[]` | tableau | batiments publics |
@@ -1179,13 +1182,29 @@ Les champs `hiddenFromWhite` et `hiddenFromBlack` suivent la logique actuelle de
 
 ### 16.4 La provenance logicielle reste surtout configurationnelle
 
-Le bloc `provenance` existe desormais et fournit des empreintes stables de `referenceData`, `sessionContext` et `configContext`.
+Le bloc `provenance` existe desormais et fournit a la fois:
 
-En revanche, il n'inclut pas encore explicitement:
+- des empreintes stables de `referenceData`, `sessionContext` et `configContext`
+- des metadonnees de build
+- des metadonnees git directement exploitables
 
-- un identifiant git ou commit
-- un numero de build applicatif
-- une version humaine du binaire
+Il inclut actuellement explicitement:
+
+- `build.configuredAtUtc`
+- `build.buildType`
+- `build.cmakeGenerator`
+- `build.compilerId`
+- `build.compilerVersion`
+- `build.systemName`
+- `git.commit`
+- `git.branch`
+- `git.dirty`
+
+Ce qui n'est pas encore present, en revanche, si l'on voulait aller plus loin en provenance produit, serait par exemple:
+
+- un numero de release applicatif distinct du schema
+- une version humaine du binaire exposee comme telle
+- un identifiant de pipeline ou d'artefact de build distribue
 
 ## 17. Resume final
 
