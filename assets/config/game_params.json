@@ -108,5 +108,8 @@
         "arena_size": 9,
         "arena_width": 4,
         "arena_height": 4
+    },
+    "rendering": {
+        "damaged_structure_opacity_percent": 70
     }
 }

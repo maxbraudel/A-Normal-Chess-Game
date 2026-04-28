@@ -9,6 +9,7 @@ bool StructureIntegrityRules::isWallType(BuildingType type) {
 bool StructureIntegrityRules::isRepairableOwnedStructureType(BuildingType type) {
     switch (type) {
         case BuildingType::Barracks:
+        case BuildingType::StoneWall:
         case BuildingType::Bridge:
         case BuildingType::Arena:
             return true;

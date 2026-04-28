@@ -68,6 +68,14 @@ private:
                                                          int dx, int dy, int maxRange);
     static std::vector<sf::Vector2i> getKingMoves(const SnapPiece& piece,
                                                   const GameSnapshot& s);
+    static std::vector<sf::Vector2i> buildWallBreachHalfPlaneMoves(
+        const SnapPiece& piece,
+        const GameSnapshot& s,
+        int globalMaxRange);
+    static std::vector<sf::Vector2i> buildWallBreachHalfPlaneThreatSquares(
+        const SnapPiece& piece,
+        const GameSnapshot& s,
+        int globalMaxRange);
 
     static bool canLandOn(const GameSnapshot& s, sf::Vector2i pos, KingdomId mover);
     static sf::Vector2i findSpawnCell(const GameSnapshot& s,

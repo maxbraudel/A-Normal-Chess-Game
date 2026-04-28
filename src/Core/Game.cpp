@@ -1078,7 +1078,10 @@ void Game::init() {
     m_assets.loadAll("assets");
 
     // Init renderer
-    m_renderer.init(m_assets, m_config.getCellSizePx());
+    m_renderer.init(
+        m_assets,
+        m_config.getCellSizePx(),
+        m_config.getDamagedStructureOpacityPercent());
 
     // Init camera
     m_camera.init(m_window);

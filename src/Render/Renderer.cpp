@@ -63,11 +63,15 @@ void configureSpriteForCell(sf::Sprite& sprite, int cellSize,
 
 } // namespace
 
-Renderer::Renderer() : m_assets(nullptr), m_cellSize(16) {}
+Renderer::Renderer()
+    : m_assets(nullptr)
+    , m_cellSize(16)
+    , m_damagedStructureOpacityPercent(70) {}
 
-void Renderer::init(const AssetManager& assets, int cellSize) {
+void Renderer::init(const AssetManager& assets, int cellSize, int damagedStructureOpacityPercent) {
     m_assets = &assets;
     m_cellSize = cellSize;
+    m_damagedStructureOpacityPercent = std::clamp(damagedStructureOpacityPercent, 0, 100);
 }
 
 OverlayRenderer& Renderer::getOverlay() { return m_overlay; }
@@ -341,10 +345,12 @@ void Renderer::drawSingleBuilding(sf::RenderWindow& window,
                                    static_cast<float>(y * m_cellSize),
                                    building.rotationQuarterTurns, building.flipMask);
 
-            // Gray out destroyed cells
+            // Keep damaged cells readable while signaling reduced integrity.
             int hp = building.getCellHP(dx, dy);
             if ((hp <= 0 || building.isCellBreached(dx, dy)) && !building.isPublic()) {
-                sprite.setColor(sf::Color(80, 80, 80, 150));
+                const sf::Uint8 damagedAlpha = static_cast<sf::Uint8>(
+                    (255 * m_damagedStructureOpacityPercent + 50) / 100);
+                sprite.setColor(sf::Color(255, 255, 255, damagedAlpha));
             } else {
                 sprite.setColor(sf::Color::White);
             }

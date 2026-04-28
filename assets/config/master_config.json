@@ -219,6 +219,9 @@
             "density_mu_times_100": -12,
             "density_sigma_times_100": 35
         },
+        "rendering": {
+            "damaged_structure_opacity_percent": 70
+        },
         "cheatcode": {
             "enabled": true,
             "shortcuts": {

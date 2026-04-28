@@ -82,6 +82,34 @@ std::array<bool, kNumKingdoms> moveDestinationHiddenByKingdom(
     return hiddenByKingdom;
 }
 
+bool isEnemyStoneWallCell(const Building* building,
+                         sf::Vector2i pos,
+                         KingdomId mover) {
+    if (!building
+        || building->isNeutral
+        || building->owner == mover
+        || building->type != BuildingType::StoneWall) {
+        return false;
+    }
+
+    const int localX = pos.x - building->origin.x;
+    const int localY = pos.y - building->origin.y;
+    return !building->isCellDestroyed(localX, localY);
+}
+
+void finalizePieceLanding(Piece& piece,
+                          const Board& board,
+                          sf::Vector2i origin,
+                          sf::Vector2i destination) {
+    piece.clearWallBreachEntryState();
+    piece.position = destination;
+
+    const Cell& destinationCell = board.getCell(destination.x, destination.y);
+    if (isEnemyStoneWallCell(destinationCell.building, destination, piece.kingdom)) {
+        piece.setWallBreachEntryState(destination - origin, destination);
+    }
+}
+
 void clearBoardBuildingLinks(Board& board) {
     auto& grid = board.getGrid();
     for (auto& row : grid) {
@@ -182,20 +210,44 @@ int processEnemyStructureOccupancy(Board& board,
     for (auto& piece : activeKingdom.pieces) {
         Cell& occupiedCell = board.getCell(piece.position.x, piece.position.y);
         Building* building = occupiedCell.building;
+        if (!building
+            || building->isNeutral
+            || building->owner == activeKingdom.id
+            || building->type != BuildingType::StoneWall) {
+            piece.clearWallBreachEntryState();
+        }
+
         if (!building || building->isNeutral || building->owner == activeKingdom.id) {
             continue;
         }
 
         const int localX = piece.position.x - building->origin.x;
         const int localY = piece.position.y - building->origin.y;
+        if (building->isCellDestroyed(localX, localY)) {
+            piece.clearWallBreachEntryState();
+            continue;
+        }
+
         const StructureOccupancyResult result = StructureIntegrityRules::applyEnemyOccupancy(
             *building, localX, localY, config);
         if (result == StructureOccupancyResult::None) {
+            if (building->type != BuildingType::StoneWall
+                || building->isCellDestroyed(localX, localY)
+                || !piece.hasWallBreachEntryStateFor(piece.position)) {
+                piece.clearWallBreachEntryState();
+            }
             continue;
         }
 
         ++structureDamageEvents;
         XPSystem::grantBlockDestroyXP(piece, xpSystemState, worldSeed, config);
+
+        if (building->type != BuildingType::StoneWall
+            || building->isCellDestroyed(localX, localY)
+            || result != StructureOccupancyResult::Breached
+            || !piece.hasWallBreachEntryStateFor(piece.position)) {
+            piece.clearWallBreachEntryState();
+        }
 
         switch (result) {
             case StructureOccupancyResult::Breached:
@@ -231,13 +283,16 @@ void processFriendlyRepairs(Kingdom& activeKingdom,
         const int footprintHeight = building.getFootprintHeight();
         for (int localY = 0; localY < footprintHeight; ++localY) {
             for (int localX = 0; localX < footprintWidth; ++localX) {
-                if (!building.isCellDestroyed(localX, localY)) {
+                if (!building.isCellDestroyed(localX, localY)
+                    && !(building.type == BuildingType::StoneWall && building.isCellBreached(localX, localY))) {
                     continue;
                 }
 
                 const sf::Vector2i cellPos{building.origin.x + localX, building.origin.y + localY};
                 const Piece* occupant = activeKingdom.getPieceAt(cellPos);
-                if (!occupant || !isBuildSupportPieceType(occupant->type)) {
+                const bool wallBreachRepair =
+                    building.type == BuildingType::StoneWall && building.isCellBreached(localX, localY);
+                if (!occupant || (!wallBreachRepair && !isBuildSupportPieceType(occupant->type))) {
                     continue;
                 }
 
@@ -246,9 +301,9 @@ void processFriendlyRepairs(Kingdom& activeKingdom,
                     continue;
                 }
 
-                if (StructureIntegrityRules::repairDestroyedCell(building, localX, localY, config)) {
+                if (StructureIntegrityRules::repairOwnedOccupancyCell(building, localX, localY, config)) {
                     activeKingdom.gold -= repairCost;
-                    log.log(turnNumber, activeKingdom.id, "Repaired a destroyed building cell!");
+                    log.log(turnNumber, activeKingdom.id, "Repaired an owned structure cell!");
                 }
             }
         }
@@ -1042,7 +1097,7 @@ void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemy
                 }
 
                 // Move
-                piece->position = cmd.destination;
+                finalizePieceLanding(*piece, board, cmd.origin, cmd.destination);
                 Cell& newCell = board.getCell(cmd.destination.x, cmd.destination.y);
                 newCell.piece = piece;
 

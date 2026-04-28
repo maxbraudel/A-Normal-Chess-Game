@@ -47,6 +47,21 @@ bool isEnemyCapturableBuildingCell(const GameSnapshot& snapshot,
     return building && !building->isNeutral && building->owner != mover;
 }
 
+bool isEnemyStoneWallCell(const SnapBuilding* building,
+                         sf::Vector2i pos,
+                         KingdomId mover) {
+    if (!building
+        || building->isNeutral
+        || building->owner == mover
+        || building->type != BuildingType::StoneWall) {
+        return false;
+    }
+
+    const int localX = pos.x - building->origin.x;
+    const int localY = pos.y - building->origin.y;
+    return !building->isCellDestroyed(localX, localY);
+}
+
 bool isAlliedBlockingWallCell(const SnapBuilding* building,
                               sf::Vector2i pos,
                               KingdomId mover) {
@@ -55,36 +70,302 @@ bool isAlliedBlockingWallCell(const SnapBuilding* building,
         && building->owner == mover;
 }
 
-std::optional<sf::Vector2i> resolveAlliedWallJumpDestination(const GameSnapshot& snapshot,
-                                                             sf::Vector2i firstWallCell,
-                                                             int dx,
-                                                             int dy,
-                                                             KingdomId mover) {
-    const SnapBuilding* building = snapshot.buildingAt(firstWallCell);
-    if (!isAlliedBlockingWallCell(building, firstWallCell, mover)) {
-        return std::nullopt;
+bool isRestrictedInsideEnemyStoneWall(const SnapPiece& piece,
+                                      const GameSnapshot& snapshot) {
+    if (!snapshot.isInBounds(piece.position.x, piece.position.y)) {
+        return false;
     }
 
-    sf::Vector2i landing = firstWallCell;
-    do {
-        landing.x += dx;
-        landing.y += dy;
-        if (!snapshot.isInBounds(landing.x, landing.y)) {
-            return std::nullopt;
-        }
-        building = snapshot.buildingAt(landing);
-    } while (isAlliedBlockingWallCell(building, landing, mover));
-
-    if (!snapshot.isTraversable(landing.x, landing.y)) {
-        return std::nullopt;
-    }
-
-    if (isBlockingWallCell(building, landing)) {
-        return std::nullopt;
-    }
-
-    return landing;
+    return isEnemyStoneWallCell(snapshot.buildingAt(piece.position), piece.position, piece.kingdom);
 }
+
+std::optional<sf::Vector2i> resolveWallBreachEntryDelta(const SnapPiece& piece,
+                                                        const GameSnapshot& snapshot) {
+    if (!isRestrictedInsideEnemyStoneWall(piece, snapshot)
+        || !piece.hasWallBreachEntryStateFor(piece.position)
+        || !piece.wallBreachEntryDelta.has_value()) {
+        return std::nullopt;
+    }
+
+    if (piece.wallBreachEntryDelta->x == 0 && piece.wallBreachEntryDelta->y == 0) {
+        return std::nullopt;
+    }
+
+    return piece.wallBreachEntryDelta;
+}
+
+enum class WallBreachSpanAxis {
+    Fallback,
+    Horizontal,
+    Vertical,
+    Intersection,
+};
+
+WallBreachSpanAxis detectWallBreachSpanAxis(const SnapPiece& piece,
+                                            const GameSnapshot& snapshot) {
+    const sf::Vector2i wallCell = piece.position;
+    int horizontalNeighborCount = 0;
+    int verticalNeighborCount = 0;
+
+    for (int dx : {-1, 1}) {
+        const sf::Vector2i neighbor{wallCell.x + dx, wallCell.y};
+        if (!snapshot.isInBounds(neighbor.x, neighbor.y)) {
+            continue;
+        }
+
+        if (isEnemyStoneWallCell(snapshot.buildingAt(neighbor), neighbor, piece.kingdom)) {
+            ++horizontalNeighborCount;
+        }
+    }
+
+    for (int dy : {-1, 1}) {
+        const sf::Vector2i neighbor{wallCell.x, wallCell.y + dy};
+        if (!snapshot.isInBounds(neighbor.x, neighbor.y)) {
+            continue;
+        }
+
+        if (isEnemyStoneWallCell(snapshot.buildingAt(neighbor), neighbor, piece.kingdom)) {
+            ++verticalNeighborCount;
+        }
+    }
+
+    if (horizontalNeighborCount > 0 && verticalNeighborCount > 0) {
+        if (horizontalNeighborCount == verticalNeighborCount) {
+            return WallBreachSpanAxis::Intersection;
+        }
+        return horizontalNeighborCount > verticalNeighborCount
+            ? WallBreachSpanAxis::Horizontal
+            : WallBreachSpanAxis::Vertical;
+    }
+    if (horizontalNeighborCount > 0) {
+        return WallBreachSpanAxis::Horizontal;
+    }
+    if (verticalNeighborCount > 0) {
+        return WallBreachSpanAxis::Vertical;
+    }
+    return WallBreachSpanAxis::Fallback;
+}
+
+bool respectsEntryComponent(int relative, int entryComponent) {
+    return entryComponent == 0 || (relative * entryComponent) <= 0;
+}
+
+bool isWallBreachSourceSideDestination(const SnapPiece& piece,
+                                      const GameSnapshot& snapshot,
+                                      sf::Vector2i entryDelta,
+                                      sf::Vector2i destination) {
+    const sf::Vector2i wallCell = piece.position;
+    const int relativeX = destination.x - wallCell.x;
+    const int relativeY = destination.y - wallCell.y;
+    switch (detectWallBreachSpanAxis(piece, snapshot)) {
+        case WallBreachSpanAxis::Horizontal:
+            if (entryDelta.y != 0) {
+                return respectsEntryComponent(relativeY, entryDelta.y);
+            }
+            break;
+        case WallBreachSpanAxis::Vertical:
+            if (entryDelta.x != 0) {
+                return respectsEntryComponent(relativeX, entryDelta.x);
+            }
+            break;
+        case WallBreachSpanAxis::Intersection:
+            return respectsEntryComponent(relativeX, entryDelta.x)
+                && respectsEntryComponent(relativeY, entryDelta.y);
+        case WallBreachSpanAxis::Fallback:
+            break;
+    }
+
+    return (relativeX * entryDelta.x + relativeY * entryDelta.y) <= 0;
+}
+
+void finalizePieceLanding(SnapPiece& piece,
+                          const GameSnapshot& snapshot,
+                          sf::Vector2i origin,
+                          sf::Vector2i destination) {
+    piece.clearWallBreachEntryState();
+    piece.position = destination;
+    if (isEnemyStoneWallCell(snapshot.buildingAt(destination), destination, piece.kingdom)) {
+        piece.setWallBreachEntryState(destination - origin, destination);
+    }
+}
+
+void removeAutonomousOccupantAt(GameSnapshot& snapshot, sf::Vector2i pos);
+
+bool applySimulatedMove(GameSnapshot& snapshot,
+                        int pieceId,
+                        sf::Vector2i destination,
+                        KingdomId mover) {
+    SnapKingdom& myKingdom = snapshot.kingdom(mover);
+    SnapPiece* piece = myKingdom.getPieceById(pieceId);
+    if (!piece) {
+        return false;
+    }
+
+    SnapKingdom& enemyKingdom = snapshot.enemyKingdom(mover);
+    SnapPiece* victim = enemyKingdom.getPieceAt(destination);
+    if (victim) {
+        if (victim->type == PieceType::King) {
+            return false;
+        }
+        enemyKingdom.removePiece(victim->id);
+    }
+
+    removeAutonomousOccupantAt(snapshot, destination);
+    const sf::Vector2i origin = piece->position;
+    finalizePieceLanding(*piece, snapshot, origin, destination);
+    return true;
+}
+
+} // namespace
+
+namespace {
+
+std::vector<sf::Vector2i> filterWallBreachSourceSideDestinations(const SnapPiece& piece,
+                                                                 const GameSnapshot& snapshot,
+                                                                 const std::vector<sf::Vector2i>& candidateMoves) {
+    const std::optional<sf::Vector2i> entryDelta = resolveWallBreachEntryDelta(piece, snapshot);
+    if (!entryDelta.has_value()) {
+        return {};
+    }
+
+    std::vector<sf::Vector2i> filteredMoves;
+    for (const sf::Vector2i& destination : candidateMoves) {
+        if (isWallBreachSourceSideDestination(piece, snapshot, *entryDelta, destination)) {
+            filteredMoves.push_back(destination);
+        }
+    }
+
+    return filteredMoves;
+}
+
+} // namespace
+
+std::vector<sf::Vector2i> ForwardModel::buildWallBreachHalfPlaneMoves(
+    const SnapPiece& piece,
+    const GameSnapshot& snapshot,
+    int globalMaxRange) {
+    std::vector<sf::Vector2i> candidateMoves;
+    switch (piece.type) {
+        case PieceType::Pawn:
+            candidateMoves = getPawnMoves(piece, snapshot);
+            break;
+        case PieceType::Knight:
+            candidateMoves = getKnightMoves(piece, snapshot);
+            break;
+        case PieceType::Bishop:
+            for (const auto& direction : std::vector<std::pair<int, int>>{{-1, -1}, {-1, 1}, {1, -1}, {1, 1}}) {
+                auto directionalMoves = getDirectionalMoves(
+                    piece,
+                    snapshot,
+                    direction.first,
+                    direction.second,
+                    globalMaxRange);
+                candidateMoves.insert(candidateMoves.end(), directionalMoves.begin(), directionalMoves.end());
+            }
+            break;
+        case PieceType::Rook:
+            for (const auto& direction : std::vector<std::pair<int, int>>{{0, -1}, {0, 1}, {-1, 0}, {1, 0}}) {
+                auto directionalMoves = getDirectionalMoves(
+                    piece,
+                    snapshot,
+                    direction.first,
+                    direction.second,
+                    globalMaxRange);
+                candidateMoves.insert(candidateMoves.end(), directionalMoves.begin(), directionalMoves.end());
+            }
+            break;
+        case PieceType::Queen:
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    if (dx == 0 && dy == 0) {
+                        continue;
+                    }
+
+                    auto directionalMoves = getDirectionalMoves(piece, snapshot, dx, dy, globalMaxRange);
+                    candidateMoves.insert(candidateMoves.end(), directionalMoves.begin(), directionalMoves.end());
+                }
+            }
+            break;
+        case PieceType::King:
+            candidateMoves = getKingMoves(piece, snapshot);
+            break;
+    }
+
+    return filterWallBreachSourceSideDestinations(
+        piece,
+        snapshot,
+        candidateMoves);
+}
+
+std::vector<sf::Vector2i> ForwardModel::buildWallBreachHalfPlaneThreatSquares(
+    const SnapPiece& piece,
+    const GameSnapshot& snapshot,
+    int globalMaxRange) {
+    std::vector<sf::Vector2i> candidateSquares;
+    switch (piece.type) {
+        case PieceType::Pawn:
+            candidateSquares = getPawnThreatenedSquares(piece, snapshot);
+            break;
+        case PieceType::Knight:
+            candidateSquares = getKnightMoves(piece, snapshot);
+            break;
+        case PieceType::Bishop:
+            for (const auto& direction : std::vector<std::pair<int, int>>{{-1, -1}, {-1, 1}, {1, -1}, {1, 1}}) {
+                auto directionalMoves = getDirectionalMoves(
+                    piece,
+                    snapshot,
+                    direction.first,
+                    direction.second,
+                    globalMaxRange);
+                candidateSquares.insert(candidateSquares.end(), directionalMoves.begin(), directionalMoves.end());
+            }
+            break;
+        case PieceType::Rook:
+            for (const auto& direction : std::vector<std::pair<int, int>>{{0, -1}, {0, 1}, {-1, 0}, {1, 0}}) {
+                auto directionalMoves = getDirectionalMoves(
+                    piece,
+                    snapshot,
+                    direction.first,
+                    direction.second,
+                    globalMaxRange);
+                candidateSquares.insert(candidateSquares.end(), directionalMoves.begin(), directionalMoves.end());
+            }
+            break;
+        case PieceType::Queen:
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    if (dx == 0 && dy == 0) {
+                        continue;
+                    }
+
+                    auto directionalMoves = getDirectionalMoves(piece, snapshot, dx, dy, globalMaxRange);
+                    candidateSquares.insert(candidateSquares.end(), directionalMoves.begin(), directionalMoves.end());
+                }
+            }
+            break;
+        case PieceType::King:
+            for (int dy = -1; dy <= 1; ++dy) {
+                for (int dx = -1; dx <= 1; ++dx) {
+                    if (dx == 0 && dy == 0) {
+                        continue;
+                    }
+
+                    sf::Vector2i destination{piece.position.x + dx, piece.position.y + dy};
+                    if (canLandOn(snapshot, destination, piece.kingdom)) {
+                        candidateSquares.push_back(destination);
+                    }
+                }
+            }
+            break;
+    }
+
+    return filterWallBreachSourceSideDestinations(
+        piece,
+        snapshot,
+        candidateSquares);
+}
+
+namespace {
 
 bool isSnapshotTerrainTraversableForSpawn(const GameSnapshot& snapshot,
                                           sf::Vector2i pos) {
@@ -102,6 +383,8 @@ bool isSnapshotTerrainTraversableForSpawn(const GameSnapshot& snapshot,
     return !StructureIntegrityRules::isWallCellBlocking(*building, localX, localY);
 }
 
+void removeAutonomousOccupantAt(GameSnapshot& snapshot, sf::Vector2i pos);
+
 void removeAutonomousOccupantAt(GameSnapshot& snapshot, sf::Vector2i pos) {
     const SnapAutonomousUnit* occupant = snapshot.autonomousUnitAt(pos);
     if (!occupant) {
@@ -117,16 +400,42 @@ void processEnemyStructureOccupancy(GameSnapshot& snapshot,
     SnapKingdom& active = snapshot.kingdom(activeKingdom);
     for (auto& piece : active.pieces) {
         SnapBuilding* building = snapshot.buildingAt(piece.position);
+        if (!building
+            || building->isNeutral
+            || building->owner == activeKingdom
+            || building->type != BuildingType::StoneWall) {
+            piece.clearWallBreachEntryState();
+        }
+
         if (!building || building->isNeutral || building->owner == activeKingdom) {
             continue;
         }
 
         const int localX = piece.position.x - building->origin.x;
         const int localY = piece.position.y - building->origin.y;
+        if (building->isCellDestroyed(localX, localY)) {
+            piece.clearWallBreachEntryState();
+            continue;
+        }
+
         const StructureOccupancyResult result = StructureIntegrityRules::applyEnemyOccupancy(
             *building, localX, localY, config);
-        if (result != StructureOccupancyResult::None) {
-            piece.xp += XPSystem::sampleBlockDestroyXP(snapshot.xpSystemState, snapshot.worldSeed, config);
+        if (result == StructureOccupancyResult::None) {
+            if (building->type != BuildingType::StoneWall
+                || building->isCellDestroyed(localX, localY)
+                || !piece.hasWallBreachEntryStateFor(piece.position)) {
+                piece.clearWallBreachEntryState();
+            }
+            continue;
+        }
+
+        piece.xp += XPSystem::sampleBlockDestroyXP(snapshot.xpSystemState, snapshot.worldSeed, config);
+
+        if (building->type != BuildingType::StoneWall
+            || building->isCellDestroyed(localX, localY)
+            || result != StructureOccupancyResult::Breached
+            || !piece.hasWallBreachEntryStateFor(piece.position)) {
+            piece.clearWallBreachEntryState();
         }
     }
 }
@@ -144,13 +453,16 @@ void processFriendlyRepairs(GameSnapshot& snapshot,
         const int footprintHeight = building.getFootprintHeight();
         for (int localY = 0; localY < footprintHeight; ++localY) {
             for (int localX = 0; localX < footprintWidth; ++localX) {
-                if (!building.isCellDestroyed(localX, localY)) {
+                if (!building.isCellDestroyed(localX, localY)
+                    && !(building.type == BuildingType::StoneWall && building.isCellBreached(localX, localY))) {
                     continue;
                 }
 
                 const sf::Vector2i cellPos{building.origin.x + localX, building.origin.y + localY};
                 const SnapPiece* occupant = active.getPieceAt(cellPos);
-                if (!occupant || !isBuildSupportPieceType(occupant->type)) {
+                const bool wallBreachRepair =
+                    building.type == BuildingType::StoneWall && building.isCellBreached(localX, localY);
+                if (!occupant || (!wallBreachRepair && !isBuildSupportPieceType(occupant->type))) {
                     continue;
                 }
 
@@ -159,7 +471,7 @@ void processFriendlyRepairs(GameSnapshot& snapshot,
                     continue;
                 }
 
-                if (StructureIntegrityRules::repairDestroyedCell(building, localX, localY, config)) {
+                if (StructureIntegrityRules::repairOwnedOccupancyCell(building, localX, localY, config)) {
                     active.gold -= repairCost;
                 }
             }
@@ -192,7 +504,15 @@ void completeUnderConstructionBuildings(SnapKingdom& kingdom) {
 // ========================================================================
 
 static SnapPiece toSnap(const Piece& p) {
-    return {p.id, p.type, p.kingdom, p.position, p.xp};
+    SnapPiece snap;
+    snap.id = p.id;
+    snap.type = p.type;
+    snap.kingdom = p.kingdom;
+    snap.position = p.position;
+    snap.xp = p.xp;
+    snap.wallBreachEntryDelta = p.wallBreachEntryDelta;
+    snap.wallBreachCell = p.wallBreachCell;
+    return snap;
 }
 
 static SnapAutonomousUnit toSnap(const AutonomousUnit& unit) {
@@ -295,7 +615,9 @@ bool ForwardModel::canLandOn(const GameSnapshot& s, sf::Vector2i pos, KingdomId 
     if (!s.isTraversable(pos.x, pos.y)) return false;
     const SnapBuilding* building = s.buildingAt(pos);
     if (isBlockingWallCell(building, pos)) {
-        return !building->isNeutral && building->owner != mover;
+        if (building->isNeutral || building->owner != mover) {
+            return !building->isNeutral && building->owner != mover;
+        }
     }
     const SnapPiece* occ = s.pieceAt(pos);
     if (occ && occ->kingdom == mover) return false; // can't land on own piece
@@ -317,24 +639,9 @@ std::vector<sf::Vector2i> ForwardModel::getPawnMoves(const SnapPiece& piece,
 
         const SnapBuilding* destinationBuilding = s.buildingAt(dest);
         if (isAlliedBlockingWallCell(destinationBuilding, dest, piece.kingdom)) {
-            const std::optional<sf::Vector2i> jumpDestination = resolveAlliedWallJumpDestination(
-                s,
-                dest,
-                direction[0],
-                direction[1],
-                piece.kingdom);
-            if (!jumpDestination.has_value()) {
-                continue;
+            if (!s.pieceAt(dest) && !s.autonomousUnitAt(dest)) {
+                moves.push_back(dest);
             }
-
-            if (s.pieceAt(*jumpDestination) || s.autonomousUnitAt(*jumpDestination)) {
-                continue;
-            }
-            if (isEnemyCapturableBuildingCell(s, *jumpDestination, piece.kingdom)) {
-                continue;
-            }
-
-            moves.push_back(*jumpDestination);
             continue;
         }
 
@@ -411,17 +718,8 @@ std::vector<sf::Vector2i> ForwardModel::getDirectionalMoves(const SnapPiece& pie
 
         const SnapBuilding* building = s.buildingAt(dest);
         if (isAlliedBlockingWallCell(building, dest, piece.kingdom)) {
-            const std::optional<sf::Vector2i> jumpDestination = resolveAlliedWallJumpDestination(
-                s,
-                dest,
-                dx,
-                dy,
-                piece.kingdom);
-            if (jumpDestination.has_value()) {
-                const SnapPiece* landingOccupant = s.pieceAt(*jumpDestination);
-                if (!(landingOccupant && landingOccupant->kingdom == piece.kingdom)) {
-                    moves.push_back(*jumpDestination);
-                }
+            if (canLandOn(s, dest, piece.kingdom)) {
+                moves.push_back(dest);
             }
             break;
         }
@@ -456,35 +754,30 @@ std::vector<sf::Vector2i> ForwardModel::getKingMoves(const SnapPiece& piece,
             if (dx == 0 && dy == 0) continue;
             sf::Vector2i dest{piece.position.x + dx, piece.position.y + dy};
             const SnapBuilding* building = s.buildingAt(dest);
-            sf::Vector2i landing = dest;
             if (isAlliedBlockingWallCell(building, dest, piece.kingdom)) {
-                const std::optional<sf::Vector2i> jumpDestination = resolveAlliedWallJumpDestination(
-                    s,
-                    dest,
-                    dx,
-                    dy,
-                    piece.kingdom);
-                if (!jumpDestination.has_value()) {
-                    continue;
+                if (canLandOn(s, dest, piece.kingdom)) {
+                    const SnapPiece* enemyKing = s.enemyKingdom(piece.kingdom).getKing();
+                    if (!enemyKing
+                        || std::abs(dest.x - enemyKing->position.x) > 1
+                        || std::abs(dest.y - enemyKing->position.y) > 1) {
+                        moves.push_back(dest);
+                    }
                 }
-                landing = *jumpDestination;
-            } else if (!canLandOn(s, dest, piece.kingdom)) {
                 continue;
             }
 
-            const SnapPiece* landingOccupant = s.pieceAt(landing);
-            if (landingOccupant && landingOccupant->kingdom == piece.kingdom) {
+            if (!canLandOn(s, dest, piece.kingdom)) {
                 continue;
             }
 
             const SnapPiece* enemyKing = s.enemyKingdom(piece.kingdom).getKing();
             if (enemyKing) {
-                int ekdx = std::abs(landing.x - enemyKing->position.x);
-                int ekdy = std::abs(landing.y - enemyKing->position.y);
+                int ekdx = std::abs(dest.x - enemyKing->position.x);
+                int ekdy = std::abs(dest.y - enemyKing->position.y);
                 if (ekdx <= 1 && ekdy <= 1) continue;
             }
 
-            moves.push_back(landing);
+            moves.push_back(dest);
         }
     }
     return moves;
@@ -495,37 +788,41 @@ std::vector<sf::Vector2i> ForwardModel::getPseudoLegalMoves(const GameSnapshot& 
                                                             int globalMaxRange) {
     std::vector<sf::Vector2i> moves;
 
-    switch (piece.type) {
-        case PieceType::Pawn:
-            moves = getPawnMoves(piece, s);
-            break;
-        case PieceType::Knight:
-            moves = getKnightMoves(piece, s);
-            break;
-        case PieceType::Bishop:
-            for (auto& d : std::vector<std::pair<int,int>>{{-1,-1},{-1,1},{1,-1},{1,1}}) {
-                auto dm = getDirectionalMoves(piece, s, d.first, d.second, globalMaxRange);
-                moves.insert(moves.end(), dm.begin(), dm.end());
-            }
-            break;
-        case PieceType::Rook:
-            for (auto& d : std::vector<std::pair<int,int>>{{0,-1},{0,1},{-1,0},{1,0}}) {
-                auto dm = getDirectionalMoves(piece, s, d.first, d.second, globalMaxRange);
-                moves.insert(moves.end(), dm.begin(), dm.end());
-            }
-            break;
-        case PieceType::Queen:
-            for (int dy = -1; dy <= 1; ++dy) {
-                for (int dx = -1; dx <= 1; ++dx) {
-                    if (dx == 0 && dy == 0) continue;
-                    auto dm = getDirectionalMoves(piece, s, dx, dy, globalMaxRange);
+    if (isRestrictedInsideEnemyStoneWall(piece, s)) {
+        moves = buildWallBreachHalfPlaneMoves(piece, s, globalMaxRange);
+    } else {
+        switch (piece.type) {
+            case PieceType::Pawn:
+                moves = getPawnMoves(piece, s);
+                break;
+            case PieceType::Knight:
+                moves = getKnightMoves(piece, s);
+                break;
+            case PieceType::Bishop:
+                for (auto& d : std::vector<std::pair<int,int>>{{-1,-1},{-1,1},{1,-1},{1,1}}) {
+                    auto dm = getDirectionalMoves(piece, s, d.first, d.second, globalMaxRange);
                     moves.insert(moves.end(), dm.begin(), dm.end());
                 }
-            }
-            break;
-        case PieceType::King:
-            moves = getKingMoves(piece, s);
-            break;
+                break;
+            case PieceType::Rook:
+                for (auto& d : std::vector<std::pair<int,int>>{{0,-1},{0,1},{-1,0},{1,0}}) {
+                    auto dm = getDirectionalMoves(piece, s, d.first, d.second, globalMaxRange);
+                    moves.insert(moves.end(), dm.begin(), dm.end());
+                }
+                break;
+            case PieceType::Queen:
+                for (int dy = -1; dy <= 1; ++dy) {
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        if (dx == 0 && dy == 0) continue;
+                        auto dm = getDirectionalMoves(piece, s, dx, dy, globalMaxRange);
+                        moves.insert(moves.end(), dm.begin(), dm.end());
+                    }
+                }
+                break;
+            case PieceType::King:
+                moves = getKingMoves(piece, s);
+                break;
+        }
     }
 
     const SnapPiece* enemyKing = s.enemyKingdom(piece.kingdom).getKing();
@@ -545,23 +842,10 @@ std::vector<sf::Vector2i> ForwardModel::getLegalMoves(const GameSnapshot& s,
     const std::vector<sf::Vector2i> pseudoLegalMoves = getPseudoLegalMoves(s, piece, globalMaxRange);
     for (const sf::Vector2i& destination : pseudoLegalMoves) {
         GameSnapshot sim = s.clone();
-        SnapPiece* simPiece = sim.kingdom(piece.kingdom).getPieceById(piece.id);
-        if (!simPiece) {
+        if (!applySimulatedMove(sim, piece.id, destination, piece.kingdom)) {
             continue;
         }
 
-        SnapKingdom& simEnemy = sim.enemyKingdom(piece.kingdom);
-        SnapPiece* victim = simEnemy.getPieceAt(destination);
-        if (victim) {
-            if (victim->type == PieceType::King) {
-                continue;
-            }
-            simEnemy.removePiece(victim->id);
-        }
-
-        removeAutonomousOccupantAt(sim, destination);
-
-        simPiece->position = destination;
         if (!isInCheck(sim, piece.kingdom, globalMaxRange)) {
             legalMoves.push_back(destination);
         }
@@ -604,7 +888,8 @@ bool ForwardModel::applyMove(GameSnapshot& s, int pieceId, sf::Vector2i dest,
 
     removeAutonomousOccupantAt(s, dest);
 
-    piece->position = dest;
+    const sf::Vector2i origin = piece->position;
+    finalizePieceLanding(*piece, s, origin, dest);
     budget.movementPointsRemaining -= moveCost;
     budget.setMoveCountForPiece(pieceId, budget.moveCountForPiece(pieceId) + 1);
     return true;
@@ -799,8 +1084,11 @@ ThreatMap ForwardModel::buildThreatMap(const GameSnapshot& s, KingdomId attacker
     ThreatMap tm;
     const SnapKingdom& atk = s.kingdom(attacker);
     auto getAttackSquares = [&](const SnapPiece& piece) {
-        std::vector<sf::Vector2i> attackSquares;
+        if (isRestrictedInsideEnemyStoneWall(piece, s)) {
+            return buildWallBreachHalfPlaneThreatSquares(piece, s, globalMaxRange);
+        }
 
+        std::vector<sf::Vector2i> attackSquares;
         switch (piece.type) {
             case PieceType::Pawn:
                 attackSquares = getPawnThreatenedSquares(piece, s);
@@ -877,17 +1165,7 @@ bool ForwardModel::isCheckmate(const GameSnapshot& s, KingdomId k, int globalMax
         auto moves = getLegalMoves(s, piece, globalMaxRange);
         for (auto& dest : moves) {
             GameSnapshot sim = s.clone();
-            SnapPiece* simPiece = sim.kingdom(k).getPieceById(piece.id);
-            if (!simPiece) continue;
-
-            SnapKingdom& simEnemy = sim.enemyKingdom(k);
-            SnapPiece* victim = simEnemy.getPieceAt(dest);
-            if (victim) {
-                if (victim->type == PieceType::King) continue;
-                simEnemy.removePiece(victim->id);
-            }
-            removeAutonomousOccupantAt(sim, dest);
-            simPiece->position = dest;
+            if (!applySimulatedMove(sim, piece.id, dest, k)) continue;
 
             if (!isInCheck(sim, k, globalMaxRange))
                 return false;

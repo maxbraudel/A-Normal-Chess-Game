@@ -533,6 +533,16 @@ std::string SaveManager::serializePiece(const Piece& p) {
        << ", \"y\": " << p.position.y
        << ", \"xp\": " << p.xp
        << ", \"formationId\": " << p.formationId
+    << ", \"wallBreachEntryDx\": "
+    << (p.wallBreachEntryDelta.has_value() ? p.wallBreachEntryDelta->x : 0)
+    << ", \"wallBreachEntryDy\": "
+    << (p.wallBreachEntryDelta.has_value() ? p.wallBreachEntryDelta->y : 0)
+    << ", \"hasWallBreachEntry\": "
+    << (p.wallBreachEntryDelta.has_value() ? "true" : "false")
+       << ", \"wallBreachCellX\": "
+       << (p.wallBreachCell.has_value() ? p.wallBreachCell->x : -1)
+       << ", \"wallBreachCellY\": "
+       << (p.wallBreachCell.has_value() ? p.wallBreachCell->y : -1)
        << " }";
     return ss.str();
 }
@@ -673,6 +683,26 @@ Piece SaveManager::parsePiece(const std::string& json) {
     p.position.y = extractInt(json, "y", 0);
     p.xp = extractInt(json, "xp", 0);
     p.formationId = extractInt(json, "formationId", -1);
+    const bool hasWallBreachEntry = extractBool(json, "hasWallBreachEntry", false);
+    const int wallBreachEntryDx = extractInt(json, "wallBreachEntryDx", 0);
+    const int wallBreachEntryDy = extractInt(json, "wallBreachEntryDy", 0);
+    const int wallBreachCellX = extractInt(json, "wallBreachCellX", -1);
+    const int wallBreachCellY = extractInt(json, "wallBreachCellY", -1);
+    if (hasWallBreachEntry && wallBreachCellX >= 0 && wallBreachCellY >= 0) {
+        p.setWallBreachEntryState(
+            {wallBreachEntryDx, wallBreachEntryDy},
+            {wallBreachCellX, wallBreachCellY});
+        return p;
+    }
+
+    const int legacyWallBreachAnchorX = extractInt(json, "wallBreachAnchorX", -1);
+    const int legacyWallBreachAnchorY = extractInt(json, "wallBreachAnchorY", -1);
+    if (legacyWallBreachAnchorX >= 0 && legacyWallBreachAnchorY >= 0
+        && wallBreachCellX >= 0 && wallBreachCellY >= 0) {
+        p.setWallBreachEntryState(
+            {wallBreachCellX - legacyWallBreachAnchorX, wallBreachCellY - legacyWallBreachAnchorY},
+            {wallBreachCellX, wallBreachCellY});
+    }
     return p;
 }
 

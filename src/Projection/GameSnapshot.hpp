@@ -22,6 +22,24 @@ struct SnapPiece {
     KingdomId kingdom = KingdomId::White;
     sf::Vector2i position{0, 0};
     int xp = 0;
+    std::optional<sf::Vector2i> wallBreachEntryDelta;
+    std::optional<sf::Vector2i> wallBreachCell;
+
+    bool hasWallBreachEntryStateFor(sf::Vector2i occupiedCell) const {
+        return wallBreachEntryDelta.has_value()
+            && wallBreachCell.has_value()
+            && *wallBreachCell == occupiedCell;
+    }
+
+    void setWallBreachEntryState(sf::Vector2i entryDelta, sf::Vector2i wallCellPos) {
+        wallBreachEntryDelta = entryDelta;
+        wallBreachCell = wallCellPos;
+    }
+
+    void clearWallBreachEntryState() {
+        wallBreachEntryDelta.reset();
+        wallBreachCell.reset();
+    }
 };
 
 struct SnapAutonomousUnit {

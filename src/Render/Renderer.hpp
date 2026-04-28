@@ -21,7 +21,7 @@ class TurnSystem;
 class Renderer {
 public:
     Renderer();
-    void init(const AssetManager& assets, int cellSize);
+    void init(const AssetManager& assets, int cellSize, int damagedStructureOpacityPercent);
 
     void draw(sf::RenderWindow& window, const Camera& camera,
               const Board& board, const std::array<Kingdom, kNumKingdoms>& kingdoms,
@@ -109,6 +109,7 @@ private:
 
     const AssetManager* m_assets;
     int m_cellSize;
+    int m_damagedStructureOpacityPercent;
     std::set<int> m_skipPieceIds;
     OverlayRenderer m_overlay;
 };

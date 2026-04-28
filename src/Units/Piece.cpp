@@ -2,10 +2,12 @@
 #include "Config/GameConfig.hpp"
 
 Piece::Piece() : id(-1), type(PieceType::Pawn), kingdom(KingdomId::White),
-                 position(0, 0), xp(0), formationId(-1) {}
+                                 position(0, 0), xp(0), formationId(-1),
+                                 wallBreachEntryDelta(std::nullopt), wallBreachCell(std::nullopt) {}
 
 Piece::Piece(int id, PieceType type, KingdomId kingdom, sf::Vector2i pos)
-    : id(id), type(type), kingdom(kingdom), position(pos), xp(0), formationId(-1) {}
+        : id(id), type(type), kingdom(kingdom), position(pos), xp(0), formationId(-1),
+            wallBreachEntryDelta(std::nullopt), wallBreachCell(std::nullopt) {}
 
 bool Piece::canUpgradeTo(PieceType target, const GameConfig& config) const {
     if (type == PieceType::Pawn) {
@@ -31,4 +33,20 @@ int Piece::getLevel() const {
         case PieceType::King: return 4;
     }
     return 0;
+}
+
+bool Piece::hasWallBreachEntryStateFor(sf::Vector2i occupiedCell) const {
+    return wallBreachEntryDelta.has_value()
+        && wallBreachCell.has_value()
+        && *wallBreachCell == occupiedCell;
+}
+
+void Piece::setWallBreachEntryState(sf::Vector2i entryDelta, sf::Vector2i wallCellPos) {
+    wallBreachEntryDelta = entryDelta;
+    wallBreachCell = wallCellPos;
+}
+
+void Piece::clearWallBreachEntryState() {
+    wallBreachEntryDelta.reset();
+    wallBreachCell.reset();
 }

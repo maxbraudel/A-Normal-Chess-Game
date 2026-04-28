@@ -25,45 +25,149 @@ bool isEnemyCapturableBuildingCell(const Cell& cell, KingdomId mover) {
     return cell.building && !cell.building->isNeutral && cell.building->owner != mover;
 }
 
+bool isEnemyStoneWallCell(const Cell& cell, int worldX, int worldY, KingdomId mover) {
+    if (!cell.building
+        || cell.building->isNeutral
+        || cell.building->owner == mover
+        || cell.building->type != BuildingType::StoneWall) {
+        return false;
+    }
+
+    const int localX = worldX - cell.building->origin.x;
+    const int localY = worldY - cell.building->origin.y;
+    return !cell.building->isCellDestroyed(localX, localY);
+}
+
 bool isAlliedBlockingWallCell(const Cell& cell, int worldX, int worldY, KingdomId mover) {
     return isBlockingWallCell(cell, worldX, worldY)
         && !cell.building->isNeutral
         && cell.building->owner == mover;
 }
 
-std::optional<sf::Vector2i> resolveAlliedWallJumpDestination(const Board& board,
-                                                             sf::Vector2i firstWallCell,
-                                                             int dx,
-                                                             int dy,
-                                                             KingdomId mover) {
-    if (!board.isInBounds(firstWallCell.x, firstWallCell.y)) {
+bool isRestrictedInsideEnemyStoneWall(const Piece& piece, const Board& board) {
+    if (!board.isInBounds(piece.position.x, piece.position.y)) {
+        return false;
+    }
+
+    const Cell& occupiedCell = board.getCell(piece.position.x, piece.position.y);
+    return isEnemyStoneWallCell(occupiedCell, piece.position.x, piece.position.y, piece.kingdom);
+}
+
+std::optional<sf::Vector2i> resolveWallBreachEntryDelta(const Piece& piece, const Board& board) {
+    if (!isRestrictedInsideEnemyStoneWall(piece, board)
+        || !piece.hasWallBreachEntryStateFor(piece.position)
+        || !piece.wallBreachEntryDelta.has_value()) {
         return std::nullopt;
     }
 
-    const Cell* currentCell = &board.getCell(firstWallCell.x, firstWallCell.y);
-    if (!isAlliedBlockingWallCell(*currentCell, firstWallCell.x, firstWallCell.y, mover)) {
+    if (piece.wallBreachEntryDelta->x == 0 && piece.wallBreachEntryDelta->y == 0) {
         return std::nullopt;
     }
 
-    sf::Vector2i landing = firstWallCell;
-    do {
-        landing.x += dx;
-        landing.y += dy;
-        if (!board.isInBounds(landing.x, landing.y)) {
-            return std::nullopt;
+    return piece.wallBreachEntryDelta;
+}
+
+enum class WallBreachSpanAxis {
+    Fallback,
+    Horizontal,
+    Vertical,
+    Intersection,
+};
+
+WallBreachSpanAxis detectWallBreachSpanAxis(const Piece& piece, const Board& board) {
+    const sf::Vector2i wallCell = piece.position;
+    int horizontalNeighborCount = 0;
+    int verticalNeighborCount = 0;
+
+    for (int dx : {-1, 1}) {
+        const sf::Vector2i neighbor{wallCell.x + dx, wallCell.y};
+        if (!board.isInBounds(neighbor.x, neighbor.y)) {
+            continue;
         }
-        currentCell = &board.getCell(landing.x, landing.y);
-    } while (isAlliedBlockingWallCell(*currentCell, landing.x, landing.y, mover));
 
-    if (!currentCell->isInCircle || currentCell->type == CellType::Water) {
-        return std::nullopt;
+        const Cell& neighborCell = board.getCell(neighbor.x, neighbor.y);
+        if (isEnemyStoneWallCell(neighborCell, neighbor.x, neighbor.y, piece.kingdom)) {
+            ++horizontalNeighborCount;
+        }
     }
 
-    if (isBlockingWallCell(*currentCell, landing.x, landing.y)) {
-        return std::nullopt;
+    for (int dy : {-1, 1}) {
+        const sf::Vector2i neighbor{wallCell.x, wallCell.y + dy};
+        if (!board.isInBounds(neighbor.x, neighbor.y)) {
+            continue;
+        }
+
+        const Cell& neighborCell = board.getCell(neighbor.x, neighbor.y);
+        if (isEnemyStoneWallCell(neighborCell, neighbor.x, neighbor.y, piece.kingdom)) {
+            ++verticalNeighborCount;
+        }
     }
 
-    return landing;
+    if (horizontalNeighborCount > 0 && verticalNeighborCount > 0) {
+        if (horizontalNeighborCount == verticalNeighborCount) {
+            return WallBreachSpanAxis::Intersection;
+        }
+        return horizontalNeighborCount > verticalNeighborCount
+            ? WallBreachSpanAxis::Horizontal
+            : WallBreachSpanAxis::Vertical;
+    }
+    if (horizontalNeighborCount > 0) {
+        return WallBreachSpanAxis::Horizontal;
+    }
+    if (verticalNeighborCount > 0) {
+        return WallBreachSpanAxis::Vertical;
+    }
+    return WallBreachSpanAxis::Fallback;
+}
+
+bool respectsEntryComponent(int relative, int entryComponent) {
+    return entryComponent == 0 || (relative * entryComponent) <= 0;
+}
+
+bool isWallBreachSourceSideDestination(const Piece& piece,
+                                       const Board& board,
+                                       sf::Vector2i entryDelta,
+                                       sf::Vector2i destination) {
+    const sf::Vector2i wallCell = piece.position;
+    const int relativeX = destination.x - wallCell.x;
+    const int relativeY = destination.y - wallCell.y;
+    switch (detectWallBreachSpanAxis(piece, board)) {
+        case WallBreachSpanAxis::Horizontal:
+            if (entryDelta.y != 0) {
+                return respectsEntryComponent(relativeY, entryDelta.y);
+            }
+            break;
+        case WallBreachSpanAxis::Vertical:
+            if (entryDelta.x != 0) {
+                return respectsEntryComponent(relativeX, entryDelta.x);
+            }
+            break;
+        case WallBreachSpanAxis::Intersection:
+            return respectsEntryComponent(relativeX, entryDelta.x)
+                && respectsEntryComponent(relativeY, entryDelta.y);
+        case WallBreachSpanAxis::Fallback:
+            break;
+    }
+
+    return (relativeX * entryDelta.x + relativeY * entryDelta.y) <= 0;
+}
+
+std::vector<sf::Vector2i> filterWallBreachSourceSideDestinations(const Piece& piece,
+                                                                 const Board& board,
+                                                                 const std::vector<sf::Vector2i>& candidateMoves) {
+    const std::optional<sf::Vector2i> entryDelta = resolveWallBreachEntryDelta(piece, board);
+    if (!entryDelta.has_value()) {
+        return {};
+    }
+
+    std::vector<sf::Vector2i> filteredMoves;
+    for (const sf::Vector2i& destination : candidateMoves) {
+        if (isWallBreachSourceSideDestination(piece, board, *entryDelta, destination)) {
+            filteredMoves.push_back(destination);
+        }
+    }
+
+    return filteredMoves;
 }
 
 bool isPawnBoardDestinationTraversable(const Board& board, int x, int y) {
@@ -79,6 +183,32 @@ bool isPawnBoardDestinationTraversable(const Board& board, int x, int y) {
 
 std::vector<sf::Vector2i> MovementRules::getValidMoves(
     const Piece& piece, const Board& board, const GameConfig& config) {
+    if (isRestrictedInsideEnemyStoneWall(piece, board)) {
+        std::vector<sf::Vector2i> candidateMoves;
+        switch (piece.type) {
+            case PieceType::Pawn:
+                candidateMoves = getPawnMoves(piece, board);
+                break;
+            case PieceType::Knight:
+                candidateMoves = getKnightMoves(piece, board, config);
+                break;
+            case PieceType::Bishop:
+                candidateMoves = getBishopMoves(piece, board, config);
+                break;
+            case PieceType::Rook:
+                candidateMoves = getRookMoves(piece, board, config);
+                break;
+            case PieceType::Queen:
+                candidateMoves = getQueenMoves(piece, board, config);
+                break;
+            case PieceType::King:
+                candidateMoves = getKingMoves(piece, board);
+                break;
+        }
+
+        return filterWallBreachSourceSideDestinations(piece, board, candidateMoves);
+    }
+
     switch (piece.type) {
         case PieceType::Pawn:   return getPawnMoves(piece, board);
         case PieceType::Knight: return getKnightMoves(piece, board, config);
@@ -92,6 +222,17 @@ std::vector<sf::Vector2i> MovementRules::getValidMoves(
 
 std::vector<sf::Vector2i> MovementRules::getThreatenedSquares(
     const Piece& piece, const Board& board, const GameConfig& config) {
+    if (isRestrictedInsideEnemyStoneWall(piece, board)) {
+        if (piece.type == PieceType::Pawn) {
+            return filterWallBreachSourceSideDestinations(
+                piece,
+                board,
+                getPawnThreatenedSquares(piece, board));
+        }
+
+        return getValidMoves(piece, board, config);
+    }
+
     if (piece.type == PieceType::Pawn) {
         return getPawnThreatenedSquares(piece, board);
     }
@@ -113,25 +254,9 @@ std::vector<sf::Vector2i> MovementRules::getPawnMoves(const Piece& piece, const 
 
         const Cell& cell = board.getCell(nx, ny);
         if (isAlliedBlockingWallCell(cell, nx, ny, piece.kingdom)) {
-            const std::optional<sf::Vector2i> jumpDestination = resolveAlliedWallJumpDestination(
-                board,
-                {nx, ny},
-                direction[0],
-                direction[1],
-                piece.kingdom);
-            if (!jumpDestination.has_value()) {
-                continue;
+            if (!cell.piece && !cell.autonomousUnit) {
+                moves.push_back({nx, ny});
             }
-
-            const Cell& landingCell = board.getCell(jumpDestination->x, jumpDestination->y);
-            if (landingCell.piece || landingCell.autonomousUnit) {
-                continue;
-            }
-            if (isEnemyCapturableBuildingCell(landingCell, piece.kingdom)) {
-                continue;
-            }
-
-            moves.push_back(*jumpDestination);
             continue;
         }
         if (cell.piece || cell.autonomousUnit) {
@@ -200,7 +325,8 @@ std::vector<sf::Vector2i> MovementRules::getKnightMoves(const Piece& piece, cons
         if (!cell.isInCircle || cell.type == CellType::Water) continue;
 
         if (isBlockingWallCell(cell, nx, ny)) {
-            if (cell.building->owner != piece.kingdom && !cell.building->isNeutral)
+            if (!(cell.piece && cell.piece->kingdom == piece.kingdom)
+                && !cell.building->isNeutral)
                 moves.push_back({nx, ny});
             continue;
         }
@@ -262,22 +388,9 @@ std::vector<sf::Vector2i> MovementRules::getKingMoves(const Piece& piece, const 
             if (!cell.isInCircle || cell.type == CellType::Water) continue;
 
             if (isAlliedBlockingWallCell(cell, nx, ny, piece.kingdom)) {
-                const std::optional<sf::Vector2i> jumpDestination = resolveAlliedWallJumpDestination(
-                    board,
-                    {nx, ny},
-                    dx,
-                    dy,
-                    piece.kingdom);
-                if (!jumpDestination.has_value()) {
-                    continue;
+                if (!(cell.piece && cell.piece->kingdom == piece.kingdom)) {
+                    moves.push_back({nx, ny});
                 }
-
-                const Cell& landingCell = board.getCell(jumpDestination->x, jumpDestination->y);
-                if (landingCell.piece && landingCell.piece->kingdom == piece.kingdom) {
-                    continue;
-                }
-
-                moves.push_back(*jumpDestination);
                 continue;
             }
             if (isBlockingWallCell(cell, nx, ny)) {
@@ -307,17 +420,8 @@ std::vector<sf::Vector2i> MovementRules::traceDirection(
         if (!cell.isInCircle || cell.type == CellType::Water) break;
 
         if (isAlliedBlockingWallCell(cell, nx, ny, piece.kingdom)) {
-            const std::optional<sf::Vector2i> jumpDestination = resolveAlliedWallJumpDestination(
-                board,
-                {nx, ny},
-                dx,
-                dy,
-                piece.kingdom);
-            if (jumpDestination.has_value()) {
-                const Cell& landingCell = board.getCell(jumpDestination->x, jumpDestination->y);
-                if (!(landingCell.piece && landingCell.piece->kingdom == piece.kingdom)) {
-                    moves.push_back(*jumpDestination);
-                }
+            if (!(cell.piece && cell.piece->kingdom == piece.kingdom)) {
+                moves.push_back({nx, ny});
             }
             break;
         }

@@ -360,6 +360,7 @@ void GameConfig::setDefaults() {
     m_weatherAlphaBasePercent = 48;
     m_weatherAlphaMinPercent = 22;
     m_weatherAlphaMaxPercent = 82;
+    m_damagedStructureOpacityPercent = 70;
     m_weatherDensityMuTimes100 = -12;
     m_weatherDensitySigmaTimes100 = 35;
 
@@ -1090,6 +1091,14 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
         }
     }
 
+    const std::string renderingSec = extractSection(root, "rendering");
+    if (!renderingSec.empty()) {
+        m_damagedStructureOpacityPercent = extractInt(
+            renderingSec,
+            "damaged_structure_opacity_percent",
+            m_damagedStructureOpacityPercent);
+    }
+
     m_weatherCooldownMinTurns = clampNonNegativeConfigValue(
         "weather.cooldown_min_turns", m_weatherCooldownMinTurns);
     m_weatherArrivalGammaShapeTimes100 = clampNonNegativeConfigValue(
@@ -1145,6 +1154,11 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
     if (m_weatherAlphaMaxPercent < m_weatherAlphaMinPercent) {
         std::swap(m_weatherAlphaMinPercent, m_weatherAlphaMaxPercent);
     }
+    m_damagedStructureOpacityPercent = clampRangedConfigValue(
+        "rendering.damaged_structure_opacity_percent",
+        m_damagedStructureOpacityPercent,
+        0,
+        100);
     m_weatherDensitySigmaTimes100 = clampRangedConfigValue(
         "weather.density_sigma_times_100", m_weatherDensitySigmaTimes100, 1, 200);
 
@@ -1476,6 +1490,7 @@ int GameConfig::getWeatherEdgeSoftnessPercent() const { return m_weatherEdgeSoft
 int GameConfig::getWeatherAlphaBasePercent() const { return m_weatherAlphaBasePercent; }
 int GameConfig::getWeatherAlphaMinPercent() const { return m_weatherAlphaMinPercent; }
 int GameConfig::getWeatherAlphaMaxPercent() const { return m_weatherAlphaMaxPercent; }
+int GameConfig::getDamagedStructureOpacityPercent() const { return m_damagedStructureOpacityPercent; }
 int GameConfig::getWeatherDensityMuTimes100() const { return m_weatherDensityMuTimes100; }
 int GameConfig::getWeatherDensitySigmaTimes100() const { return m_weatherDensitySigmaTimes100; }
 

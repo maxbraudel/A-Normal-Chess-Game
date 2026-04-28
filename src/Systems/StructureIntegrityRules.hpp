@@ -83,4 +83,21 @@ public:
         building.repairCellAt(localX, localY, defaultCellHP(building.type, config));
         return true;
     }
+
+    template <typename BuildingLike>
+    static bool repairOwnedOccupancyCell(BuildingLike& building,
+                                         int localX,
+                                         int localY,
+                                         const GameConfig& config) {
+        if (!isRepairableOwnedStructureType(building.type)) {
+            return false;
+        }
+
+        if (building.type == BuildingType::StoneWall && building.isCellBreached(localX, localY)) {
+            building.repairCellAt(localX, localY, defaultCellHP(building.type, config));
+            return true;
+        }
+
+        return repairDestroyedCell(building, localX, localY, config);
+    }
 };

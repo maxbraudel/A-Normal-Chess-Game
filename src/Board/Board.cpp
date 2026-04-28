@@ -70,7 +70,9 @@ bool Board::isTraversable(int x, int y, KingdomId mover) const {
         const int localX = x - cell.building->origin.x;
         const int localY = y - cell.building->origin.y;
         if (StructureIntegrityRules::isWallCellBlocking(*cell.building, localX, localY)) {
-            return false;
+            if (cell.building->isNeutral || cell.building->owner != mover) {
+                return false;
+            }
         }
     }
     // Friendly pieces block

@@ -2244,7 +2244,7 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
             "ForwardModel pawn threat maps should exclude orthogonal squares.");
     }
 
-    void testPawnJumpsAcrossContinuousAlliedWallSegment() {
+    void testPawnStopsOnAlliedWallCellWithoutPassingThrough() {
         GameConfig config;
         Board board;
         board.init(8);
@@ -2258,15 +2258,15 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
         linkBuildingOnBoard(white.buildings.back(), board);
 
         const std::vector<sf::Vector2i> validMoves = MovementRules::getValidMoves(pawn, board, config);
-        expect(containsCell(validMoves, {9, 8}),
-            "Pawns should jump a continuous allied wall segment and land on the first cell after it.");
-        expect(!containsCell(validMoves, {7, 8})
-            && !containsCell(validMoves, {8, 8})
+        expect(containsCell(validMoves, {7, 8}),
+            "Pawns should be allowed to move directly onto an allied wall cell.");
+        expect(!containsCell(validMoves, {8, 8})
+            && !containsCell(validMoves, {9, 8})
             && !containsCell(validMoves, {10, 8}),
-            "Pawn wall jumps should not land inside the allied wall segment or keep moving beyond the first post-wall cell.");
+            "Pawns should stop on the first allied wall cell instead of crossing or overshooting the wall segment.");
     }
 
-    void testRookJumpAcrossAlliedWallStopsAfterFirstLandingCell() {
+    void testRookStopsOnFirstAlliedWallCell() {
         GameConfig config;
         Board board;
         board.init(8);
@@ -2280,13 +2280,14 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
         linkBuildingOnBoard(white.buildings.back(), board);
 
         const std::vector<sf::Vector2i> validMoves = MovementRules::getValidMoves(rook, board, config);
-        expect(containsCell(validMoves, {9, 8}),
-            "Directional pieces should be able to jump a continuous allied wall segment.");
-        expect(!containsCell(validMoves, {10, 8}) && !containsCell(validMoves, {11, 8}),
-            "Directional wall jumps should stop on the first cell after the allied wall segment instead of granting full remaining range.");
+        expect(containsCell(validMoves, {7, 8}),
+            "Directional pieces should be allowed to stop on the first allied wall cell they encounter.");
+        expect(!containsCell(validMoves, {8, 8}) && !containsCell(validMoves, {9, 8})
+            && !containsCell(validMoves, {10, 8}) && !containsCell(validMoves, {11, 8}),
+            "Directional allied-wall movement should stop on the wall cell instead of traversing or jumping the segment.");
     }
 
-    void testForwardModelAlliedWallJumpMatchesRuntimeSemantics() {
+    void testForwardModelAlliedWallLandingMatchesRuntimeSemantics() {
         GameConfig config;
         Board board;
         board.init(8);
@@ -2303,17 +2304,18 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
         GameSnapshot snapshot = ForwardModel::createSnapshot(board, white, black, {}, 1);
         const SnapPiece* snapRook = snapshot.white.getPieceById(742);
         expect(snapRook != nullptr,
-            "The allied-wall jump snapshot should preserve the rook.");
+            "The allied-wall landing snapshot should preserve the rook.");
 
         const std::vector<sf::Vector2i> pseudoLegalMoves = ForwardModel::getPseudoLegalMoves(
             snapshot, *snapRook, config.getGlobalMaxRange());
-        expect(containsCell(pseudoLegalMoves, {9, 8}),
-            "ForwardModel should mirror runtime allied-wall jumps.");
-        expect(!containsCell(pseudoLegalMoves, {10, 8}) && !containsCell(pseudoLegalMoves, {11, 8}),
-            "ForwardModel allied-wall jumps should also stop on the first post-wall cell.");
+        expect(containsCell(pseudoLegalMoves, {7, 8}),
+            "ForwardModel should mirror direct allied-wall landings.");
+        expect(!containsCell(pseudoLegalMoves, {8, 8}) && !containsCell(pseudoLegalMoves, {9, 8})
+            && !containsCell(pseudoLegalMoves, {10, 8}) && !containsCell(pseudoLegalMoves, {11, 8}),
+            "ForwardModel allied-wall movement should also stop on the wall cell instead of crossing the segment.");
     }
 
-    void testTurnSystemAcceptsAlliedWallJumpButRejectsExtraRange() {
+    void testTurnSystemAcceptsAlliedWallLandingButRejectsPassingThrough() {
         GameConfig config;
         Board board;
         board.init(8);
@@ -2330,21 +2332,32 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
         TurnSystem turnSystem;
         std::vector<Building> publicBuildings;
 
-        TurnCommand jumpMove;
-        jumpMove.type = TurnCommand::Move;
-        jumpMove.pieceId = 743;
-        jumpMove.origin = {6, 8};
-        jumpMove.destination = {9, 8};
+        TurnCommand wallLandingMove;
+        wallLandingMove.type = TurnCommand::Move;
+        wallLandingMove.pieceId = 743;
+        wallLandingMove.origin = {6, 8};
+        wallLandingMove.destination = {7, 8};
 
-        expect(turnSystem.queueCommand(jumpMove, board, white, black, publicBuildings, config),
-            "TurnSystem should accept a move that lands on the first cell after a continuous allied wall segment.");
+        expect(turnSystem.queueCommand(wallLandingMove, board, white, black, publicBuildings, config),
+            "TurnSystem should accept a move that lands directly on an allied wall cell.");
 
         turnSystem.resetPendingCommands();
 
-        TurnCommand tooFarMove = jumpMove;
+        TurnCommand passThroughMove;
+        passThroughMove.type = TurnCommand::Move;
+        passThroughMove.pieceId = 743;
+        passThroughMove.origin = {6, 8};
+        passThroughMove.destination = {9, 8};
+
+        expect(!turnSystem.queueCommand(passThroughMove, board, white, black, publicBuildings, config),
+            "TurnSystem should reject moves that try to pass through a continuous allied wall segment.");
+
+        turnSystem.resetPendingCommands();
+
+        TurnCommand tooFarMove = passThroughMove;
         tooFarMove.destination = {10, 8};
         expect(!turnSystem.queueCommand(tooFarMove, board, white, black, publicBuildings, config),
-            "TurnSystem should reject moves that try to keep full range after jumping an allied wall segment.");
+            "TurnSystem should reject moves that try to keep full range past an allied wall segment.");
     }
 
     void testForwardModelCapturesAutonomousUnitDiagonally() {
@@ -5984,6 +5997,51 @@ void testTurnSystemSkipsUnaffordableProduction() {
             "Repairing a destroyed owned cell should deduct the configured per-cell repair cost.");
     }
 
+    void testTurnSystemRepairsBreachedOwnedStoneWallWithAlliedOccupancy() {
+        GameConfig config;
+        Board board;
+        board.init(10);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 747, PieceType::King, KingdomId::White, {0, 0});
+        addPieceToBoard(white, board, 748, PieceType::Rook, KingdomId::White, {2, 3});
+        addPieceToBoard(black, board, 749, PieceType::King, KingdomId::Black, {9, 9});
+        white.gold = config.getRepairCostPerCell(BuildingType::StoneWall);
+
+        white.addBuilding(makeTestStoneWall(829, KingdomId::White, {3, 3}, config));
+        Building& wall = white.buildings.back();
+        wall.setCellHP(0, 0, std::max(1, wall.getCellHP(0, 0) - 1));
+        wall.setCellBreached(0, 0, true);
+        linkBuildingOnBoard(wall, board);
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+        EventLog eventLog;
+        PieceFactory pieceFactory;
+        BuildingFactory buildingFactory;
+
+        TurnCommand moveOntoWall;
+        moveOntoWall.type = TurnCommand::Move;
+        moveOntoWall.pieceId = 748;
+        moveOntoWall.origin = {2, 3};
+        moveOntoWall.destination = {3, 3};
+
+        expect(turnSystem.queueCommand(moveOntoWall, board, white, black, publicBuildings, config),
+            "TurnSystem should accept an allied move onto a breached allied stone wall.");
+
+        turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
+
+        expect(!white.buildings.front().isCellBreached(0, 0),
+            "Any allied piece occupying a breached allied stone wall should repair the breach during commit.");
+        expect(white.buildings.front().getCellHP(0, 0)
+                == StructureIntegrityRules::defaultCellHP(BuildingType::StoneWall, config),
+            "Repairing a breached allied stone wall should restore the cell to full default HP.");
+        expect(white.gold == 0,
+            "Repairing a breached allied stone wall should deduct the configured repair cost.");
+    }
+
     void testTurnSystemRepairsBeforeIncome() {
         GameConfig config;
         Board board;
@@ -6152,7 +6210,7 @@ void testTurnSystemSkipsUnaffordableProduction() {
             "Destroyed stone walls should be removed from the board when the breach is finished.");
     }
 
-    void testStoneWallBreachPersistsAfterAttackerLeavesAndFinishesOnReturn() {
+    void testStoneWallBreachPersistsAfterSameSideRetreatAndFinishesOnReturn() {
         GameConfig config;
         Board board;
         board.init(10);
@@ -6181,13 +6239,21 @@ void testTurnSystemSkipsUnaffordableProduction() {
              "Breach move should queue successfully.");
         turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
 
-        TurnCommand leaveMove;
-        leaveMove.type = TurnCommand::Move;
-        leaveMove.pieceId = 2;
-        leaveMove.origin = {4, 4};
-        leaveMove.destination = {5, 4};
-         expect(turnSystem.queueCommand(leaveMove, board, white, black, publicBuildings, config),
-             "Leaving a breached wall should still be allowed.");
+        TurnCommand blockedCrossMove;
+        blockedCrossMove.type = TurnCommand::Move;
+        blockedCrossMove.pieceId = 2;
+        blockedCrossMove.origin = {4, 4};
+        blockedCrossMove.destination = {5, 4};
+         expect(!turnSystem.queueCommand(blockedCrossMove, board, white, black, publicBuildings, config),
+             "A piece still inside a breached stone wall should not be allowed to cross to the far side before the wall is fully destroyed.");
+
+        TurnCommand retreatMove;
+        retreatMove.type = TurnCommand::Move;
+        retreatMove.pieceId = 2;
+        retreatMove.origin = {4, 4};
+        retreatMove.destination = {3, 4};
+         expect(turnSystem.queueCommand(retreatMove, board, white, black, publicBuildings, config),
+             "A piece inside a breached wall should still be able to redeploy on the original side of the wall.");
         turnSystem.commitTurn(board, white, black, publicBuildings, config, eventLog, pieceFactory, buildingFactory);
 
         expect(black.buildings.size() == 1 && black.buildings.front().isCellBreached(0, 0),
@@ -6198,7 +6264,7 @@ void testTurnSystemSkipsUnaffordableProduction() {
         TurnCommand returnMove;
         returnMove.type = TurnCommand::Move;
         returnMove.pieceId = 2;
-        returnMove.origin = {5, 4};
+        returnMove.origin = {3, 4};
         returnMove.destination = {4, 4};
          expect(turnSystem.queueCommand(returnMove, board, white, black, publicBuildings, config),
              "Returning to a breached wall should queue successfully.");
@@ -6208,6 +6274,144 @@ void testTurnSystemSkipsUnaffordableProduction() {
             "A later occupancy on a breached stone wall should finish destroying it.");
         expect(board.getCell(4, 4).building == nullptr,
             "The board should clear the wall pointer once a breached stone wall is fully destroyed.");
+    }
+
+    void testBreachedStoneWallOccupantKeepsSourceSideThreatsButCannotCrossWall() {
+        GameConfig config;
+        Board board;
+        board.init(10);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 84, PieceType::King, KingdomId::White, {0, 0});
+        Piece& rook = addPieceToBoard(white, board, 85, PieceType::Rook, KingdomId::White, {4, 4});
+        addPieceToBoard(black, board, 86, PieceType::King, KingdomId::Black, {2, 4});
+        black.addBuilding(makeTestStoneWall(84, KingdomId::Black, {4, 4}, config));
+        linkBuildingOnBoard(black.buildings.back(), board);
+        black.buildings.back().setCellHP(0, 0, std::max(1, black.buildings.back().getCellHP(0, 0) - 1));
+        black.buildings.back().setCellBreached(0, 0, true);
+        rook.setWallBreachEntryState({1, 0}, {4, 4});
+
+        const std::vector<sf::Vector2i> validMoves = MovementRules::getValidMoves(rook, board, config);
+        expect(containsCell(validMoves, {3, 4}),
+            "A piece inside a breached stone wall should still get same-side moves generated from the wall cell itself.");
+        expect(containsCell(validMoves, {2, 4}),
+            "A piece inside a breached stone wall should keep offensive moves on the side it came from.");
+        expect(!containsCell(validMoves, {5, 4}),
+            "A piece inside a breached stone wall should not get pseudo-legal moves that cross through the still-intact wall.");
+
+        const std::vector<sf::Vector2i> threatenedSquares = MovementRules::getThreatenedSquares(rook, board, config);
+        expect(containsCell(threatenedSquares, {2, 4}),
+            "A piece inside a breached stone wall should still threaten targets on its source side.");
+        expect(CheckSystem::isInCheck(KingdomId::Black, board, config),
+            "Runtime check detection should keep same-side attacks from a piece occupying a breached stone wall.");
+
+        GameSnapshot snapshot = ForwardModel::createSnapshot(board, white, black, {}, 1);
+        const SnapPiece* snapRook = snapshot.white.getPieceById(85);
+        expect(snapRook != nullptr,
+            "The breached-wall projection test should preserve the attacking rook in the snapshot.");
+
+        const std::vector<sf::Vector2i> pseudoLegalMoves = ForwardModel::getPseudoLegalMoves(
+            snapshot, *snapRook, config.getGlobalMaxRange());
+        expect(containsCell(pseudoLegalMoves, {3, 4}),
+            "ForwardModel should preserve same-side moves from the actual breached wall cell.");
+        expect(containsCell(pseudoLegalMoves, {2, 4}),
+            "ForwardModel should preserve same-side captures from a breached stone wall.");
+        expect(!containsCell(pseudoLegalMoves, {5, 4}),
+            "ForwardModel should not allow pseudo-legal crossing through a breached stone wall.");
+        expect(ForwardModel::isInCheck(snapshot, KingdomId::Black, config.getGlobalMaxRange()),
+            "Snapshot check detection should preserve same-side attacks from a piece still occupying a breached stone wall.");
+    }
+
+    void testBreachedHorizontalStoneWallUsesWallOrientationForBishopSideFiltering() {
+        GameConfig config;
+        Board board;
+        board.init(10);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 90, PieceType::King, KingdomId::White, {0, 0});
+        Piece& bishop = addPieceToBoard(white, board, 91, PieceType::Bishop, KingdomId::White, {4, 4});
+        addPieceToBoard(black, board, 92, PieceType::King, KingdomId::Black, {9, 9});
+
+        black.addBuilding(makeTestStoneWall(90, KingdomId::Black, {3, 4}, config));
+        black.addBuilding(makeTestStoneWall(91, KingdomId::Black, {4, 4}, config));
+        black.addBuilding(makeTestStoneWall(92, KingdomId::Black, {5, 4}, config));
+        for (Building& wall : black.buildings) {
+            linkBuildingOnBoard(wall, board);
+        }
+
+        black.buildings[1].setCellHP(0, 0, std::max(1, black.buildings[1].getCellHP(0, 0) - 1));
+        black.buildings[1].setCellBreached(0, 0, true);
+        bishop.setWallBreachEntryState({-1, -1}, {4, 4});
+
+        const std::vector<sf::Vector2i> validMoves = MovementRules::getValidMoves(bishop, board, config);
+        expect(containsCell(validMoves, {5, 5}),
+            "A bishop inside a breached horizontal wall should keep moves on the source side of the wall.");
+        expect(!containsCell(validMoves, {5, 3}),
+            "A bishop inside a breached horizontal wall should not get diagonal moves on the opposite side just because the entry vector was diagonal.");
+
+        GameSnapshot snapshot = ForwardModel::createSnapshot(board, white, black, {}, 1);
+        const SnapPiece* snapBishop = snapshot.white.getPieceById(91);
+        expect(snapBishop != nullptr,
+            "The horizontal breached-wall bishop test should preserve the bishop in the snapshot.");
+
+        const std::vector<sf::Vector2i> pseudoLegalMoves = ForwardModel::getPseudoLegalMoves(
+            snapshot, *snapBishop, config.getGlobalMaxRange());
+        expect(containsCell(pseudoLegalMoves, {5, 5}),
+            "ForwardModel should preserve bishop moves on the source side of a horizontal breached wall.");
+        expect(!containsCell(pseudoLegalMoves, {5, 3}),
+            "ForwardModel should reject bishop moves that switch to the opposite side of a horizontal breached wall.");
+    }
+
+    void testBreachedArrowStoneWallKeepsBothBackwardBishopDiagonals() {
+        GameConfig config;
+        Board board;
+        board.init(10);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 93, PieceType::King, KingdomId::White, {0, 0});
+        Piece& bishop = addPieceToBoard(white, board, 94, PieceType::Bishop, KingdomId::White, {4, 4});
+        addPieceToBoard(black, board, 95, PieceType::King, KingdomId::Black, {9, 9});
+
+        black.addBuilding(makeTestStoneWall(93, KingdomId::Black, {3, 4}, config));
+        black.addBuilding(makeTestStoneWall(94, KingdomId::Black, {4, 4}, config));
+        black.addBuilding(makeTestStoneWall(95, KingdomId::Black, {5, 4}, config));
+        black.addBuilding(makeTestStoneWall(96, KingdomId::Black, {4, 5}, config));
+        for (Building& wall : black.buildings) {
+            linkBuildingOnBoard(wall, board);
+        }
+
+        black.buildings[1].setCellHP(0, 0, std::max(1, black.buildings[1].getCellHP(0, 0) - 1));
+        black.buildings[1].setCellBreached(0, 0, true);
+        bishop.setWallBreachEntryState({1, -1}, {4, 4});
+
+        const std::vector<sf::Vector2i> validMoves = MovementRules::getValidMoves(bishop, board, config);
+        expect(containsCell(validMoves, {3, 5}),
+            "A bishop inside an arrow-shaped breached wall should keep the backward diagonal it used to enter from.");
+        expect(containsCell(validMoves, {5, 5}),
+            "A bishop inside an arrow-shaped breached wall should also keep the other backward diagonal on the same side.");
+        expect(!containsCell(validMoves, {3, 3}),
+            "A bishop inside an arrow-shaped breached wall should not move onto the opposite side through the upper-left diagonal.");
+        expect(!containsCell(validMoves, {5, 3}),
+            "A bishop inside an arrow-shaped breached wall should not move onto the opposite side through the upper-right diagonal.");
+
+        GameSnapshot snapshot = ForwardModel::createSnapshot(board, white, black, {}, 1);
+        const SnapPiece* snapBishop = snapshot.white.getPieceById(94);
+        expect(snapBishop != nullptr,
+            "The arrow-shaped breached-wall bishop test should preserve the bishop in the snapshot.");
+
+        const std::vector<sf::Vector2i> pseudoLegalMoves = ForwardModel::getPseudoLegalMoves(
+            snapshot, *snapBishop, config.getGlobalMaxRange());
+        expect(containsCell(pseudoLegalMoves, {3, 5}),
+            "ForwardModel should preserve the entry-side backward diagonal in an arrow-shaped breached wall.");
+        expect(containsCell(pseudoLegalMoves, {5, 5}),
+            "ForwardModel should preserve both backward diagonals on the source side of an arrow-shaped breached wall.");
+        expect(!containsCell(pseudoLegalMoves, {3, 3}),
+            "ForwardModel should reject upper-left bishop moves that cross to the opposite side of an arrow-shaped breached wall.");
+        expect(!containsCell(pseudoLegalMoves, {5, 3}),
+            "ForwardModel should reject upper-right bishop moves that cross to the opposite side of an arrow-shaped breached wall.");
     }
 
 void testFirstBishopSpawnUsesDefaultNearestRule() {
@@ -9902,10 +10106,10 @@ int main(int argc, char** argv) {
         {"session metadata edit save", testSessionMetadataServiceEditsAndRenamesSaveMetadata},
         {"data recorder rejects legacy schema companion", testGameDataRecorderRejectsLegacySchemaCompanion},
         {"session runtime coordinator flow", testSessionRuntimeCoordinatorAppliesSessionEntryAndMainMenuTransitions},
-        {"pawn allied wall jump", testPawnJumpsAcrossContinuousAlliedWallSegment},
-        {"rook allied wall jump", testRookJumpAcrossAlliedWallStopsAfterFirstLandingCell},
-        {"forward model allied wall jump", testForwardModelAlliedWallJumpMatchesRuntimeSemantics},
-        {"turn system allied wall jump", testTurnSystemAcceptsAlliedWallJumpButRejectsExtraRange},
+        {"pawn allied wall landing stops at wall", testPawnStopsOnAlliedWallCellWithoutPassingThrough},
+        {"rook allied wall landing stops at wall", testRookStopsOnFirstAlliedWallCell},
+        {"forward model allied wall landing", testForwardModelAlliedWallLandingMatchesRuntimeSemantics},
+        {"turn system allied wall landing without passing", testTurnSystemAcceptsAlliedWallLandingButRejectsPassingThrough},
         {"selection query coordinator bookmark fallback", testSelectionQueryCoordinatorResolvesBookmarkFallback},
         {"selection query coordinator autonomous id", testSelectionQueryCoordinatorResolvesAutonomousUnitById},
         {"ui callback coordinator guards", testUICallbackCoordinatorGuardsHudAndToolbarActions},
@@ -10055,9 +10259,13 @@ int main(int argc, char** argv) {
         {"turn system cancel production", testTurnSystemCancelsQueuedProductionPerBarracks},
         {"build system pawn adjacency", testBuildSystemAllowsPawnAdjacency},
         {"turn system repair with pawn occupancy", testTurnSystemRepairsDestroyedOwnedCellWithPawnOccupancy},
+        {"turn system repairs breached stone wall", testTurnSystemRepairsBreachedOwnedStoneWallWithAlliedOccupancy},
         {"turn system repairs before income", testTurnSystemRepairsBeforeIncome},
         {"stone wall destroys after staying breached", testStoneWallDestroysWhenEnemyStaysOnBreachedCellUntilNextCommit},
-        {"stone wall breach persists after leaving", testStoneWallBreachPersistsAfterAttackerLeavesAndFinishesOnReturn},
+        {"stone wall breach persists after same-side retreat", testStoneWallBreachPersistsAfterSameSideRetreatAndFinishesOnReturn},
+        {"breached stone wall occupant keeps source-side threats but cannot cross", testBreachedStoneWallOccupantKeepsSourceSideThreatsButCannotCrossWall},
+        {"breached horizontal wall filters bishop by wall orientation", testBreachedHorizontalStoneWallUsesWallOrientationForBishopSideFiltering},
+        {"breached arrow wall keeps both backward bishop diagonals", testBreachedArrowStoneWallKeepsBothBackwardBishopDiagonals},
         {"first bishop spawn uses default rule", testFirstBishopSpawnUsesDefaultNearestRule},
         {"spawn uses anchor cell when free", testSpawnUsesAnchorCellWhenFree},
         {"spawn falls back around blocked anchor", testSpawnFallsBackToNearestCellAroundBlockedAnchor},

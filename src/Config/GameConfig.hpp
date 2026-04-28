@@ -129,6 +129,7 @@ public:
     int getWeatherAlphaBasePercent() const;
     int getWeatherAlphaMinPercent() const;
     int getWeatherAlphaMaxPercent() const;
+    int getDamagedStructureOpacityPercent() const;
     int getWeatherDensityMuTimes100() const;
     int getWeatherDensitySigmaTimes100() const;
 
@@ -293,6 +294,7 @@ private:
     int m_weatherAlphaBasePercent;
     int m_weatherAlphaMinPercent;
     int m_weatherAlphaMaxPercent;
+    int m_damagedStructureOpacityPercent;
     int m_weatherDensityMuTimes100;
     int m_weatherDensitySigmaTimes100;
 
