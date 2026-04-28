@@ -2244,6 +2244,109 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
             "ForwardModel pawn threat maps should exclude orthogonal squares.");
     }
 
+    void testPawnJumpsAcrossContinuousAlliedWallSegment() {
+        GameConfig config;
+        Board board;
+        board.init(8);
+
+        Kingdom white(KingdomId::White);
+        Piece& pawn = addPieceToBoard(white, board, 740, PieceType::Pawn, KingdomId::White, {6, 8});
+
+        white.addBuilding(makeTestStoneWall(820, KingdomId::White, {7, 8}, config));
+        linkBuildingOnBoard(white.buildings.back(), board);
+        white.addBuilding(makeTestStoneWall(821, KingdomId::White, {8, 8}, config));
+        linkBuildingOnBoard(white.buildings.back(), board);
+
+        const std::vector<sf::Vector2i> validMoves = MovementRules::getValidMoves(pawn, board, config);
+        expect(containsCell(validMoves, {9, 8}),
+            "Pawns should jump a continuous allied wall segment and land on the first cell after it.");
+        expect(!containsCell(validMoves, {7, 8})
+            && !containsCell(validMoves, {8, 8})
+            && !containsCell(validMoves, {10, 8}),
+            "Pawn wall jumps should not land inside the allied wall segment or keep moving beyond the first post-wall cell.");
+    }
+
+    void testRookJumpAcrossAlliedWallStopsAfterFirstLandingCell() {
+        GameConfig config;
+        Board board;
+        board.init(8);
+
+        Kingdom white(KingdomId::White);
+        Piece& rook = addPieceToBoard(white, board, 741, PieceType::Rook, KingdomId::White, {6, 8});
+
+        white.addBuilding(makeTestStoneWall(822, KingdomId::White, {7, 8}, config));
+        linkBuildingOnBoard(white.buildings.back(), board);
+        white.addBuilding(makeTestStoneWall(823, KingdomId::White, {8, 8}, config));
+        linkBuildingOnBoard(white.buildings.back(), board);
+
+        const std::vector<sf::Vector2i> validMoves = MovementRules::getValidMoves(rook, board, config);
+        expect(containsCell(validMoves, {9, 8}),
+            "Directional pieces should be able to jump a continuous allied wall segment.");
+        expect(!containsCell(validMoves, {10, 8}) && !containsCell(validMoves, {11, 8}),
+            "Directional wall jumps should stop on the first cell after the allied wall segment instead of granting full remaining range.");
+    }
+
+    void testForwardModelAlliedWallJumpMatchesRuntimeSemantics() {
+        GameConfig config;
+        Board board;
+        board.init(8);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 742, PieceType::Rook, KingdomId::White, {6, 8});
+
+        white.addBuilding(makeTestStoneWall(824, KingdomId::White, {7, 8}, config));
+        linkBuildingOnBoard(white.buildings.back(), board);
+        white.addBuilding(makeTestStoneWall(825, KingdomId::White, {8, 8}, config));
+        linkBuildingOnBoard(white.buildings.back(), board);
+
+        GameSnapshot snapshot = ForwardModel::createSnapshot(board, white, black, {}, 1);
+        const SnapPiece* snapRook = snapshot.white.getPieceById(742);
+        expect(snapRook != nullptr,
+            "The allied-wall jump snapshot should preserve the rook.");
+
+        const std::vector<sf::Vector2i> pseudoLegalMoves = ForwardModel::getPseudoLegalMoves(
+            snapshot, *snapRook, config.getGlobalMaxRange());
+        expect(containsCell(pseudoLegalMoves, {9, 8}),
+            "ForwardModel should mirror runtime allied-wall jumps.");
+        expect(!containsCell(pseudoLegalMoves, {10, 8}) && !containsCell(pseudoLegalMoves, {11, 8}),
+            "ForwardModel allied-wall jumps should also stop on the first post-wall cell.");
+    }
+
+    void testTurnSystemAcceptsAlliedWallJumpButRejectsExtraRange() {
+        GameConfig config;
+        Board board;
+        board.init(8);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 743, PieceType::Rook, KingdomId::White, {6, 8});
+
+        white.addBuilding(makeTestStoneWall(826, KingdomId::White, {7, 8}, config));
+        linkBuildingOnBoard(white.buildings.back(), board);
+        white.addBuilding(makeTestStoneWall(827, KingdomId::White, {8, 8}, config));
+        linkBuildingOnBoard(white.buildings.back(), board);
+
+        TurnSystem turnSystem;
+        std::vector<Building> publicBuildings;
+
+        TurnCommand jumpMove;
+        jumpMove.type = TurnCommand::Move;
+        jumpMove.pieceId = 743;
+        jumpMove.origin = {6, 8};
+        jumpMove.destination = {9, 8};
+
+        expect(turnSystem.queueCommand(jumpMove, board, white, black, publicBuildings, config),
+            "TurnSystem should accept a move that lands on the first cell after a continuous allied wall segment.");
+
+        turnSystem.resetPendingCommands();
+
+        TurnCommand tooFarMove = jumpMove;
+        tooFarMove.destination = {10, 8};
+        expect(!turnSystem.queueCommand(tooFarMove, board, white, black, publicBuildings, config),
+            "TurnSystem should reject moves that try to keep full range after jumping an allied wall segment.");
+    }
+
     void testForwardModelCapturesAutonomousUnitDiagonally() {
         GameConfig config;
         Board board;
@@ -9799,6 +9902,10 @@ int main(int argc, char** argv) {
         {"session metadata edit save", testSessionMetadataServiceEditsAndRenamesSaveMetadata},
         {"data recorder rejects legacy schema companion", testGameDataRecorderRejectsLegacySchemaCompanion},
         {"session runtime coordinator flow", testSessionRuntimeCoordinatorAppliesSessionEntryAndMainMenuTransitions},
+        {"pawn allied wall jump", testPawnJumpsAcrossContinuousAlliedWallSegment},
+        {"rook allied wall jump", testRookJumpAcrossAlliedWallStopsAfterFirstLandingCell},
+        {"forward model allied wall jump", testForwardModelAlliedWallJumpMatchesRuntimeSemantics},
+        {"turn system allied wall jump", testTurnSystemAcceptsAlliedWallJumpButRejectsExtraRange},
         {"selection query coordinator bookmark fallback", testSelectionQueryCoordinatorResolvesBookmarkFallback},
         {"selection query coordinator autonomous id", testSelectionQueryCoordinatorResolvesAutonomousUnitById},
         {"ui callback coordinator guards", testUICallbackCoordinatorGuardsHudAndToolbarActions},

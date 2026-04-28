@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Statistiques Generator - Data Companion V5</title>
+<link rel="stylesheet" href="./styles.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
+<script src="./app.js" defer></script>
+</head>
+<body>
+<div class="dashboard-shell">
+  <aside class="command-rail">
+    <section class="hero-panel panel panel-cut">
+      <p class="eyebrow">A Normal Chess Game</p>
+      <h1>Statistiques Generator</h1>
+      <p class="hero-copy">
+        Page simple pour lire un companion Data V5 configure directement depuis
+        <strong>app.js</strong>.
+      </p>
+    </section>
+
+    <section class="panel panel-cut">
+      <div class="panel-heading compact-heading">
+        <div>
+          <p class="eyebrow">Source</p>
+          <h2>Fichier JSON configure</h2>
+        </div>
+      </div>
+      <div class="source-value" id="configuredSourceLabel">DATA_COMPANION_URL non configure.</div>
+      <div class="status-stack">
+        <div class="status-pill" id="loadStatus">Aucune source configuree.</div>
+        <div class="status-pill status-soft" id="schemaStatus">Definir DATA_COMPANION_URL en haut de app.js.</div>
+      </div>
+    </section>
+
+    <section class="panel panel-cut">
+      <div class="panel-heading compact-heading">
+        <div>
+          <p class="eyebrow">Radar</p>
+          <h2>Lecture rapide</h2>
+        </div>
+      </div>
+      <div class="metric-grid compact-grid" id="summaryCards"></div>
+    </section>
+
+    <section class="panel panel-cut">
+      <div class="panel-heading compact-heading">
+        <div>
+          <p class="eyebrow">Schema</p>
+          <h2>Topologie Data</h2>
+        </div>
+      </div>
+      <div class="topology-strip" id="topologyStrip"></div>
+      <div class="schema-list" id="rootKeyList"></div>
+    </section>
+
+    <section class="panel panel-cut">
+      <div class="panel-heading compact-heading">
+        <div>
+          <p class="eyebrow">Etat</p>
+          <h2>Alertes</h2>
+        </div>
+      </div>
+      <div class="alert-stack" id="alertStack"></div>
+    </section>
+  </aside>
+
+  <main class="analysis-stage">
+    <section class="banner-panel" id="historyBanner" hidden></section>
+
+    <section class="panel panel-cut empty-panel" id="emptyState">
+      <p class="eyebrow">Pret</p>
+      <h2>Le viewer attend une source configuree</h2>
+      <p>
+        Definir <strong>DATA_COMPANION_URL</strong> en haut de <strong>app.js</strong>,
+        puis recharger la page pour activer les graphiques et tables.
+      </p>
+    </section>
+
+    <section class="panel panel-cut section-panel" id="sessionPanel">
+      <div class="panel-heading">
+        <div>
+          <p class="eyebrow">Session</p>
+          <h2>Portrait du companion</h2>
+        </div>
+      </div>
+      <div class="session-layout">
+        <div class="fact-grid" id="sessionFactGrid"></div>
+        <div class="signal-card">
+          <p class="signal-title">Schema de lecture</p>
+          <div class="signal-flow" id="signalFlow"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel panel-cut section-panel" id="weatherPanel">
+      <div class="panel-heading split-heading">
+        <div>
+          <p class="eyebrow">Meteo</p>
+          <h2>Visibilite et fronts</h2>
+        </div>
+        <p class="panel-note">Les traits verticaux marquent les apparitions et fins de fronts.</p>
+      </div>
+      <div class="chart-shell tall-chart">
+        <canvas id="weatherChart"></canvas>
+      </div>
+      <div class="metric-grid" id="weatherCards"></div>
+      <div class="table-shell">
+        <div class="table-head">
+          <h3>Journal meteo recent</h3>
+          <span id="weatherTableMeta"></span>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Turn</th>
+                <th>Type</th>
+                <th>Front</th>
+                <th>Couverture</th>
+              </tr>
+            </thead>
+            <tbody id="weatherEventTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel panel-cut section-panel" id="infernalPanel">
+      <div class="panel-heading split-heading">
+        <div>
+          <p class="eyebrow">Infernal</p>
+          <h2>Dette, spawns et duree de vie</h2>
+        </div>
+        <p class="panel-note">Les marqueurs colorent le royaume cible et affichent la piece manifestee.</p>
+      </div>
+      <div class="chart-shell tall-chart">
+        <canvas id="infernalChart"></canvas>
+      </div>
+      <div class="metric-grid" id="infernalCards"></div>
+      <div class="table-shell">
+        <div class="table-head">
+          <h3>Spawns infernaux</h3>
+          <span id="infernalTableMeta"></span>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Turn</th>
+                <th>Unite</th>
+                <th>Cible</th>
+                <th>Piece</th>
+                <th>Lifetime</th>
+              </tr>
+            </thead>
+            <tbody id="infernalSpawnTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel panel-cut section-panel" id="xpPanel">
+      <div class="panel-heading split-heading">
+        <div>
+          <p class="eyebrow">XP</p>
+          <h2>Distribution robuste et audit brut</h2>
+        </div>
+        <p class="panel-note">Moyenne, mediane, moyenne tronquee et ventilation par source.</p>
+      </div>
+      <div class="dual-chart-grid">
+        <div class="chart-shell medium-chart">
+          <canvas id="xpTurnChart"></canvas>
+        </div>
+        <div class="chart-shell medium-chart">
+          <canvas id="xpSourceChart"></canvas>
+        </div>
+      </div>
+      <div class="metric-grid" id="xpCards"></div>
+
+      <div class="table-grid">
+        <div class="table-shell">
+          <div class="table-head">
+            <h3>Sources XP</h3>
+            <span id="xpSourceMeta"></span>
+          </div>
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Source</th>
+                  <th>Grants</th>
+                  <th>Total XP</th>
+                  <th>Moyenne</th>
+                </tr>
+              </thead>
+              <tbody id="xpSourceTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="table-shell">
+          <div class="table-head table-head-inline">
+            <h3>Grants XP</h3>
+            <label class="field-shell inline-field" for="xpGrantFilterInput">
+              <span>Filtre</span>
+              <input id="xpGrantFilterInput" type="text" placeholder="piece, source, royaume..." autocomplete="off">
+            </label>
+          </div>
+          <div class="table-scroll tall-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th>Turn</th>
+                  <th>Source</th>
+                  <th>XP</th>
+                  <th>Piece</th>
+                  <th>Royaume</th>
+                  <th>XP avant/apres</th>
+                </tr>
+              </thead>
+              <tbody id="xpGrantTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

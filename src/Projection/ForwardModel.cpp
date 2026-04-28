@@ -16,6 +16,7 @@
 #include "Systems/XPSystem.hpp"
 #include <cmath>
 #include <algorithm>
+#include <optional>
 #include <set>
 
 namespace {
@@ -44,6 +45,45 @@ bool isEnemyCapturableBuildingCell(const GameSnapshot& snapshot,
                                    KingdomId mover) {
     const SnapBuilding* building = snapshot.buildingAt(pos);
     return building && !building->isNeutral && building->owner != mover;
+}
+
+bool isAlliedBlockingWallCell(const SnapBuilding* building,
+                              sf::Vector2i pos,
+                              KingdomId mover) {
+    return isBlockingWallCell(building, pos)
+        && !building->isNeutral
+        && building->owner == mover;
+}
+
+std::optional<sf::Vector2i> resolveAlliedWallJumpDestination(const GameSnapshot& snapshot,
+                                                             sf::Vector2i firstWallCell,
+                                                             int dx,
+                                                             int dy,
+                                                             KingdomId mover) {
+    const SnapBuilding* building = snapshot.buildingAt(firstWallCell);
+    if (!isAlliedBlockingWallCell(building, firstWallCell, mover)) {
+        return std::nullopt;
+    }
+
+    sf::Vector2i landing = firstWallCell;
+    do {
+        landing.x += dx;
+        landing.y += dy;
+        if (!snapshot.isInBounds(landing.x, landing.y)) {
+            return std::nullopt;
+        }
+        building = snapshot.buildingAt(landing);
+    } while (isAlliedBlockingWallCell(building, landing, mover));
+
+    if (!snapshot.isTraversable(landing.x, landing.y)) {
+        return std::nullopt;
+    }
+
+    if (isBlockingWallCell(building, landing)) {
+        return std::nullopt;
+    }
+
+    return landing;
 }
 
 bool isSnapshotTerrainTraversableForSpawn(const GameSnapshot& snapshot,
@@ -275,6 +315,29 @@ std::vector<sf::Vector2i> ForwardModel::getPawnMoves(const SnapPiece& piece,
             continue;
         }
 
+        const SnapBuilding* destinationBuilding = s.buildingAt(dest);
+        if (isAlliedBlockingWallCell(destinationBuilding, dest, piece.kingdom)) {
+            const std::optional<sf::Vector2i> jumpDestination = resolveAlliedWallJumpDestination(
+                s,
+                dest,
+                direction[0],
+                direction[1],
+                piece.kingdom);
+            if (!jumpDestination.has_value()) {
+                continue;
+            }
+
+            if (s.pieceAt(*jumpDestination) || s.autonomousUnitAt(*jumpDestination)) {
+                continue;
+            }
+            if (isEnemyCapturableBuildingCell(s, *jumpDestination, piece.kingdom)) {
+                continue;
+            }
+
+            moves.push_back(*jumpDestination);
+            continue;
+        }
+
         if (s.pieceAt(dest) || s.autonomousUnitAt(dest)) {
             continue;
         }
@@ -347,6 +410,21 @@ std::vector<sf::Vector2i> ForwardModel::getDirectionalMoves(const SnapPiece& pie
         if (!s.isTraversable(dest.x, dest.y)) break;
 
         const SnapBuilding* building = s.buildingAt(dest);
+        if (isAlliedBlockingWallCell(building, dest, piece.kingdom)) {
+            const std::optional<sf::Vector2i> jumpDestination = resolveAlliedWallJumpDestination(
+                s,
+                dest,
+                dx,
+                dy,
+                piece.kingdom);
+            if (jumpDestination.has_value()) {
+                const SnapPiece* landingOccupant = s.pieceAt(*jumpDestination);
+                if (!(landingOccupant && landingOccupant->kingdom == piece.kingdom)) {
+                    moves.push_back(*jumpDestination);
+                }
+            }
+            break;
+        }
         if (isBlockingWallCell(building, dest)) {
             if (!building->isNeutral && building->owner != piece.kingdom) {
                 moves.push_back(dest);
@@ -377,15 +455,36 @@ std::vector<sf::Vector2i> ForwardModel::getKingMoves(const SnapPiece& piece,
         for (int dx = -1; dx <= 1; ++dx) {
             if (dx == 0 && dy == 0) continue;
             sf::Vector2i dest{piece.position.x + dx, piece.position.y + dy};
-            if (canLandOn(s, dest, piece.kingdom)) {
-                const SnapPiece* enemyKing = s.enemyKingdom(piece.kingdom).getKing();
-                if (enemyKing) {
-                    int ekdx = std::abs(dest.x - enemyKing->position.x);
-                    int ekdy = std::abs(dest.y - enemyKing->position.y);
-                    if (ekdx <= 1 && ekdy <= 1) continue;
+            const SnapBuilding* building = s.buildingAt(dest);
+            sf::Vector2i landing = dest;
+            if (isAlliedBlockingWallCell(building, dest, piece.kingdom)) {
+                const std::optional<sf::Vector2i> jumpDestination = resolveAlliedWallJumpDestination(
+                    s,
+                    dest,
+                    dx,
+                    dy,
+                    piece.kingdom);
+                if (!jumpDestination.has_value()) {
+                    continue;
                 }
-                moves.push_back(dest);
+                landing = *jumpDestination;
+            } else if (!canLandOn(s, dest, piece.kingdom)) {
+                continue;
             }
+
+            const SnapPiece* landingOccupant = s.pieceAt(landing);
+            if (landingOccupant && landingOccupant->kingdom == piece.kingdom) {
+                continue;
+            }
+
+            const SnapPiece* enemyKing = s.enemyKingdom(piece.kingdom).getKing();
+            if (enemyKing) {
+                int ekdx = std::abs(landing.x - enemyKing->position.x);
+                int ekdy = std::abs(landing.y - enemyKing->position.y);
+                if (ekdx <= 1 && ekdy <= 1) continue;
+            }
+
+            moves.push_back(landing);
         }
     }
     return moves;

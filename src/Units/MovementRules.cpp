@@ -6,6 +6,8 @@
 #include "Buildings/BuildingType.hpp"
 #include "Config/GameConfig.hpp"
 
+#include <optional>
+
 namespace {
 
 bool isBlockingWallCell(const Cell& cell, int worldX, int worldY) {
@@ -21,6 +23,47 @@ bool isBlockingWallCell(const Cell& cell, int worldX, int worldY) {
 
 bool isEnemyCapturableBuildingCell(const Cell& cell, KingdomId mover) {
     return cell.building && !cell.building->isNeutral && cell.building->owner != mover;
+}
+
+bool isAlliedBlockingWallCell(const Cell& cell, int worldX, int worldY, KingdomId mover) {
+    return isBlockingWallCell(cell, worldX, worldY)
+        && !cell.building->isNeutral
+        && cell.building->owner == mover;
+}
+
+std::optional<sf::Vector2i> resolveAlliedWallJumpDestination(const Board& board,
+                                                             sf::Vector2i firstWallCell,
+                                                             int dx,
+                                                             int dy,
+                                                             KingdomId mover) {
+    if (!board.isInBounds(firstWallCell.x, firstWallCell.y)) {
+        return std::nullopt;
+    }
+
+    const Cell* currentCell = &board.getCell(firstWallCell.x, firstWallCell.y);
+    if (!isAlliedBlockingWallCell(*currentCell, firstWallCell.x, firstWallCell.y, mover)) {
+        return std::nullopt;
+    }
+
+    sf::Vector2i landing = firstWallCell;
+    do {
+        landing.x += dx;
+        landing.y += dy;
+        if (!board.isInBounds(landing.x, landing.y)) {
+            return std::nullopt;
+        }
+        currentCell = &board.getCell(landing.x, landing.y);
+    } while (isAlliedBlockingWallCell(*currentCell, landing.x, landing.y, mover));
+
+    if (!currentCell->isInCircle || currentCell->type == CellType::Water) {
+        return std::nullopt;
+    }
+
+    if (isBlockingWallCell(*currentCell, landing.x, landing.y)) {
+        return std::nullopt;
+    }
+
+    return landing;
 }
 
 bool isPawnBoardDestinationTraversable(const Board& board, int x, int y) {
@@ -69,6 +112,28 @@ std::vector<sf::Vector2i> MovementRules::getPawnMoves(const Piece& piece, const 
         }
 
         const Cell& cell = board.getCell(nx, ny);
+        if (isAlliedBlockingWallCell(cell, nx, ny, piece.kingdom)) {
+            const std::optional<sf::Vector2i> jumpDestination = resolveAlliedWallJumpDestination(
+                board,
+                {nx, ny},
+                direction[0],
+                direction[1],
+                piece.kingdom);
+            if (!jumpDestination.has_value()) {
+                continue;
+            }
+
+            const Cell& landingCell = board.getCell(jumpDestination->x, jumpDestination->y);
+            if (landingCell.piece || landingCell.autonomousUnit) {
+                continue;
+            }
+            if (isEnemyCapturableBuildingCell(landingCell, piece.kingdom)) {
+                continue;
+            }
+
+            moves.push_back(*jumpDestination);
+            continue;
+        }
         if (cell.piece || cell.autonomousUnit) {
             continue;
         }
@@ -196,6 +261,25 @@ std::vector<sf::Vector2i> MovementRules::getKingMoves(const Piece& piece, const 
             const Cell& cell = board.getCell(nx, ny);
             if (!cell.isInCircle || cell.type == CellType::Water) continue;
 
+            if (isAlliedBlockingWallCell(cell, nx, ny, piece.kingdom)) {
+                const std::optional<sf::Vector2i> jumpDestination = resolveAlliedWallJumpDestination(
+                    board,
+                    {nx, ny},
+                    dx,
+                    dy,
+                    piece.kingdom);
+                if (!jumpDestination.has_value()) {
+                    continue;
+                }
+
+                const Cell& landingCell = board.getCell(jumpDestination->x, jumpDestination->y);
+                if (landingCell.piece && landingCell.piece->kingdom == piece.kingdom) {
+                    continue;
+                }
+
+                moves.push_back(*jumpDestination);
+                continue;
+            }
             if (isBlockingWallCell(cell, nx, ny)) {
                 if (cell.building->owner != piece.kingdom && !cell.building->isNeutral)
                     moves.push_back({nx, ny});
@@ -222,6 +306,21 @@ std::vector<sf::Vector2i> MovementRules::traceDirection(
         const Cell& cell = board.getCell(nx, ny);
         if (!cell.isInCircle || cell.type == CellType::Water) break;
 
+        if (isAlliedBlockingWallCell(cell, nx, ny, piece.kingdom)) {
+            const std::optional<sf::Vector2i> jumpDestination = resolveAlliedWallJumpDestination(
+                board,
+                {nx, ny},
+                dx,
+                dy,
+                piece.kingdom);
+            if (jumpDestination.has_value()) {
+                const Cell& landingCell = board.getCell(jumpDestination->x, jumpDestination->y);
+                if (!(landingCell.piece && landingCell.piece->kingdom == piece.kingdom)) {
+                    moves.push_back(*jumpDestination);
+                }
+            }
+            break;
+        }
         if (isBlockingWallCell(cell, nx, ny)) {
             if (cell.building->owner != piece.kingdom && !cell.building->isNeutral)
                 moves.push_back({nx, ny});
