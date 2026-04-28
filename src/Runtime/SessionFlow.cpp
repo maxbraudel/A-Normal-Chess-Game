@@ -92,6 +92,7 @@ bool SessionFlow::startNewSession(const GameSessionConfig& session,
         m_dataRecorder.setPendingTurnTelemetry(m_behavioralTelemetry.snapshotPendingTurn());
     } else {
         m_behavioralTelemetry.reset();
+        m_dataRecorder.setPendingTurnTelemetry(BehavioralPendingTurnTelemetry{});
     }
     return true;
 }
@@ -156,6 +157,7 @@ bool SessionFlow::loadSession(const std::string& saveName,
         m_dataRecorder.setPendingTurnTelemetry(m_behavioralTelemetry.snapshotPendingTurn());
     } else {
         m_behavioralTelemetry.reset();
+        m_dataRecorder.setPendingTurnTelemetry(BehavioralPendingTurnTelemetry{});
     }
     return true;
 }
@@ -181,6 +183,8 @@ bool SessionFlow::saveAuthoritativeSession(bool allowSave,
     if (m_engine.sessionConfig().dataCollectionEnabled
         && m_engine.sessionConfig().behavioralTelemetryEnabled) {
         m_dataRecorder.setPendingTurnTelemetry(m_behavioralTelemetry.snapshotPendingTurn());
+    } else if (m_engine.sessionConfig().dataCollectionEnabled) {
+        m_dataRecorder.setPendingTurnTelemetry(BehavioralPendingTurnTelemetry{});
     }
 
     if (m_engine.sessionConfig().dataCollectionEnabled

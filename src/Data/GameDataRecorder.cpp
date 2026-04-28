@@ -3453,6 +3453,10 @@ bool GameDataRecorder::loadFromFile(const std::string& dataFilePath,
         return false;
     }
 
+    if (extractInt(json, "schemaVersion", 0) != kSchemaVersion) {
+        return false;
+    }
+
     reset();
     m_enabled = extractBool(json, "dataCollectionEnabled", true);
     m_historyContinuityComplete = extractBool(json, "historyContinuityComplete", false);

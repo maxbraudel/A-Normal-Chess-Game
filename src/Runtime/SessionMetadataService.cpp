@@ -147,6 +147,7 @@ bool SessionMetadataService::editSavedSession(const SessionFormRequest& request,
     data.tacticalGridEnabled = finalizedSession.tacticalGridEnabled;
     data.sharedTurnPreviewEnabled = finalizedSession.sharedTurnPreviewEnabled;
     data.dataCollectionEnabled = finalizedSession.dataCollectionEnabled;
+    data.behavioralTelemetryEnabled = finalizedSession.behavioralTelemetryEnabled;
 
     if (!GameStateValidator::validateSaveData(data, errorMessage)) {
         return false;
@@ -170,13 +171,25 @@ bool SessionMetadataService::editSavedSession(const SessionFormRequest& request,
     }
 
     if (finalizedSession.dataCollectionEnabled) {
-        GameDataRecorder::renameCompanion(kDataDirectory,
-                                          request.originalSaveName,
-                                          finalizedSession.saveName);
+        if (!GameDataRecorder::renameCompanion(kDataDirectory,
+                                               request.originalSaveName,
+                                               finalizedSession.saveName)) {
+            writeError(errorMessage,
+                "Save metadata was updated, but the Data companion could not be renamed.");
+            return false;
+        }
     } else {
-        GameDataRecorder::deleteCompanion(kDataDirectory, request.originalSaveName);
+        if (!GameDataRecorder::deleteCompanion(kDataDirectory, request.originalSaveName)) {
+            writeError(errorMessage,
+                "Save metadata was updated, but the old Data companion could not be removed.");
+            return false;
+        }
         if (finalizedSession.saveName != request.originalSaveName) {
-            GameDataRecorder::deleteCompanion(kDataDirectory, finalizedSession.saveName);
+            if (!GameDataRecorder::deleteCompanion(kDataDirectory, finalizedSession.saveName)) {
+                writeError(errorMessage,
+                    "Save metadata was updated, but a stale renamed Data companion could not be removed.");
+                return false;
+            }
         }
     }
 

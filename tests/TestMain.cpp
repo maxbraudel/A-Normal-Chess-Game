@@ -30,6 +30,7 @@
 #include "Core/GameState.hpp"
 #include "Core/GameStateValidator.hpp"
 #include "Core/TurnDraft.hpp"
+#include "Data/GameDataRecorder.hpp"
 #include "Debug/GameStateDebugRecorder.hpp"
 #include "Input/InputHandler.hpp"
 #include "Input/LayeredSelection.hpp"
@@ -5085,6 +5086,8 @@ void testSaveManagerRoundTrip() {
                     session.multiplayer.passwordSalt);
                 session.tacticalGridEnabled = false;
                 session.sharedTurnPreviewEnabled = false;
+                session.dataCollectionEnabled = true;
+                session.behavioralTelemetryEnabled = true;
 
                 std::string error;
                 expect(engine.startNewSession(session, config, &error), error);
@@ -5103,6 +5106,8 @@ void testSaveManagerRoundTrip() {
                 request.session.multiplayer.port = 43000;
                 request.session.tacticalGridEnabled = true;
                 request.session.sharedTurnPreviewEnabled = true;
+                request.session.dataCollectionEnabled = true;
+                request.session.behavioralTelemetryEnabled = true;
 
                 expect(SessionMetadataService::editSavedSession(request,
                                                                 saveManager,
@@ -5128,6 +5133,10 @@ void testSaveManagerRoundTrip() {
                     "Editing save metadata should update Tactical Grid availability.");
                 expect(editedData.sharedTurnPreviewEnabled,
                     "Editing save metadata should update Shared Turn Preview availability.");
+                expect(editedData.dataCollectionEnabled,
+                    "Editing save metadata should preserve Data companion collection when it remains enabled.");
+                expect(editedData.behavioralTelemetryEnabled,
+                    "Editing save metadata should preserve behavioral telemetry availability when it remains enabled.");
                 expect(editedData.multiplayer.enabled && editedData.multiplayer.port == 43000,
                     "Editing save metadata should update the stored LAN port while keeping the session networked.");
                 expect(editedData.multiplayer.passwordSalt == session.multiplayer.passwordSalt
@@ -5137,6 +5146,70 @@ void testSaveManagerRoundTrip() {
                         && editedData.kingdoms[kingdomIndex(KingdomId::White)].pieces.size() == 1
                         && editedData.kingdoms[kingdomIndex(KingdomId::Black)].pieces.size() == 1,
                     "Editing save metadata should preserve the authoritative board state and kingdom pieces.");
+            } catch (...) {
+                std::filesystem::remove_all(tempDir);
+                throw;
+            }
+
+            std::filesystem::remove_all(tempDir);
+        }
+
+        void testGameDataRecorderRejectsLegacySchemaCompanion() {
+            GameConfig config;
+            GameEngine engine;
+            SaveManager saveManager;
+            GameDataRecorder recorder;
+            const auto tempDir = std::filesystem::temp_directory_path()
+                / ("anormalchessgame_datarecorder_"
+                    + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
+            std::filesystem::create_directories(tempDir);
+
+            try {
+                GameSessionConfig session = makeDefaultGameSessionConfig(GameMode::HumanVsHuman,
+                                                                         "legacy_companion_schema_test");
+                session.dataCollectionEnabled = true;
+
+                std::string error;
+                expect(engine.startNewSession(session, config, &error), error);
+                const SaveData snapshot = engine.createSaveData();
+                const std::filesystem::path companionPath = tempDir / "legacy_companion_schema_test.json";
+
+                std::ofstream output(companionPath);
+                expect(output.is_open(),
+                    "Legacy companion schema test should be able to create a temporary companion file.");
+                output << "{\n";
+                output << "  \"schemaVersion\": 2,\n";
+                output << "  \"saveName\": \"legacy_companion_schema_test\",\n";
+                output << "  \"dataCollectionEnabled\": true,\n";
+                output << "  \"historyContinuityComplete\": true,\n";
+                output << "  \"loadedFromExistingCompanion\": true,\n";
+                output << "  \"createdAtUnix\": 1,\n";
+                output << "  \"lastUpdatedAtUnix\": 1,\n";
+                output << "  \"initialSnapshotReason\": \"legacy_schema\",\n";
+                output << "  \"initialSnapshot\": " << saveManager.serialize(snapshot) << ",\n";
+                output << "  \"turnHistory\": []\n";
+                output << "}\n";
+                output.close();
+
+                const bool resumed = recorder.resumeOrBootstrapFromSave(
+                    session,
+                    snapshot,
+                    companionPath.string(),
+                    saveManager);
+                expect(!resumed,
+                    "GameDataRecorder should reject companions from an older schema instead of resuming incompatible history.");
+
+                std::string saveError;
+                expect(recorder.saveToFile(companionPath.string(), config, saveManager, &saveError), saveError);
+
+                std::ifstream rewritten(companionPath);
+                std::stringstream buffer;
+                buffer << rewritten.rdbuf();
+                const std::string json = buffer.str();
+                expect(json.find("\"schemaVersion\": 5") != std::string::npos,
+                    "Rejected legacy companions should be replaced by a fresh current-schema Data file on the next save.");
+                expect(json.find("\"historyContinuityComplete\": false") != std::string::npos,
+                    "Bootstrapping after rejecting a legacy companion should mark the history as partial.");
             } catch (...) {
                 std::filesystem::remove_all(tempDir);
                 throw;
@@ -9724,6 +9797,7 @@ int main(int argc, char** argv) {
         {"session flow roundtrip", testSessionFlowStartsSavesAndLoadsSession},
         {"session metadata create prep", testSessionMetadataServicePreparesCreateSessionsAndHashesLanPasswords},
         {"session metadata edit save", testSessionMetadataServiceEditsAndRenamesSaveMetadata},
+        {"data recorder rejects legacy schema companion", testGameDataRecorderRejectsLegacySchemaCompanion},
         {"session runtime coordinator flow", testSessionRuntimeCoordinatorAppliesSessionEntryAndMainMenuTransitions},
         {"selection query coordinator bookmark fallback", testSelectionQueryCoordinatorResolvesBookmarkFallback},
         {"selection query coordinator autonomous id", testSelectionQueryCoordinatorResolvesAutonomousUnitById},
