@@ -24,7 +24,6 @@ Sources de verite inspectees:
 - `src/Core/Game.cpp`
 - `src/Save/SaveManager.cpp`
 - `assets/config/master_config.json`
-- `assets/config/game_params.json`
 
 Conclusion courte:
 
@@ -37,13 +36,12 @@ Conclusion courte:
 
 ### 2.1 Precedence de configuration runtime
 
-Le jeu charge d'abord `assets/config/master_config.json`, puis tombe sur `assets/config/game_params.json` seulement si le fichier unifie n'est pas present. En pratique, les valeurs runtime actuelles proviennent donc prioritairement de `master_config.json`, completees par les defaults de `GameConfig::setDefaults()` pour les cles non exposees.
+Le jeu charge maintenant `assets/config/master_config.json` comme source unique de configuration runtime. Les valeurs runtime actuelles proviennent donc de `master_config.json`, completees par les defaults de `GameConfig::setDefaults()` pour les cles non exposees.
 
 Consequences pour l'aleatoire:
 
-- les familles XP, infernal et meteo sont pilotees par des cles presentes dans `master_config.json`
-- les coffres ont maintenant une exposition partielle dans `master_config.json` pour les poids de loot et le profil d'or, mais plusieurs parametres de spawn restent sur defaults code
-- `game_params.json` ne porte aujourd'hui ni section `weather`, ni section `infernal`, ni section `chests`
+- les familles XP, infernal, meteo et coffres sont pilotees par des cles presentes dans `master_config.json`
+- certains parametres de spawn ou de distribution restent sur defaults code lorsqu'ils ne sont pas encore exposes dans `master_config.json`
 
 ### 2.2 Trois patterns de generation aleatoire
 

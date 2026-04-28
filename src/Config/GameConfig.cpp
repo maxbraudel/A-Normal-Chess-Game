@@ -360,7 +360,7 @@ void GameConfig::setDefaults() {
     m_weatherAlphaBasePercent = 48;
     m_weatherAlphaMinPercent = 22;
     m_weatherAlphaMaxPercent = 82;
-    m_damagedStructureOpacityPercent = 70;
+    m_renderingStyle = RenderingStyleConfig{};
     m_weatherDensityMuTimes100 = -12;
     m_weatherDensitySigmaTimes100 = 35;
 
@@ -1093,10 +1093,223 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
 
     const std::string renderingSec = extractSection(root, "rendering");
     if (!renderingSec.empty()) {
-        m_damagedStructureOpacityPercent = extractInt(
-            renderingSec,
-            "damaged_structure_opacity_percent",
-            m_damagedStructureOpacityPercent);
+        const auto extractRenderingColor = [&](const std::string& parentSection,
+                                               const std::string& key,
+                                               const sf::Color& defaultColor,
+                                               const std::string& label) {
+            const std::string colorSec = extractSection(parentSection, key);
+            if (colorSec.empty()) {
+                return defaultColor;
+            }
+
+            const int red = clampRangedConfigValue(
+                label + ".r",
+                extractInt(colorSec, "r", defaultColor.r),
+                0,
+                255);
+            const int green = clampRangedConfigValue(
+                label + ".g",
+                extractInt(colorSec, "g", defaultColor.g),
+                0,
+                255);
+            const int blue = clampRangedConfigValue(
+                label + ".b",
+                extractInt(colorSec, "b", defaultColor.b),
+                0,
+                255);
+            const int alpha = clampRangedConfigValue(
+                label + ".a",
+                extractInt(colorSec, "a", defaultColor.a),
+                0,
+                255);
+            return sf::Color(
+                static_cast<sf::Uint8>(red),
+                static_cast<sf::Uint8>(green),
+                static_cast<sf::Uint8>(blue),
+                static_cast<sf::Uint8>(alpha));
+        };
+
+        if (containsJsonKey(renderingSec, "damaged_structure_opacity_percent")) {
+            m_renderingStyle.damagedStructures.opacityPercent = extractInt(
+                renderingSec,
+                "damaged_structure_opacity_percent",
+                m_renderingStyle.damagedStructures.opacityPercent);
+        }
+
+        const std::string damagedStructuresSec = extractSection(renderingSec, "damaged_structures");
+        if (!damagedStructuresSec.empty()) {
+            m_renderingStyle.damagedStructures.opacityPercent = extractInt(
+                damagedStructuresSec,
+                "opacity_percent",
+                m_renderingStyle.damagedStructures.opacityPercent);
+        }
+
+        const std::string selectionOverlaySec = extractSection(renderingSec, "selection_overlay");
+        if (!selectionOverlaySec.empty()) {
+            m_renderingStyle.selectionOverlay.selectionFrame = extractRenderingColor(
+                selectionOverlaySec,
+                "selection_frame",
+                m_renderingStyle.selectionOverlay.selectionFrame,
+                "rendering.selection_overlay.selection_frame");
+            m_renderingStyle.selectionOverlay.originCellSafe = extractRenderingColor(
+                selectionOverlaySec,
+                "origin_cell_safe",
+                m_renderingStyle.selectionOverlay.originCellSafe,
+                "rendering.selection_overlay.origin_cell_safe");
+            m_renderingStyle.selectionOverlay.reachableCell = extractRenderingColor(
+                selectionOverlaySec,
+                "reachable_cell",
+                m_renderingStyle.selectionOverlay.reachableCell,
+                "rendering.selection_overlay.reachable_cell");
+            m_renderingStyle.selectionOverlay.dangerCell = extractRenderingColor(
+                selectionOverlaySec,
+                "danger_cell",
+                m_renderingStyle.selectionOverlay.dangerCell,
+                "rendering.selection_overlay.danger_cell");
+        }
+
+        const std::string buildPreviewSec = extractSection(renderingSec, "build_preview");
+        if (!buildPreviewSec.empty()) {
+            m_renderingStyle.buildPreview.validFill = extractRenderingColor(
+                buildPreviewSec,
+                "valid_fill",
+                m_renderingStyle.buildPreview.validFill,
+                "rendering.build_preview.valid_fill");
+            m_renderingStyle.buildPreview.invalidFill = extractRenderingColor(
+                buildPreviewSec,
+                "invalid_fill",
+                m_renderingStyle.buildPreview.invalidFill,
+                "rendering.build_preview.invalid_fill");
+            m_renderingStyle.buildPreview.validOutline = extractRenderingColor(
+                buildPreviewSec,
+                "valid_outline",
+                m_renderingStyle.buildPreview.validOutline,
+                "rendering.build_preview.valid_outline");
+            m_renderingStyle.buildPreview.invalidOutline = extractRenderingColor(
+                buildPreviewSec,
+                "invalid_outline",
+                m_renderingStyle.buildPreview.invalidOutline,
+                "rendering.build_preview.invalid_outline");
+        }
+
+        const std::string structureOverlaySec = extractSection(renderingSec, "structure_overlay");
+        if (!structureOverlaySec.empty()) {
+            m_renderingStyle.structureOverlay.background = extractRenderingColor(
+                structureOverlaySec,
+                "background",
+                m_renderingStyle.structureOverlay.background,
+                "rendering.structure_overlay.background");
+            m_renderingStyle.structureOverlay.outline = extractRenderingColor(
+                structureOverlaySec,
+                "outline",
+                m_renderingStyle.structureOverlay.outline,
+                "rendering.structure_overlay.outline");
+            m_renderingStyle.structureOverlay.fill = extractRenderingColor(
+                structureOverlaySec,
+                "fill",
+                m_renderingStyle.structureOverlay.fill,
+                "rendering.structure_overlay.fill");
+            m_renderingStyle.structureOverlay.text = extractRenderingColor(
+                structureOverlaySec,
+                "text",
+                m_renderingStyle.structureOverlay.text,
+                "rendering.structure_overlay.text");
+            m_renderingStyle.structureOverlay.iconSizePx = extractInt(
+                structureOverlaySec,
+                "icon_size_px",
+                m_renderingStyle.structureOverlay.iconSizePx);
+            m_renderingStyle.structureOverlay.actionMarkerSizePx = extractInt(
+                structureOverlaySec,
+                "action_marker_size_px",
+                m_renderingStyle.structureOverlay.actionMarkerSizePx);
+            m_renderingStyle.structureOverlay.progressWidthPx = extractInt(
+                structureOverlaySec,
+                "progress_width_px",
+                m_renderingStyle.structureOverlay.progressWidthPx);
+            m_renderingStyle.structureOverlay.progressHeightPx = extractInt(
+                structureOverlaySec,
+                "progress_height_px",
+                m_renderingStyle.structureOverlay.progressHeightPx);
+            m_renderingStyle.structureOverlay.itemGapPx = extractInt(
+                structureOverlaySec,
+                "item_gap_px",
+                m_renderingStyle.structureOverlay.itemGapPx);
+            m_renderingStyle.structureOverlay.rowGapPx = extractInt(
+                structureOverlaySec,
+                "row_gap_px",
+                m_renderingStyle.structureOverlay.rowGapPx);
+            m_renderingStyle.structureOverlay.marginAboveBuildingPx = extractInt(
+                structureOverlaySec,
+                "margin_above_building_px",
+                m_renderingStyle.structureOverlay.marginAboveBuildingPx);
+            m_renderingStyle.structureOverlay.textSizePx = extractInt(
+                structureOverlaySec,
+                "text_size_px",
+                m_renderingStyle.structureOverlay.textSizePx);
+        }
+
+        const std::string orientationCheckerSec = extractSection(renderingSec, "orientation_checkerboard");
+        if (!orientationCheckerSec.empty()) {
+            m_renderingStyle.orientationCheckerboard.dark = extractRenderingColor(
+                orientationCheckerSec,
+                "dark",
+                m_renderingStyle.orientationCheckerboard.dark,
+                "rendering.orientation_checkerboard.dark");
+            m_renderingStyle.orientationCheckerboard.light = extractRenderingColor(
+                orientationCheckerSec,
+                "light",
+                m_renderingStyle.orientationCheckerboard.light,
+                "rendering.orientation_checkerboard.light");
+        }
+
+        const std::string queuedMovePathsSec = extractSection(renderingSec, "queued_move_paths");
+        if (!queuedMovePathsSec.empty()) {
+            m_renderingStyle.queuedMovePaths.color = extractRenderingColor(
+                queuedMovePathsSec,
+                "color",
+                m_renderingStyle.queuedMovePaths.color,
+                "rendering.queued_move_paths.color");
+            m_renderingStyle.queuedMovePaths.layerOpacityPercent = extractInt(
+                queuedMovePathsSec,
+                "layer_opacity_percent",
+                m_renderingStyle.queuedMovePaths.layerOpacityPercent);
+            m_renderingStyle.queuedMovePaths.thicknessPx = extractInt(
+                queuedMovePathsSec,
+                "thickness_px",
+                m_renderingStyle.queuedMovePaths.thicknessPx);
+            m_renderingStyle.queuedMovePaths.dottedDotSizePx = extractInt(
+                queuedMovePathsSec,
+                "dotted_dot_size_px",
+                m_renderingStyle.queuedMovePaths.dottedDotSizePx);
+            m_renderingStyle.queuedMovePaths.dottedGapPx = extractInt(
+                queuedMovePathsSec,
+                "dotted_gap_px",
+                m_renderingStyle.queuedMovePaths.dottedGapPx);
+        }
+
+        const std::string tacticalGridSec = extractSection(renderingSec, "tactical_grid");
+        if (!tacticalGridSec.empty()) {
+            m_renderingStyle.tacticalGrid.checkerDark = extractRenderingColor(
+                tacticalGridSec,
+                "checker_dark",
+                m_renderingStyle.tacticalGrid.checkerDark,
+                "rendering.tactical_grid.checker_dark");
+            m_renderingStyle.tacticalGrid.checkerLight = extractRenderingColor(
+                tacticalGridSec,
+                "checker_light",
+                m_renderingStyle.tacticalGrid.checkerLight,
+                "rendering.tactical_grid.checker_light");
+            m_renderingStyle.tacticalGrid.blockedTerrain = extractRenderingColor(
+                tacticalGridSec,
+                "blocked_terrain",
+                m_renderingStyle.tacticalGrid.blockedTerrain,
+                "rendering.tactical_grid.blocked_terrain");
+            m_renderingStyle.tacticalGrid.blockedStructure = extractRenderingColor(
+                tacticalGridSec,
+                "blocked_structure",
+                m_renderingStyle.tacticalGrid.blockedStructure,
+                "rendering.tactical_grid.blocked_structure");
+        }
     }
 
     m_weatherCooldownMinTurns = clampNonNegativeConfigValue(
@@ -1154,11 +1367,57 @@ bool GameConfig::loadFromFile(const std::string& filepath) {
     if (m_weatherAlphaMaxPercent < m_weatherAlphaMinPercent) {
         std::swap(m_weatherAlphaMinPercent, m_weatherAlphaMaxPercent);
     }
-    m_damagedStructureOpacityPercent = clampRangedConfigValue(
-        "rendering.damaged_structure_opacity_percent",
-        m_damagedStructureOpacityPercent,
+    m_renderingStyle.damagedStructures.opacityPercent = clampRangedConfigValue(
+        "rendering.damaged_structures.opacity_percent",
+        m_renderingStyle.damagedStructures.opacityPercent,
         0,
         100);
+    m_renderingStyle.structureOverlay.iconSizePx = clampPositiveConfigValue(
+        "rendering.structure_overlay.icon_size_px",
+        m_renderingStyle.structureOverlay.iconSizePx);
+    m_renderingStyle.structureOverlay.actionMarkerSizePx = clampPositiveConfigValue(
+        "rendering.structure_overlay.action_marker_size_px",
+        m_renderingStyle.structureOverlay.actionMarkerSizePx);
+    m_renderingStyle.structureOverlay.progressWidthPx = clampPositiveConfigValue(
+        "rendering.structure_overlay.progress_width_px",
+        m_renderingStyle.structureOverlay.progressWidthPx);
+    m_renderingStyle.structureOverlay.progressHeightPx = clampPositiveConfigValue(
+        "rendering.structure_overlay.progress_height_px",
+        m_renderingStyle.structureOverlay.progressHeightPx);
+    m_renderingStyle.structureOverlay.itemGapPx = clampRangedConfigValue(
+        "rendering.structure_overlay.item_gap_px",
+        m_renderingStyle.structureOverlay.itemGapPx,
+        0,
+        1024);
+    m_renderingStyle.structureOverlay.rowGapPx = clampRangedConfigValue(
+        "rendering.structure_overlay.row_gap_px",
+        m_renderingStyle.structureOverlay.rowGapPx,
+        0,
+        1024);
+    m_renderingStyle.structureOverlay.marginAboveBuildingPx = clampRangedConfigValue(
+        "rendering.structure_overlay.margin_above_building_px",
+        m_renderingStyle.structureOverlay.marginAboveBuildingPx,
+        0,
+        1024);
+    m_renderingStyle.structureOverlay.textSizePx = clampPositiveConfigValue(
+        "rendering.structure_overlay.text_size_px",
+        m_renderingStyle.structureOverlay.textSizePx);
+    m_renderingStyle.queuedMovePaths.layerOpacityPercent = clampRangedConfigValue(
+        "rendering.queued_move_paths.layer_opacity_percent",
+        m_renderingStyle.queuedMovePaths.layerOpacityPercent,
+        0,
+        100);
+    m_renderingStyle.queuedMovePaths.thicknessPx = clampPositiveConfigValue(
+        "rendering.queued_move_paths.thickness_px",
+        m_renderingStyle.queuedMovePaths.thicknessPx);
+    m_renderingStyle.queuedMovePaths.dottedDotSizePx = clampPositiveConfigValue(
+        "rendering.queued_move_paths.dotted_dot_size_px",
+        m_renderingStyle.queuedMovePaths.dottedDotSizePx);
+    m_renderingStyle.queuedMovePaths.dottedGapPx = clampRangedConfigValue(
+        "rendering.queued_move_paths.dotted_gap_px",
+        m_renderingStyle.queuedMovePaths.dottedGapPx,
+        0,
+        1024);
     m_weatherDensitySigmaTimes100 = clampRangedConfigValue(
         "weather.density_sigma_times_100", m_weatherDensitySigmaTimes100, 1, 200);
 
@@ -1490,7 +1749,8 @@ int GameConfig::getWeatherEdgeSoftnessPercent() const { return m_weatherEdgeSoft
 int GameConfig::getWeatherAlphaBasePercent() const { return m_weatherAlphaBasePercent; }
 int GameConfig::getWeatherAlphaMinPercent() const { return m_weatherAlphaMinPercent; }
 int GameConfig::getWeatherAlphaMaxPercent() const { return m_weatherAlphaMaxPercent; }
-int GameConfig::getDamagedStructureOpacityPercent() const { return m_damagedStructureOpacityPercent; }
+int GameConfig::getDamagedStructureOpacityPercent() const { return m_renderingStyle.damagedStructures.opacityPercent; }
+const RenderingStyleConfig& GameConfig::getRenderingStyle() const { return m_renderingStyle; }
 int GameConfig::getWeatherDensityMuTimes100() const { return m_weatherDensityMuTimes100; }
 int GameConfig::getWeatherDensitySigmaTimes100() const { return m_weatherDensitySigmaTimes100; }
 

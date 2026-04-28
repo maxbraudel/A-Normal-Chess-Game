@@ -5,6 +5,7 @@
 #include <sstream>
 #include <map>
 #include <SFML/Window/Keyboard.hpp>
+#include "Config/RenderingStyleConfig.hpp"
 #include "Buildings/BuildingType.hpp"
 #include "Systems/ResourceIncomeProfile.hpp"
 #include "Systems/WeatherTypes.hpp"
@@ -130,6 +131,7 @@ public:
     int getWeatherAlphaMinPercent() const;
     int getWeatherAlphaMaxPercent() const;
     int getDamagedStructureOpacityPercent() const;
+    const RenderingStyleConfig& getRenderingStyle() const;
     int getWeatherDensityMuTimes100() const;
     int getWeatherDensitySigmaTimes100() const;
 
@@ -294,7 +296,7 @@ private:
     int m_weatherAlphaBasePercent;
     int m_weatherAlphaMinPercent;
     int m_weatherAlphaMaxPercent;
-    int m_damagedStructureOpacityPercent;
+    RenderingStyleConfig m_renderingStyle;
     int m_weatherDensityMuTimes100;
     int m_weatherDensitySigmaTimes100;
 

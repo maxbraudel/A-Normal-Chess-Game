@@ -1,6 +1,10 @@
 #include "Runtime/RenderCoordinator.hpp"
 
 #include <algorithm>
+#include <cstdlib>
+
+#include <SFML/Graphics/RenderTexture.hpp>
+#include <SFML/Graphics/Sprite.hpp>
 
 #include "Assets/AssetManager.hpp"
 #include "Board/Board.hpp"
@@ -17,6 +21,10 @@
 #include "Systems/TurnCommand.hpp"
 
 namespace {
+
+sf::Uint8 opacityPercentToAlpha(int opacityPercent) {
+    return static_cast<sf::Uint8>((255 * opacityPercent + 50) / 100);
+}
 
 void drawStructureOverlaysForBuildings(sf::RenderWindow& window,
                                        Renderer& renderer,
@@ -140,6 +148,22 @@ bool isPendingBuildHiddenByFog(const WorldRenderState& state,
     return false;
 }
 
+std::optional<sf::Vector2i> resolveMovePathElbow(const TurnCommand& pendingCommand) {
+    const int dx = pendingCommand.destination.x - pendingCommand.origin.x;
+    const int dy = pendingCommand.destination.y - pendingCommand.origin.y;
+    const int absDx = std::abs(dx);
+    const int absDy = std::abs(dy);
+
+    if (absDx == 2 && absDy == 1) {
+        return sf::Vector2i{pendingCommand.destination.x, pendingCommand.origin.y};
+    }
+    if (absDx == 1 && absDy == 2) {
+        return sf::Vector2i{pendingCommand.origin.x, pendingCommand.destination.y};
+    }
+
+    return std::nullopt;
+}
+
 } // namespace
 
 bool RenderCoordinator::shouldRenderWorld(GameState state) {
@@ -184,11 +208,14 @@ WorldRenderPlan RenderCoordinator::buildWorldRenderPlan(
         const sf::Vector2i highlightedOrigin = pendingMove != nullptr
             ? pendingMove->origin
             : state.selectedCell.value_or(state.selectedPiece->position);
-        const bool shouldShowOriginOverlay = state.selectedPiece->type == PieceType::King || pendingMove != nullptr;
+        const bool shouldShowOriginOverlay = state.selectedPiece->type == PieceType::King
+            || (pendingMove != nullptr && state.selectedOriginSelectable);
         if (shouldShowOriginOverlay) {
             plan.selectedOriginCell = OriginCellSpec{
                 highlightedOrigin,
-                state.selectedOriginDangerous ? sf::Color(255, 40, 40, 90) : sf::Color(40, 120, 255, 130)
+                state.selectedOriginDangerous
+                    ? config.getRenderingStyle().selectionOverlay.dangerCell
+                    : config.getRenderingStyle().selectionOverlay.originCellSafe
             };
         }
         plan.highlightedCells = state.validMoves;
@@ -273,6 +300,14 @@ WorldRenderPlan RenderCoordinator::buildWorldRenderPlan(
                 continue;
             }
 
+            const std::optional<sf::Vector2i> movePathElbow = resolveMovePathElbow(pendingCommand);
+            plan.movePaths.push_back(MovePathSpec{
+                pendingCommand.origin,
+                pendingCommand.destination,
+                movePathElbow,
+                movePathElbow.has_value()
+            });
+
             plan.actionMarkers.push_back(ActionMarkerSpec{
                 pendingCommand.destination,
                 1,
@@ -354,6 +389,36 @@ void RenderCoordinator::renderWorldFrame(WorldRenderBindings& bindings,
                                                        bindings.camera,
                                                        plan.dangerCells,
                                                        bindings.config.getCellSizePx());
+    }
+
+    if (!plan.movePaths.empty()) {
+        sf::RenderTexture movePathLayer;
+        if (movePathLayer.create(bindings.windowSize.x, bindings.windowSize.y)) {
+            movePathLayer.clear(sf::Color::Transparent);
+            for (const MovePathSpec& movePath : plan.movePaths) {
+                bindings.renderer.getOverlay().drawMovePath(movePathLayer,
+                                                            bindings.camera,
+                                                            bindings.hudView,
+                                                            bindings.windowSize,
+                                                            movePath.origin,
+                                                            movePath.destination,
+                                                            movePath.elbow,
+                                                            movePath.dottedFirstSegment,
+                                                            bindings.config.getCellSizePx());
+            }
+            movePathLayer.display();
+
+            sf::Sprite movePathSprite(movePathLayer.getTexture());
+            movePathSprite.setColor(sf::Color(
+                255,
+                255,
+                255,
+                opacityPercentToAlpha(bindings.config.getRenderingStyle().queuedMovePaths.layerOpacityPercent)));
+            const sf::View savedView = bindings.window.getView();
+            bindings.window.setView(bindings.hudView);
+            bindings.window.draw(movePathSprite);
+            bindings.window.setView(savedView);
+        }
     }
 
     const StructureOverlayPolicy overlayPolicy = makeWorldStructureOverlayPolicy();

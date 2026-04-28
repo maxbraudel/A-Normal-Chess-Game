@@ -21,8 +21,6 @@ namespace {
 
 constexpr int kFlipHorizontalMask = 1;
 constexpr int kFlipVerticalMask = 2;
-const sf::Color kTacticalGridBlockedTerrainColor(86, 112, 146, 255);
-const sf::Color kTacticalGridBlockedStructureColor(54, 54, 54, 255);
 
 void configureSpriteForCell(sf::Sprite& sprite, int cellSize,
                             float cellX, float cellY,
@@ -66,12 +64,13 @@ void configureSpriteForCell(sf::Sprite& sprite, int cellSize,
 Renderer::Renderer()
     : m_assets(nullptr)
     , m_cellSize(16)
-    , m_damagedStructureOpacityPercent(70) {}
+    , m_renderingStyle() {}
 
-void Renderer::init(const AssetManager& assets, int cellSize, int damagedStructureOpacityPercent) {
+void Renderer::init(const AssetManager& assets, int cellSize, const RenderingStyleConfig& renderingStyle) {
     m_assets = &assets;
     m_cellSize = cellSize;
-    m_damagedStructureOpacityPercent = std::clamp(damagedStructureOpacityPercent, 0, 100);
+    m_renderingStyle = renderingStyle;
+    m_overlay.configure(m_renderingStyle);
 }
 
 OverlayRenderer& Renderer::getOverlay() { return m_overlay; }
@@ -125,7 +124,7 @@ void Renderer::drawTacticalGridBlockedTerrain(sf::RenderWindow& window,
     const int maxRow = std::min(diameter - 1, static_cast<int>((viewBounds.top + viewBounds.height) / m_cellSize) + 1);
 
     sf::RectangleShape cellShape(sf::Vector2f(static_cast<float>(m_cellSize), static_cast<float>(m_cellSize)));
-    cellShape.setFillColor(kTacticalGridBlockedTerrainColor);
+    cellShape.setFillColor(m_renderingStyle.tacticalGrid.blockedTerrain);
 
     for (int y = minRow; y <= maxRow; ++y) {
         for (int x = minCol; x <= maxCol; ++x) {
@@ -155,7 +154,7 @@ void Renderer::drawTacticalGridBlockedStructures(sf::RenderWindow& window,
     const int maxRow = std::min(diameter - 1, static_cast<int>((viewBounds.top + viewBounds.height) / m_cellSize) + 1);
 
     sf::RectangleShape cellShape(sf::Vector2f(static_cast<float>(m_cellSize), static_cast<float>(m_cellSize)));
-    cellShape.setFillColor(kTacticalGridBlockedStructureColor);
+    cellShape.setFillColor(m_renderingStyle.tacticalGrid.blockedStructure);
 
     for (int y = minRow; y <= maxRow; ++y) {
         for (int x = minCol; x <= maxCol; ++x) {
@@ -349,7 +348,7 @@ void Renderer::drawSingleBuilding(sf::RenderWindow& window,
             int hp = building.getCellHP(dx, dy);
             if ((hp <= 0 || building.isCellBreached(dx, dy)) && !building.isPublic()) {
                 const sf::Uint8 damagedAlpha = static_cast<sf::Uint8>(
-                    (255 * m_damagedStructureOpacityPercent + 50) / 100);
+                    (255 * m_renderingStyle.damagedStructures.opacityPercent + 50) / 100);
                 sprite.setColor(sf::Color(255, 255, 255, damagedAlpha));
             } else {
                 sprite.setColor(sf::Color::White);

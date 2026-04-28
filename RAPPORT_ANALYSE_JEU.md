@@ -737,7 +737,7 @@ L'IA est puissante sur le papier, mais on observe deja une derive entre configur
 
 Exemple concret:
 
-- `assets/config/ai_params.json` contient une section `timing`
+- `assets/config/master_config.json` centralise maintenant les parametres IA dans sa section `ai`, y compris `timing`
 - `AIConfig.cpp` ne parse pas cette section
 - `AIConfig.cpp` force aussi `randomness = 0.0f` au lieu de lire la valeur JSON
 

@@ -1,6 +1,8 @@
 #pragma once
 #include <SFML/Graphics.hpp>
+#include <optional>
 #include <vector>
+#include "Config/RenderingStyleConfig.hpp"
 #include "Buildings/BuildingType.hpp"
 #include "Render/StructureOverlay.hpp"
 
@@ -11,6 +13,7 @@ class Board;
 
 class OverlayRenderer {
 public:
+    void configure(const RenderingStyleConfig& renderingStyle);
     void drawOrientationCheckerboard(sf::RenderWindow& window, const Board& board, int cellSize);
     void drawTacticalGridCheckerboard(sf::RenderWindow& window, const Board& board, int cellSize);
     void drawSelectionFrame(sf::RenderWindow& window, const Camera& camera,
@@ -34,8 +37,17 @@ public:
                           sf::Vector2i origin, int width, int height,
                           const std::string& iconName,
                           int cellSize, const AssetManager& assets);
+    void drawMovePath(sf::RenderTarget& target, const Camera& camera,
+                      const sf::View& hudView, sf::Vector2u windowSize,
+                      sf::Vector2i origin, sf::Vector2i destination,
+                      const std::optional<sf::Vector2i>& elbow,
+                      bool dottedFirstSegment,
+                      int cellSize);
     void drawStructureOverlay(sf::RenderWindow& window, const Camera& camera,
                                const sf::View& hudView, sf::Vector2u windowSize,
                                const Building& building, const StructureOverlayStack& overlay,
                                int cellSize, const AssetManager& assets);
+
+private:
+    RenderingStyleConfig m_renderingStyle;
 };

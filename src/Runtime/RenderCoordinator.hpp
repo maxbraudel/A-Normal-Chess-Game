@@ -57,6 +57,13 @@ struct ActionMarkerSpec {
     std::string iconName;
 };
 
+struct MovePathSpec {
+    sf::Vector2i origin{0, 0};
+    sf::Vector2i destination{0, 0};
+    std::optional<sf::Vector2i> elbow;
+    bool dottedFirstSegment = false;
+};
+
 struct WorldRenderState {
     GameState gameState = GameState::MainMenu;
     ToolState activeTool = ToolState::Select;
@@ -71,6 +78,7 @@ struct WorldRenderState {
     const MapObject* selectedMapObject = nullptr;
     std::optional<sf::Vector2i> selectedCell;
     bool selectedOriginDangerous = false;
+    bool selectedOriginSelectable = true;
     std::vector<sf::Vector2i> validMoves;
     std::vector<sf::Vector2i> dangerMoves;
     std::set<int> capturePreviewPieceIds;
@@ -93,6 +101,7 @@ struct WorldRenderPlan {
     std::optional<BuildPreviewSpec> liveBuildPreview;
     std::vector<BuildPreviewSpec> pendingBuildPreviews;
     std::vector<ActionMarkerSpec> actionMarkers;
+    std::vector<MovePathSpec> movePaths;
     const Building* selectedBuilding = nullptr;
 };
 

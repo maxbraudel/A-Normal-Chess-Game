@@ -19,10 +19,10 @@ Perimetre explicitement exclu du coeur du rapport :
 
 Point de configuration important :
 
-- le jeu charge d'abord assets/config/master_config.json, puis retombe sur assets/config/game_params.json seulement si master_config.json est absent
-- l'IA charge d'abord assets/config/master_config.json, puis retombe sur assets/config/ai_params.json en secours
-- la configuration actuelle expose des parametres XP, infernal et meteo dans master_config.json
-- la configuration actuelle n'expose pas de section chest dans master_config.json ni dans game_params.json ; le systeme de coffres tourne donc avec les valeurs par defaut codees dans GameConfig::setDefaults()
+- le jeu charge maintenant assets/config/master_config.json comme source unique de configuration runtime
+- l'IA lit egalement sa configuration depuis la section ai de assets/config/master_config.json
+- la configuration actuelle expose des parametres XP, infernal, meteo et coffres dans master_config.json
+- les cles non exposees dans master_config.json continuent de retomber sur les valeurs par defaut de GameConfig::setDefaults()
 
 Point de reproductibilite important :
 
@@ -1035,7 +1035,7 @@ Localisation :
 
 - src/AI/AIStrategy.cpp
 - src/Config/AIConfig.cpp
-- assets/config/master_config.json et assets/config/ai_params.json
+- assets/config/master_config.json
 
 Etat actuel :
 

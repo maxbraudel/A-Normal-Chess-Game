@@ -129,6 +129,24 @@ std::vector<TurnCommand> pendingCommandsWithCandidateMove(const std::vector<Turn
     return candidateCommands;
 }
 
+bool candidateMovePreservesPendingCommandSequence(const TurnValidationContext& context,
+                                                 const std::vector<TurnCommand>& pendingCommands,
+                                                 int pieceId,
+                                                 sf::Vector2i origin,
+                                                 sf::Vector2i destination) {
+    TurnCommand candidateMove;
+    candidateMove.type = TurnCommand::Move;
+    candidateMove.pieceId = pieceId;
+    candidateMove.origin = origin;
+    candidateMove.destination = destination;
+
+    const PendingTurnNormalizationResult normalization = PendingTurnProjection::normalize(
+        context,
+        pendingCommandsWithCandidateMove(pendingCommands, candidateMove),
+        PendingTurnInvalidCommandPolicy::FailFast);
+    return normalization.valid;
+}
+
 bool candidateMoveKeepsKingSafe(const TurnValidationContext& context,
                                 const std::vector<TurnCommand>& pendingCommands,
                                 int pieceId,
@@ -240,9 +258,21 @@ SelectionMoveOptions SelectionMoveRules::classifyPieceMoves(const TurnValidation
     const sf::Vector2i selectionOrigin = pendingMove != nullptr
         ? pendingMove->origin
         : projectedPiece->position;
+    std::vector<sf::Vector2i> compatiblePseudoLegalMoves;
+    compatiblePseudoLegalMoves.reserve(pseudoLegalMoves.size());
+    for (const sf::Vector2i& destination : pseudoLegalMoves) {
+        if (candidateMovePreservesPendingCommandSequence(
+                context,
+                pendingCommands,
+                pieceId,
+                selectionOrigin,
+                destination)) {
+            compatiblePseudoLegalMoves.push_back(destination);
+        }
+    }
 
     if (singleResponseMode) {
-        for (const sf::Vector2i& destination : pseudoLegalMoves) {
+        for (const sf::Vector2i& destination : compatiblePseudoLegalMoves) {
             if (candidateMoveKeepsKingSafe(context, pendingCommands, pieceId, selectionOrigin, destination)) {
                 moveOptions.safeMoves.push_back(destination);
             }
@@ -252,7 +282,7 @@ SelectionMoveOptions SelectionMoveRules::classifyPieceMoves(const TurnValidation
     }
 
     if (moveOptions.originUnsafe) {
-        for (const sf::Vector2i& destination : pseudoLegalMoves) {
+        for (const sf::Vector2i& destination : compatiblePseudoLegalMoves) {
             if (candidateMoveKeepsKingSafe(context, pendingCommands, pieceId, selectionOrigin, destination)) {
                 moveOptions.safeMoves.push_back(destination);
             } else {
@@ -263,12 +293,19 @@ SelectionMoveOptions SelectionMoveRules::classifyPieceMoves(const TurnValidation
         return moveOptions;
     }
 
-    moveOptions.safeMoves = ForwardModel::getLegalMoves(
+    const std::vector<sf::Vector2i> projectedLegalMoves = ForwardModel::getLegalMoves(
         projection.snapshot,
         *projectedPiece,
         context.config.getGlobalMaxRange());
+    for (const sf::Vector2i& destination : projectedLegalMoves) {
+        if (std::find(compatiblePseudoLegalMoves.begin(),
+                      compatiblePseudoLegalMoves.end(),
+                      destination) != compatiblePseudoLegalMoves.end()) {
+            moveOptions.safeMoves.push_back(destination);
+        }
+    }
 
-    for (const sf::Vector2i& destination : pseudoLegalMoves) {
+    for (const sf::Vector2i& destination : compatiblePseudoLegalMoves) {
         if (std::find(moveOptions.safeMoves.begin(), moveOptions.safeMoves.end(), destination)
             == moveOptions.safeMoves.end()) {
             moveOptions.unsafeMoves.push_back(destination);

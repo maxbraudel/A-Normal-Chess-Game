@@ -1911,6 +1911,51 @@ void testInputHandlerKeepsBlockedOriginInformationalOnly() {
             "The blue origin should remain informational only when cancelling the earlier move would leave a later queued piece colliding with that origin.");
     }
 
+    void testSelectionMoveRulesHideDestinationsThatInvalidateLaterQueuedBishopMove() {
+        GameConfig config;
+        Board board;
+        board.init(12);
+
+        Kingdom white(KingdomId::White);
+        Kingdom black(KingdomId::Black);
+        addPieceToBoard(white, board, 329, PieceType::King, KingdomId::White, {4, 4});
+        Piece& lineBishop = addPieceToBoard(white, board, 330, PieceType::Bishop, KingdomId::White, {10, 10});
+        Piece& blockingBishop = addPieceToBoard(white, board, 331, PieceType::Bishop, KingdomId::White, {11, 9});
+        addPieceToBoard(black, board, 425, PieceType::King, KingdomId::Black, {18, 18});
+
+        std::vector<Building> publicBuildings;
+        TurnSystem turnSystem;
+        turnSystem.setActiveKingdom(KingdomId::White);
+
+        const TurnCommand blockingMove = makeMoveCommand(blockingBishop.id, {11, 9}, {10, 8});
+        const TurnCommand lineMove = makeMoveCommand(lineBishop.id, {10, 10}, {13, 7});
+
+        expect(turnSystem.queueCommand(blockingMove, board, white, black, publicBuildings, config),
+            "The blocking bishop should be able to vacate the diagonal before the leading bishop moves through it.");
+        expect(turnSystem.queueCommand(lineMove, board, white, black, publicBuildings, config),
+            "The leading bishop should be able to queue a long diagonal move once the blocking bishop has vacated its path.");
+
+        blockingBishop.position = blockingMove.destination;
+        lineBishop.position = lineMove.destination;
+
+        const SelectionMoveOptions moveOptions = SelectionMoveRules::classifyPieceMoves(
+            board,
+            white,
+            black,
+            publicBuildings,
+            1,
+            turnSystem.getPendingCommands(),
+            blockingBishop.id,
+            config);
+
+        expect(containsCell(moveOptions.safeMoves, {9, 7}),
+            "Reselecting the earlier bishop should still expose alternate destinations that keep the later queued diagonal move valid.");
+        expect(!containsCell(moveOptions.safeMoves, {12, 8}) && !containsCell(moveOptions.unsafeMoves, {12, 8}),
+            "Destinations that would re-block a later queued bishop path should disappear completely from the overlays.");
+        expect(!moveOptions.originSelectable,
+            "The blue origin should stay informational only when returning the blocking bishop to its start would invalidate the later queued bishop move.");
+    }
+
     void testTurnSystemAllowsMoveAfterQueuedUpgradeBeforeCommit() {
         GameConfig config;
         Board board;
@@ -3854,9 +3899,69 @@ void testSessionValidatorRejectsInvalidOrdering() {
         expect(plan.selectionFrames.size() == 1
                 && plan.selectionFrames.front().origin == selectedPiece.position,
             "RenderCoordinator should add a selection frame for the selected piece.");
+        expect(plan.movePaths.size() == 1,
+            "RenderCoordinator should add a queued move path for each pending movement command.");
+        expectVec2i(plan.movePaths.front().origin, selectedPiece.position,
+            "RenderCoordinator should keep the queued move path anchored to the move origin.");
+        expectVec2i(plan.movePaths.front().destination, {5, 5},
+            "RenderCoordinator should keep the queued move path anchored to the move destination.");
+        expect(!plan.movePaths.front().elbow.has_value() && !plan.movePaths.front().dottedFirstSegment,
+            "Non-knight queued move paths should stay straight without dotted segments.");
         expect(plan.actionMarkers.size() == 1
                 && plan.actionMarkers.front().iconName == "move_ongoing",
             "RenderCoordinator should add move action markers for queued movement commands.");
+    }
+
+    void testRenderCoordinatorBuildsKnightMovePathPlan() {
+        GameConfig config;
+
+        WorldRenderState state;
+        state.gameState = GameState::Playing;
+        state.permissions.canShowActionOverlays = true;
+
+        const TurnCommand knightMove = makeMoveCommand(900, {4, 5}, {6, 6});
+        const WorldRenderPlan plan = RenderCoordinator::buildWorldRenderPlan(
+            state,
+            std::vector<TurnCommand>{knightMove},
+            {},
+            {},
+            config);
+
+        expect(plan.movePaths.size() == 1,
+            "RenderCoordinator should emit a move path spec for queued knight moves.");
+        expect(plan.movePaths.front().elbow.has_value(),
+            "Knight move paths should include an elbow for the L-shaped trajectory.");
+        expectVec2i(*plan.movePaths.front().elbow, {6, 5},
+            "Knight move paths should place the elbow at the end of the long leg of the L trajectory.");
+        expect(plan.movePaths.front().dottedFirstSegment,
+            "Knight move paths should flag the long leg as partially dotted to show the jump.");
+    }
+
+    void testRenderCoordinatorHidesQueuedOriginOverlayWhenOriginIsNoLongerSelectable() {
+        GameConfig config;
+
+        Piece selectedPiece(91, PieceType::Bishop, KingdomId::White, {6, 6});
+        WorldRenderState state;
+        state.gameState = GameState::Playing;
+        state.activeTool = ToolState::Select;
+        state.permissions.canShowActionOverlays = true;
+        state.activeKingdom = KingdomId::White;
+        state.selectedPiece = &selectedPiece;
+        state.selectedOriginSelectable = false;
+        state.validMoves = {{7, 7}};
+
+        const TurnCommand moveCommand = makeMoveCommand(selectedPiece.id, {4, 4}, selectedPiece.position);
+        const WorldRenderPlan plan = RenderCoordinator::buildWorldRenderPlan(
+            state,
+            std::vector<TurnCommand>{moveCommand},
+            {},
+            {},
+            config);
+
+        expect(!plan.selectedOriginCell.has_value(),
+            "RenderCoordinator should hide the queued origin overlay when the origin is no longer selectable.");
+        expect(plan.movePaths.size() == 1,
+            "RenderCoordinator should keep the queued move path visible even when the origin overlay is hidden.");
     }
 
     void testRenderCoordinatorBuildsTacticalGridPlan() {
@@ -10039,6 +10144,19 @@ void testResourceIncomeHelperSupportsBothResourceTypes() {
              << "    \"farm_height\": 3,\n"
              << "    \"arena_width\": 2,\n"
              << "    \"arena_height\": 2\n"
+            << "  },\n"
+            << "  \"rendering\": {\n"
+            << "    \"damaged_structures\": { \"opacity_percent\": 61 },\n"
+            << "    \"queued_move_paths\": {\n"
+            << "      \"layer_opacity_percent\": 35,\n"
+            << "      \"thickness_px\": 12,\n"
+            << "      \"dotted_dot_size_px\": 7,\n"
+            << "      \"dotted_gap_px\": 3\n"
+            << "    },\n"
+            << "    \"tactical_grid\": {\n"
+            << "      \"checker_dark\": { \"r\": 10, \"g\": 20, \"b\": 30, \"a\": 255 },\n"
+            << "      \"blocked_structure\": { \"r\": 90, \"g\": 91, \"b\": 92, \"a\": 200 }\n"
+            << "    }\n"
              << "  }\n"
              << "}\n";
         }
@@ -10059,6 +10177,18 @@ void testResourceIncomeHelperSupportsBothResourceTypes() {
             "Chunked arena definitions should force the runtime footprint width to 4.");
         expect(config.getBuildingHeight(BuildingType::Arena) == 4,
             "Chunked arena definitions should force the runtime footprint height to 4.");
+        expect(config.getRenderingStyle().damagedStructures.opacityPercent == 61,
+            "Nested rendering config should override damaged structure opacity.");
+        expect(config.getRenderingStyle().queuedMovePaths.layerOpacityPercent == 35,
+            "Nested rendering config should override queued move path layer opacity.");
+        expect(config.getRenderingStyle().queuedMovePaths.thicknessPx == 12,
+            "Nested rendering config should override queued move path thickness.");
+        expect(config.getRenderingStyle().queuedMovePaths.dottedDotSizePx == 7,
+            "Nested rendering config should override queued move path dotted dot size.");
+        expect(config.getRenderingStyle().tacticalGrid.checkerDark == sf::Color(10, 20, 30, 255),
+            "Nested rendering config should override the tactical-grid checker dark color.");
+        expect(config.getRenderingStyle().tacticalGrid.blockedStructure == sf::Color(90, 91, 92, 200),
+            "Nested rendering config should override the tactical-grid blocked-structure color.");
     }
 
 void testInGameViewModelBuilder() {
@@ -10130,6 +10260,8 @@ int main(int argc, char** argv) {
         {"input coordinator cheatcode shortcuts", testInputCoordinatorPlansCheatcodeShortcuts},
         {"input coordinator world routing", testInputCoordinatorRoutesWorldInputAfterGuiFiltering},
         {"render coordinator move overlay plan", testRenderCoordinatorBuildsSelectionAndMoveOverlayPlan},
+        {"render coordinator knight move path plan", testRenderCoordinatorBuildsKnightMovePathPlan},
+        {"render coordinator hides invalid queued origin overlay", testRenderCoordinatorHidesQueuedOriginOverlayWhenOriginIsNoLongerSelectable},
         {"render coordinator tactical grid plan", testRenderCoordinatorBuildsTacticalGridPlan},
         {"chest config current loot catch-up toggle", testChestConfigLoadsCurrentLootCatchUpToggle},
         {"chest config structured gold reward profile", testChestConfigLoadsStructuredGoldRewardProfile},
@@ -10218,6 +10350,7 @@ int main(int argc, char** argv) {
         {"selection move rules pawn autonomous capture", testSelectionMoveRulesAllowPawnToCaptureAutonomousUnitDiagonally},
         {"selection move rules ignore queued upgrade live moves", testSelectionMoveRulesIgnoreQueuedUpgradeForLivePieceMoves},
         {"selection move rules keep alternates when origin later occupied", testSelectionMoveRulesKeepAlternateMovesWhenLaterQueuedMoveOccupiesOrigin},
+        {"selection move rules hide destinations that invalidate later bishop move", testSelectionMoveRulesHideDestinationsThatInvalidateLaterQueuedBishopMove},
         {"turn system move after queued upgrade", testTurnSystemAllowsMoveAfterQueuedUpgradeBeforeCommit},
         {"hud layout net income wide", testHudLayoutKeepsNetIncomeWide},
         {"toolbar presentation switchers", testToolBarPresentationTracksSwitcherStates},

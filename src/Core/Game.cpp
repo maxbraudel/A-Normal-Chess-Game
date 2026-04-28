@@ -1057,10 +1057,7 @@ void Game::centerCameraOnKingdom(KingdomId kingdom) {
 
 void Game::init() {
     // Load config
-    const bool hasUnifiedGameConfig = m_config.loadFromFile("assets/config/master_config.json");
-    if (!hasUnifiedGameConfig) {
-        m_config.loadFromFile("assets/config/game_params.json");
-    }
+    m_config.loadFromFile("assets/config/master_config.json");
 
     // Create window
     m_window.create(sf::VideoMode(1280, 720), "A Normal Chess Game", sf::Style::Default);
@@ -1081,7 +1078,7 @@ void Game::init() {
     m_renderer.init(
         m_assets,
         m_config.getCellSizePx(),
-        m_config.getDamagedStructureOpacityPercent());
+        m_config.getRenderingStyle());
 
     // Init camera
     m_camera.init(m_window);
@@ -1296,6 +1293,7 @@ void Game::render() {
             renderState.selectedCell = m_input.getSelectionAnchorCell();
         }
         renderState.selectedOriginDangerous = m_input.isSelectedOriginDangerous();
+        renderState.selectedOriginSelectable = m_input.isSelectedOriginSelectable();
         renderState.validMoves = m_input.getValidMoves();
         renderState.dangerMoves = m_input.getDangerMoves();
         renderState.capturePreviewPieceIds = m_input.getCapturePreviewPieceIds();
