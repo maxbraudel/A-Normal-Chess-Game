@@ -25,7 +25,7 @@ public:
 
         Type type = Type::Error;
         std::string message;
-        std::vector<TurnCommand> commands;
+        MultiplayerTurnSubmission turnSubmission;
         MultiplayerTurnPreview turnPreview;
     };
 
@@ -55,7 +55,7 @@ private:
                                    const std::string& interruptedMessage);
     void pushEvent(Event::Type type,
                    const std::string& message,
-                   const std::vector<TurnCommand>& commands = {},
+                   const MultiplayerTurnSubmission& turnSubmission = {},
                    const MultiplayerTurnPreview& turnPreview = {});
     bool sendPacket(sf::Packet& packet, std::string* errorMessage = nullptr);
     void handlePacket(sf::Packet& packet);

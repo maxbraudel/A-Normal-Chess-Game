@@ -22,6 +22,7 @@
 class Board;
 class Building;
 class BuildingFactory;
+class BehavioralTelemetryCollector;
 class Camera;
 struct Cell;
 class GameConfig;
@@ -62,6 +63,8 @@ struct FrontendDisplayBindings {
     BuildingFactory& buildingFactory;
     TurnValidationContext authoritativeTurnContext;
     const GameConfig& config;
+    BehavioralTelemetryCollector* behavioralTelemetry = nullptr;
+    BehavioralTelemetryOrigin behavioralTelemetryOrigin = BehavioralTelemetryOrigin::LocalHost;
     const WeatherMaskCache& weatherMaskCache;
     KingdomId localPerspectiveKingdom = KingdomId::White;
 };

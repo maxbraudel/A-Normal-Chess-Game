@@ -9,6 +9,7 @@
 #include "Multiplayer/MultiplayerRuntime.hpp"
 #include "Save/SaveData.hpp"
 #include "Save/SaveManager.hpp"
+#include "Telemetry/BehavioralTelemetryCollector.hpp"
 
 namespace {
 
@@ -31,6 +32,7 @@ SessionFlow::SessionFlow(GameEngine& engine,
                          MultiplayerRuntime& multiplayer,
                          GameStateDebugRecorder& debugRecorder,
                          GameDataRecorder& dataRecorder,
+                         BehavioralTelemetryCollector& behavioralTelemetry,
                          const GameConfig& config,
                          std::string savesDirectory)
     : m_engine(engine)
@@ -38,6 +40,7 @@ SessionFlow::SessionFlow(GameEngine& engine,
     , m_multiplayer(multiplayer)
     , m_debugRecorder(debugRecorder)
     , m_dataRecorder(dataRecorder)
+    , m_behavioralTelemetry(behavioralTelemetry)
     , m_config(config)
     , m_savesDirectory(std::move(savesDirectory)) {}
 
@@ -74,6 +77,21 @@ bool SessionFlow::startNewSession(const GameSessionConfig& session,
         m_dataRecorder.beginNewSession(session, m_engine.createSaveData());
     } else {
         m_dataRecorder.reset();
+    }
+
+    const bool telemetryEnabled = session.dataCollectionEnabled
+        && session.behavioralTelemetryEnabled;
+    m_behavioralTelemetry.setEnabled(telemetryEnabled);
+    if (telemetryEnabled) {
+        m_behavioralTelemetry.beginPendingTurn(
+            m_engine.turnSystem().getTurnNumber(),
+            m_engine.turnSystem().getActiveKingdom(),
+            BehavioralTelemetryOrigin::LocalHost);
+        m_behavioralTelemetry.setPendingStateRevision(
+            m_engine.turnSystem().getPendingStateRevision());
+        m_dataRecorder.setPendingTurnTelemetry(m_behavioralTelemetry.snapshotPendingTurn());
+    } else {
+        m_behavioralTelemetry.reset();
     }
     return true;
 }
@@ -120,6 +138,25 @@ bool SessionFlow::loadSession(const std::string& saveName,
         m_engine.createSaveData(),
         GameDataRecorder::buildCompanionPath(kDataDirectory, saveName),
         m_saveManager);
+
+    const bool telemetryEnabled = m_engine.sessionConfig().dataCollectionEnabled
+        && m_engine.sessionConfig().behavioralTelemetryEnabled;
+    m_behavioralTelemetry.setEnabled(telemetryEnabled);
+    if (telemetryEnabled) {
+        if (m_dataRecorder.pendingTurnTelemetry().turnNumber > 0) {
+            m_behavioralTelemetry.restorePendingTurn(m_dataRecorder.pendingTurnTelemetry());
+        } else {
+            m_behavioralTelemetry.beginPendingTurn(
+                m_engine.turnSystem().getTurnNumber(),
+                m_engine.turnSystem().getActiveKingdom(),
+                BehavioralTelemetryOrigin::LocalHost);
+        }
+        m_behavioralTelemetry.setPendingStateRevision(
+            m_engine.turnSystem().getPendingStateRevision());
+        m_dataRecorder.setPendingTurnTelemetry(m_behavioralTelemetry.snapshotPendingTurn());
+    } else {
+        m_behavioralTelemetry.reset();
+    }
     return true;
 }
 
@@ -139,6 +176,11 @@ bool SessionFlow::saveAuthoritativeSession(bool allowSave,
     if (!m_saveManager.save(buildSavePath(m_savesDirectory, m_engine.gameName()), data)) {
         writeError(errorMessage, "Failed to save game!");
         return false;
+    }
+
+    if (m_engine.sessionConfig().dataCollectionEnabled
+        && m_engine.sessionConfig().behavioralTelemetryEnabled) {
+        m_dataRecorder.setPendingTurnTelemetry(m_behavioralTelemetry.snapshotPendingTurn());
     }
 
     if (m_engine.sessionConfig().dataCollectionEnabled

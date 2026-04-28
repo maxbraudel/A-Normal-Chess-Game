@@ -14,7 +14,8 @@ class GameDataRecorder;
 class GameEngine;
 class GameStateDebugRecorder;
 class MultiplayerRuntime;
-struct TurnCommand;
+class BehavioralTelemetryCollector;
+struct MultiplayerTurnSubmission;
 
 struct AuthoritativeTurnExecution {
     bool committed = false;
@@ -60,6 +61,7 @@ public:
                     MultiplayerRuntime& multiplayer,
                     GameStateDebugRecorder& debugRecorder,
                     GameDataRecorder& dataRecorder,
+                    BehavioralTelemetryCollector& behavioralTelemetry,
                     const GameConfig& config);
 
     AuthoritativeTurnExecution executeAuthoritativeTurn();
@@ -70,12 +72,13 @@ public:
 
     ClientTurnSubmissionResult submitClientTurn(bool lanClient);
     RemoteTurnSubmissionResult applyRemoteTurnSubmission(bool lanHost,
-                                                         const std::vector<TurnCommand>& commands);
+                                                         const MultiplayerTurnSubmission& submission);
 
 private:
     GameEngine& m_engine;
     MultiplayerRuntime& m_multiplayer;
     GameStateDebugRecorder& m_debugRecorder;
     GameDataRecorder& m_dataRecorder;
+    BehavioralTelemetryCollector& m_behavioralTelemetry;
     const GameConfig& m_config;
 };

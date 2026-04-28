@@ -145,10 +145,11 @@ void TurnLifecycleCoordinator::resetPlayerTurn(const TurnLifecycleCallbacks& cal
 }
 
 bool TurnLifecycleCoordinator::applyRemoteTurnSubmission(bool lanHost,
-                                                         const std::vector<TurnCommand>& commands,
+                                                         const MultiplayerTurnSubmission& submission,
                                                          const TurnLifecycleCallbacks& callbacks,
                                                          std::string* errorMessage) {
-    const RemoteTurnSubmissionResult result = m_turnCoordinator.applyRemoteTurnSubmission(lanHost, commands);
+    const RemoteTurnSubmissionResult result =
+        m_turnCoordinator.applyRemoteTurnSubmission(lanHost, submission);
     if (result.shouldCommitAuthoritativeTurn) {
         commitAuthoritativeTurn(lanHost, callbacks);
     } else if (result.shouldResetPendingCommands) {

@@ -220,7 +220,7 @@ void MultiplayerRuntimeCoordinator::processServerEvent(const MultiplayerServer::
     }
     if (plan.applyRemoteTurnSubmission && callbacks.applyRemoteTurnSubmission) {
         std::string error;
-        if (!callbacks.applyRemoteTurnSubmission(event.commands, &error)) {
+        if (!callbacks.applyRemoteTurnSubmission(event.turnSubmission, &error)) {
             const std::string rejectionMessage =
                 error.empty() ? "The host rejected the submitted turn." : error;
             m_runtime.sendTurnRejected(rejectionMessage, nullptr);

@@ -254,6 +254,7 @@ bool GameEngine::restoreFromSave(const SaveData& data,
     m_sessionConfig.tacticalGridEnabled = data.tacticalGridEnabled;
     m_sessionConfig.sharedTurnPreviewEnabled = data.sharedTurnPreviewEnabled;
     m_sessionConfig.dataCollectionEnabled = data.dataCollectionEnabled;
+    m_sessionConfig.behavioralTelemetryEnabled = data.behavioralTelemetryEnabled;
 
     m_board.init(data.mapRadius);
     if (!data.grid.empty()) {
@@ -362,6 +363,7 @@ SaveData GameEngine::createSaveData() const {
     data.tacticalGridEnabled = m_sessionConfig.tacticalGridEnabled;
     data.sharedTurnPreviewEnabled = m_sessionConfig.sharedTurnPreviewEnabled;
     data.dataCollectionEnabled = m_sessionConfig.dataCollectionEnabled;
+    data.behavioralTelemetryEnabled = m_sessionConfig.behavioralTelemetryEnabled;
 
     const int diameter = m_board.getDiameter();
     data.grid.resize(diameter);

@@ -19,6 +19,7 @@
 #include "Systems/SelectionMoveRules.hpp"
 #include "Config/GameConfig.hpp"
 #include "Runtime/WeatherVisibility.hpp"
+#include "Telemetry/BehavioralTelemetryCollector.hpp"
 #include "UI/UIManager.hpp"
 
 #include <algorithm>
@@ -29,6 +30,13 @@ namespace {
 
 constexpr float kKeyboardPanSpeed = 900.f;
 const auto kSelectionCycleThreshold = std::chrono::milliseconds(350);
+
+BehavioralTelemetryEventDetails makeSelectionTelemetryDetails(sf::Vector2i cellPos) {
+    BehavioralTelemetryEventDetails details;
+    details.hasCell = true;
+    details.cell = cellPos;
+    return details;
+}
 
 void rebuildLayerOrder(LayeredSelectionStack& stack) {
     stack.count = 0;
@@ -579,18 +587,81 @@ void InputHandler::applyResolvedSelection(const LayeredSelectionStack& stack,
                                    context,
                                    context.permissions.canIssueCommands && stack.piece
                                        && stack.piece->kingdom == context.controlledKingdom.id);
+            if (context.behavioralTelemetry != nullptr && stack.piece != nullptr) {
+                BehavioralTelemetryEventDetails details = makeSelectionTelemetryDetails(stack.cellPos);
+                details.pieceId = stack.piece->id;
+                details.pendingStateRevision = context.turnSystem.getPendingStateRevision();
+                context.behavioralTelemetry->recordInteraction(
+                    context.turnSystem.getTurnNumber(),
+                    context.turnSystem.getActiveKingdom(),
+                    context.behavioralTelemetryOrigin,
+                    BehavioralTelemetryStage::Interaction,
+                    "piece_selected",
+                    "Piece Selected",
+                    details);
+            }
             return;
         case SelectionLayer::AutonomousUnit:
             activateAutonomousSelection(stack.autonomousUnit, stack.cellPos);
+            if (context.behavioralTelemetry != nullptr && stack.autonomousUnit != nullptr) {
+                BehavioralTelemetryEventDetails details = makeSelectionTelemetryDetails(stack.cellPos);
+                details.pieceId = stack.autonomousUnit->id;
+                details.pendingStateRevision = context.turnSystem.getPendingStateRevision();
+                context.behavioralTelemetry->recordInteraction(
+                    context.turnSystem.getTurnNumber(),
+                    context.turnSystem.getActiveKingdom(),
+                    context.behavioralTelemetryOrigin,
+                    BehavioralTelemetryStage::Interaction,
+                    "autonomous_unit_selected",
+                    "Autonomous Unit Selected",
+                    details);
+            }
             return;
         case SelectionLayer::Building:
             activateBuildingSelection(stack.building, stack.cellPos);
+            if (context.behavioralTelemetry != nullptr && stack.building != nullptr) {
+                BehavioralTelemetryEventDetails details = makeSelectionTelemetryDetails(stack.cellPos);
+                details.buildId = stack.building->id;
+                details.pendingStateRevision = context.turnSystem.getPendingStateRevision();
+                context.behavioralTelemetry->recordInteraction(
+                    context.turnSystem.getTurnNumber(),
+                    context.turnSystem.getActiveKingdom(),
+                    context.behavioralTelemetryOrigin,
+                    BehavioralTelemetryStage::Interaction,
+                    "building_selected",
+                    "Building Selected",
+                    details);
+            }
             return;
         case SelectionLayer::Object:
             activateMapObjectSelection(stack.mapObject, stack.cellPos);
+            if (context.behavioralTelemetry != nullptr && stack.mapObject != nullptr) {
+                BehavioralTelemetryEventDetails details = makeSelectionTelemetryDetails(stack.cellPos);
+                details.pendingStateRevision = context.turnSystem.getPendingStateRevision();
+                context.behavioralTelemetry->recordInteraction(
+                    context.turnSystem.getTurnNumber(),
+                    context.turnSystem.getActiveKingdom(),
+                    context.behavioralTelemetryOrigin,
+                    BehavioralTelemetryStage::Interaction,
+                    "map_object_selected",
+                    "Map Object Selected",
+                    details);
+            }
             return;
         case SelectionLayer::Terrain:
             activateTerrainSelection(stack.cellPos);
+            if (context.behavioralTelemetry != nullptr) {
+                BehavioralTelemetryEventDetails details = makeSelectionTelemetryDetails(stack.cellPos);
+                details.pendingStateRevision = context.turnSystem.getPendingStateRevision();
+                context.behavioralTelemetry->recordInteraction(
+                    context.turnSystem.getTurnNumber(),
+                    context.turnSystem.getActiveKingdom(),
+                    context.behavioralTelemetryOrigin,
+                    BehavioralTelemetryStage::Interaction,
+                    "terrain_selected",
+                    "Terrain Selected",
+                    details);
+            }
             return;
         case SelectionLayer::None:
         default:
@@ -736,6 +807,21 @@ void InputHandler::handleEvent(const sf::Event& event, const InputContext& conte
     if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::R
         && m_currentTool == ToolState::Build && context.permissions.canQueueNonMoveActions) {
         m_buildPreviewRotationQuarterTurns = (m_buildPreviewRotationQuarterTurns + 1) % 4;
+        if (context.behavioralTelemetry != nullptr && m_hasBuildPreview) {
+            BehavioralTelemetryEventDetails details = makeSelectionTelemetryDetails(
+                m_buildPreviewAnchorCell);
+            details.reason = "rotation_quarter_turns="
+                + std::to_string(m_buildPreviewRotationQuarterTurns);
+            details.pendingStateRevision = context.turnSystem.getPendingStateRevision();
+            context.behavioralTelemetry->recordInteraction(
+                context.turnSystem.getTurnNumber(),
+                context.turnSystem.getActiveKingdom(),
+                context.behavioralTelemetryOrigin,
+                BehavioralTelemetryStage::Preview,
+                "build_preview_rotated",
+                "Build Preview Rotated",
+                details);
+        }
     }
 
     switch (m_currentTool) {
@@ -922,8 +1008,21 @@ void InputHandler::handleBuildTool(const sf::Event& event, const InputContext& c
     if (event.type == sf::Event::MouseMoved) {
         sf::Vector2f worldPos = context.camera.screenToWorld({event.mouseMove.x, event.mouseMove.y}, context.window);
         sf::Vector2i cellPos = context.camera.worldToCell(worldPos, context.config.getCellSizePx());
+        const bool openingPreview = !m_hasBuildPreview;
         m_buildPreviewAnchorCell = cellPos;
         m_hasBuildPreview = true;
+        if (openingPreview && context.behavioralTelemetry != nullptr) {
+            BehavioralTelemetryEventDetails details = makeSelectionTelemetryDetails(cellPos);
+            details.pendingStateRevision = context.turnSystem.getPendingStateRevision();
+            context.behavioralTelemetry->recordInteraction(
+                context.turnSystem.getTurnNumber(),
+                context.turnSystem.getActiveKingdom(),
+                context.behavioralTelemetryOrigin,
+                BehavioralTelemetryStage::Preview,
+                "build_preview_opened",
+                "Build Preview Opened",
+                details);
+        }
     }
 
     if (!context.permissions.canIssueCommands || !context.permissions.canQueueNonMoveActions) {

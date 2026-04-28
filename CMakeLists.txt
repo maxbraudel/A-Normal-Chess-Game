@@ -91,6 +91,7 @@ FetchContent_MakeAvailable(TGUI)
 # Explicit source list keeps module membership intentional and avoids silent build drift.
 set(CORE_SOURCES
     src/Data/GameDataRecorder.cpp
+    src/Telemetry/BehavioralTelemetryCollector.cpp
     src/Projection/ForwardModel.cpp
     src/Assets/AssetManager.cpp
     src/Board/Board.cpp

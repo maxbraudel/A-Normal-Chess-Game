@@ -29,6 +29,7 @@ struct SaveData {
     bool tacticalGridEnabled = false;
     bool sharedTurnPreviewEnabled = false;
     bool dataCollectionEnabled = false;
+    bool behavioralTelemetryEnabled = false;
 
     // Grid state
     struct CellData {

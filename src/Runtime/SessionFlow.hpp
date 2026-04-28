@@ -9,6 +9,7 @@ class GameDataRecorder;
 class GameEngine;
 class GameStateDebugRecorder;
 class MultiplayerRuntime;
+class BehavioralTelemetryCollector;
 class SaveManager;
 
 class SessionFlow {
@@ -18,6 +19,7 @@ public:
                 MultiplayerRuntime& multiplayer,
                 GameStateDebugRecorder& debugRecorder,
                 GameDataRecorder& dataRecorder,
+                BehavioralTelemetryCollector& behavioralTelemetry,
                 const GameConfig& config,
                 std::string savesDirectory = "saves");
 
@@ -34,6 +36,7 @@ private:
     MultiplayerRuntime& m_multiplayer;
     GameStateDebugRecorder& m_debugRecorder;
     GameDataRecorder& m_dataRecorder;
+    BehavioralTelemetryCollector& m_behavioralTelemetry;
     const GameConfig& m_config;
     std::string m_savesDirectory;
 };

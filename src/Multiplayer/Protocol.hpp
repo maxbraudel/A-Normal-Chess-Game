@@ -7,6 +7,7 @@
 
 #include "Core/GameplayNotification.hpp"
 #include "Core/GameSessionConfig.hpp"
+#include "Telemetry/BehavioralTelemetryTypes.hpp"
 #include "Systems/TurnCommand.hpp"
 
 enum class MultiplayerMessageType : sf::Uint8 {
@@ -45,6 +46,7 @@ struct MultiplayerStateSnapshot {
 
 struct MultiplayerTurnSubmission {
     std::vector<TurnCommand> commands;
+    BehavioralPendingTurnTelemetry behavioralTelemetry;
 };
 
 struct MultiplayerTurnPreview {
@@ -52,6 +54,7 @@ struct MultiplayerTurnPreview {
     KingdomId activeKingdom = KingdomId::White;
     std::uint64_t pendingStateRevision = 0;
     std::vector<TurnCommand> commands;
+    BehavioralPendingTurnTelemetry behavioralTelemetry;
 };
 
 struct MultiplayerTurnRejected {

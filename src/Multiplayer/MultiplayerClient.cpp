@@ -95,9 +95,10 @@ bool MultiplayerClient::sendJoinRequest(const std::string& passwordDigest, std::
     return sendPacket(packet, errorMessage);
 }
 
-bool MultiplayerClient::sendTurnSubmission(const std::vector<TurnCommand>& commands, std::string* errorMessage) {
+bool MultiplayerClient::sendTurnSubmission(const MultiplayerTurnSubmission& submission,
+                                           std::string* errorMessage) {
     sf::Packet packet = createPacket(MultiplayerMessageType::TurnSubmission);
-    writePacket(packet, MultiplayerTurnSubmission{commands});
+    writePacket(packet, submission);
     return sendPacket(packet, errorMessage);
 }
 

@@ -12,7 +12,7 @@ class GameEngine;
 class InputHandler;
 class TurnCoordinator;
 class UIManager;
-struct TurnCommand;
+struct MultiplayerTurnSubmission;
 
 struct CommitPlayerTurnDispatchPlan {
     bool submitClientTurn = false;
@@ -65,7 +65,7 @@ public:
     void commitAuthoritativeTurn(bool lanHost, const TurnLifecycleCallbacks& callbacks);
     void resetPlayerTurn(const TurnLifecycleCallbacks& callbacks);
     bool applyRemoteTurnSubmission(bool lanHost,
-                                   const std::vector<TurnCommand>& commands,
+                                   const MultiplayerTurnSubmission& submission,
                                    const TurnLifecycleCallbacks& callbacks,
                                    std::string* errorMessage = nullptr);
 

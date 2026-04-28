@@ -41,6 +41,7 @@ enum class TurnCommandAuditAction {
 struct TurnCommandAuditEntry {
     int sequence = 0;
     int turnNumber = 0;
+    long long turnElapsedMs = 0;
     TurnCommandAuditAction action = TurnCommandAuditAction::Queue;
     bool accepted = false;
     bool hasCommand = false;

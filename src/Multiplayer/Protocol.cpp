@@ -19,6 +19,15 @@ bool readBool(sf::Packet& packet, bool& value) {
 bool writeTurnCommand(sf::Packet& packet, const TurnCommand& command);
 bool readTurnCommand(sf::Packet& packet, TurnCommand& command);
 
+bool writeCellPosition(sf::Packet& packet, sf::Vector2i cell) {
+    packet << cell.x << cell.y;
+    return true;
+}
+
+bool readCellPosition(sf::Packet& packet, sf::Vector2i& cell) {
+    return static_cast<bool>(packet >> cell.x >> cell.y);
+}
+
 bool writeTurnCommandVector(sf::Packet& packet, const std::vector<TurnCommand>& commands) {
     packet << static_cast<sf::Uint32>(commands.size());
     for (const TurnCommand& command : commands) {
@@ -47,6 +56,129 @@ bool readTurnCommandVector(sf::Packet& packet, std::vector<TurnCommand>& command
     }
 
     return true;
+}
+
+bool writeBehavioralTelemetryEvent(sf::Packet& packet, const BehavioralTelemetryEvent& event) {
+    packet << event.sequence
+           << event.turnNumber
+           << static_cast<sf::Uint8>(event.activeKingdom)
+           << static_cast<sf::Uint8>(event.origin)
+           << static_cast<sf::Uint8>(event.stage)
+           << event.eventKey
+           << event.eventLabel
+           << static_cast<sf::Int64>(event.turnElapsedMs)
+           << static_cast<sf::Int64>(event.hostObservedAtUnixMs);
+    writeBool(packet, event.accepted);
+    writeBool(packet, event.hasAccepted);
+    writeBool(packet, event.hasCell);
+    if (!writeCellPosition(packet, event.cell)) {
+        return false;
+    }
+    packet << event.pieceId
+           << event.buildId
+           << event.commandAuditSequence
+           << static_cast<sf::Uint64>(event.pendingStateRevision)
+           << event.reason;
+    return true;
+}
+
+bool readBehavioralTelemetryEvent(sf::Packet& packet, BehavioralTelemetryEvent& event) {
+    sf::Uint8 activeKingdom = 0;
+    sf::Uint8 origin = 0;
+    sf::Uint8 stage = 0;
+    sf::Int64 turnElapsedMs = 0;
+    sf::Int64 hostObservedAtUnixMs = 0;
+    sf::Uint64 pendingStateRevision = 0;
+    if (!(packet >> event.sequence
+          >> event.turnNumber
+          >> activeKingdom
+          >> origin
+          >> stage
+          >> event.eventKey
+          >> event.eventLabel
+          >> turnElapsedMs
+          >> hostObservedAtUnixMs)) {
+        return false;
+    }
+    if (!readBool(packet, event.accepted)
+        || !readBool(packet, event.hasAccepted)
+        || !readBool(packet, event.hasCell)
+        || !readCellPosition(packet, event.cell)
+        || !(packet >> event.pieceId
+             >> event.buildId
+             >> event.commandAuditSequence
+             >> pendingStateRevision
+             >> event.reason)) {
+        return false;
+    }
+
+    event.activeKingdom = static_cast<KingdomId>(activeKingdom);
+    event.origin = static_cast<BehavioralTelemetryOrigin>(origin);
+    event.stage = static_cast<BehavioralTelemetryStage>(stage);
+    event.turnElapsedMs = static_cast<long long>(turnElapsedMs);
+    event.hostObservedAtUnixMs = static_cast<long long>(hostObservedAtUnixMs);
+    event.pendingStateRevision = static_cast<std::uint64_t>(pendingStateRevision);
+    return true;
+}
+
+bool writeBehavioralTelemetryEventVector(sf::Packet& packet,
+                                         const std::vector<BehavioralTelemetryEvent>& events) {
+    packet << static_cast<sf::Uint32>(events.size());
+    for (const BehavioralTelemetryEvent& event : events) {
+        if (!writeBehavioralTelemetryEvent(packet, event)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+bool readBehavioralTelemetryEventVector(sf::Packet& packet,
+                                        std::vector<BehavioralTelemetryEvent>& events) {
+    sf::Uint32 eventCount = 0;
+    if (!(packet >> eventCount)) {
+        return false;
+    }
+
+    events.clear();
+    events.reserve(eventCount);
+    for (sf::Uint32 index = 0; index < eventCount; ++index) {
+        BehavioralTelemetryEvent event;
+        if (!readBehavioralTelemetryEvent(packet, event)) {
+            return false;
+        }
+        events.push_back(std::move(event));
+    }
+
+    return true;
+}
+
+bool writeBehavioralPendingTurnTelemetry(sf::Packet& packet,
+                                         const BehavioralPendingTurnTelemetry& telemetry) {
+    packet << telemetry.turnNumber
+           << static_cast<sf::Uint8>(telemetry.activeKingdom)
+           << static_cast<sf::Uint64>(telemetry.pendingStateRevision)
+           << static_cast<sf::Uint64>(telemetry.telemetryRevision);
+    return writeBehavioralTelemetryEventVector(packet, telemetry.interactionTimeline)
+        && writeBehavioralTelemetryEventVector(packet, telemetry.orchestrationEvents);
+}
+
+bool readBehavioralPendingTurnTelemetry(sf::Packet& packet,
+                                        BehavioralPendingTurnTelemetry& telemetry) {
+    sf::Uint8 activeKingdom = 0;
+    sf::Uint64 pendingStateRevision = 0;
+    sf::Uint64 telemetryRevision = 0;
+    if (!(packet >> telemetry.turnNumber
+          >> activeKingdom
+          >> pendingStateRevision
+          >> telemetryRevision)) {
+        return false;
+    }
+
+    telemetry.activeKingdom = static_cast<KingdomId>(activeKingdom);
+    telemetry.pendingStateRevision = static_cast<std::uint64_t>(pendingStateRevision);
+    telemetry.telemetryRevision = static_cast<std::uint64_t>(telemetryRevision);
+    return readBehavioralTelemetryEventVector(packet, telemetry.interactionTimeline)
+        && readBehavioralTelemetryEventVector(packet, telemetry.orchestrationEvents);
 }
 
 bool writeTurnCommand(sf::Packet& packet, const TurnCommand& command) {
@@ -236,18 +368,21 @@ bool readPacket(sf::Packet& packet, MultiplayerStateSnapshot& snapshot) {
 }
 
 bool writePacket(sf::Packet& packet, const MultiplayerTurnSubmission& submission) {
-    return writeTurnCommandVector(packet, submission.commands);
+    return writeTurnCommandVector(packet, submission.commands)
+        && writeBehavioralPendingTurnTelemetry(packet, submission.behavioralTelemetry);
 }
 
 bool readPacket(sf::Packet& packet, MultiplayerTurnSubmission& submission) {
-    return readTurnCommandVector(packet, submission.commands);
+    return readTurnCommandVector(packet, submission.commands)
+        && readBehavioralPendingTurnTelemetry(packet, submission.behavioralTelemetry);
 }
 
 bool writePacket(sf::Packet& packet, const MultiplayerTurnPreview& preview) {
     packet << preview.turnNumber
            << static_cast<sf::Uint8>(preview.activeKingdom)
            << static_cast<sf::Uint64>(preview.pendingStateRevision);
-    return writeTurnCommandVector(packet, preview.commands);
+    return writeTurnCommandVector(packet, preview.commands)
+        && writeBehavioralPendingTurnTelemetry(packet, preview.behavioralTelemetry);
 }
 
 bool readPacket(sf::Packet& packet, MultiplayerTurnPreview& preview) {
@@ -259,7 +394,8 @@ bool readPacket(sf::Packet& packet, MultiplayerTurnPreview& preview) {
 
     preview.activeKingdom = static_cast<KingdomId>(activeKingdom);
     preview.pendingStateRevision = static_cast<std::uint64_t>(pendingStateRevision);
-    return readTurnCommandVector(packet, preview.commands);
+    return readTurnCommandVector(packet, preview.commands)
+        && readBehavioralPendingTurnTelemetry(packet, preview.behavioralTelemetry);
 }
 
 bool writePacket(sf::Packet& packet, const MultiplayerTurnRejected& rejection) {

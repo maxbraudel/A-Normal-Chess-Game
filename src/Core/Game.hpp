@@ -24,6 +24,7 @@
 #include "Config/GameConfig.hpp"
 #include "Data/GameDataRecorder.hpp"
 #include "Debug/GameStateDebugRecorder.hpp"
+#include "Telemetry/BehavioralTelemetryCollector.hpp"
 #include "Systems/CheckSystem.hpp"
 #include "Input/InputHandler.hpp"
 #include "Input/InputSelectionBookmark.hpp"
@@ -103,6 +104,7 @@ private:
     bool isLanClient() const { return m_localPlayerContext.mode == LocalSessionMode::LanClient; }
     std::string participantName(KingdomId id) const;
     std::string activeTurnLabel() const;
+    BehavioralTelemetryOrigin currentBehavioralTelemetryOrigin() const;
 
     void setupUICallbacks();
     void updateUIState();
@@ -227,6 +229,7 @@ private:
     std::uint64_t m_lastRemoteTurnPreviewRevision = 0;
     GameStateDebugRecorder m_debugRecorder;
     GameDataRecorder m_dataRecorder;
+    BehavioralTelemetryCollector m_behavioralTelemetry;
 
     // Input/Render/UI
     InputHandler m_input;
@@ -253,10 +256,11 @@ private:
 
     struct PublishedSharedTurnPreviewState {
         bool hasSentPreview = false;
-        bool previewHadCommands = false;
+        bool previewHadPayload = false;
         int turnNumber = 1;
         KingdomId activeKingdom = KingdomId::White;
         std::uint64_t pendingStateRevision = 0;
+        std::uint64_t telemetryRevision = 0;
     };
     PublishedSharedTurnPreviewState m_publishedSharedTurnPreviewState;
 

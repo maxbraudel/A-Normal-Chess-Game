@@ -138,6 +138,39 @@ int extractInt(const std::string& json, const std::string& key, int defaultValue
     }
 }
 
+long long extractLongLong(const std::string& json,
+                         const std::string& key,
+                         long long defaultValue) {
+    std::size_t pos = findValueStart(json, key);
+    if (pos == std::string::npos) {
+        return defaultValue;
+    }
+
+    std::size_t end = pos;
+    if (end < json.size() && (json[end] == '-' || json[end] == '+')) {
+        ++end;
+    }
+    while (end < json.size() && std::isdigit(static_cast<unsigned char>(json[end])) != 0) {
+        ++end;
+    }
+    if (end == pos) {
+        return defaultValue;
+    }
+
+    try {
+        return std::stoll(json.substr(pos, end - pos));
+    } catch (...) {
+        return defaultValue;
+    }
+}
+
+std::uint64_t extractUInt64(const std::string& json,
+                            const std::string& key,
+                            std::uint64_t defaultValue) {
+    const long long value = extractLongLong(json, key, static_cast<long long>(defaultValue));
+    return (value < 0) ? defaultValue : static_cast<std::uint64_t>(value);
+}
+
 bool extractBool(const std::string& json, const std::string& key, bool defaultValue) {
     std::size_t pos = findValueStart(json, key);
     if (pos == std::string::npos) {
@@ -315,6 +348,23 @@ constexpr std::array<TurnCommandAuditAction, 4> kAllTurnCommandAuditActions{
     TurnCommandAuditAction::Replace,
     TurnCommandAuditAction::Cancel,
     TurnCommandAuditAction::Reset
+};
+
+constexpr std::array<BehavioralTelemetryOrigin, 4> kAllBehavioralTelemetryOrigins{
+    BehavioralTelemetryOrigin::LocalHost,
+    BehavioralTelemetryOrigin::LocalClient,
+    BehavioralTelemetryOrigin::RemoteClientReported,
+    BehavioralTelemetryOrigin::HostObserved
+};
+
+constexpr std::array<BehavioralTelemetryStage, 7> kAllBehavioralTelemetryStages{
+    BehavioralTelemetryStage::Interaction,
+    BehavioralTelemetryStage::CommandLifecycle,
+    BehavioralTelemetryStage::Preview,
+    BehavioralTelemetryStage::Submission,
+    BehavioralTelemetryStage::Validation,
+    BehavioralTelemetryStage::Commit,
+    BehavioralTelemetryStage::Persistence
 };
 
 constexpr std::array<EventLog::Event::Kind, 2> kAllEventKinds{
@@ -1131,6 +1181,34 @@ std::string serializeReferenceData() {
     }
     output << "],";
 
+    output << "\"behavioralTelemetryOrigins\":[";
+    for (std::size_t index = 0; index < kAllBehavioralTelemetryOrigins.size(); ++index) {
+        if (index > 0) {
+            output << ",";
+        }
+        const BehavioralTelemetryOrigin origin = kAllBehavioralTelemetryOrigins[index];
+        output << "{"
+               << "\"id\":" << static_cast<int>(origin) << ","
+               << "\"key\":\"" << behavioralTelemetryOriginKey(origin) << "\","
+               << "\"label\":\"" << behavioralTelemetryOriginLabel(origin) << "\""
+               << "}";
+    }
+    output << "],";
+
+    output << "\"behavioralTelemetryStages\":[";
+    for (std::size_t index = 0; index < kAllBehavioralTelemetryStages.size(); ++index) {
+        if (index > 0) {
+            output << ",";
+        }
+        const BehavioralTelemetryStage stage = kAllBehavioralTelemetryStages[index];
+        output << "{"
+               << "\"id\":" << static_cast<int>(stage) << ","
+               << "\"key\":\"" << behavioralTelemetryStageKey(stage) << "\","
+               << "\"label\":\"" << behavioralTelemetryStageLabel(stage) << "\""
+               << "}";
+    }
+    output << "],";
+
     output << "\"eventKinds\":[";
     for (std::size_t index = 0; index < kAllEventKinds.size(); ++index) {
         if (index > 0) {
@@ -1258,7 +1336,9 @@ std::string serializeSessionContext(const SaveData& snapshot) {
     output << "\"options\":{";
     output << "\"tacticalGridEnabled\":" << (snapshot.tacticalGridEnabled ? "true" : "false") << ",";
     output << "\"sharedTurnPreviewEnabled\":" << (snapshot.sharedTurnPreviewEnabled ? "true" : "false") << ",";
-    output << "\"dataCollectionEnabled\":" << (snapshot.dataCollectionEnabled ? "true" : "false");
+        output << "\"dataCollectionEnabled\":" << (snapshot.dataCollectionEnabled ? "true" : "false") << ",";
+        output << "\"behavioralTelemetryEnabled\":"
+            << (snapshot.behavioralTelemetryEnabled ? "true" : "false");
     output << "}";
     output << "}";
     return output.str();
@@ -1539,6 +1619,7 @@ std::string serializeTurnCommandAuditEntry(const TurnCommandAuditEntry& entry) {
     output << "{"
            << "\"sequence\":" << entry.sequence << ","
            << "\"turnNumber\":" << entry.turnNumber << ","
+           << "\"turnElapsedMs\":" << entry.turnElapsedMs << ","
            << "\"action\":" << static_cast<int>(entry.action) << ","
            << "\"actionKey\":\"" << turnCommandAuditActionKeyName(entry.action) << "\","
            << "\"actionLabel\":\"" << turnCommandAuditActionLabelName(entry.action) << "\","
@@ -1559,6 +1640,7 @@ TurnCommandAuditEntry parseTurnCommandAuditEntry(const std::string& json) {
     TurnCommandAuditEntry entry;
     entry.sequence = extractInt(json, "sequence", 0);
     entry.turnNumber = extractInt(json, "turnNumber", 0);
+    entry.turnElapsedMs = extractLongLong(json, "turnElapsedMs", 0);
     entry.action = static_cast<TurnCommandAuditAction>(extractInt(json, "action", 0));
     entry.accepted = extractBool(json, "accepted", false);
     entry.hasCommand = extractBool(json, "hasCommand", false);
@@ -1568,6 +1650,128 @@ TurnCommandAuditEntry parseTurnCommandAuditEntry(const std::string& json) {
         entry.command = parseTurnCommand(commandSection);
     }
     return entry;
+}
+
+std::string serializeBehavioralTelemetryEvent(const BehavioralTelemetryEvent& event) {
+    std::ostringstream output;
+    output << "{"
+           << "\"sequence\":" << event.sequence << ","
+           << "\"turnNumber\":" << event.turnNumber << ","
+           << "\"activeKingdom\":" << static_cast<int>(event.activeKingdom) << ","
+           << "\"activeKingdomKey\":\"" << kingdomKeyName(event.activeKingdom) << "\","
+           << "\"origin\":" << static_cast<int>(event.origin) << ","
+           << "\"originKey\":\"" << behavioralTelemetryOriginKey(event.origin) << "\","
+           << "\"originLabel\":\"" << behavioralTelemetryOriginLabel(event.origin) << "\","
+           << "\"stage\":" << static_cast<int>(event.stage) << ","
+           << "\"stageKey\":\"" << behavioralTelemetryStageKey(event.stage) << "\","
+           << "\"stageLabel\":\"" << behavioralTelemetryStageLabel(event.stage) << "\","
+           << "\"eventKey\":\"" << escapeJsonString(event.eventKey) << "\","
+           << "\"eventLabel\":\"" << escapeJsonString(event.eventLabel) << "\","
+           << "\"turnElapsedMs\":" << event.turnElapsedMs << ","
+           << "\"hostObservedAtUnixMs\":" << event.hostObservedAtUnixMs << ","
+           << "\"accepted\":" << (event.accepted ? "true" : "false") << ","
+           << "\"hasAccepted\":" << (event.hasAccepted ? "true" : "false") << ","
+           << "\"hasCell\":" << (event.hasCell ? "true" : "false") << ","
+           << "\"cell\":" << serializeCellPosition(event.cell) << ","
+           << "\"pieceId\":" << event.pieceId << ","
+           << "\"buildId\":" << event.buildId << ","
+           << "\"commandAuditSequence\":" << event.commandAuditSequence << ","
+           << "\"pendingStateRevision\":" << event.pendingStateRevision << ","
+           << "\"reason\":\"" << escapeJsonString(event.reason) << "\""
+           << "}";
+    return output.str();
+}
+
+BehavioralTelemetryEvent parseBehavioralTelemetryEvent(const std::string& json) {
+    BehavioralTelemetryEvent event;
+    event.sequence = extractInt(json, "sequence", 0);
+    event.turnNumber = extractInt(json, "turnNumber", 0);
+    event.activeKingdom = static_cast<KingdomId>(extractInt(
+        json,
+        "activeKingdom",
+        static_cast<int>(KingdomId::White)));
+    event.origin = static_cast<BehavioralTelemetryOrigin>(extractInt(
+        json,
+        "origin",
+        static_cast<int>(BehavioralTelemetryOrigin::LocalHost)));
+    event.stage = static_cast<BehavioralTelemetryStage>(extractInt(
+        json,
+        "stage",
+        static_cast<int>(BehavioralTelemetryStage::Interaction)));
+    event.eventKey = extractString(json, "eventKey");
+    event.eventLabel = extractString(json, "eventLabel");
+    event.turnElapsedMs = extractLongLong(json, "turnElapsedMs", 0);
+    event.hostObservedAtUnixMs = extractLongLong(json, "hostObservedAtUnixMs", 0);
+    event.accepted = extractBool(json, "accepted", false);
+    event.hasAccepted = extractBool(json, "hasAccepted", false);
+    event.hasCell = extractBool(json, "hasCell", false);
+    const std::string cellSection = extractSection(json, "cell");
+    if (!cellSection.empty()) {
+        event.cell.x = extractInt(cellSection, "x", 0);
+        event.cell.y = extractInt(cellSection, "y", 0);
+    }
+    event.pieceId = extractInt(json, "pieceId", -1);
+    event.buildId = extractInt(json, "buildId", -1);
+    event.commandAuditSequence = extractInt(json, "commandAuditSequence", -1);
+    event.pendingStateRevision = extractUInt64(json, "pendingStateRevision", 0);
+    event.reason = extractString(json, "reason");
+    return event;
+}
+
+std::string serializeBehavioralPendingTurnTelemetry(
+    const BehavioralPendingTurnTelemetry& pendingTurnTelemetry) {
+    std::ostringstream output;
+    output << "{";
+    output << "\"turnNumber\":" << pendingTurnTelemetry.turnNumber << ",";
+    output << "\"activeKingdom\":" << static_cast<int>(pendingTurnTelemetry.activeKingdom) << ",";
+    output << "\"activeKingdomKey\":\""
+           << kingdomKeyName(pendingTurnTelemetry.activeKingdom) << "\",";
+    output << "\"pendingStateRevision\":" << pendingTurnTelemetry.pendingStateRevision << ",";
+    output << "\"telemetryRevision\":" << pendingTurnTelemetry.telemetryRevision << ",";
+    output << "\"interactionTimeline\":[";
+    for (std::size_t index = 0; index < pendingTurnTelemetry.interactionTimeline.size(); ++index) {
+        if (index > 0) {
+            output << ",";
+        }
+        output << serializeBehavioralTelemetryEvent(
+            pendingTurnTelemetry.interactionTimeline[index]);
+    }
+    output << "],";
+    output << "\"orchestrationEvents\":[";
+    for (std::size_t index = 0; index < pendingTurnTelemetry.orchestrationEvents.size(); ++index) {
+        if (index > 0) {
+            output << ",";
+        }
+        output << serializeBehavioralTelemetryEvent(
+            pendingTurnTelemetry.orchestrationEvents[index]);
+    }
+    output << "]";
+    output << "}";
+    return output.str();
+}
+
+BehavioralPendingTurnTelemetry parseBehavioralPendingTurnTelemetry(const std::string& json) {
+    BehavioralPendingTurnTelemetry pendingTurnTelemetry;
+    if (json.empty()) {
+        return pendingTurnTelemetry;
+    }
+
+    pendingTurnTelemetry.turnNumber = extractInt(json, "turnNumber", 0);
+    pendingTurnTelemetry.activeKingdom = static_cast<KingdomId>(extractInt(
+        json,
+        "activeKingdom",
+        static_cast<int>(KingdomId::White)));
+    pendingTurnTelemetry.pendingStateRevision = extractUInt64(json, "pendingStateRevision", 0);
+    pendingTurnTelemetry.telemetryRevision = extractUInt64(json, "telemetryRevision", 0);
+
+    for (const std::string& element : splitArrayElements(extractArray(json, "interactionTimeline"))) {
+        pendingTurnTelemetry.interactionTimeline.push_back(parseBehavioralTelemetryEvent(element));
+    }
+    for (const std::string& element : splitArrayElements(extractArray(json, "orchestrationEvents"))) {
+        pendingTurnTelemetry.orchestrationEvents.push_back(parseBehavioralTelemetryEvent(element));
+    }
+
+    return pendingTurnTelemetry;
 }
 
 std::string serializeXPRewardAuditEntry(const XPRewardAuditEntry& entry) {
@@ -3137,6 +3341,8 @@ std::string serializeTurnRecord(const SaveData& previousSnapshot,
         output << serializeEvent(record.newEvents[index]);
     }
     output << "],\n";
+    output << "      \"behavioralTelemetry\": "
+           << serializeBehavioralPendingTurnTelemetry(record.behavioralTelemetry) << ",\n";
     output << "      \"turnDelta\": " << serializeTurnDelta(previousSnapshot, record, config) << ",\n";
     output << "      \"structuredEvents\": "
            << serializeStructuredEvents(previousSnapshot, record, config) << ",\n";
@@ -3174,6 +3380,8 @@ GameDataTurnRecord parseTurnRecord(const std::string& json,
     for (const std::string& element : splitArrayElements(extractArray(json, "newEvents"))) {
         record.newEvents.push_back(parseEvent(element));
     }
+    record.behavioralTelemetry = parseBehavioralPendingTurnTelemetry(
+        extractSection(json, "behavioralTelemetry"));
 
     SaveData snapshot;
     const std::string snapshotSection = extractSection(json, "snapshot");
@@ -3202,6 +3410,7 @@ void GameDataRecorder::reset() {
     m_initialSnapshotReason.clear();
     m_initialSnapshot = SaveData{};
     m_turnHistory.clear();
+    m_pendingTurnTelemetry = BehavioralPendingTurnTelemetry{};
     m_lastRecordedEventCount = 0;
 }
 
@@ -3265,6 +3474,9 @@ bool GameDataRecorder::loadFromFile(const std::string& dataFilePath,
         m_turnHistory.push_back(parseTurnRecord(element, saveManager));
     }
 
+    m_pendingTurnTelemetry = parseBehavioralPendingTurnTelemetry(
+        extractSection(json, "pendingTurnTelemetry"));
+
     m_lastRecordedEventCount = currentSnapshot().events.size();
     return true;
 }
@@ -3299,6 +3511,7 @@ void GameDataRecorder::recordCommittedTurn(const std::vector<TurnCommand>& queue
                                            bool gameOver,
                                            KingdomId winner,
                                            const std::vector<GameplayNotification>& notifications,
+                                           const BehavioralPendingTurnTelemetry& behavioralTelemetry,
                                            const SaveData& snapshot) {
     if (!m_enabled) {
         return;
@@ -3316,6 +3529,7 @@ void GameDataRecorder::recordCommittedTurn(const std::vector<TurnCommand>& queue
     record.commandAuditTrail = commandAuditTrail;
     record.xpAuditTrail = xpAuditTrail;
     record.notifications = notifications;
+    record.behavioralTelemetry = behavioralTelemetry;
     if (m_lastRecordedEventCount < snapshot.events.size()) {
         record.newEvents.assign(snapshot.events.begin() + static_cast<std::ptrdiff_t>(m_lastRecordedEventCount),
                                 snapshot.events.end());
@@ -3323,7 +3537,18 @@ void GameDataRecorder::recordCommittedTurn(const std::vector<TurnCommand>& queue
     record.snapshot = snapshot;
 
     m_turnHistory.push_back(std::move(record));
+    m_pendingTurnTelemetry = BehavioralPendingTurnTelemetry{};
     m_lastRecordedEventCount = snapshot.events.size();
+    m_lastUpdatedAtUnix = std::time(nullptr);
+}
+
+void GameDataRecorder::setPendingTurnTelemetry(
+    const BehavioralPendingTurnTelemetry& pendingTurnTelemetry) {
+    if (!m_enabled) {
+        return;
+    }
+
+    m_pendingTurnTelemetry = pendingTurnTelemetry;
     m_lastUpdatedAtUnix = std::time(nullptr);
 }
 
@@ -3388,6 +3613,8 @@ bool GameDataRecorder::saveToFile(const std::string& dataFilePath,
         previousSnapshot = &m_turnHistory[index].snapshot;
     }
     output << "  ],\n";
+        output << "  \"pendingTurnTelemetry\": "
+            << serializeBehavioralPendingTurnTelemetry(m_pendingTurnTelemetry) << ",\n";
     output << "  \"currentMetrics\": " << serializeSnapshotMetrics(currentSnapshot(), config) << ",\n";
     output << "  \"currentAnalytics\": " << serializeSnapshotAnalytics(currentSnapshot(), config) << ",\n";
     output << "  \"currentStateSummary\": "

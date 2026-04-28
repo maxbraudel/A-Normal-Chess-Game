@@ -6,6 +6,7 @@
 
 #include "Core/InteractionPermissions.hpp"
 #include "Kingdom/KingdomId.hpp"
+#include "Telemetry/BehavioralTelemetryTypes.hpp"
 #include "Systems/WeatherTypes.hpp"
 #include "Systems/TurnValidationContext.hpp"
 
@@ -19,6 +20,7 @@ class Building;
 class BuildingFactory;
 class CheckEscapeSolver;
 class AsyncSelectionMoveService;
+class BehavioralTelemetryCollector;
 
 struct InputContext {
     sf::RenderWindow& window;
@@ -36,6 +38,8 @@ struct InputContext {
     TurnValidationContext authoritativeTurnContext;
     UIManager& uiManager;
     const GameConfig& config;
+    BehavioralTelemetryCollector* behavioralTelemetry = nullptr;
+    BehavioralTelemetryOrigin behavioralTelemetryOrigin = BehavioralTelemetryOrigin::LocalHost;
     CheckEscapeSolver* sharedCheckEscapeSolver = nullptr;
     AsyncSelectionMoveService* asyncSelectionMoveService = nullptr;
     const WeatherMaskCache* weatherMaskCache = nullptr;

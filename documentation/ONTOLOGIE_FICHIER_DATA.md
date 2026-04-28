@@ -15,7 +15,7 @@ Ce document correspond au schema actuellement ecrit par `GameDataRecorder`.
 
 Version de schema actuelle:
 
-- `schemaVersion = 4`
+- `schemaVersion = 5`
 
 ## 2. Philosophie generale du modele
 
@@ -30,8 +30,8 @@ Le fichier sert a la fois:
 
 En consequence, le fichier contient toujours deux couches:
 
-- une couche brute: `initialSnapshot`, `turnHistory[].snapshot`, `currentStateSummary`, `turnHistory[].queuedCommands`, `turnHistory[].commandAuditTrail`, `turnHistory[].xpAuditTrail`
-- une couche derivee: `provenance`, `initialMetrics`, `initialAnalytics`, `turnHistory[].turnDelta`, `turnHistory[].structuredEvents`, `turnHistory[].snapshotMetrics`, `turnHistory[].analytics`, `currentMetrics`, `currentAnalytics`
+- une couche brute: `initialSnapshot`, `turnHistory[].snapshot`, `currentStateSummary`, `turnHistory[].queuedCommands`, `turnHistory[].commandAuditTrail`, `turnHistory[].xpAuditTrail`, `turnHistory[].behavioralTelemetry`, `pendingTurnTelemetry`
+- une couche derivee: `provenance`, `referenceData`, `initialMetrics`, `initialAnalytics`, `turnHistory[].turnDelta`, `turnHistory[].structuredEvents`, `turnHistory[].snapshotMetrics`, `turnHistory[].analytics`, `currentMetrics`, `currentAnalytics`
 
 ### 2.2 Le snapshot reste la source de verite finale
 
@@ -76,7 +76,7 @@ Le fichier racine suit cette forme generale:
 
 ```json
 {
-  "schemaVersion": 4,
+  "schemaVersion": 5,
   "saveName": "ExampleSave",
   "dataCollectionEnabled": true,
   "historyContinuityComplete": true,
@@ -105,6 +105,7 @@ Le fichier racine suit cette forme generale:
       "xpAuditTrail": [ ... ],
       "notifications": [ ... ],
       "newEvents": [ ... ],
+      "behavioralTelemetry": { ... },
       "turnDelta": { ... },
       "structuredEvents": [ ... ],
       "snapshotMetrics": { ... },
@@ -112,6 +113,7 @@ Le fichier racine suit cette forme generale:
       "snapshot": { ... }
     }
   ],
+  "pendingTurnTelemetry": { ... },
   "currentMetrics": { ... },
   "currentAnalytics": { ... },
   "currentStateSummary": { ... }
@@ -190,6 +192,7 @@ Quand cela arrive, il faut decodet la valeur avec `referenceData`.
 | `initialAnalytics` | objet | vues analytiques derivees du snapshot initial |
 | `initialSnapshot` | objet `SaveData` | etat autoritaire de depart |
 | `turnHistory` | tableau | historique par turn commite |
+| `pendingTurnTelemetry` | objet | telemetrie comportementale courante du turn en preparation au moment du save |
 | `currentMetrics` | objet | agregats derives de l'etat courant |
 | `currentAnalytics` | objet | vues analytiques derivees de l'etat courant |
 | `currentStateSummary` | objet `SaveData` | etat autoritaire courant |
@@ -328,6 +331,7 @@ Champs:
 - `tacticalGridEnabled`
 - `sharedTurnPreviewEnabled`
 - `dataCollectionEnabled`
+- `behavioralTelemetryEnabled`
 
 ## 9. `configContext`: contexte des regles actives
 
@@ -504,6 +508,7 @@ Structure generale:
 | `xpAuditTrail` | tableau | piste d'audit brute des gains d'XP autoritaires attribues pendant le turn |
 | `notifications` | tableau | notifications gameplay generees par le commit |
 | `newEvents` | tableau | nouveaux evenements ajoutes au journal entre le precedent point enregistre et ce snapshot |
+| `behavioralTelemetry` | objet | timeline comportementale et d'orchestration rattachee au turn qui vient d'etre commite |
 | `turnDelta` | objet | resume causal derive des changements observables entre snapshot precedent et snapshot courant |
 | `structuredEvents` | tableau | flattening typé des actions et changements saillants du turn |
 | `snapshotMetrics` | objet | resume agrege du snapshot post-commit |
@@ -696,6 +701,50 @@ Ces trois champs doivent etre lus ensemble.
 - `snapshot`: etat exact post-commit
 - `snapshotMetrics`: resume rapide post-commit
 - `analytics`: vue denormalisee post-commit
+
+### 11.9 `behavioralTelemetry` et `pendingTurnTelemetry`
+
+Le schema V5 ajoute une couche de telemetrie comportementale orientee recherche, distincte du simple diff autoritaire de snapshot.
+
+Deux objets coexistent:
+
+- `turnHistory[].behavioralTelemetry`: photographie de la timeline qui a mene au turn finalement commite
+- `pendingTurnTelemetry`: etat courant de cette timeline au moment de la sauvegarde, meme si aucun commit n'a encore eu lieu
+
+Structure de base:
+
+- `turnNumber`
+- `activeKingdom`, `activeKingdomKey`
+- `pendingStateRevision`
+- `telemetryRevision`
+- `interactionTimeline`
+- `orchestrationEvents`
+
+Chaque evenement de timeline expose notamment:
+
+- `sequence`
+- `turnNumber`
+- `origin`, `originKey`, `originLabel`
+- `stage`, `stageKey`, `stageLabel`
+- `eventKey`, `eventLabel`
+- `turnElapsedMs`
+- `hostObservedAtUnixMs`
+- `accepted`, `hasAccepted`
+- `hasCell`, `cell`
+- `pieceId`
+- `buildId`
+- `commandAuditSequence`
+- `pendingStateRevision`
+- `reason`
+
+Interpretation:
+
+- `interactionTimeline` capture les selections, previews et evenements de cycle de commande observes pendant la preparation du turn
+- `orchestrationEvents` capture les etapes reseau et runtime de plus haut niveau: validation, soumission, reception distante, commit
+- `origin` distingue la provenance locale, client distante declaree et observation cote host
+- `turnElapsedMs` reste la reference principale pour reconstruire la chronologie intra-turn
+
+Cette couche ne cherche pas a enregistrer tous les mouvements de souris ni tous les survols bruts. Elle reste volontairement a un niveau intermediaire: semantique, exploitable, et compatible LAN.
 
 ## 12. Le bloc courant: `currentMetrics`, `currentAnalytics`, `currentStateSummary`
 

@@ -16,7 +16,7 @@ enum class GameMode {
 
 inline constexpr int kMinMultiplayerPort = 1;
 inline constexpr int kMaxMultiplayerPort = 65535;
-inline constexpr std::uint32_t kCurrentMultiplayerProtocolVersion = 2;
+inline constexpr std::uint32_t kCurrentMultiplayerProtocolVersion = 3;
 
 struct MultiplayerConfig {
     bool enabled = false;
@@ -59,6 +59,7 @@ struct GameSessionConfig {
     bool tacticalGridEnabled = false;
     bool sharedTurnPreviewEnabled = false;
     bool dataCollectionEnabled = false;
+    bool behavioralTelemetryEnabled = false;
 };
 
 struct SaveSummary {
@@ -69,6 +70,7 @@ struct SaveSummary {
     bool tacticalGridEnabled = false;
     bool sharedTurnPreviewEnabled = false;
     bool dataCollectionEnabled = false;
+    bool behavioralTelemetryEnabled = false;
 };
 
 inline GameSessionConfig makeDefaultGameSessionConfig(GameMode mode,

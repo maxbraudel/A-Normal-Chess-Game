@@ -189,14 +189,14 @@ bool MultiplayerRuntime::publishTurnPreview(bool lanHost,
     return m_client.sendTurnPreview(preview, errorMessage);
 }
 
-bool MultiplayerRuntime::submitTurnSubmission(const std::vector<TurnCommand>& commands,
+bool MultiplayerRuntime::submitTurnSubmission(const MultiplayerTurnSubmission& submission,
                                               std::string* errorMessage) {
     if (!m_client.isAuthenticated()) {
         writeMultiplayerError(errorMessage, "The multiplayer host connection is not authenticated.");
         return false;
     }
 
-    return m_client.sendTurnSubmission(commands, errorMessage);
+    return m_client.sendTurnSubmission(submission, errorMessage);
 }
 
 bool MultiplayerRuntime::sendTurnRejected(const std::string& reason,

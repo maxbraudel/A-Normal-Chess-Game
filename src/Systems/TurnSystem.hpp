@@ -7,6 +7,7 @@
 #include "Autonomous/AutonomousUnit.hpp"
 #include "Core/GameplayNotification.hpp"
 #include "Objects/MapObject.hpp"
+#include "Telemetry/BehavioralTelemetryTypes.hpp"
 #include "Systems/ChestSystem.hpp"
 #include "Systems/InfernalSystem.hpp"
 #include "Systems/XPTypes.hpp"
@@ -30,6 +31,7 @@ class CheckSystem;
 class PieceFactory;
 class BuildingFactory;
 struct WeatherMaskCache;
+class BehavioralTelemetryCollector;
 
 class TurnSystem {
 public:
@@ -124,6 +126,8 @@ public:
     int getBuildPointsRemaining() const;
     int getMoveCountForPiece(int pieceId) const;
     std::uint64_t getPendingStateRevision() const;
+    void setBehavioralTelemetry(BehavioralTelemetryCollector* behavioralTelemetry,
+                                BehavioralTelemetryOrigin origin);
 
     void commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemyKingdom,
                     std::vector<Building>& publicBuildings,
@@ -183,6 +187,8 @@ private:
     std::uint64_t m_pendingStateRevision;
     std::vector<TurnCommandAuditEntry> m_commandAuditTrail;
     int m_nextCommandAuditSequence;
+    BehavioralTelemetryCollector* m_behavioralTelemetry;
+    BehavioralTelemetryOrigin m_behavioralTelemetryOrigin;
 
     void rebuildQueuedSpecialState();
     void refreshProjectedBudgetState(const TurnValidationContext& context);

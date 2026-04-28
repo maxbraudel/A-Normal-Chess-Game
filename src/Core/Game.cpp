@@ -68,9 +68,20 @@ LRESULT CALLBACK GameWindowProc(HWND hwnd, UINT message, WPARAM wParam, LPARAM l
 
 Game::Game()
     : m_state(GameState::MainMenu)
-    , m_sessionFlow(m_engine, m_saveManager, m_multiplayer, m_debugRecorder, m_dataRecorder, m_config)
+    , m_sessionFlow(m_engine,
+                    m_saveManager,
+                    m_multiplayer,
+                    m_debugRecorder,
+                    m_dataRecorder,
+                    m_behavioralTelemetry,
+                    m_config)
     , m_multiplayerJoinCoordinator(m_engine, m_multiplayer, m_saveManager, m_input, m_config)
-    , m_turnCoordinator(m_engine, m_multiplayer, m_debugRecorder, m_dataRecorder, m_config)
+    , m_turnCoordinator(m_engine,
+                        m_multiplayer,
+                        m_debugRecorder,
+                        m_dataRecorder,
+                        m_behavioralTelemetry,
+                        m_config)
     , m_sessionRuntimeCoordinator(
           m_state,
           m_waitingForRemoteTurnResult,
@@ -124,6 +135,12 @@ bool Game::isLocalPlayerTurn() const {
 
 bool Game::canLocalPlayerIssueCommands() const {
     return currentInteractionPermissions().canIssueCommands;
+}
+
+BehavioralTelemetryOrigin Game::currentBehavioralTelemetryOrigin() const {
+    return (m_localPlayerContext.mode == LocalSessionMode::LanClient)
+        ? BehavioralTelemetryOrigin::LocalClient
+        : BehavioralTelemetryOrigin::LocalHost;
 }
 
 UICallbackRuntimeState Game::makeUICallbackRuntimeState() const {
@@ -500,12 +517,28 @@ void Game::applyRemoteTurnPreview(const MultiplayerTurnPreview& preview) {
     }
 
     if (m_remoteTurnPreviewState.has_value()
-        && preview.pendingStateRevision <= m_remoteTurnPreviewState->pendingStateRevision) {
+        && (preview.pendingStateRevision < m_remoteTurnPreviewState->pendingStateRevision
+            || (preview.pendingStateRevision == m_remoteTurnPreviewState->pendingStateRevision
+                && preview.behavioralTelemetry.telemetryRevision
+                    <= m_remoteTurnPreviewState->behavioralTelemetry.telemetryRevision))) {
         return;
     }
 
+    const bool telemetryEnabled = m_engine.sessionConfig().dataCollectionEnabled
+        && m_engine.sessionConfig().behavioralTelemetryEnabled;
+    const bool hasTelemetryPayload = telemetryEnabled
+        && preview.behavioralTelemetry.telemetryRevision > 0
+        && (!preview.behavioralTelemetry.interactionTimeline.empty()
+            || !preview.behavioralTelemetry.orchestrationEvents.empty());
+
+    if (isLanHost() && hasTelemetryPayload) {
+        m_behavioralTelemetry.replaceRemoteClientReportedPendingTurn(preview.behavioralTelemetry, 0);
+        m_dataRecorder.setPendingTurnTelemetry(m_behavioralTelemetry.snapshotPendingTurn());
+    }
+
     if (preview.commands.empty()) {
-        clearRemoteTurnPreview();
+        m_remoteTurnPreviewState = preview;
+        invalidateRemoteTurnPreviewDraft();
         return;
     }
 
@@ -529,7 +562,7 @@ bool Game::publishSharedTurnPreviewIfNeeded(std::string* errorMessage) {
     if (!canPublish) {
         if (transportReady
             && m_publishedSharedTurnPreviewState.hasSentPreview
-            && m_publishedSharedTurnPreviewState.previewHadCommands) {
+            && m_publishedSharedTurnPreviewState.previewHadPayload) {
             MultiplayerTurnPreview clearPreview;
             clearPreview.turnNumber = turnSystem().getTurnNumber();
             clearPreview.activeKingdom = turnSystem().getActiveKingdom();
@@ -548,16 +581,28 @@ bool Game::publishSharedTurnPreviewIfNeeded(std::string* errorMessage) {
     preview.activeKingdom = turnSystem().getActiveKingdom();
     preview.pendingStateRevision = turnSystem().getPendingStateRevision();
     preview.commands = turnSystem().getPendingCommands();
+    const bool telemetryEnabled = m_engine.sessionConfig().dataCollectionEnabled
+        && m_engine.sessionConfig().behavioralTelemetryEnabled;
+    if (telemetryEnabled) {
+        preview.behavioralTelemetry = m_behavioralTelemetry.snapshotPendingTurn();
+    }
 
     const bool hasCommands = !preview.commands.empty();
-    const bool shouldSend = hasCommands
+    const bool hasTelemetryPayload = telemetryEnabled
+        && preview.behavioralTelemetry.telemetryRevision > 0
+        && (!preview.behavioralTelemetry.interactionTimeline.empty()
+            || !preview.behavioralTelemetry.orchestrationEvents.empty());
+    const bool hasPayload = hasCommands || hasTelemetryPayload;
+    const bool shouldSend = hasPayload
         ? !m_publishedSharedTurnPreviewState.hasSentPreview
-            || !m_publishedSharedTurnPreviewState.previewHadCommands
+            || !m_publishedSharedTurnPreviewState.previewHadPayload
             || m_publishedSharedTurnPreviewState.turnNumber != preview.turnNumber
             || m_publishedSharedTurnPreviewState.activeKingdom != preview.activeKingdom
             || m_publishedSharedTurnPreviewState.pendingStateRevision != preview.pendingStateRevision
+            || m_publishedSharedTurnPreviewState.telemetryRevision
+                != preview.behavioralTelemetry.telemetryRevision
         : m_publishedSharedTurnPreviewState.hasSentPreview
-            && m_publishedSharedTurnPreviewState.previewHadCommands;
+            && m_publishedSharedTurnPreviewState.previewHadPayload;
     if (!shouldSend) {
         return true;
     }
@@ -567,10 +612,11 @@ bool Game::publishSharedTurnPreviewIfNeeded(std::string* errorMessage) {
     }
 
     m_publishedSharedTurnPreviewState.hasSentPreview = true;
-    m_publishedSharedTurnPreviewState.previewHadCommands = hasCommands;
+    m_publishedSharedTurnPreviewState.previewHadPayload = hasPayload;
     m_publishedSharedTurnPreviewState.turnNumber = preview.turnNumber;
     m_publishedSharedTurnPreviewState.activeKingdom = preview.activeKingdom;
     m_publishedSharedTurnPreviewState.pendingStateRevision = preview.pendingStateRevision;
+    m_publishedSharedTurnPreviewState.telemetryRevision = preview.behavioralTelemetry.telemetryRevision;
     return true;
 }
 
@@ -601,6 +647,22 @@ InteractionPermissions Game::currentInteractionPermissions(const CheckTurnValida
 InputContext Game::buildInputContext(const InteractionPermissions& permissions) {
     ensureWeatherMaskUpToDate();
     ensureRemoteTurnPreviewDraftUpToDate();
+
+    const BehavioralTelemetryOrigin telemetryOrigin = currentBehavioralTelemetryOrigin();
+    const bool telemetryEnabled = m_engine.sessionConfig().dataCollectionEnabled
+        && m_engine.sessionConfig().behavioralTelemetryEnabled;
+    m_behavioralTelemetry.setEnabled(telemetryEnabled);
+    if (telemetryEnabled) {
+        m_behavioralTelemetry.beginPendingTurn(
+            turnSystem().getTurnNumber(),
+            turnSystem().getActiveKingdom(),
+            telemetryOrigin);
+        m_behavioralTelemetry.setPendingStateRevision(turnSystem().getPendingStateRevision());
+        turnSystem().setBehavioralTelemetry(&m_behavioralTelemetry, telemetryOrigin);
+    } else {
+        turnSystem().setBehavioralTelemetry(nullptr, telemetryOrigin);
+    }
+
     FrontendDisplayBindings bindings{
         m_window,
         m_camera,
@@ -615,6 +677,8 @@ InputContext Game::buildInputContext(const InteractionPermissions& permissions) 
         buildingFactory(),
         authoritativeTurnContext(),
         m_config,
+        telemetryEnabled ? &m_behavioralTelemetry : nullptr,
+        telemetryOrigin,
         m_engine.weatherMaskCache(),
         localPerspectiveKingdom()
     };
@@ -1383,10 +1447,10 @@ void Game::updateMultiplayer() {
         [this](const std::vector<GameplayNotification>& notifications, std::string* errorMessage) {
             return pushSnapshotToRemote(notifications, errorMessage);
         },
-        [this](const std::vector<TurnCommand>& commands, std::string* errorMessage) {
+        [this](const MultiplayerTurnSubmission& submission, std::string* errorMessage) {
             return m_turnLifecycleCoordinator.applyRemoteTurnSubmission(
                 isLanHost(),
-                commands,
+            submission,
                 makeTurnLifecycleCallbacks(),
                 errorMessage);
         },

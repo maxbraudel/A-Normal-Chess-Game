@@ -20,6 +20,7 @@
 #include "Systems/ChestSystem.hpp"
 #include "Systems/InfernalSystem.hpp"
 #include "Systems/TurnPointRules.hpp"
+#include "Telemetry/BehavioralTelemetryCollector.hpp"
 #include "Runtime/WeatherVisibility.hpp"
 #include "Units/PieceFactory.hpp"
 #include "Buildings/BuildingFactory.hpp"
@@ -271,8 +272,10 @@ TurnSystem::TurnSystem()
       m_movementPointsMax(0), m_movementPointsRemaining(0),
       m_buildPointsMax(0), m_buildPointsRemaining(0),
       m_hasProduced(false), m_hasMarried(false),
-            m_pendingStateRevision(1),
-            m_nextCommandAuditSequence(0) {}
+    m_pendingStateRevision(1),
+    m_nextCommandAuditSequence(0),
+    m_behavioralTelemetry(nullptr),
+    m_behavioralTelemetryOrigin(BehavioralTelemetryOrigin::LocalHost) {}
 
 void TurnSystem::setActiveKingdom(KingdomId id) {
     if (m_activeKingdom != id) {
@@ -293,6 +296,9 @@ int TurnSystem::getTurnNumber() const { return m_turnNumber; }
 
 void TurnSystem::markPendingStateChanged() {
     ++m_pendingStateRevision;
+    if (m_behavioralTelemetry != nullptr) {
+        m_behavioralTelemetry->setPendingStateRevision(m_pendingStateRevision);
+    }
 }
 
 void TurnSystem::appendCommandAudit(TurnCommandAuditAction action,
@@ -302,6 +308,9 @@ void TurnSystem::appendCommandAudit(TurnCommandAuditAction action,
     TurnCommandAuditEntry entry;
     entry.sequence = m_nextCommandAuditSequence++;
     entry.turnNumber = m_turnNumber;
+    entry.turnElapsedMs = (m_behavioralTelemetry != nullptr)
+        ? m_behavioralTelemetry->currentTurnElapsedMs()
+        : 0;
     entry.action = action;
     entry.accepted = accepted;
     entry.hasCommand = (command != nullptr);
@@ -310,6 +319,13 @@ void TurnSystem::appendCommandAudit(TurnCommandAuditAction action,
     }
     entry.reason = reason;
     m_commandAuditTrail.push_back(std::move(entry));
+    if (m_behavioralTelemetry != nullptr) {
+        m_behavioralTelemetry->recordCommandAudit(
+            m_turnNumber,
+            m_activeKingdom,
+            m_behavioralTelemetryOrigin,
+            m_commandAuditTrail.back());
+    }
 }
 
 void TurnSystem::syncPointBudget(const GameConfig& config, const Kingdom& activeKingdom) {
@@ -947,6 +963,15 @@ int TurnSystem::getMoveCountForPiece(int pieceId) const {
 }
 
 std::uint64_t TurnSystem::getPendingStateRevision() const { return m_pendingStateRevision; }
+
+void TurnSystem::setBehavioralTelemetry(BehavioralTelemetryCollector* behavioralTelemetry,
+                                        BehavioralTelemetryOrigin origin) {
+    m_behavioralTelemetry = behavioralTelemetry;
+    m_behavioralTelemetryOrigin = origin;
+    if (m_behavioralTelemetry != nullptr) {
+        m_behavioralTelemetry->setPendingStateRevision(m_pendingStateRevision);
+    }
+}
 
 void TurnSystem::commitTurn(Board& board, Kingdom& activeKingdom, Kingdom& enemyKingdom,
                              std::vector<Building>& publicBuildings,

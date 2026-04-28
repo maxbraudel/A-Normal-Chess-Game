@@ -34,7 +34,7 @@ Le critere principal est le suivant:
 Point de verification important:
 
 - le fichier reel `build/Data/pepo.json` actuellement present dans le workspace est encore un artifact en schema V2
-- le generateur present dans le code source est, lui, deja passe en schema V4
+- le generateur present dans le code source est, lui, deja passe en schema V5
 - il existe donc un ecart temporaire entre l'etat du code et ce companion precis, qui s'explique par le fait que ce fichier n'a pas ete regenere apres les derniers changements du recorder
 
 ## 3. Verdict court
@@ -42,12 +42,12 @@ Point de verification important:
 Verdict synthetique:
 
 - oui, le fichier Data est deja tres riche et globalement suffisant pour des analyses statistiques serieuses au niveau etat de partie / evolution par turn
-- non, il n'est pas totalement exhaustif si l'objectif futur est de faire de l'analyse causale fine, de l'analyse d'intention joueur, ou des etudes d'evenements systeme sans repasser par des diffs de snapshots
+- non, il n'est pas totalement exhaustif si l'objectif futur est de faire de l'analyse causale moteur atomique ou de la capture brute tres haute frequence des gestes utilisateur
 
 Important pour interpreter correctement ce verdict:
 
 - le verdict porte sur le generateur actuel de la codebase, pas uniquement sur le companion `build/Data/pepo.json` ouvert dans le workspace
-- sur disque, `build/Data/pepo.json` ne montre pas encore `provenance`, `turnDelta`, `structuredEvents`, `commandAuditTrail` ni `xpAuditTrail`, parce qu'il a ete produit avant la mise a jour V4
+- sur disque, `build/Data/pepo.json` ne montre pas encore `provenance`, `turnDelta`, `structuredEvents`, `commandAuditTrail`, `xpAuditTrail`, `behavioralTelemetry` ni `pendingTurnTelemetry`, parce qu'il a ete produit avant la mise a jour V5
 - des qu'une sauvegarde est regeneree avec le binaire actuel, le companion attendu doit embarquer ces nouveaux blocs
 
 Autrement dit:
@@ -59,7 +59,8 @@ Conclusion courte:
 
 - exhaustif pour l'etat autoritaire par turn: presque oui
 - suffisant pour des statistiques descriptives, longitudinales et comparatives: oui
-- exhaustif pour la causalite fine et l'analyse de processus: pas encore
+- exhaustif pour l'analyse comportementale semantique et l'orchestration reseau de turn: oui, largement
+- exhaustif pour la causalite moteur atomique la plus basse: pas encore
 
 ## 4. Ce qui est deja tres bien couvert
 
@@ -190,7 +191,7 @@ Le jeu exporte deja assez de contexte pour des analyses statistiques solides sur
 
 ## 6. Ce qui a ete ajoute suite a l'audit, et ce qui reste vraiment
 
-Depuis l'audit initial, les principaux manques structurels identifies ont ete traites dans le schema V4.
+Depuis l'audit initial, les principaux manques structurels identifies ont ete traites dans le schema V5.
 
 ### 6.1 Journal analytique type: ajoute
 
@@ -206,7 +207,9 @@ Cela couvre des classes d'evenements qui n'etaient auparavant presentes qu'en te
 - apparition, deplacement, upgrade et retrait des pieces
 - pose et retrait de batiments
 - debuts et fins de production
-- transitions majeures d'objets de carte, d'unites autonomes et de fronts meteo
+- apparition et ouverture de coffres
+- spawn, deplacement, changement de phase et retrait de l'infernal
+- apparition et fin des fronts meteo
 
 Verdict actuel:
 
@@ -268,12 +271,31 @@ Le fichier expose maintenant un bloc `provenance` qui fournit a la fois des empr
 
 Verdict actuel:
 
-- suffisant pour comparer de maniere robuste des fichiers produits sous des contextes de regles differents
-- suffisant pour rattacher explicitement un companion a un contexte de build et a une revision git pratique
-- il reste seulement un manque mineur si l'on veut une notion metier distincte de `configVersion` en plus du hash de configuration
-- le companion reel actuellement ouvert ne montre pas encore ce bloc, mais le code source l'ajoute bien a la racine du fichier
+- suffisante pour distinguer de maniere robuste deux exports produits par des builds ou revisions differents
+- suffisante pour tracer la famille de format et les empreintes des grands blocs de contexte
 
-### 6.5 Attribution XP: ajoutee sous forme de piste d'audit brute
+### 6.5 Telemetrie comportementale et orchestration LAN: ajoutees
+
+Le fichier expose maintenant une couche temporelle complementaire, structuree pour l'etude de la preparation de turn humaine:
+
+- `turnHistory[].behavioralTelemetry` pour le turn finalement commite
+- `pendingTurnTelemetry` pour l'etat courant du turn encore en preparation au moment du save
+
+Cette couche enregistre notamment:
+
+- les interactions significatives de preparation: selections, ouvertures de preview, rotations de build et changements semantiques du draft
+- une chronologie exploitable via `interactionTimeline` et `orchestrationEvents`
+- les etapes d'orchestration: preview partagee, soumission client, reception host, validation, acceptation ou rejet, debut et fin de commit
+- la provenance des signaux: `local_host`, `local_client`, `remote_client_reported`, `host_observed`
+
+Verdict actuel:
+
+- le principal angle mort sur l'intention et le rythme de preparation de turn est maintenant ferme
+- la compatibilite LAN est bonne: le protocole multijoueur V3 transporte la telemetrie dans `MultiplayerTurnPreview` et `MultiplayerTurnSubmission`
+- le systeme reste volontairement non intrusif: il ne capture pas les flux bruts de souris ou hover a haute frequence
+- il ne capture pas encore une couche dediee de performance reseau telle que la latence, le round-trip time, la duree de mise en file ou les delais de retransmission
+
+### 6.6 Attribution XP: ajoutee sous forme de piste d'audit brute
 
 Le fichier expose maintenant `xpAuditTrail`, qui journalise chaque gain d'XP autoritaire avec:
 
@@ -289,28 +311,29 @@ Cette piste est ensuite reprojectee dans `structuredEvents` sous une forme reque
 Verdict actuel:
 
 - le principal angle mort sur l'attribution d'XP est ferme
-- on peut maintenant etudier la progression XP sans inference a partir des seuls snapshots
+- on peut maintenant etudier la progression XP par source sans inference fragile a partir des seuls snapshots
 - il ne manque plus qu'une causalite moteur encore plus atomique si l'on voulait relier chaque gain a une sous-phase interne fine du commit
 
-### 6.6 Conclusion operationnelle de la verification finale
+### 6.7 Conclusion operationnelle de la verification finale
 
 La verification finale fait apparaitre deux niveaux de verite complementaires:
 
-- au niveau codebase et pipeline runtime/save, le systeme Data est maintenant proche de l'etat cible V4 et couvre l'essentiel des besoins statistiques futurs
+- au niveau codebase et pipeline runtime/save, le systeme Data correspond maintenant au schema V5 et couvre l'essentiel des besoins statistiques futurs
 - au niveau artifact observe, `build/Data/pepo.json` est un ancien export V2 et ne doit pas etre pris comme preuve que les nouveaux champs manquent encore dans le generateur
 
 Autrement dit:
 
-- pour juger l'exhaustivite du systeme, il faut regarder le code actuel
-- pour juger l'exhaustivite d'un fichier precis deja present sur disque, il faut aussi tenir compte de sa date et de sa version de schema
+- pour juger l'exhaustivite du systeme, il faut regarder le code actuel et le pipeline runtime/save
+- pour juger l'exhaustivite d'un fichier precis deja present sur disque, il faut aussi tenir compte de sa date et de sa `schemaVersion`
 
-### 6.7 Ce qui reste vraiment ouvert
+### 6.8 Ce qui reste vraiment ouvert
 
-Les manques residuels ne sont plus des trous majeurs de couverture. Ils sont concentres sur des besoins d'analyse tres fine:
+Les manques residuels ne sont plus des trous majeurs de couverture de l'etat du jeu. Ils sont concentres sur des besoins d'analyse plus fins et plus specialises:
 
-- rattachement univoque de chaque micro-delta interne a une commande source unique
-- certains evenements purement runtime / orchestration qui resteraient hors du perimetre de `TurnSystem`
-- l'absence de timestamps fins sur les tentatives de commande si un jour on veut etudier le temps de reflexion, le rythme d'interaction ou la latence humaine intra-turn
+- causalite moteur atomique: il n'existe pas encore de chronologie interne qui rattache chaque sous-effet de commit a la regle exacte qui l'a produit
+- deliberation IA: le fichier n'exporte pas encore les candidats evalues, les scores internes, la justification du plan retenu ou les raisons d'abandon d'autres plans
+- performance reseau: il n'existe pas encore de metriques dediees de latence, de round-trip, de delai entre preview et reception, ou de temps de reconciliation
+- micro-gestes utilisateur: les trajectoires de pointeur, survols continus et autres signaux haute frequence sont volontairement exclus
 
 ## 7. Ce qui n'est pas un oubli critique
 
@@ -321,7 +344,8 @@ Il est important de ne pas sur-auditer a tort. Certaines donnees pourraient semb
 Les mouvements commites sont deja couverts par:
 
 - `queuedCommands`
-- `newEvents`
+- `structuredEvents`
+- `turnDelta`
 - les snapshots successifs
 
 Donc, pour les pieces joueuses, l'historique de mouvement est deja exploitable.
@@ -363,41 +387,54 @@ Si necessaire un jour pour la recherche ou le replay analytique, ajouter:
 - une chronologie interne des sous-effets de commit
 - un rattachement stable commande -> sous-effets -> deltas atomiques
 
-### Priorite 2: evenements d'orchestration hors coeur de turn
+### Priorite 2: deliberation IA exploitable
 
-Completer si besoin les rejets ou decisions qui ne passent pas directement par `TurnSystem`.
+Si l'on veut etudier plus tard le comportement de l'IA elle-meme, ajouter:
 
-### Priorite 3: telemetrie temporelle intra-turn
+- les plans candidats consideres
+- les scores ou heuristiques dominantes
+- la raison du plan selectionne
 
-Ajouter si besoin futur:
+### Priorite 3: performance reseau et orchestration
 
-- timestamps fins par tentative de commande
-- duree de preparation d'un turn
-- cadence de jeu et temps de reaction par joueur
+Si l'on veut etudier la qualite de l'experience LAN, ajouter:
+
+- latence preview -> reception
+- latence submission -> acceptation ou rejet
+- round-trip time, retries et delais de reconciliation
+
+### Priorite 4: telemetrie gestuelle haute frequence
+
+Seulement si une etude UX le justifie un jour, ajouter:
+
+- trajectoires de pointeur
+- survols continus
+- granularite temporelle plus fine entre interactions significatives
 
 ## 9. Reponse finale a la question
 
-Reponse courte, mise a jour apres implementation du schema V4:
+Reponse courte, mise a jour apres verification finale du schema V5:
 
-- oui, le fichier Data actuel est maintenant tres proche d'une couverture exhaustive pour les etudes statistiques, comparatives et longitudinales serieuses
-- oui, les principaux oublis identifies pendant l'audit ont ete corriges: `provenance`, `turnDelta`, `structuredEvents`, `commandAuditTrail`, `xpAuditTrail`
-- non, il n'est pas encore exhaustif au sens le plus fort si l'on veut une causalite moteur totalement atomique ou une telemetrie temporelle fine du comportement joueur
+- oui, le generateur Data actuel est suffisant pour des etudes statistiques, comparatives, longitudinales et comportementales serieuses
+- oui, les principaux oublis identifies pendant les audits precedents ont bien ete corriges: `provenance`, `turnDelta`, `structuredEvents`, `commandAuditTrail`, `xpAuditTrail`, `behavioralTelemetry`, `pendingTurnTelemetry`
+- non, il n'est pas exhaustif au sens absolu pour toutes les etudes imaginables
+
+Ce qui manque encore, si l'on vise des etudes plus specialisees, est clairement localise:
+
+- la causalite moteur atomique la plus basse
+- la deliberation et les scores internes de l'IA
+- les metriques dediees de transport reseau
+- la telemetrie brute de micro-gestes utilisateur a haute frequence
 
 Reserve pratique:
 
 - le companion `build/Data/pepo.json` actuellement visible dans le workspace reste un echantillon V2
 - il ne reflete donc pas a lui seul l'etat final du generateur analyse
 
-Ce qu'il reste surtout a ce stade n'est plus de l'etat brut manque.
-
-Ce qu'il reste surtout, c'est:
-
-- un niveau de causalite encore plus bas si un jour on veut du replay analytique interne tres detaille
-- une couverture explicite des evenements d'orchestration hors coeur de turn
-- une telemetrie temporelle plus fine si un jour on veut etudier le rythme de prise de decision humaine
-
 Verdict final:
 
-- pour des statistiques descriptives et comparatives: oui, c'est suffisant
-- pour des analyses comportementales sur l'intention et les rejets de commande: oui, c'est maintenant largement exploitable
-- pour une base de recherche durable: oui, l'architecture est bonne et les manques restants sont residuels et clairement localises
+- pour l'etat autoritaire et les systemes de jeu: oui, c'est largement suffisant
+- pour les deltas de turn et les evenements metier: oui
+- pour l'intention joueur, les rejets de commande et la preparation de turn: oui
+- pour l'orchestration LAN fonctionnelle: oui
+- pour la micro-causalite moteur, la perf reseau et l'UX gestuelle brute: pas encore

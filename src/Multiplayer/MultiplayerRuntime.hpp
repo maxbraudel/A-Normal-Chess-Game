@@ -44,7 +44,7 @@ public:
     bool publishTurnPreview(bool lanHost,
                             const MultiplayerTurnPreview& preview,
                             std::string* errorMessage = nullptr);
-    bool submitTurnSubmission(const std::vector<TurnCommand>& commands,
+    bool submitTurnSubmission(const MultiplayerTurnSubmission& submission,
                               std::string* errorMessage = nullptr);
     bool sendTurnRejected(const std::string& reason,
                           std::string* errorMessage = nullptr);

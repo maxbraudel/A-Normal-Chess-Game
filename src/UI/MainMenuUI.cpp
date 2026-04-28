@@ -22,6 +22,9 @@ std::string buildSaveLabel(const SaveSummary& save) {
     if (save.sharedTurnPreviewEnabled) {
         label += " | Shared Turn Preview";
     }
+    if (save.behavioralTelemetryEnabled) {
+        label += " | Behavioral Telemetry";
+    }
     return label;
 }
 }
@@ -310,12 +313,30 @@ void MainMenuUI::init(tgui::Gui& gui, const AssetManager& assets) {
     m_dataCollectionCheckBox->setPosition({36, 652});
     m_dataCollectionCheckBox->setText("Generate Data");
     m_dataCollectionCheckBox->setTextSize(18);
-    m_dataCollectionCheckBox->onChange([this](bool) {
+    m_dataCollectionCheckBox->onChange([this](bool checked) {
+        if (!checked && m_behavioralTelemetryCheckBox) {
+            m_behavioralTelemetryCheckBox->setChecked(false);
+        }
         if (m_createErrorLabel) {
             m_createErrorLabel->setText("");
         }
     });
     dialog->add(m_dataCollectionCheckBox);
+
+    m_behavioralTelemetryCheckBox = tgui::CheckBox::create();
+    styleCheckBox(m_behavioralTelemetryCheckBox);
+    m_behavioralTelemetryCheckBox->setPosition({272, 652});
+    m_behavioralTelemetryCheckBox->setText("Behavioral Telemetry");
+    m_behavioralTelemetryCheckBox->setTextSize(18);
+    m_behavioralTelemetryCheckBox->onChange([this](bool checked) {
+        if (checked && m_dataCollectionCheckBox) {
+            m_dataCollectionCheckBox->setChecked(true);
+        }
+        if (m_createErrorLabel) {
+            m_createErrorLabel->setText("");
+        }
+    });
+    dialog->add(m_behavioralTelemetryCheckBox);
 
     m_createErrorLabel = tgui::Label::create("");
     m_createErrorLabel->setPosition({36, 686});
@@ -603,6 +624,7 @@ void MainMenuUI::openCreateDialog() {
     if (m_tacticalGridCheckBox) m_tacticalGridCheckBox->setChecked(false);
     if (m_sharedTurnPreviewCheckBox) m_sharedTurnPreviewCheckBox->setChecked(false);
     if (m_dataCollectionCheckBox) m_dataCollectionCheckBox->setChecked(false);
+    if (m_behavioralTelemetryCheckBox) m_behavioralTelemetryCheckBox->setChecked(false);
     updateSessionDialogLabels();
     closeJoinDialog();
     m_createOverlay->setVisible(true);
@@ -649,6 +671,9 @@ void MainMenuUI::openEditDialog() {
     }
     if (m_dataCollectionCheckBox) {
         m_dataCollectionCheckBox->setChecked(selectedSave->dataCollectionEnabled);
+    }
+    if (m_behavioralTelemetryCheckBox) {
+        m_behavioralTelemetryCheckBox->setChecked(selectedSave->behavioralTelemetryEnabled);
     }
     updateSessionDialogLabels();
     closeJoinDialog();
@@ -714,8 +739,11 @@ void MainMenuUI::submitSessionDialog() {
         m_tacticalGridCheckBox != nullptr && m_tacticalGridCheckBox->isChecked();
     request.session.sharedTurnPreviewEnabled =
         m_sharedTurnPreviewCheckBox != nullptr && m_sharedTurnPreviewCheckBox->isChecked();
+    request.session.behavioralTelemetryEnabled =
+        m_behavioralTelemetryCheckBox != nullptr && m_behavioralTelemetryCheckBox->isChecked();
     request.session.dataCollectionEnabled =
-        m_dataCollectionCheckBox != nullptr && m_dataCollectionCheckBox->isChecked();
+        (m_dataCollectionCheckBox != nullptr && m_dataCollectionCheckBox->isChecked())
+        || request.session.behavioralTelemetryEnabled;
 
     if (request.session.saveName.empty()) {
         m_createErrorLabel->setText("Save name is required.");

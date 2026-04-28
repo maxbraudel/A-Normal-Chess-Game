@@ -72,9 +72,9 @@ void MultiplayerServer::handleClientTransportLoss(const std::string& authenticat
 
 void MultiplayerServer::pushEvent(Event::Type type,
                                   const std::string& message,
-                                  const std::vector<TurnCommand>& commands,
+                                  const MultiplayerTurnSubmission& turnSubmission,
                                   const MultiplayerTurnPreview& turnPreview) {
-    m_events.push_back(Event{type, message, commands, turnPreview});
+    m_events.push_back(Event{type, message, turnSubmission, turnPreview});
 }
 
 bool MultiplayerServer::sendPacket(sf::Packet& packet, std::string* errorMessage) {
@@ -212,7 +212,7 @@ void MultiplayerServer::handlePacket(sf::Packet& packet) {
                 return;
             }
 
-            pushEvent(Event::Type::TurnSubmitted, "Remote turn submitted.", submission.commands);
+            pushEvent(Event::Type::TurnSubmitted, "Remote turn submitted.", submission);
             break;
         }
 
