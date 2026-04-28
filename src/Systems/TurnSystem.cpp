@@ -271,7 +271,8 @@ TurnSystem::TurnSystem()
       m_movementPointsMax(0), m_movementPointsRemaining(0),
       m_buildPointsMax(0), m_buildPointsRemaining(0),
       m_hasProduced(false), m_hasMarried(false),
-    m_pendingStateRevision(1) {}
+            m_pendingStateRevision(1),
+            m_nextCommandAuditSequence(0) {}
 
 void TurnSystem::setActiveKingdom(KingdomId id) {
     if (m_activeKingdom != id) {
@@ -292,6 +293,23 @@ int TurnSystem::getTurnNumber() const { return m_turnNumber; }
 
 void TurnSystem::markPendingStateChanged() {
     ++m_pendingStateRevision;
+}
+
+void TurnSystem::appendCommandAudit(TurnCommandAuditAction action,
+                                    const TurnCommand* command,
+                                    bool accepted,
+                                    const std::string& reason) {
+    TurnCommandAuditEntry entry;
+    entry.sequence = m_nextCommandAuditSequence++;
+    entry.turnNumber = m_turnNumber;
+    entry.action = action;
+    entry.accepted = accepted;
+    entry.hasCommand = (command != nullptr);
+    if (command != nullptr) {
+        entry.command = *command;
+    }
+    entry.reason = reason;
+    m_commandAuditTrail.push_back(std::move(entry));
 }
 
 void TurnSystem::syncPointBudget(const GameConfig& config, const Kingdom& activeKingdom) {
@@ -366,6 +384,11 @@ bool TurnSystem::queueCommand(const TurnCommand& cmd,
         case TurnCommand::Move:
             if (queuedCommand.pieceId >= 0
                 && getPendingDisbandCommand(queuedCommand.pieceId) != nullptr) {
+                appendCommandAudit(
+                    TurnCommandAuditAction::Queue,
+                    &queuedCommand,
+                    false,
+                    "piece_has_pending_disband");
                 return false;
             }
             break;
@@ -373,6 +396,11 @@ bool TurnSystem::queueCommand(const TurnCommand& cmd,
         case TurnCommand::Produce:
             if (queuedCommand.barracksId >= 0
                 && m_producedBarracks.count(queuedCommand.barracksId)) {
+                appendCommandAudit(
+                    TurnCommandAuditAction::Queue,
+                    &queuedCommand,
+                    false,
+                    "barracks_already_has_pending_production");
                 return false;
             }
             break;
@@ -381,6 +409,11 @@ bool TurnSystem::queueCommand(const TurnCommand& cmd,
             if (queuedCommand.upgradePieceId >= 0
                 && (getPendingUpgradeCommand(queuedCommand.upgradePieceId) != nullptr
                     || getPendingDisbandCommand(queuedCommand.upgradePieceId) != nullptr)) {
+                appendCommandAudit(
+                    TurnCommandAuditAction::Queue,
+                    &queuedCommand,
+                    false,
+                    "piece_has_conflicting_pending_command");
                 return false;
             }
             break;
@@ -390,11 +423,21 @@ bool TurnSystem::queueCommand(const TurnCommand& cmd,
                 || getPendingDisbandCommand(queuedCommand.pieceId) != nullptr
                 || getPendingMoveCommand(queuedCommand.pieceId) != nullptr
                 || getPendingUpgradeCommand(queuedCommand.pieceId) != nullptr) {
+                appendCommandAudit(
+                    TurnCommandAuditAction::Queue,
+                    &queuedCommand,
+                    false,
+                    "invalid_disband_target_or_conflicting_pending_command");
                 return false;
             }
             break;
 
         case TurnCommand::Marry:
+            appendCommandAudit(
+                TurnCommandAuditAction::Queue,
+                &queuedCommand,
+                false,
+                "marry_command_not_supported");
             return false;
 
         default:
@@ -412,6 +455,11 @@ bool TurnSystem::queueCommand(const TurnCommand& cmd,
             context,
             candidateCommands);
         if (!candidateValidation.valid) {
+            appendCommandAudit(
+                TurnCommandAuditAction::Queue,
+                &queuedCommand,
+                false,
+                candidateValidation.errorMessage);
             return false;
         }
 
@@ -419,17 +467,32 @@ bool TurnSystem::queueCommand(const TurnCommand& cmd,
         rebuildQueuedSpecialState();
         refreshProjectedBudgetState(context);
         markPendingStateChanged();
+        appendCommandAudit(
+            TurnCommandAuditAction::Queue,
+            &queuedCommand,
+            true,
+            "accepted_while_resolving_check");
         return true;
     }
 
     std::string errorMessage;
     if (!PendingTurnProjection::canAppendCommand(
             context, m_pendingCommands, queuedCommand, &errorMessage)) {
+        appendCommandAudit(
+            TurnCommandAuditAction::Queue,
+            &queuedCommand,
+            false,
+            errorMessage.empty() ? "projection_rejected" : errorMessage);
         return false;
     }
 
     if (queuedCommand.type == TurnCommand::Build) {
         if (!buildingFactory && queuedCommand.buildId < 0) {
+            appendCommandAudit(
+                TurnCommandAuditAction::Queue,
+                &queuedCommand,
+                false,
+                "missing_building_factory_for_build_id_reservation");
             return false;
         }
 
@@ -444,6 +507,7 @@ bool TurnSystem::queueCommand(const TurnCommand& cmd,
     rebuildQueuedSpecialState();
     refreshProjectedBudgetState(context);
     markPendingStateChanged();
+    appendCommandAudit(TurnCommandAuditAction::Queue, &queuedCommand, true, "accepted");
     return true;
 }
 
@@ -461,6 +525,13 @@ bool TurnSystem::queueCommand(const TurnCommand& cmd,
 }
 
 void TurnSystem::resetPendingCommands() {
+    if (!m_pendingCommands.empty()) {
+        appendCommandAudit(
+            TurnCommandAuditAction::Reset,
+            nullptr,
+            true,
+            "pending_commands_cleared");
+    }
     m_pendingCommands.clear();
     m_pieceMoveCounts.clear();
     m_movementPointsRemaining = m_movementPointsMax;
@@ -471,6 +542,9 @@ void TurnSystem::resetPendingCommands() {
 
 bool TurnSystem::cancelMoveCommand(int pieceId,
                                    const TurnValidationContext& context) {
+    TurnCommand auditCommand;
+    auditCommand.type = TurnCommand::Move;
+    auditCommand.pieceId = pieceId;
     const auto originalSize = m_pendingCommands.size();
     auto it = std::remove_if(m_pendingCommands.begin(), m_pendingCommands.end(),
         [pieceId](const TurnCommand& c) {
@@ -478,12 +552,22 @@ bool TurnSystem::cancelMoveCommand(int pieceId,
         });
     m_pendingCommands.erase(it, m_pendingCommands.end());
     if (m_pendingCommands.size() == originalSize) {
+        appendCommandAudit(
+            TurnCommandAuditAction::Cancel,
+            &auditCommand,
+            false,
+            "no_matching_pending_move");
         return false;
     }
 
     rebuildQueuedSpecialState();
     refreshProjectedBudgetState(context);
     markPendingStateChanged();
+    appendCommandAudit(
+        TurnCommandAuditAction::Cancel,
+        &auditCommand,
+        true,
+        "cancelled_pending_move");
     return true;
 }
 
@@ -500,6 +584,9 @@ bool TurnSystem::cancelMoveCommand(int pieceId,
 
 bool TurnSystem::cancelBuildCommand(int buildId,
                                     const TurnValidationContext& context) {
+    TurnCommand auditCommand;
+    auditCommand.type = TurnCommand::Build;
+    auditCommand.buildId = buildId;
     const auto originalSize = m_pendingCommands.size();
     auto it = std::remove_if(m_pendingCommands.begin(), m_pendingCommands.end(),
         [buildId](const TurnCommand& c) {
@@ -507,12 +594,22 @@ bool TurnSystem::cancelBuildCommand(int buildId,
         });
     m_pendingCommands.erase(it, m_pendingCommands.end());
     if (m_pendingCommands.size() == originalSize) {
+        appendCommandAudit(
+            TurnCommandAuditAction::Cancel,
+            &auditCommand,
+            false,
+            "no_matching_pending_build");
         return false;
     }
 
     rebuildQueuedSpecialState();
     refreshProjectedBudgetState(context);
     markPendingStateChanged();
+    appendCommandAudit(
+        TurnCommandAuditAction::Cancel,
+        &auditCommand,
+        true,
+        "cancelled_pending_build");
     return true;
 }
 
@@ -530,9 +627,19 @@ bool TurnSystem::cancelBuildCommand(int buildId,
 bool TurnSystem::replaceMoveCommand(const TurnCommand& moveCommand,
                                     const TurnValidationContext& context) {
     if (moveCommand.type != TurnCommand::Move) {
+        appendCommandAudit(
+            TurnCommandAuditAction::Replace,
+            &moveCommand,
+            false,
+            "replace_requires_move_command");
         return false;
     }
     if (getPendingDisbandCommand(moveCommand.pieceId) != nullptr) {
+        appendCommandAudit(
+            TurnCommandAuditAction::Replace,
+            &moveCommand,
+            false,
+            "piece_has_pending_disband");
         return false;
     }
 
@@ -559,6 +666,11 @@ bool TurnSystem::replaceMoveCommand(const TurnCommand& moveCommand,
             context,
             candidateCommands);
         if (!candidateValidation.valid) {
+            appendCommandAudit(
+                TurnCommandAuditAction::Replace,
+                &moveCommand,
+                false,
+                candidateValidation.errorMessage);
             return false;
         }
 
@@ -566,6 +678,11 @@ bool TurnSystem::replaceMoveCommand(const TurnCommand& moveCommand,
         rebuildQueuedSpecialState();
         refreshProjectedBudgetState(context);
         markPendingStateChanged();
+        appendCommandAudit(
+            TurnCommandAuditAction::Replace,
+            &moveCommand,
+            true,
+            "accepted_while_resolving_check");
         return true;
     }
 
@@ -574,6 +691,11 @@ bool TurnSystem::replaceMoveCommand(const TurnCommand& moveCommand,
         candidateCommands,
         PendingTurnInvalidCommandPolicy::DropInvalidBuilds);
     if (!projection.valid) {
+        appendCommandAudit(
+            TurnCommandAuditAction::Replace,
+            &moveCommand,
+            false,
+            "normalized_projection_invalid");
         return false;
     }
 
@@ -585,6 +707,11 @@ bool TurnSystem::replaceMoveCommand(const TurnCommand& moveCommand,
     m_buildPointsRemaining = budget.buildPointsRemaining;
     m_pieceMoveCounts = budget.pieceMoveCounts;
     markPendingStateChanged();
+    appendCommandAudit(
+        TurnCommandAuditAction::Replace,
+        &moveCommand,
+        true,
+        replacedExistingMove ? "replaced_existing_move" : "queued_new_move_via_replace");
     return true;
 }
 
@@ -601,6 +728,9 @@ bool TurnSystem::replaceMoveCommand(const TurnCommand& moveCommand,
 
 bool TurnSystem::cancelProduceCommand(int barracksId,
                                       const TurnValidationContext& context) {
+    TurnCommand auditCommand;
+    auditCommand.type = TurnCommand::Produce;
+    auditCommand.barracksId = barracksId;
     const auto originalSize = m_pendingCommands.size();
     auto it = std::remove_if(m_pendingCommands.begin(), m_pendingCommands.end(),
         [barracksId](const TurnCommand& c) {
@@ -608,12 +738,22 @@ bool TurnSystem::cancelProduceCommand(int barracksId,
         });
     m_pendingCommands.erase(it, m_pendingCommands.end());
     if (m_pendingCommands.size() == originalSize) {
+        appendCommandAudit(
+            TurnCommandAuditAction::Cancel,
+            &auditCommand,
+            false,
+            "no_matching_pending_production");
         return false;
     }
 
     rebuildQueuedSpecialState();
     refreshProjectedBudgetState(context);
     markPendingStateChanged();
+    appendCommandAudit(
+        TurnCommandAuditAction::Cancel,
+        &auditCommand,
+        true,
+        "cancelled_pending_production");
     return true;
 }
 
@@ -630,6 +770,9 @@ bool TurnSystem::cancelProduceCommand(int barracksId,
 
 bool TurnSystem::cancelUpgradeCommand(int pieceId,
                                       const TurnValidationContext& context) {
+    TurnCommand auditCommand;
+    auditCommand.type = TurnCommand::Upgrade;
+    auditCommand.upgradePieceId = pieceId;
     const auto originalSize = m_pendingCommands.size();
     auto it = std::remove_if(m_pendingCommands.begin(), m_pendingCommands.end(),
         [pieceId](const TurnCommand& c) {
@@ -637,12 +780,22 @@ bool TurnSystem::cancelUpgradeCommand(int pieceId,
         });
     m_pendingCommands.erase(it, m_pendingCommands.end());
     if (m_pendingCommands.size() == originalSize) {
+        appendCommandAudit(
+            TurnCommandAuditAction::Cancel,
+            &auditCommand,
+            false,
+            "no_matching_pending_upgrade");
         return false;
     }
 
     rebuildQueuedSpecialState();
     refreshProjectedBudgetState(context);
     markPendingStateChanged();
+    appendCommandAudit(
+        TurnCommandAuditAction::Cancel,
+        &auditCommand,
+        true,
+        "cancelled_pending_upgrade");
     return true;
 }
 
@@ -659,6 +812,9 @@ bool TurnSystem::cancelUpgradeCommand(int pieceId,
 
 bool TurnSystem::cancelDisbandCommand(int pieceId,
                                       const TurnValidationContext& context) {
+    TurnCommand auditCommand;
+    auditCommand.type = TurnCommand::Disband;
+    auditCommand.pieceId = pieceId;
     const auto originalSize = m_pendingCommands.size();
     auto it = std::remove_if(m_pendingCommands.begin(), m_pendingCommands.end(),
         [pieceId](const TurnCommand& c) {
@@ -666,12 +822,22 @@ bool TurnSystem::cancelDisbandCommand(int pieceId,
         });
     m_pendingCommands.erase(it, m_pendingCommands.end());
     if (m_pendingCommands.size() == originalSize) {
+        appendCommandAudit(
+            TurnCommandAuditAction::Cancel,
+            &auditCommand,
+            false,
+            "no_matching_pending_disband");
         return false;
     }
 
     rebuildQueuedSpecialState();
     refreshProjectedBudgetState(context);
     markPendingStateChanged();
+    appendCommandAudit(
+        TurnCommandAuditAction::Cancel,
+        &auditCommand,
+        true,
+        "cancelled_pending_disband");
     return true;
 }
 
@@ -688,6 +854,15 @@ bool TurnSystem::cancelDisbandCommand(int pieceId,
 
 const std::vector<TurnCommand>& TurnSystem::getPendingCommands() const {
     return m_pendingCommands;
+}
+
+const std::vector<TurnCommandAuditEntry>& TurnSystem::getCommandAuditTrail() const {
+    return m_commandAuditTrail;
+}
+
+void TurnSystem::clearCommandAuditTrail() {
+    m_commandAuditTrail.clear();
+    m_nextCommandAuditSequence = 0;
 }
 
 const TurnCommand* TurnSystem::getPendingMoveCommand(int pieceId) const {

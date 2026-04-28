@@ -1,11 +1,12 @@
 #pragma once
 #include <SFML/System/Vector2.hpp>
+#include <string>
 #include "Units/PieceType.hpp"
 #include "Buildings/BuildingType.hpp"
 
 struct TurnCommand {
     enum Type { Move, Build, Produce, Upgrade, Marry, FormGroup, BreakGroup, Disband };
-    Type type;
+    Type type = Move;
 
     // Move
     int pieceId = -1;
@@ -28,4 +29,21 @@ struct TurnCommand {
 
     // Formation
     int formationId = -1;
+};
+
+enum class TurnCommandAuditAction {
+    Queue = 0,
+    Replace,
+    Cancel,
+    Reset
+};
+
+struct TurnCommandAuditEntry {
+    int sequence = 0;
+    int turnNumber = 0;
+    TurnCommandAuditAction action = TurnCommandAuditAction::Queue;
+    bool accepted = false;
+    bool hasCommand = false;
+    TurnCommand command{};
+    std::string reason;
 };

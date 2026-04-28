@@ -15,7 +15,7 @@ Ce document correspond au schema actuellement ecrit par `GameDataRecorder`.
 
 Version de schema actuelle:
 
-- `schemaVersion = 2`
+- `schemaVersion = 4`
 
 ## 2. Philosophie generale du modele
 
@@ -30,8 +30,8 @@ Le fichier sert a la fois:
 
 En consequence, le fichier contient toujours deux couches:
 
-- une couche brute: `initialSnapshot`, `turnHistory[].snapshot`, `currentStateSummary`
-- une couche derivee: `initialMetrics`, `initialAnalytics`, `turnHistory[].snapshotMetrics`, `turnHistory[].analytics`, `currentMetrics`, `currentAnalytics`
+- une couche brute: `initialSnapshot`, `turnHistory[].snapshot`, `currentStateSummary`, `turnHistory[].queuedCommands`, `turnHistory[].commandAuditTrail`, `turnHistory[].xpAuditTrail`
+- une couche derivee: `provenance`, `initialMetrics`, `initialAnalytics`, `turnHistory[].turnDelta`, `turnHistory[].structuredEvents`, `turnHistory[].snapshotMetrics`, `turnHistory[].analytics`, `currentMetrics`, `currentAnalytics`
 
 ### 2.2 Le snapshot reste la source de verite finale
 
@@ -76,13 +76,14 @@ Le fichier racine suit cette forme generale:
 
 ```json
 {
-  "schemaVersion": 2,
+  "schemaVersion": 4,
   "saveName": "ExampleSave",
   "dataCollectionEnabled": true,
   "historyContinuityComplete": true,
   "loadedFromExistingCompanion": false,
   "createdAtUnix": 1770000000,
   "lastUpdatedAtUnix": 1770000100,
+  "provenance": { ... },
   "referenceData": { ... },
   "sessionContext": { ... },
   "configContext": { ... },
@@ -100,8 +101,12 @@ Le fichier racine suit cette forme generale:
       "activeValidation": { ... },
       "nextTurnValidation": { ... },
       "queuedCommands": [ ... ],
+      "commandAuditTrail": [ ... ],
+      "xpAuditTrail": [ ... ],
       "notifications": [ ... ],
       "newEvents": [ ... ],
+      "turnDelta": { ... },
+      "structuredEvents": [ ... ],
       "snapshotMetrics": { ... },
       "analytics": { ... },
       "snapshot": { ... }
@@ -176,6 +181,7 @@ Quand cela arrive, il faut decodet la valeur avec `referenceData`.
 | `loadedFromExistingCompanion` | booleen | indique si le fichier courant prolonge un ancien companion existant |
 | `createdAtUnix` | entier | date de creation initiale du companion |
 | `lastUpdatedAtUnix` | entier | date de derniere ecriture du companion |
+| `provenance` | objet | empreintes du contrat exporte et metadonnees de provenance logique, build et git |
 | `referenceData` | objet | dictionnaires de reference pour decoder les enums et ids |
 | `sessionContext` | objet | contexte metier de la partie |
 | `configContext` | objet | contexte de regles et de parametres |
@@ -214,6 +220,45 @@ Valeurs actuellement observees ou attendues:
 - `initial_state_new_game`: nouvelle partie suivie des son debut
 - `initial_state_loaded_game_partial`: partie chargee depuis une save sans ancien companion reutilisable
 
+### 6.4 `provenance`
+
+`provenance` decrit l'identite logique du fichier exporte, sans dupliquer toute la configuration complete.
+
+Champs actuels:
+
+- `generator`
+- `generatorSchemaVersion`
+- `formatFamily`
+- `build`
+- `git`
+- `referenceDataHash`
+- `sessionContextHash`
+- `configContextHash`
+
+Interpretation:
+
+- `generator` identifie le producteur du companion
+- `generatorSchemaVersion` est la version du contrat de sortie
+- `formatFamily` identifie la famille de format exporte
+- `build` decrit le contexte de compilation du binaire qui a ecrit le companion
+- `git` rattache le fichier a une revision de code source pratique
+- les trois hashes permettent de verifier rapidement si deux fichiers partagent les memes dimensions de reference, le meme contexte de session logique et le meme contexte de configuration
+
+Sous-structure actuelle de `build`:
+
+- `configuredAtUtc`
+- `buildType`
+- `cmakeGenerator`
+- `compilerId`
+- `compilerVersion`
+- `systemName`
+
+Sous-structure actuelle de `git`:
+
+- `commit`
+- `branch`
+- `dirty`
+
 ## 7. `referenceData`: dictionnaires de reference
 
 `referenceData` est la dimension de reference du fichier.
@@ -227,6 +272,7 @@ Il contient des listes d'objets `{id, key, label}` pour:
 - `buildingTypes`
 - `chestRewardTypes`
 - `turnCommandTypes`
+- `turnCommandAuditActions`
 - `eventKinds`
 - `gameplayNotificationKinds`
 - `autonomousUnitTypes`
@@ -454,8 +500,12 @@ Structure generale:
 | `activeValidation` | objet | validation du turn du royaume actif avant commit |
 | `nextTurnValidation` | objet | validation calculee pour l'etat suivant |
 | `queuedCommands` | tableau | commandes qui composaient le turn soumis |
+| `commandAuditTrail` | tableau | piste d'audit brute des tentatives, remplacements, annulations et resets de commandes |
+| `xpAuditTrail` | tableau | piste d'audit brute des gains d'XP autoritaires attribues pendant le turn |
 | `notifications` | tableau | notifications gameplay generees par le commit |
 | `newEvents` | tableau | nouveaux evenements ajoutes au journal entre le precedent point enregistre et ce snapshot |
+| `turnDelta` | objet | resume causal derive des changements observables entre snapshot precedent et snapshot courant |
+| `structuredEvents` | tableau | flattening typé des actions et changements saillants du turn |
 | `snapshotMetrics` | objet | resume agrege du snapshot post-commit |
 | `analytics` | objet | vue analytique post-commit |
 | `snapshot` | objet `SaveData` | snapshot autoritaire post-commit |
@@ -512,9 +562,63 @@ Lecture pratique par type:
 Important:
 
 - `queuedCommands` represente l'intention soumise au moteur
-- ce n'est pas encore une trace causale fine de sous-resolution interne commande par commande
+- il faut le lire avec `commandAuditTrail`, `turnDelta` et `structuredEvents` pour obtenir la trace analytique complete du turn
 
-### 11.3 `notifications`
+### 11.3 `commandAuditTrail`
+
+`commandAuditTrail` enregistre la vie brute des commandes avant le commit effectif.
+
+Chaque entree contient:
+
+- `sequence`
+- `turnNumber`
+- `action`, `actionKey`, `actionLabel`
+- `accepted`
+- `hasCommand`
+- `reason`
+- `command`
+
+Semantique:
+
+- `queue`: tentative d'ajout d'une commande dans le draft du turn
+- `replace`: remplacement normalise d'une commande de mouvement existante
+- `cancel`: annulation explicite d'une commande en attente
+- `reset`: purge du draft courant
+
+Usage analytique:
+
+- mesurer les commandes refusees avant commit
+- distinguer intention retenue et intention abandonnee
+- etudier les causes de rejet ou d'annulation sans reconstruire l'UI
+
+### 11.4 `xpAuditTrail`
+
+`xpAuditTrail` enregistre la piste brute des gains d'XP autoritaires attribues pendant la resolution du turn.
+
+Chaque entree contient notamment:
+
+- `sequence`
+- `source`, `sourceKey`, `sourceLabel`
+- `amount`
+- `recipientPieceId`
+- `recipientKingdomId`, `recipientKingdomKey`, `recipientKingdomLabel`
+- `recipientPosition`
+- `recipientXPBefore`, `recipientXPAfter`
+- `victimPieceTypeId`, `victimPieceTypeKey`, `victimPieceTypeLabel` si pertinent
+- `rngCounterBefore`, `rngCounterAfter`
+
+Usage analytique:
+
+- mesurer la progression XP sans inferer a partir des seuls snapshots
+- comparer les gains d'XP par source exacte
+- auditer les tirages RNG consommes par les gains variables
+
+Important:
+
+- `xpAuditTrail` est la couche brute autoritaire
+- `structuredEvents` re-expose aussi ces gains sous une forme lineaire de type `xp_granted`
+
+### 11.5 `notifications`
 
 `notifications` contient les notifications gameplay user-facing ou quasi user-facing generees par le commit.
 
@@ -532,7 +636,7 @@ Usage principal actuel:
 
 - recompenses de coffre
 
-### 11.4 `newEvents`
+### 11.6 `newEvents`
 
 `newEvents` est un delta d'evenements par rapport au dernier point d'enregistrement Data.
 
@@ -552,7 +656,40 @@ Important:
 - `newEvents` est un delta local a l'enregistrement Data
 - `snapshot.events` dans le `SaveData` reste la version cumulative du journal
 
-### 11.5 `snapshotMetrics`, `analytics`, `snapshot`
+### 11.7 `turnDelta` et `structuredEvents`
+
+`turnDelta` et `structuredEvents` sont des couches derivees calculees a partir du snapshot precedent, du snapshot courant, des commandes soumises, du `commandAuditTrail` et du `xpAuditTrail`.
+
+`turnDelta` est organise par familles de changements observables.
+
+Exemples de sous-blocs actuellement presents:
+
+- budgets de turn et points depenses
+- deltas d'economie par royaume
+- deltas de dette infernale
+- apparitions, retraits et deplacements d'entites
+- changements de production et de cellules de batiment
+- transitions d'objets de carte, d'unites autonomes et de fronts meteo
+
+`structuredEvents` est une vue lineaire d'evenements types, directement exploitable en ETL sans reparcourir tous les diffs.
+
+Exemples de types actuellement presents:
+
+- `command_queued`, `command_rejected`, `command_replaced`, `command_cancelled`, `pending_commands_reset`
+- `command_committed`
+- `xp_granted`
+- `piece_spawned`, `piece_moved`, `piece_upgraded`, `piece_removed`
+- `building_placed`, `building_removed`, `production_started`, `production_completed`
+- `chest_spawned`, `infernal_spawned`, `weather_front_spawned` selon les diffs observes
+
+Regle de lecture:
+
+- utiliser `commandAuditTrail` pour la trace brute des intentions et des rejets
+- utiliser `xpAuditTrail` pour la trace brute des gains d'XP
+- utiliser `structuredEvents` pour les pipelines analytiques generalistes
+- utiliser `turnDelta` quand on veut un diff structure par domaine metier
+
+### 11.8 `snapshotMetrics`, `analytics`, `snapshot`
 
 Ces trois champs doivent etre lus ensemble.
 
@@ -969,13 +1106,19 @@ Attention:
 
 Le schema est deja tres exploitable, mais il a encore des limites explicites.
 
-### 16.1 Pas encore de trace causale fine commande par commande
+### 16.1 La causalite fine n'est pas encore totalement atomique
 
-`queuedCommands` enregistre l'intention du turn, mais pas encore:
+Le schema enregistre maintenant:
 
-- le succes ou l'echec detaille de chaque sous-effet interne
-- l'ordre exact de toutes les resolutions internes du moteur
-- un journal exhaustif des deltas atomiques cause par une commande donnee
+- `commandAuditTrail` pour les tentatives, remplacements, annulations et resets
+- `turnDelta` pour les changements structures entre deux snapshots
+- `structuredEvents` pour une vue lineaire typée du turn
+
+Il manque encore, si l'on veut une causalite totalement atomique:
+
+- le succes ou l'echec detaille de chaque sous-effet interne d'une commande
+- l'ordre exhaustif de toutes les resolutions moteur internes a un commit
+- un rattachement garanti univoque de chaque delta atomique a une commande source unique
 
 ### 16.2 `commandHistory` dans `SaveData` n'est pas la surface historique principale
 
@@ -984,6 +1127,16 @@ L'historique temporel a utiliser pour l'analyse est `turnHistory`, pas `snapshot
 ### 16.3 La visibilite actuelle est centree sur le brouillard meteo
 
 Les champs `hiddenFromWhite` et `hiddenFromBlack` suivent la logique actuelle de `WeatherVisibility`. Ils ne constituent pas un systeme de vision general abstrait independant du runtime courant.
+
+### 16.4 La provenance logicielle reste surtout configurationnelle
+
+Le bloc `provenance` existe desormais et fournit des empreintes stables de `referenceData`, `sessionContext` et `configContext`.
+
+En revanche, il n'inclut pas encore explicitement:
+
+- un identifiant git ou commit
+- un numero de build applicatif
+- une version humaine du binaire
 
 ## 17. Resume final
 

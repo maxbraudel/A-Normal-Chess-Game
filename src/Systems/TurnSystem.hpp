@@ -101,6 +101,8 @@ public:
                               const std::vector<Building>& publicBuildings,
                               const GameConfig& config);
     const std::vector<TurnCommand>& getPendingCommands() const;
+    const std::vector<TurnCommandAuditEntry>& getCommandAuditTrail() const;
+    void clearCommandAuditTrail();
     const TurnCommand* getPendingMoveCommand(int pieceId) const;
     const TurnCommand* getPendingBuildCommand(int buildId) const;
     const TurnCommand* getPendingProduceCommand(int barracksId) const;
@@ -179,8 +181,14 @@ private:
     std::set<int> m_producedBarracks;  // barracks IDs that have a produce queued
     bool m_hasMarried;
     std::uint64_t m_pendingStateRevision;
+    std::vector<TurnCommandAuditEntry> m_commandAuditTrail;
+    int m_nextCommandAuditSequence;
 
     void rebuildQueuedSpecialState();
     void refreshProjectedBudgetState(const TurnValidationContext& context);
     void markPendingStateChanged();
+    void appendCommandAudit(TurnCommandAuditAction action,
+                            const TurnCommand* command,
+                            bool accepted,
+                            const std::string& reason = {});
 };

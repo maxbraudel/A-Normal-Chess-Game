@@ -22,6 +22,9 @@ AuthoritativeTurnExecution TurnCoordinator::executeAuthoritativeTurn() {
     execution.committedActiveKingdom = m_engine.turnSystem().getActiveKingdom();
     execution.committedTurnNumber = m_engine.turnSystem().getTurnNumber();
     const std::vector<TurnCommand> queuedCommands = m_engine.turnSystem().getPendingCommands();
+    const std::vector<TurnCommandAuditEntry> commandAuditTrail =
+        m_engine.turnSystem().getCommandAuditTrail();
+    const std::vector<XPRewardAuditEntry> xpAuditTrail = m_engine.xpRewardAuditTrail();
 
     const PendingTurnCommitResult commitResult = m_engine.commitPendingTurn(m_config);
     execution.committed = commitResult.committed;
@@ -41,6 +44,8 @@ AuthoritativeTurnExecution TurnCoordinator::executeAuthoritativeTurn() {
         if (m_dataRecorder.isEnabled()) {
             m_dataRecorder.recordCommittedTurn(
                 queuedCommands,
+                commandAuditTrail,
+                xpAuditTrail,
                 execution.committedTurnNumber,
                 execution.committedActiveKingdom,
                 commitResult.activeValidation,
@@ -50,6 +55,9 @@ AuthoritativeTurnExecution TurnCoordinator::executeAuthoritativeTurn() {
                 commitResult.notifications,
                 m_engine.createSaveData());
         }
+
+        m_engine.turnSystem().clearCommandAuditTrail();
+        m_engine.clearXPRewardAuditTrail();
     }
 
     return execution;

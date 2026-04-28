@@ -5,13 +5,16 @@
 #include <cctype>
 #include <filesystem>
 #include <fstream>
+#include <iomanip>
 #include <optional>
 #include <sstream>
 
+#include "BuildProvenance.hpp"
 #include "Config/GameConfig.hpp"
 #include "Runtime/WeatherVisibility.hpp"
 #include "Save/SaveManager.hpp"
 #include "Systems/EconomySystem.hpp"
+#include "Systems/TurnPointRules.hpp"
 
 namespace fs = std::filesystem;
 
@@ -307,6 +310,13 @@ constexpr std::array<TurnCommand::Type, 8> kAllTurnCommandTypes{
     TurnCommand::Disband
 };
 
+constexpr std::array<TurnCommandAuditAction, 4> kAllTurnCommandAuditActions{
+    TurnCommandAuditAction::Queue,
+    TurnCommandAuditAction::Replace,
+    TurnCommandAuditAction::Cancel,
+    TurnCommandAuditAction::Reset
+};
+
 constexpr std::array<EventLog::Event::Kind, 2> kAllEventKinds{
     EventLog::Event::Kind::Message,
     EventLog::Event::Kind::Move
@@ -346,6 +356,10 @@ constexpr std::array<XPRewardSource, kNumXPRewardSources> kAllXpRewardSources{
     XPRewardSource::DestroyBlock,
     XPRewardSource::ArenaPerTurn
 };
+
+std::string serializeReferenceData();
+std::string serializeSessionContext(const SaveData& snapshot);
+std::string serializeConfigContext(const GameConfig& config);
 
 const char* kingdomKeyName(KingdomId kingdom) {
     switch (kingdom) {
@@ -467,6 +481,28 @@ const char* turnCommandTypeLabelName(TurnCommand::Type type) {
     return "Unknown";
 }
 
+const char* turnCommandAuditActionKeyName(TurnCommandAuditAction action) {
+    switch (action) {
+        case TurnCommandAuditAction::Queue: return "queue";
+        case TurnCommandAuditAction::Replace: return "replace";
+        case TurnCommandAuditAction::Cancel: return "cancel";
+        case TurnCommandAuditAction::Reset: return "reset";
+    }
+
+    return "unknown";
+}
+
+const char* turnCommandAuditActionLabelName(TurnCommandAuditAction action) {
+    switch (action) {
+        case TurnCommandAuditAction::Queue: return "Queue";
+        case TurnCommandAuditAction::Replace: return "Replace";
+        case TurnCommandAuditAction::Cancel: return "Cancel";
+        case TurnCommandAuditAction::Reset: return "Reset";
+    }
+
+    return "Unknown";
+}
+
 const char* gameplayNotificationKindKeyName(GameplayNotificationKind kind) {
     switch (kind) {
         case GameplayNotificationKind::ChestReward: return "chest_reward";
@@ -529,6 +565,31 @@ const char* eventKindLabelName(EventLog::Event::Kind kind) {
     }
 
     return "Unknown";
+}
+
+const char* buildingStateKeyName(BuildingState state) {
+    switch (state) {
+        case BuildingState::Completed: return "completed";
+        case BuildingState::UnderConstruction: return "under_construction";
+    }
+
+    return "unknown";
+}
+
+const char* mapObjectTypeKeyName(MapObjectType type) {
+    switch (type) {
+        case MapObjectType::Chest: return "chest";
+    }
+
+    return "unknown";
+}
+
+const char* autonomousUnitTypeKeyName(AutonomousUnitType type) {
+    switch (type) {
+        case AutonomousUnitType::InfernalPiece: return "infernal_piece";
+    }
+
+    return "unknown";
 }
 
 const char* weatherDirectionKeyName(WeatherDirection direction) {
@@ -693,6 +754,164 @@ const AutonomousUnit* findAutonomousUnitById(const std::vector<AutonomousUnit>& 
     }
 
     return nullptr;
+}
+
+template <typename Callback>
+void forEachPieceInSnapshot(const SaveData& snapshot, Callback&& callback) {
+    for (KingdomId kingdom : kAllKingdoms) {
+        for (const Piece& piece : snapshot.kingdoms[kingdomIndex(kingdom)].pieces) {
+            callback(piece);
+        }
+    }
+}
+
+template <typename Callback>
+void forEachBuildingInSnapshot(const SaveData& snapshot, Callback&& callback) {
+    for (KingdomId kingdom : kAllKingdoms) {
+        for (const Building& building : snapshot.kingdoms[kingdomIndex(kingdom)].buildings) {
+            callback(building);
+        }
+    }
+    for (const Building& building : snapshot.publicBuildings) {
+        callback(building);
+    }
+}
+
+const Piece* findPieceById(const SaveData& snapshot, int pieceId) {
+    if (pieceId < 0) {
+        return nullptr;
+    }
+
+    for (KingdomId kingdom : kAllKingdoms) {
+        for (const Piece& piece : snapshot.kingdoms[kingdomIndex(kingdom)].pieces) {
+            if (piece.id == pieceId) {
+                return &piece;
+            }
+        }
+    }
+
+    return nullptr;
+}
+
+const Building* findBuildingById(const SaveData& snapshot, int buildingId) {
+    if (buildingId < 0) {
+        return nullptr;
+    }
+
+    for (KingdomId kingdom : kAllKingdoms) {
+        for (const Building& building : snapshot.kingdoms[kingdomIndex(kingdom)].buildings) {
+            if (building.id == buildingId) {
+                return &building;
+            }
+        }
+    }
+
+    for (const Building& building : snapshot.publicBuildings) {
+        if (building.id == buildingId) {
+            return &building;
+        }
+    }
+
+    return nullptr;
+}
+
+std::string serializeJsonArray(const std::vector<std::string>& items) {
+    std::ostringstream output;
+    output << "[";
+    for (std::size_t index = 0; index < items.size(); ++index) {
+        if (index > 0) {
+            output << ",";
+        }
+        output << items[index];
+    }
+    output << "]";
+    return output.str();
+}
+
+std::string hashHex(const std::string& value) {
+    std::uint64_t hash = 1469598103934665603ull;
+    for (unsigned char current : value) {
+        hash ^= static_cast<std::uint64_t>(current);
+        hash *= 1099511628211ull;
+    }
+
+    std::ostringstream output;
+    output << std::hex << std::setw(16) << std::setfill('0') << hash;
+    return output.str();
+}
+
+std::string weatherFrontIdentity(const WeatherFrontDescriptor& front) {
+    std::ostringstream output;
+    output << static_cast<int>(front.direction)
+           << ':' << front.shapeSeed
+           << ':' << front.densitySeed
+           << ':' << front.centerStartXTimes1000
+           << ':' << front.centerStartYTimes1000;
+    return output.str();
+}
+
+bool snapshotHasWeatherFrontIdentity(const SaveData& snapshot, const std::string& identity) {
+    for (const WeatherFrontDescriptor& front : snapshot.weatherSystemState.activeFronts) {
+        if (weatherFrontIdentity(front) == identity) {
+            return true;
+        }
+    }
+
+    if (snapshot.weatherSystemState.activeFronts.empty() && snapshot.weatherSystemState.hasActiveFront) {
+        return weatherFrontIdentity(snapshot.weatherSystemState.activeFront) == identity;
+    }
+
+    return false;
+}
+
+std::string pieceRemovalCause(const GameDataTurnRecord& record,
+                              const Piece& previousPiece) {
+    if (previousPiece.kingdom == record.committedActiveKingdom) {
+        for (const TurnCommand& command : record.queuedCommands) {
+            if (command.type == TurnCommand::Disband && command.pieceId == previousPiece.id) {
+                return "disbanded";
+            }
+        }
+    }
+
+    for (const TurnCommand& command : record.queuedCommands) {
+        if (command.type == TurnCommand::Move && command.destination == previousPiece.position) {
+            return "captured";
+        }
+    }
+
+    return "unknown";
+}
+
+std::string serializeProvenance(const SaveData& snapshot,
+                                const GameConfig& config) {
+    const std::string referenceData = serializeReferenceData();
+    const std::string sessionContext = serializeSessionContext(snapshot);
+    const std::string configContext = serializeConfigContext(config);
+
+    std::ostringstream output;
+    output << "{";
+    output << "\"generator\":\"GameDataRecorder\",";
+    output << "\"generatorSchemaVersion\":" << GameDataRecorder::kSchemaVersion << ",";
+    output << "\"formatFamily\":\"A Normal Chess Game Data Companion\",";
+    output << "\"build\":{";
+    output << "\"configuredAtUtc\":\"" << escapeJsonString(BuildProvenance::kConfiguredAtUtc) << "\",";
+    output << "\"buildType\":\"" << escapeJsonString(BuildProvenance::kBuildType) << "\",";
+    output << "\"cmakeGenerator\":\"" << escapeJsonString(BuildProvenance::kCMakeGenerator) << "\",";
+    output << "\"compilerId\":\"" << escapeJsonString(BuildProvenance::kCompilerId) << "\",";
+    output << "\"compilerVersion\":\"" << escapeJsonString(BuildProvenance::kCompilerVersion) << "\",";
+    output << "\"systemName\":\"" << escapeJsonString(BuildProvenance::kSystemName) << "\"";
+    output << "},";
+    output << "\"git\":{";
+    output << "\"commit\":\"" << escapeJsonString(BuildProvenance::kGitCommit) << "\",";
+    output << "\"branch\":\"" << escapeJsonString(BuildProvenance::kGitBranch) << "\",";
+    output << "\"dirty\":" << (BuildProvenance::kGitDirty ? "true" : "false");
+    output << "},";
+    output << "\"referenceDataHash\":\"" << hashHex(referenceData) << "\",";
+    output << "\"sessionContextHash\":\"" << hashHex(sessionContext) << "\",";
+    output << "\"configContextHash\":\"" << hashHex(configContext) << "\"";
+    output << "}";
+    return output.str();
 }
 
 std::optional<ResourceIncomeProfile> incomeProfileForBuildingType(BuildingType type,
@@ -894,6 +1113,20 @@ std::string serializeReferenceData() {
                << "\"id\":" << static_cast<int>(type) << ","
                << "\"key\":\"" << turnCommandTypeKeyName(type) << "\","
                << "\"label\":\"" << turnCommandTypeLabelName(type) << "\""
+               << "}";
+    }
+    output << "],";
+
+    output << "\"turnCommandAuditActions\":[";
+    for (std::size_t index = 0; index < kAllTurnCommandAuditActions.size(); ++index) {
+        if (index > 0) {
+            output << ",";
+        }
+        const TurnCommandAuditAction action = kAllTurnCommandAuditActions[index];
+        output << "{"
+               << "\"id\":" << static_cast<int>(action) << ","
+               << "\"key\":\"" << turnCommandAuditActionKeyName(action) << "\","
+               << "\"label\":\"" << turnCommandAuditActionLabelName(action) << "\""
                << "}";
     }
     output << "],";
@@ -1299,6 +1532,90 @@ TurnCommand parseTurnCommand(const std::string& json) {
     command.upgradeTarget = static_cast<PieceType>(extractInt(json, "upgradeTarget", static_cast<int>(PieceType::Knight)));
     command.formationId = extractInt(json, "formationId", -1);
     return command;
+}
+
+std::string serializeTurnCommandAuditEntry(const TurnCommandAuditEntry& entry) {
+    std::ostringstream output;
+    output << "{"
+           << "\"sequence\":" << entry.sequence << ","
+           << "\"turnNumber\":" << entry.turnNumber << ","
+           << "\"action\":" << static_cast<int>(entry.action) << ","
+           << "\"actionKey\":\"" << turnCommandAuditActionKeyName(entry.action) << "\","
+           << "\"actionLabel\":\"" << turnCommandAuditActionLabelName(entry.action) << "\","
+           << "\"accepted\":" << (entry.accepted ? "true" : "false") << ","
+           << "\"hasCommand\":" << (entry.hasCommand ? "true" : "false") << ","
+           << "\"reason\":\"" << escapeJsonString(entry.reason) << "\",";
+    output << "\"command\":";
+    if (entry.hasCommand) {
+        output << serializeTurnCommand(entry.command);
+    } else {
+        output << "null";
+    }
+    output << "}";
+    return output.str();
+}
+
+TurnCommandAuditEntry parseTurnCommandAuditEntry(const std::string& json) {
+    TurnCommandAuditEntry entry;
+    entry.sequence = extractInt(json, "sequence", 0);
+    entry.turnNumber = extractInt(json, "turnNumber", 0);
+    entry.action = static_cast<TurnCommandAuditAction>(extractInt(json, "action", 0));
+    entry.accepted = extractBool(json, "accepted", false);
+    entry.hasCommand = extractBool(json, "hasCommand", false);
+    entry.reason = extractString(json, "reason");
+    const std::string commandSection = extractSection(json, "command");
+    if (entry.hasCommand && !commandSection.empty()) {
+        entry.command = parseTurnCommand(commandSection);
+    }
+    return entry;
+}
+
+std::string serializeXPRewardAuditEntry(const XPRewardAuditEntry& entry) {
+    std::ostringstream output;
+    output << "{"
+           << "\"sequence\":" << entry.sequence << ","
+           << "\"source\":" << static_cast<int>(entry.source) << ","
+           << "\"sourceKey\":\"" << xpRewardSourceKeyName(entry.source) << "\"," 
+           << "\"sourceLabel\":\"" << xpRewardSourceLabelName(entry.source) << "\"," 
+           << "\"amount\":" << entry.amount << ","
+           << "\"recipientPieceId\":" << entry.recipientPieceId << ","
+           << "\"recipientPieceType\":" << static_cast<int>(entry.recipientPieceType) << ","
+           << "\"recipientPieceTypeKey\":\"" << pieceTypeKeyName(entry.recipientPieceType) << "\"," 
+           << "\"recipientPieceTypeLabel\":\"" << pieceTypeLabelName(entry.recipientPieceType) << "\"," 
+           << "\"recipientKingdom\":" << static_cast<int>(entry.recipientKingdom) << ","
+           << "\"recipientKingdomKey\":\"" << kingdomKeyName(entry.recipientKingdom) << "\"," 
+           << "\"recipientKingdomLabel\":\"" << kingdomLabelName(entry.recipientKingdom) << "\"," 
+           << "\"recipientCellX\":" << entry.recipientCellX << ","
+           << "\"recipientCellY\":" << entry.recipientCellY << ","
+           << "\"recipientXpBefore\":" << entry.recipientXpBefore << ","
+           << "\"recipientXpAfter\":" << entry.recipientXpAfter << ","
+           << "\"hasVictimPieceType\":" << (entry.hasVictimPieceType ? "true" : "false") << ","
+           << "\"victimPieceType\":" << static_cast<int>(entry.victimPieceType) << ","
+           << "\"victimPieceTypeKey\":\"" << pieceTypeKeyName(entry.victimPieceType) << "\"," 
+           << "\"victimPieceTypeLabel\":\"" << pieceTypeLabelName(entry.victimPieceType) << "\"," 
+           << "\"rngCounterBefore\":" << entry.rngCounterBefore << ","
+           << "\"rngCounterAfter\":" << entry.rngCounterAfter
+           << "}";
+    return output.str();
+}
+
+XPRewardAuditEntry parseXPRewardAuditEntry(const std::string& json) {
+    XPRewardAuditEntry entry;
+    entry.sequence = extractInt(json, "sequence", 0);
+    entry.source = static_cast<XPRewardSource>(extractInt(json, "source", static_cast<int>(XPRewardSource::DestroyBlock)));
+    entry.amount = extractInt(json, "amount", 0);
+    entry.recipientPieceId = extractInt(json, "recipientPieceId", -1);
+    entry.recipientPieceType = static_cast<PieceType>(extractInt(json, "recipientPieceType", static_cast<int>(PieceType::Pawn)));
+    entry.recipientKingdom = static_cast<KingdomId>(extractInt(json, "recipientKingdom", static_cast<int>(KingdomId::White)));
+    entry.recipientCellX = extractInt(json, "recipientCellX", 0);
+    entry.recipientCellY = extractInt(json, "recipientCellY", 0);
+    entry.recipientXpBefore = extractInt(json, "recipientXpBefore", 0);
+    entry.recipientXpAfter = extractInt(json, "recipientXpAfter", 0);
+    entry.hasVictimPieceType = extractBool(json, "hasVictimPieceType", false);
+    entry.victimPieceType = static_cast<PieceType>(extractInt(json, "victimPieceType", static_cast<int>(PieceType::Pawn)));
+    entry.rngCounterBefore = static_cast<std::uint32_t>(extractInt(json, "rngCounterBefore", 0));
+    entry.rngCounterAfter = static_cast<std::uint32_t>(extractInt(json, "rngCounterAfter", 0));
+    return entry;
 }
 
 std::string serializeNotification(const GameplayNotification& notification) {
@@ -1931,7 +2248,844 @@ EventLog::Event parseEvent(const std::string& json) {
     return event;
 }
 
-std::string serializeTurnRecord(const GameDataTurnRecord& record,
+std::string serializeTurnDelta(const SaveData& previousSnapshot,
+                               const GameDataTurnRecord& record,
+                               const GameConfig& config) {
+    const SaveData& currentSnapshot = record.snapshot;
+    const KingdomId committedKingdom = record.committedActiveKingdom;
+    const SaveData::KingdomData& previousKingdom = previousSnapshot.kingdoms[kingdomIndex(committedKingdom)];
+    const TurnPointBudget turnBudget = TurnPointRules::makeBudget(
+        config,
+        previousKingdom.movementPointsMaxBonus,
+        previousKingdom.buildPointsMaxBonus);
+
+    int movementPointsSpent = 0;
+    int buildPointsSpent = 0;
+    for (const TurnCommand& command : record.queuedCommands) {
+        if (command.type == TurnCommand::Move) {
+            const Piece* previousPiece = findPieceById(previousSnapshot, command.pieceId);
+            if (previousPiece != nullptr) {
+                movementPointsSpent += TurnPointRules::movementCost(previousPiece->type, config);
+            }
+        } else if (command.type == TurnCommand::Build) {
+            buildPointsSpent += TurnPointRules::buildCost(command.buildingType, config);
+        }
+    }
+
+    const int movementPointsUnused = std::max(0, turnBudget.movementPointsMax - movementPointsSpent);
+    const int buildPointsUnused = std::max(0, turnBudget.buildPointsMax - buildPointsSpent);
+
+    std::vector<std::string> kingdomEconomyDeltas;
+    for (KingdomId kingdom : kAllKingdoms) {
+        const SaveData::KingdomData& before = previousSnapshot.kingdoms[kingdomIndex(kingdom)];
+        const SaveData::KingdomData& after = currentSnapshot.kingdoms[kingdomIndex(kingdom)];
+        std::ostringstream item;
+        item << "{"
+             << "\"kingdomId\":" << static_cast<int>(kingdom) << ","
+             << "\"kingdomKey\":\"" << kingdomKeyName(kingdom) << "\","
+             << "\"goldBefore\":" << before.gold << ","
+             << "\"goldAfter\":" << after.gold << ","
+             << "\"goldDelta\":" << (after.gold - before.gold) << ","
+             << "\"movementPointsMaxBonusBefore\":" << before.movementPointsMaxBonus << ","
+             << "\"movementPointsMaxBonusAfter\":" << after.movementPointsMaxBonus << ","
+             << "\"movementPointsMaxBonusDelta\":"
+             << (after.movementPointsMaxBonus - before.movementPointsMaxBonus) << ","
+             << "\"buildPointsMaxBonusBefore\":" << before.buildPointsMaxBonus << ","
+             << "\"buildPointsMaxBonusAfter\":" << after.buildPointsMaxBonus << ","
+             << "\"buildPointsMaxBonusDelta\":" << (after.buildPointsMaxBonus - before.buildPointsMaxBonus) << ","
+             << "\"pieceCountBefore\":" << before.pieces.size() << ","
+             << "\"pieceCountAfter\":" << after.pieces.size() << ","
+             << "\"pieceCountDelta\":" << (static_cast<int>(after.pieces.size()) - static_cast<int>(before.pieces.size())) << ","
+             << "\"buildingCountBefore\":" << before.buildings.size() << ","
+             << "\"buildingCountAfter\":" << after.buildings.size() << ","
+             << "\"buildingCountDelta\":"
+             << (static_cast<int>(after.buildings.size()) - static_cast<int>(before.buildings.size()))
+             << "}";
+        kingdomEconomyDeltas.push_back(item.str());
+    }
+
+    std::vector<std::string> movedPieces;
+    std::vector<std::string> spawnedPieces;
+    std::vector<std::string> removedPieces;
+    std::vector<std::string> upgradedPieces;
+    std::vector<std::string> xpChanges;
+    std::vector<std::string> formationChanges;
+
+    forEachPieceInSnapshot(currentSnapshot, [&](const Piece& piece) {
+        const Piece* previousPiece = findPieceById(previousSnapshot, piece.id);
+        if (previousPiece == nullptr) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"pieceId\":" << piece.id << ","
+                 << "\"pieceTypeId\":" << static_cast<int>(piece.type) << ","
+                 << "\"pieceTypeKey\":\"" << pieceTypeKeyName(piece.type) << "\","
+                 << "\"kingdomId\":" << static_cast<int>(piece.kingdom) << ","
+                 << "\"kingdomKey\":\"" << kingdomKeyName(piece.kingdom) << "\","
+                 << "\"position\":" << serializeCellPosition(piece.position)
+                 << "}";
+            spawnedPieces.push_back(item.str());
+            return;
+        }
+
+        if (previousPiece->position != piece.position) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"pieceId\":" << piece.id << ","
+                 << "\"pieceTypeId\":" << static_cast<int>(piece.type) << ","
+                 << "\"pieceTypeKey\":\"" << pieceTypeKeyName(piece.type) << "\","
+                 << "\"kingdomId\":" << static_cast<int>(piece.kingdom) << ","
+                 << "\"kingdomKey\":\"" << kingdomKeyName(piece.kingdom) << "\","
+                 << "\"from\":" << serializeCellPosition(previousPiece->position) << ","
+                 << "\"to\":" << serializeCellPosition(piece.position)
+                 << "}";
+            movedPieces.push_back(item.str());
+        }
+
+        if (previousPiece->type != piece.type) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"pieceId\":" << piece.id << ","
+                 << "\"kingdomId\":" << static_cast<int>(piece.kingdom) << ","
+                 << "\"kingdomKey\":\"" << kingdomKeyName(piece.kingdom) << "\","
+                 << "\"fromPieceTypeId\":" << static_cast<int>(previousPiece->type) << ","
+                 << "\"fromPieceTypeKey\":\"" << pieceTypeKeyName(previousPiece->type) << "\","
+                 << "\"toPieceTypeId\":" << static_cast<int>(piece.type) << ","
+                 << "\"toPieceTypeKey\":\"" << pieceTypeKeyName(piece.type) << "\""
+                 << "}";
+            upgradedPieces.push_back(item.str());
+        }
+
+        if (previousPiece->xp != piece.xp) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"pieceId\":" << piece.id << ","
+                 << "\"pieceTypeId\":" << static_cast<int>(piece.type) << ","
+                 << "\"pieceTypeKey\":\"" << pieceTypeKeyName(piece.type) << "\","
+                 << "\"kingdomId\":" << static_cast<int>(piece.kingdom) << ","
+                 << "\"kingdomKey\":\"" << kingdomKeyName(piece.kingdom) << "\","
+                 << "\"xpBefore\":" << previousPiece->xp << ","
+                 << "\"xpAfter\":" << piece.xp << ","
+                 << "\"xpDelta\":" << (piece.xp - previousPiece->xp)
+                 << "}";
+            xpChanges.push_back(item.str());
+        }
+
+        if (previousPiece->formationId != piece.formationId) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"pieceId\":" << piece.id << ","
+                 << "\"pieceTypeId\":" << static_cast<int>(piece.type) << ","
+                 << "\"pieceTypeKey\":\"" << pieceTypeKeyName(piece.type) << "\","
+                 << "\"kingdomId\":" << static_cast<int>(piece.kingdom) << ","
+                 << "\"kingdomKey\":\"" << kingdomKeyName(piece.kingdom) << "\","
+                 << "\"formationIdBefore\":" << previousPiece->formationId << ","
+                 << "\"formationIdAfter\":" << piece.formationId
+                 << "}";
+            formationChanges.push_back(item.str());
+        }
+    });
+
+    forEachPieceInSnapshot(previousSnapshot, [&](const Piece& piece) {
+        if (findPieceById(currentSnapshot, piece.id) != nullptr) {
+            return;
+        }
+
+        std::ostringstream item;
+        item << "{"
+             << "\"pieceId\":" << piece.id << ","
+             << "\"pieceTypeId\":" << static_cast<int>(piece.type) << ","
+             << "\"pieceTypeKey\":\"" << pieceTypeKeyName(piece.type) << "\","
+             << "\"kingdomId\":" << static_cast<int>(piece.kingdom) << ","
+             << "\"kingdomKey\":\"" << kingdomKeyName(piece.kingdom) << "\","
+             << "\"lastPosition\":" << serializeCellPosition(piece.position) << ","
+             << "\"cause\":\"" << pieceRemovalCause(record, piece) << "\""
+             << "}";
+        removedPieces.push_back(item.str());
+    });
+
+    std::vector<std::string> placedBuildings;
+    std::vector<std::string> removedBuildings;
+    std::vector<std::string> buildingStateChanges;
+    std::vector<std::string> productionChanges;
+    std::vector<std::string> buildingCellChanges;
+
+    forEachBuildingInSnapshot(currentSnapshot, [&](const Building& building) {
+        const Building* previousBuilding = findBuildingById(previousSnapshot, building.id);
+        if (previousBuilding == nullptr) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"buildingId\":" << building.id << ","
+                 << "\"buildingTypeId\":" << static_cast<int>(building.type) << ","
+                 << "\"buildingTypeKey\":\"" << buildingTypeKeyName(building.type) << "\","
+                 << "\"ownerKingdomId\":" << static_cast<int>(building.owner) << ","
+                 << "\"ownerKingdomKey\":\"" << kingdomKeyName(building.owner) << "\","
+                 << "\"isNeutral\":" << (building.isNeutral ? "true" : "false") << ","
+                 << "\"origin\":" << serializeCellPosition(building.origin)
+                 << "}";
+            placedBuildings.push_back(item.str());
+            return;
+        }
+
+        if (previousBuilding->state != building.state) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"buildingId\":" << building.id << ","
+                 << "\"buildingTypeId\":" << static_cast<int>(building.type) << ","
+                 << "\"buildingTypeKey\":\"" << buildingTypeKeyName(building.type) << "\","
+                 << "\"stateBefore\":\"" << buildingStateKeyName(previousBuilding->state) << "\","
+                 << "\"stateAfter\":\"" << buildingStateKeyName(building.state) << "\""
+                 << "}";
+            buildingStateChanges.push_back(item.str());
+        }
+
+        if (previousBuilding->isProducing != building.isProducing
+            || previousBuilding->producingType != building.producingType
+            || previousBuilding->turnsRemaining != building.turnsRemaining) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"buildingId\":" << building.id << ","
+                 << "\"buildingTypeId\":" << static_cast<int>(building.type) << ","
+                 << "\"buildingTypeKey\":\"" << buildingTypeKeyName(building.type) << "\","
+                 << "\"wasProducing\":" << (previousBuilding->isProducing ? "true" : "false") << ","
+                 << "\"isProducing\":" << (building.isProducing ? "true" : "false") << ","
+                 << "\"produceTypeBeforeId\":" << previousBuilding->producingType << ","
+                 << "\"produceTypeAfterId\":" << building.producingType << ","
+                 << "\"produceTypeAfterKey\":\""
+                 << pieceTypeKeyName(static_cast<PieceType>(building.producingType)) << "\","
+                 << "\"turnsRemainingBefore\":" << previousBuilding->turnsRemaining << ","
+                 << "\"turnsRemainingAfter\":" << building.turnsRemaining
+                 << "}";
+            productionChanges.push_back(item.str());
+        }
+
+        const int width = std::min(previousBuilding->getFootprintWidth(), building.getFootprintWidth());
+        const int height = std::min(previousBuilding->getFootprintHeight(), building.getFootprintHeight());
+        for (int localY = 0; localY < height; ++localY) {
+            for (int localX = 0; localX < width; ++localX) {
+                const int beforeHp = previousBuilding->getCellHP(localX, localY);
+                const int afterHp = building.getCellHP(localX, localY);
+                const bool beforeBreached = previousBuilding->isCellBreached(localX, localY);
+                const bool afterBreached = building.isCellBreached(localX, localY);
+                const bool beforeDestroyed = previousBuilding->isCellDestroyed(localX, localY);
+                const bool afterDestroyed = building.isCellDestroyed(localX, localY);
+
+                if (beforeHp == afterHp
+                    && beforeBreached == afterBreached
+                    && beforeDestroyed == afterDestroyed) {
+                    continue;
+                }
+
+                const char* changeKind = "changed";
+                if (!beforeDestroyed && afterDestroyed) {
+                    changeKind = "destroyed";
+                } else if (beforeDestroyed && !afterDestroyed) {
+                    changeKind = "repaired";
+                } else if (afterHp < beforeHp) {
+                    changeKind = "damaged";
+                } else if (afterHp > beforeHp) {
+                    changeKind = "repaired";
+                } else if (!beforeBreached && afterBreached) {
+                    changeKind = "breached";
+                }
+
+                const sf::Vector2i worldCell{building.origin.x + localX, building.origin.y + localY};
+                std::ostringstream item;
+                item << "{"
+                     << "\"buildingId\":" << building.id << ","
+                     << "\"buildingTypeId\":" << static_cast<int>(building.type) << ","
+                     << "\"buildingTypeKey\":\"" << buildingTypeKeyName(building.type) << "\","
+                     << "\"changeKind\":\"" << changeKind << "\","
+                     << "\"worldCell\":" << serializeCellPosition(worldCell) << ","
+                     << "\"beforeHp\":" << beforeHp << ","
+                     << "\"afterHp\":" << afterHp << ","
+                     << "\"beforeBreached\":" << (beforeBreached ? "true" : "false") << ","
+                     << "\"afterBreached\":" << (afterBreached ? "true" : "false") << ","
+                     << "\"beforeDestroyed\":" << (beforeDestroyed ? "true" : "false") << ","
+                     << "\"afterDestroyed\":" << (afterDestroyed ? "true" : "false")
+                     << "}";
+                buildingCellChanges.push_back(item.str());
+            }
+        }
+    });
+
+    forEachBuildingInSnapshot(previousSnapshot, [&](const Building& building) {
+        if (findBuildingById(currentSnapshot, building.id) != nullptr) {
+            return;
+        }
+
+        std::ostringstream item;
+        item << "{"
+             << "\"buildingId\":" << building.id << ","
+             << "\"buildingTypeId\":" << static_cast<int>(building.type) << ","
+             << "\"buildingTypeKey\":\"" << buildingTypeKeyName(building.type) << "\","
+             << "\"ownerKingdomId\":" << static_cast<int>(building.owner) << ","
+             << "\"ownerKingdomKey\":\"" << kingdomKeyName(building.owner) << "\","
+             << "\"isNeutral\":" << (building.isNeutral ? "true" : "false") << ","
+             << "\"origin\":" << serializeCellPosition(building.origin)
+             << "}";
+        removedBuildings.push_back(item.str());
+    });
+
+    std::vector<std::string> spawnedObjects;
+    std::vector<std::string> removedObjects;
+    for (const MapObject& object : currentSnapshot.mapObjects) {
+        if (findMapObjectById(previousSnapshot.mapObjects, object.id) != nullptr) {
+            continue;
+        }
+
+        std::ostringstream item;
+        item << "{"
+             << "\"objectId\":" << object.id << ","
+             << "\"objectTypeKey\":\"" << mapObjectTypeKeyName(object.type) << "\","
+             << "\"position\":" << serializeCellPosition(object.position) << ","
+             << "\"reward\":" << serializeChestReward(object.chest.reward)
+             << "}";
+        spawnedObjects.push_back(item.str());
+    }
+
+    for (const MapObject& object : previousSnapshot.mapObjects) {
+        if (findMapObjectById(currentSnapshot.mapObjects, object.id) != nullptr) {
+            continue;
+        }
+
+        std::ostringstream item;
+        item << "{"
+             << "\"objectId\":" << object.id << ","
+             << "\"objectTypeKey\":\"" << mapObjectTypeKeyName(object.type) << "\","
+             << "\"position\":" << serializeCellPosition(object.position) << ","
+             << "\"reward\":" << serializeChestReward(object.chest.reward)
+             << "}";
+        removedObjects.push_back(item.str());
+    }
+
+    std::vector<std::string> spawnedAutonomousUnits;
+    std::vector<std::string> removedAutonomousUnits;
+    std::vector<std::string> movedAutonomousUnits;
+    std::vector<std::string> autonomousPhaseChanges;
+    std::vector<std::string> autonomousTargetChanges;
+
+    for (const AutonomousUnit& unit : currentSnapshot.autonomousUnits) {
+        const AutonomousUnit* previousUnit = findAutonomousUnitById(previousSnapshot.autonomousUnits, unit.id);
+        if (previousUnit == nullptr) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"unitId\":" << unit.id << ","
+                 << "\"unitTypeKey\":\"" << autonomousUnitTypeKeyName(unit.type) << "\","
+                 << "\"position\":" << serializeCellPosition(unit.position) << ","
+                 << "\"targetKingdomId\":" << static_cast<int>(unit.infernal.targetKingdom) << ","
+                 << "\"targetKingdomKey\":\"" << kingdomKeyName(unit.infernal.targetKingdom) << "\","
+                 << "\"targetPieceId\":" << unit.infernal.targetPieceId << ","
+                 << "\"phaseKey\":\"" << infernalPhaseKeyName(unit.infernal.phase) << "\""
+                 << "}";
+            spawnedAutonomousUnits.push_back(item.str());
+            continue;
+        }
+
+        if (previousUnit->position != unit.position) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"unitId\":" << unit.id << ","
+                 << "\"unitTypeKey\":\"" << autonomousUnitTypeKeyName(unit.type) << "\","
+                 << "\"from\":" << serializeCellPosition(previousUnit->position) << ","
+                 << "\"to\":" << serializeCellPosition(unit.position)
+                 << "}";
+            movedAutonomousUnits.push_back(item.str());
+        }
+
+        if (previousUnit->infernal.phase != unit.infernal.phase) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"unitId\":" << unit.id << ","
+                 << "\"phaseBefore\":\"" << infernalPhaseKeyName(previousUnit->infernal.phase) << "\","
+                 << "\"phaseAfter\":\"" << infernalPhaseKeyName(unit.infernal.phase) << "\""
+                 << "}";
+            autonomousPhaseChanges.push_back(item.str());
+        }
+
+        if (previousUnit->infernal.targetPieceId != unit.infernal.targetPieceId
+            || previousUnit->infernal.targetKingdom != unit.infernal.targetKingdom) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"unitId\":" << unit.id << ","
+                 << "\"targetKingdomBeforeId\":" << static_cast<int>(previousUnit->infernal.targetKingdom) << ","
+                 << "\"targetKingdomBeforeKey\":\"" << kingdomKeyName(previousUnit->infernal.targetKingdom) << "\","
+                 << "\"targetKingdomAfterId\":" << static_cast<int>(unit.infernal.targetKingdom) << ","
+                 << "\"targetKingdomAfterKey\":\"" << kingdomKeyName(unit.infernal.targetKingdom) << "\","
+                 << "\"targetPieceIdBefore\":" << previousUnit->infernal.targetPieceId << ","
+                 << "\"targetPieceIdAfter\":" << unit.infernal.targetPieceId
+                 << "}";
+            autonomousTargetChanges.push_back(item.str());
+        }
+    }
+
+    for (const AutonomousUnit& unit : previousSnapshot.autonomousUnits) {
+        if (findAutonomousUnitById(currentSnapshot.autonomousUnits, unit.id) != nullptr) {
+            continue;
+        }
+
+        std::ostringstream item;
+        item << "{"
+             << "\"unitId\":" << unit.id << ","
+             << "\"unitTypeKey\":\"" << autonomousUnitTypeKeyName(unit.type) << "\","
+             << "\"lastPosition\":" << serializeCellPosition(unit.position) << ","
+             << "\"phaseKey\":\"" << infernalPhaseKeyName(unit.infernal.phase) << "\""
+             << "}";
+        removedAutonomousUnits.push_back(item.str());
+    }
+
+    std::vector<std::string> spawnedWeatherFronts;
+    std::vector<std::string> endedWeatherFronts;
+    for (const WeatherFrontDescriptor& front : currentSnapshot.weatherSystemState.activeFronts) {
+        if (!snapshotHasWeatherFrontIdentity(previousSnapshot, weatherFrontIdentity(front))) {
+            spawnedWeatherFronts.push_back(serializeWeatherFront(front));
+        }
+    }
+    const bool previousHasLegacyOnlyFront = previousSnapshot.weatherSystemState.activeFronts.empty()
+        && previousSnapshot.weatherSystemState.hasActiveFront;
+    if (previousHasLegacyOnlyFront) {
+        const WeatherFrontDescriptor& front = previousSnapshot.weatherSystemState.activeFront;
+        if (!snapshotHasWeatherFrontIdentity(currentSnapshot, weatherFrontIdentity(front))) {
+            endedWeatherFronts.push_back(serializeWeatherFront(front));
+        }
+    }
+    for (const WeatherFrontDescriptor& front : previousSnapshot.weatherSystemState.activeFronts) {
+        if (!snapshotHasWeatherFrontIdentity(currentSnapshot, weatherFrontIdentity(front))) {
+            endedWeatherFronts.push_back(serializeWeatherFront(front));
+        }
+    }
+
+    std::ostringstream output;
+    output << "{";
+    output << "\"turnNumber\":" << record.committedTurnNumber << ",";
+    output << "\"activeKingdomId\":" << static_cast<int>(committedKingdom) << ",";
+    output << "\"activeKingdomKey\":\"" << kingdomKeyName(committedKingdom) << "\",";
+    output << "\"budgets\":{";
+    output << "\"movementPointsMax\":" << turnBudget.movementPointsMax << ",";
+    output << "\"movementPointsSpent\":" << movementPointsSpent << ",";
+    output << "\"movementPointsUnused\":" << movementPointsUnused << ",";
+    output << "\"buildPointsMax\":" << turnBudget.buildPointsMax << ",";
+    output << "\"buildPointsSpent\":" << buildPointsSpent << ",";
+    output << "\"buildPointsUnused\":" << buildPointsUnused;
+    output << "},";
+    output << "\"economy\":{\"byKingdom\":" << serializeJsonArray(kingdomEconomyDeltas) << "},";
+    output << "\"pieces\":{";
+    output << "\"moved\":" << serializeJsonArray(movedPieces) << ",";
+    output << "\"spawned\":" << serializeJsonArray(spawnedPieces) << ",";
+    output << "\"removed\":" << serializeJsonArray(removedPieces) << ",";
+    output << "\"upgraded\":" << serializeJsonArray(upgradedPieces) << ",";
+    output << "\"xpChanged\":" << serializeJsonArray(xpChanges) << ",";
+    output << "\"formationChanged\":" << serializeJsonArray(formationChanges);
+    output << "},";
+    output << "\"buildings\":{";
+    output << "\"placed\":" << serializeJsonArray(placedBuildings) << ",";
+    output << "\"removed\":" << serializeJsonArray(removedBuildings) << ",";
+    output << "\"stateChanged\":" << serializeJsonArray(buildingStateChanges) << ",";
+    output << "\"productionChanged\":" << serializeJsonArray(productionChanges) << ",";
+    output << "\"cellChanged\":" << serializeJsonArray(buildingCellChanges);
+    output << "},";
+    output << "\"objects\":{";
+    output << "\"spawned\":" << serializeJsonArray(spawnedObjects) << ",";
+    output << "\"removed\":" << serializeJsonArray(removedObjects);
+    output << "},";
+    output << "\"autonomousUnits\":{";
+    output << "\"spawned\":" << serializeJsonArray(spawnedAutonomousUnits) << ",";
+    output << "\"removed\":" << serializeJsonArray(removedAutonomousUnits) << ",";
+    output << "\"moved\":" << serializeJsonArray(movedAutonomousUnits) << ",";
+    output << "\"phaseChanged\":" << serializeJsonArray(autonomousPhaseChanges) << ",";
+    output << "\"targetChanged\":" << serializeJsonArray(autonomousTargetChanges);
+    output << "},";
+    output << "\"systems\":{";
+    output << "\"whiteBloodDebtDelta\":"
+           << (currentSnapshot.infernalSystemState.whiteBloodDebt - previousSnapshot.infernalSystemState.whiteBloodDebt) << ",";
+    output << "\"blackBloodDebtDelta\":"
+           << (currentSnapshot.infernalSystemState.blackBloodDebt - previousSnapshot.infernalSystemState.blackBloodDebt) << ",";
+    output << "\"weatherFrontCountDelta\":"
+           << (static_cast<int>(currentSnapshot.weatherSystemState.activeFronts.size())
+               - static_cast<int>(previousSnapshot.weatherSystemState.activeFronts.size())) << ",";
+    output << "\"fogCellCountDelta\":"
+           << (static_cast<int>(currentSnapshot.weatherMaskCache.alphaByCell.size())
+               - static_cast<int>(previousSnapshot.weatherMaskCache.alphaByCell.size())) << ",";
+    output << "\"mapObjectCountDelta\":"
+           << (static_cast<int>(currentSnapshot.mapObjects.size()) - static_cast<int>(previousSnapshot.mapObjects.size())) << ",";
+    output << "\"autonomousUnitCountDelta\":"
+           << (static_cast<int>(currentSnapshot.autonomousUnits.size()) - static_cast<int>(previousSnapshot.autonomousUnits.size())) << ",";
+    output << "\"eventCountDelta\":"
+           << (static_cast<int>(currentSnapshot.events.size()) - static_cast<int>(previousSnapshot.events.size())) << ",";
+    output << "\"chestActiveObjectBefore\":" << previousSnapshot.chestSystemState.activeChestObjectId << ",";
+    output << "\"chestActiveObjectAfter\":" << currentSnapshot.chestSystemState.activeChestObjectId << ",";
+    output << "\"infernalActiveUnitBefore\":" << previousSnapshot.infernalSystemState.activeInfernalUnitId << ",";
+    output << "\"infernalActiveUnitAfter\":" << currentSnapshot.infernalSystemState.activeInfernalUnitId << ",";
+    output << "\"weatherFrontsSpawned\":" << serializeJsonArray(spawnedWeatherFronts) << ",";
+    output << "\"weatherFrontsEnded\":" << serializeJsonArray(endedWeatherFronts);
+    output << "}";
+    output << "}";
+    return output.str();
+}
+
+std::string serializeStructuredEvents(const SaveData& previousSnapshot,
+                                      const GameDataTurnRecord& record,
+                                      const GameConfig& config) {
+    (void) config;
+    const SaveData& currentSnapshot = record.snapshot;
+    std::vector<std::string> events;
+    std::size_t sequence = 0;
+
+    for (const TurnCommandAuditEntry& audit : record.commandAuditTrail) {
+        const char* typeKey = "command_attempt";
+        const char* typeLabel = "Command Attempt";
+        switch (audit.action) {
+            case TurnCommandAuditAction::Queue:
+                typeKey = audit.accepted ? "command_queued" : "command_rejected";
+                typeLabel = audit.accepted ? "Command Queued" : "Command Rejected";
+                break;
+            case TurnCommandAuditAction::Replace:
+                typeKey = audit.accepted ? "command_replaced" : "command_replace_rejected";
+                typeLabel = audit.accepted ? "Command Replaced" : "Command Replace Rejected";
+                break;
+            case TurnCommandAuditAction::Cancel:
+                typeKey = audit.accepted ? "command_cancelled" : "command_cancel_rejected";
+                typeLabel = audit.accepted ? "Command Cancelled" : "Command Cancel Rejected";
+                break;
+            case TurnCommandAuditAction::Reset:
+                typeKey = "pending_commands_reset";
+                typeLabel = "Pending Commands Reset";
+                break;
+        }
+
+        std::ostringstream item;
+        item << "{"
+             << "\"sequence\":" << sequence++ << ","
+             << "\"typeKey\":\"" << typeKey << "\","
+             << "\"typeLabel\":\"" << typeLabel << "\","
+             << "\"auditAction\":" << static_cast<int>(audit.action) << ","
+             << "\"auditActionKey\":\"" << turnCommandAuditActionKeyName(audit.action) << "\","
+             << "\"accepted\":" << (audit.accepted ? "true" : "false") << ","
+             << "\"reason\":\"" << escapeJsonString(audit.reason) << "\",";
+        item << "\"command\":";
+        if (audit.hasCommand) {
+            item << serializeTurnCommand(audit.command);
+        } else {
+            item << "null";
+        }
+        item << "}";
+        events.push_back(item.str());
+    }
+
+    for (const TurnCommand& command : record.queuedCommands) {
+        std::ostringstream item;
+        item << "{"
+             << "\"sequence\":" << sequence++ << ","
+             << "\"typeKey\":\"command_committed\","
+             << "\"typeLabel\":\"Command Committed\","
+             << "\"commandTypeId\":" << static_cast<int>(command.type) << ","
+             << "\"commandTypeKey\":\"" << turnCommandTypeKeyName(command.type) << "\","
+             << "\"commandTypeLabel\":\"" << turnCommandTypeLabelName(command.type) << "\","
+             << "\"command\":" << serializeTurnCommand(command)
+             << "}";
+        events.push_back(item.str());
+    }
+
+    for (const XPRewardAuditEntry& audit : record.xpAuditTrail) {
+        std::ostringstream item;
+        item << "{"
+             << "\"sequence\":" << sequence++ << ","
+             << "\"typeKey\":\"xp_granted\"," 
+             << "\"typeLabel\":\"XP Granted\"," 
+             << "\"rewardSourceId\":" << static_cast<int>(audit.source) << ","
+             << "\"rewardSourceKey\":\"" << xpRewardSourceKeyName(audit.source) << "\"," 
+             << "\"rewardSourceLabel\":\"" << xpRewardSourceLabelName(audit.source) << "\"," 
+             << "\"amount\":" << audit.amount << ","
+             << "\"recipientPieceId\":" << audit.recipientPieceId << ","
+             << "\"recipientPieceTypeId\":" << static_cast<int>(audit.recipientPieceType) << ","
+             << "\"recipientPieceTypeKey\":\"" << pieceTypeKeyName(audit.recipientPieceType) << "\"," 
+             << "\"recipientKingdomId\":" << static_cast<int>(audit.recipientKingdom) << ","
+             << "\"recipientKingdomKey\":\"" << kingdomKeyName(audit.recipientKingdom) << "\"," 
+             << "\"recipientPosition\":" << serializeCellPosition({audit.recipientCellX, audit.recipientCellY}) << ","
+             << "\"recipientXpBefore\":" << audit.recipientXpBefore << ","
+             << "\"recipientXpAfter\":" << audit.recipientXpAfter << ","
+             << "\"rngCounterBefore\":" << audit.rngCounterBefore << ","
+             << "\"rngCounterAfter\":" << audit.rngCounterAfter << ","
+             << "\"hasVictimPieceType\":" << (audit.hasVictimPieceType ? "true" : "false") << ","
+             << "\"victimPieceTypeId\":" << static_cast<int>(audit.victimPieceType) << ","
+             << "\"victimPieceTypeKey\":\"" << pieceTypeKeyName(audit.victimPieceType) << "\""
+             << "}";
+        events.push_back(item.str());
+    }
+
+    forEachPieceInSnapshot(currentSnapshot, [&](const Piece& piece) {
+        const Piece* previousPiece = findPieceById(previousSnapshot, piece.id);
+        if (previousPiece == nullptr) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"sequence\":" << sequence++ << ","
+                 << "\"typeKey\":\"piece_spawned\","
+                 << "\"typeLabel\":\"Piece Spawned\","
+                 << "\"pieceId\":" << piece.id << ","
+                 << "\"pieceTypeId\":" << static_cast<int>(piece.type) << ","
+                 << "\"pieceTypeKey\":\"" << pieceTypeKeyName(piece.type) << "\","
+                 << "\"kingdomId\":" << static_cast<int>(piece.kingdom) << ","
+                 << "\"kingdomKey\":\"" << kingdomKeyName(piece.kingdom) << "\","
+                 << "\"position\":" << serializeCellPosition(piece.position)
+                 << "}";
+            events.push_back(item.str());
+            return;
+        }
+
+        if (previousPiece->position != piece.position) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"sequence\":" << sequence++ << ","
+                 << "\"typeKey\":\"piece_moved\","
+                 << "\"typeLabel\":\"Piece Moved\","
+                 << "\"pieceId\":" << piece.id << ","
+                 << "\"pieceTypeId\":" << static_cast<int>(piece.type) << ","
+                 << "\"pieceTypeKey\":\"" << pieceTypeKeyName(piece.type) << "\","
+                 << "\"kingdomId\":" << static_cast<int>(piece.kingdom) << ","
+                 << "\"kingdomKey\":\"" << kingdomKeyName(piece.kingdom) << "\","
+                 << "\"from\":" << serializeCellPosition(previousPiece->position) << ","
+                 << "\"to\":" << serializeCellPosition(piece.position)
+                 << "}";
+            events.push_back(item.str());
+        }
+
+        if (previousPiece->type != piece.type) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"sequence\":" << sequence++ << ","
+                 << "\"typeKey\":\"piece_upgraded\","
+                 << "\"typeLabel\":\"Piece Upgraded\","
+                 << "\"pieceId\":" << piece.id << ","
+                 << "\"kingdomId\":" << static_cast<int>(piece.kingdom) << ","
+                 << "\"kingdomKey\":\"" << kingdomKeyName(piece.kingdom) << "\","
+                 << "\"fromPieceTypeId\":" << static_cast<int>(previousPiece->type) << ","
+                 << "\"fromPieceTypeKey\":\"" << pieceTypeKeyName(previousPiece->type) << "\","
+                 << "\"toPieceTypeId\":" << static_cast<int>(piece.type) << ","
+                 << "\"toPieceTypeKey\":\"" << pieceTypeKeyName(piece.type) << "\""
+                 << "}";
+            events.push_back(item.str());
+        }
+    });
+
+    forEachPieceInSnapshot(previousSnapshot, [&](const Piece& piece) {
+        if (findPieceById(currentSnapshot, piece.id) != nullptr) {
+            return;
+        }
+
+        std::ostringstream item;
+        item << "{"
+             << "\"sequence\":" << sequence++ << ","
+             << "\"typeKey\":\"piece_removed\","
+             << "\"typeLabel\":\"Piece Removed\","
+             << "\"pieceId\":" << piece.id << ","
+             << "\"pieceTypeId\":" << static_cast<int>(piece.type) << ","
+             << "\"pieceTypeKey\":\"" << pieceTypeKeyName(piece.type) << "\","
+             << "\"kingdomId\":" << static_cast<int>(piece.kingdom) << ","
+             << "\"kingdomKey\":\"" << kingdomKeyName(piece.kingdom) << "\","
+             << "\"lastPosition\":" << serializeCellPosition(piece.position) << ","
+             << "\"cause\":\"" << pieceRemovalCause(record, piece) << "\""
+             << "}";
+        events.push_back(item.str());
+    });
+
+    forEachBuildingInSnapshot(currentSnapshot, [&](const Building& building) {
+        const Building* previousBuilding = findBuildingById(previousSnapshot, building.id);
+        if (previousBuilding == nullptr) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"sequence\":" << sequence++ << ","
+                 << "\"typeKey\":\"building_placed\","
+                 << "\"typeLabel\":\"Building Placed\","
+                 << "\"buildingId\":" << building.id << ","
+                 << "\"buildingTypeId\":" << static_cast<int>(building.type) << ","
+                 << "\"buildingTypeKey\":\"" << buildingTypeKeyName(building.type) << "\","
+                 << "\"origin\":" << serializeCellPosition(building.origin)
+                 << "}";
+            events.push_back(item.str());
+            return;
+        }
+
+        if (!previousBuilding->isProducing && building.isProducing) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"sequence\":" << sequence++ << ","
+                 << "\"typeKey\":\"production_started\","
+                 << "\"typeLabel\":\"Production Started\","
+                 << "\"buildingId\":" << building.id << ","
+                 << "\"buildingTypeKey\":\"" << buildingTypeKeyName(building.type) << "\","
+                 << "\"produceTypeId\":" << building.producingType << ","
+                 << "\"produceTypeKey\":\"" << pieceTypeKeyName(static_cast<PieceType>(building.producingType)) << "\""
+                 << "}";
+            events.push_back(item.str());
+        }
+
+        if (previousBuilding->isProducing && !building.isProducing) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"sequence\":" << sequence++ << ","
+                 << "\"typeKey\":\"production_completed\","
+                 << "\"typeLabel\":\"Production Completed\","
+                 << "\"buildingId\":" << building.id << ","
+                 << "\"buildingTypeKey\":\"" << buildingTypeKeyName(building.type) << "\","
+                 << "\"produceTypeId\":" << previousBuilding->producingType << ","
+                 << "\"produceTypeKey\":\""
+                 << pieceTypeKeyName(static_cast<PieceType>(previousBuilding->producingType)) << "\""
+                 << "}";
+            events.push_back(item.str());
+        }
+    });
+
+    forEachBuildingInSnapshot(previousSnapshot, [&](const Building& building) {
+        if (findBuildingById(currentSnapshot, building.id) != nullptr) {
+            return;
+        }
+
+        std::ostringstream item;
+        item << "{"
+             << "\"sequence\":" << sequence++ << ","
+             << "\"typeKey\":\"building_removed\","
+             << "\"typeLabel\":\"Building Removed\","
+             << "\"buildingId\":" << building.id << ","
+             << "\"buildingTypeId\":" << static_cast<int>(building.type) << ","
+             << "\"buildingTypeKey\":\"" << buildingTypeKeyName(building.type) << "\","
+             << "\"origin\":" << serializeCellPosition(building.origin)
+             << "}";
+        events.push_back(item.str());
+    });
+
+    for (const MapObject& object : currentSnapshot.mapObjects) {
+        if (findMapObjectById(previousSnapshot.mapObjects, object.id) != nullptr) {
+            continue;
+        }
+
+        std::ostringstream item;
+        item << "{"
+             << "\"sequence\":" << sequence++ << ","
+             << "\"typeKey\":\"chest_spawned\","
+             << "\"typeLabel\":\"Chest Spawned\","
+             << "\"objectId\":" << object.id << ","
+             << "\"position\":" << serializeCellPosition(object.position) << ","
+             << "\"reward\":" << serializeChestReward(object.chest.reward)
+             << "}";
+        events.push_back(item.str());
+    }
+
+    for (const GameplayNotification& notification : record.notifications) {
+        std::ostringstream item;
+        item << "{"
+             << "\"sequence\":" << sequence++ << ","
+             << "\"typeKey\":\"chest_opened\","
+             << "\"typeLabel\":\"Chest Opened\","
+             << "\"kingdomId\":" << static_cast<int>(notification.kingdom) << ","
+             << "\"kingdomKey\":\"" << kingdomKeyName(notification.kingdom) << "\","
+             << "\"reward\":" << serializeChestReward(notification.chestReward)
+             << "}";
+        events.push_back(item.str());
+    }
+
+    for (const AutonomousUnit& unit : currentSnapshot.autonomousUnits) {
+        const AutonomousUnit* previousUnit = findAutonomousUnitById(previousSnapshot.autonomousUnits, unit.id);
+        if (previousUnit == nullptr) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"sequence\":" << sequence++ << ","
+                 << "\"typeKey\":\"infernal_spawned\","
+                 << "\"typeLabel\":\"Infernal Spawned\","
+                 << "\"unitId\":" << unit.id << ","
+                 << "\"position\":" << serializeCellPosition(unit.position) << ","
+                 << "\"phaseKey\":\"" << infernalPhaseKeyName(unit.infernal.phase) << "\""
+                 << "}";
+            events.push_back(item.str());
+            continue;
+        }
+
+        if (previousUnit->position != unit.position) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"sequence\":" << sequence++ << ","
+                 << "\"typeKey\":\"infernal_moved\","
+                 << "\"typeLabel\":\"Infernal Moved\","
+                 << "\"unitId\":" << unit.id << ","
+                 << "\"from\":" << serializeCellPosition(previousUnit->position) << ","
+                 << "\"to\":" << serializeCellPosition(unit.position)
+                 << "}";
+            events.push_back(item.str());
+        }
+
+        if (previousUnit->infernal.phase != unit.infernal.phase) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"sequence\":" << sequence++ << ","
+                 << "\"typeKey\":\"infernal_phase_changed\","
+                 << "\"typeLabel\":\"Infernal Phase Changed\","
+                 << "\"unitId\":" << unit.id << ","
+                 << "\"phaseBefore\":\"" << infernalPhaseKeyName(previousUnit->infernal.phase) << "\","
+                 << "\"phaseAfter\":\"" << infernalPhaseKeyName(unit.infernal.phase) << "\""
+                 << "}";
+            events.push_back(item.str());
+        }
+    }
+
+    for (const AutonomousUnit& unit : previousSnapshot.autonomousUnits) {
+        if (findAutonomousUnitById(currentSnapshot.autonomousUnits, unit.id) != nullptr) {
+            continue;
+        }
+
+        std::ostringstream item;
+        item << "{"
+             << "\"sequence\":" << sequence++ << ","
+             << "\"typeKey\":\"infernal_removed\","
+             << "\"typeLabel\":\"Infernal Removed\","
+             << "\"unitId\":" << unit.id << ","
+             << "\"lastPosition\":" << serializeCellPosition(unit.position)
+             << "}";
+        events.push_back(item.str());
+    }
+
+    for (const WeatherFrontDescriptor& front : currentSnapshot.weatherSystemState.activeFronts) {
+        if (!snapshotHasWeatherFrontIdentity(previousSnapshot, weatherFrontIdentity(front))) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"sequence\":" << sequence++ << ","
+                 << "\"typeKey\":\"weather_front_spawned\","
+                 << "\"typeLabel\":\"Weather Front Spawned\","
+                 << "\"front\":" << serializeWeatherFront(front)
+                 << "}";
+            events.push_back(item.str());
+        }
+    }
+    const bool previousHasLegacyOnlyFront = previousSnapshot.weatherSystemState.activeFronts.empty()
+        && previousSnapshot.weatherSystemState.hasActiveFront;
+    if (previousHasLegacyOnlyFront) {
+        const WeatherFrontDescriptor& front = previousSnapshot.weatherSystemState.activeFront;
+        if (!snapshotHasWeatherFrontIdentity(currentSnapshot, weatherFrontIdentity(front))) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"sequence\":" << sequence++ << ","
+                 << "\"typeKey\":\"weather_front_ended\","
+                 << "\"typeLabel\":\"Weather Front Ended\","
+                 << "\"front\":" << serializeWeatherFront(front)
+                 << "}";
+            events.push_back(item.str());
+        }
+    }
+    for (const WeatherFrontDescriptor& front : previousSnapshot.weatherSystemState.activeFronts) {
+        if (!snapshotHasWeatherFrontIdentity(currentSnapshot, weatherFrontIdentity(front))) {
+            std::ostringstream item;
+            item << "{"
+                 << "\"sequence\":" << sequence++ << ","
+                 << "\"typeKey\":\"weather_front_ended\","
+                 << "\"typeLabel\":\"Weather Front Ended\","
+                 << "\"front\":" << serializeWeatherFront(front)
+                 << "}";
+            events.push_back(item.str());
+        }
+    }
+
+    return serializeJsonArray(events);
+}
+
+std::string serializeTurnRecord(const SaveData& previousSnapshot,
+                                const GameDataTurnRecord& record,
                                 const GameConfig& config,
                                 SaveManager& saveManager) {
     std::ostringstream output;
@@ -1951,6 +3105,22 @@ std::string serializeTurnRecord(const GameDataTurnRecord& record,
         output << serializeTurnCommand(record.queuedCommands[index]);
     }
     output << "],\n";
+    output << "      \"commandAuditTrail\": [";
+    for (std::size_t index = 0; index < record.commandAuditTrail.size(); ++index) {
+        if (index > 0) {
+            output << ",";
+        }
+        output << serializeTurnCommandAuditEntry(record.commandAuditTrail[index]);
+    }
+    output << "],\n";
+    output << "      \"xpAuditTrail\": [";
+    for (std::size_t index = 0; index < record.xpAuditTrail.size(); ++index) {
+        if (index > 0) {
+            output << ",";
+        }
+        output << serializeXPRewardAuditEntry(record.xpAuditTrail[index]);
+    }
+    output << "],\n";
     output << "      \"notifications\": [";
     for (std::size_t index = 0; index < record.notifications.size(); ++index) {
         if (index > 0) {
@@ -1967,6 +3137,9 @@ std::string serializeTurnRecord(const GameDataTurnRecord& record,
         output << serializeEvent(record.newEvents[index]);
     }
     output << "],\n";
+    output << "      \"turnDelta\": " << serializeTurnDelta(previousSnapshot, record, config) << ",\n";
+    output << "      \"structuredEvents\": "
+           << serializeStructuredEvents(previousSnapshot, record, config) << ",\n";
     output << "      \"snapshotMetrics\": " << serializeSnapshotMetrics(record.snapshot, config) << ",\n";
     output << "      \"analytics\": " << serializeSnapshotAnalytics(record.snapshot, config) << ",\n";
     output << "      \"snapshot\": ";
@@ -1988,6 +3161,12 @@ GameDataTurnRecord parseTurnRecord(const std::string& json,
 
     for (const std::string& element : splitArrayElements(extractArray(json, "queuedCommands"))) {
         record.queuedCommands.push_back(parseTurnCommand(element));
+    }
+    for (const std::string& element : splitArrayElements(extractArray(json, "commandAuditTrail"))) {
+        record.commandAuditTrail.push_back(parseTurnCommandAuditEntry(element));
+    }
+    for (const std::string& element : splitArrayElements(extractArray(json, "xpAuditTrail"))) {
+        record.xpAuditTrail.push_back(parseXPRewardAuditEntry(element));
     }
     for (const std::string& element : splitArrayElements(extractArray(json, "notifications"))) {
         record.notifications.push_back(parseNotification(element));
@@ -2111,6 +3290,8 @@ bool GameDataRecorder::resumeOrBootstrapFromSave(const GameSessionConfig& sessio
 }
 
 void GameDataRecorder::recordCommittedTurn(const std::vector<TurnCommand>& queuedCommands,
+                                           const std::vector<TurnCommandAuditEntry>& commandAuditTrail,
+                                           const std::vector<XPRewardAuditEntry>& xpAuditTrail,
                                            int committedTurnNumber,
                                            KingdomId committedActiveKingdom,
                                            const CheckTurnValidation& activeValidation,
@@ -2132,6 +3313,8 @@ void GameDataRecorder::recordCommittedTurn(const std::vector<TurnCommand>& queue
     record.activeValidation = activeValidation;
     record.nextTurnValidation = nextTurnValidation;
     record.queuedCommands = queuedCommands;
+    record.commandAuditTrail = commandAuditTrail;
+    record.xpAuditTrail = xpAuditTrail;
     record.notifications = notifications;
     if (m_lastRecordedEventCount < snapshot.events.size()) {
         record.newEvents.assign(snapshot.events.begin() + static_cast<std::ptrdiff_t>(m_lastRecordedEventCount),
@@ -2185,6 +3368,7 @@ bool GameDataRecorder::saveToFile(const std::string& dataFilePath,
            << (m_loadedFromExistingCompanion ? "true" : "false") << ",\n";
     output << "  \"createdAtUnix\": " << static_cast<long long>(m_createdAtUnix) << ",\n";
     output << "  \"lastUpdatedAtUnix\": " << static_cast<long long>(m_lastUpdatedAtUnix) << ",\n";
+    output << "  \"provenance\": " << serializeProvenance(currentSnapshot(), config) << ",\n";
     output << "  \"referenceData\": " << serializeReferenceData() << ",\n";
     output << "  \"sessionContext\": " << serializeSessionContext(currentSnapshot()) << ",\n";
     output << "  \"configContext\": " << serializeConfigContext(config) << ",\n";
@@ -2194,12 +3378,14 @@ bool GameDataRecorder::saveToFile(const std::string& dataFilePath,
     output << "  \"initialSnapshot\": "
            << indentMultilineJson(saveManager.serialize(m_initialSnapshot), 2) << ",\n";
     output << "  \"turnHistory\": [\n";
+    const SaveData* previousSnapshot = &m_initialSnapshot;
     for (std::size_t index = 0; index < m_turnHistory.size(); ++index) {
-        output << serializeTurnRecord(m_turnHistory[index], config, saveManager);
+        output << serializeTurnRecord(*previousSnapshot, m_turnHistory[index], config, saveManager);
         if (index + 1 < m_turnHistory.size()) {
             output << ",";
         }
         output << "\n";
+        previousSnapshot = &m_turnHistory[index].snapshot;
     }
     output << "  ],\n";
     output << "  \"currentMetrics\": " << serializeSnapshotMetrics(currentSnapshot(), config) << ",\n";

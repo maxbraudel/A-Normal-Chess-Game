@@ -1,0 +1,15 @@
+#pragma once
+
+namespace BuildProvenance {
+
+inline constexpr const char* kConfiguredAtUtc = "@ANCG_CONFIGURED_AT_UTC@";
+inline constexpr const char* kBuildType = "@ANCG_BUILD_TYPE@";
+inline constexpr const char* kCMakeGenerator = "@ANCG_CMAKE_GENERATOR@";
+inline constexpr const char* kCompilerId = "@ANCG_COMPILER_ID@";
+inline constexpr const char* kCompilerVersion = "@ANCG_COMPILER_VERSION@";
+inline constexpr const char* kSystemName = "@ANCG_SYSTEM_NAME@";
+inline constexpr const char* kGitCommit = "@ANCG_GIT_COMMIT@";
+inline constexpr const char* kGitBranch = "@ANCG_GIT_BRANCH@";
+inline constexpr bool kGitDirty = @ANCG_GIT_DIRTY@;
+
+} // namespace BuildProvenance

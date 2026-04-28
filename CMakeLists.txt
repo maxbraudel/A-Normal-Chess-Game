@@ -1,6 +1,56 @@
 cmake_minimum_required(VERSION 3.20)
 project(ANormalChessGame LANGUAGES CXX)
 
+string(TIMESTAMP ANCG_CONFIGURED_AT_UTC "%Y-%m-%dT%H:%M:%SZ" UTC)
+set(ANCG_BUILD_TYPE "${CMAKE_BUILD_TYPE}")
+if(ANCG_BUILD_TYPE STREQUAL "")
+    set(ANCG_BUILD_TYPE "unknown")
+endif()
+set(ANCG_CMAKE_GENERATOR "${CMAKE_GENERATOR}")
+set(ANCG_COMPILER_ID "${CMAKE_CXX_COMPILER_ID}")
+set(ANCG_COMPILER_VERSION "${CMAKE_CXX_COMPILER_VERSION}")
+set(ANCG_SYSTEM_NAME "${CMAKE_SYSTEM_NAME}")
+set(ANCG_GIT_COMMIT "unknown")
+set(ANCG_GIT_BRANCH "unknown")
+set(ANCG_GIT_DIRTY false)
+
+find_package(Git QUIET)
+if(GIT_FOUND AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" -C "${CMAKE_SOURCE_DIR}" rev-parse --short=12 HEAD
+        OUTPUT_VARIABLE ANCG_GIT_COMMIT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+    if(ANCG_GIT_COMMIT STREQUAL "")
+        set(ANCG_GIT_COMMIT "unknown")
+    endif()
+
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" -C "${CMAKE_SOURCE_DIR}" rev-parse --abbrev-ref HEAD
+        OUTPUT_VARIABLE ANCG_GIT_BRANCH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+    if(ANCG_GIT_BRANCH STREQUAL "")
+        set(ANCG_GIT_BRANCH "unknown")
+    endif()
+
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" -C "${CMAKE_SOURCE_DIR}" status --porcelain
+        OUTPUT_VARIABLE ANCG_GIT_STATUS
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET)
+    if(NOT ANCG_GIT_STATUS STREQUAL "")
+        set(ANCG_GIT_DIRTY true)
+    endif()
+endif()
+
+set(ANCG_GENERATED_INCLUDE_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+file(MAKE_DIRECTORY "${ANCG_GENERATED_INCLUDE_DIR}")
+configure_file(
+    "${CMAKE_SOURCE_DIR}/cmake/BuildProvenance.hpp.in"
+    "${ANCG_GENERATED_INCLUDE_DIR}/BuildProvenance.hpp"
+    @ONLY)
+
 if(APPLE)
     enable_language(OBJCXX)
 endif()
@@ -149,7 +199,10 @@ set(APP_SOURCES
 # Core library
 add_library(${PROJECT_NAME}Core STATIC ${CORE_SOURCES})
 
-target_include_directories(${PROJECT_NAME}Core PUBLIC ${CMAKE_SOURCE_DIR}/src)
+target_include_directories(${PROJECT_NAME}Core PUBLIC
+    ${CMAKE_SOURCE_DIR}/src
+    ${ANCG_GENERATED_INCLUDE_DIR}
+)
 
 target_link_libraries(${PROJECT_NAME}Core PUBLIC
     sfml-graphics

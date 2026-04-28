@@ -93,10 +93,12 @@ public:
     WeatherMaskCache& weatherMaskCache() { return m_weatherMaskCache; }
     const WeatherMaskCache& weatherMaskCache() const { return m_weatherMaskCache; }
     const XPSystemState& xpSystemState() const { return m_xpSystemState; }
+    const std::vector<XPRewardAuditEntry>& xpRewardAuditTrail() const { return m_xpSystemState.rewardAuditTrail; }
     const InfernalSystemState& infernalSystemState() const { return m_infernalSystemState; }
 
     void ensureWeatherMaskUpToDate(const GameConfig& config);
     void clearWeatherMaskCache();
+    void clearXPRewardAuditTrail();
 
     TurnSystem& turnSystem() { return m_turnSystem; }
     const TurnSystem& turnSystem() const { return m_turnSystem; }

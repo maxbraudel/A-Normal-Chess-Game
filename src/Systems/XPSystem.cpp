@@ -48,6 +48,35 @@ XPRewardSource killSourceForVictim(PieceType victim) {
     }
 }
 
+void appendRewardAudit(XPSystemState& state,
+                       XPRewardSource source,
+                       const Piece& recipient,
+                       int amount,
+                       std::uint32_t rngCounterBefore,
+                       bool hasVictimPieceType,
+                       PieceType victimPieceType) {
+    if (amount <= 0) {
+        return;
+    }
+
+    XPRewardAuditEntry entry;
+    entry.sequence = state.nextAuditSequence++;
+    entry.source = source;
+    entry.amount = amount;
+    entry.recipientPieceId = recipient.id;
+    entry.recipientPieceType = recipient.type;
+    entry.recipientKingdom = recipient.kingdom;
+    entry.recipientCellX = recipient.position.x;
+    entry.recipientCellY = recipient.position.y;
+    entry.recipientXpBefore = recipient.xp - amount;
+    entry.recipientXpAfter = recipient.xp;
+    entry.hasVictimPieceType = hasVictimPieceType;
+    entry.victimPieceType = victimPieceType;
+    entry.rngCounterBefore = rngCounterBefore;
+    entry.rngCounterAfter = state.rngCounter;
+    state.rewardAuditTrail.push_back(std::move(entry));
+}
+
 int sampleProfile(const XPRewardProfile& profile,
                   XPSystemState& state,
                   std::uint32_t worldSeed) {
@@ -92,8 +121,17 @@ int XPSystem::grantKillXP(Piece& killer,
                           XPSystemState& state,
                           std::uint32_t worldSeed,
                           const GameConfig& config) {
+    const std::uint32_t rngCounterBefore = state.rngCounter;
     const int xp = sampleKillXP(victim, state, worldSeed, config);
     killer.xp += xp;
+    appendRewardAudit(
+        state,
+        killSourceForVictim(victim),
+        killer,
+        xp,
+        rngCounterBefore,
+        true,
+        victim);
     return xp;
 }
 
@@ -101,8 +139,17 @@ int XPSystem::grantBlockDestroyXP(Piece& destroyer,
                                   XPSystemState& state,
                                   std::uint32_t worldSeed,
                                   const GameConfig& config) {
+    const std::uint32_t rngCounterBefore = state.rngCounter;
     const int xp = sampleBlockDestroyXP(state, worldSeed, config);
     destroyer.xp += xp;
+    appendRewardAudit(
+        state,
+        XPRewardSource::DestroyBlock,
+        destroyer,
+        xp,
+        rngCounterBefore,
+        false,
+        PieceType::Pawn);
     return xp;
 }
 
@@ -122,7 +169,17 @@ void XPSystem::grantArenaXP(Kingdom& kingdom,
             if (cell.piece && cell.piece->kingdom == kingdom.id) {
                 Piece* p = kingdom.getPieceById(cell.piece->id);
                 if (p) {
-                    p->xp += sampleArenaXP(state, worldSeed, config);
+                    const std::uint32_t rngCounterBefore = state.rngCounter;
+                    const int xp = sampleArenaXP(state, worldSeed, config);
+                    p->xp += xp;
+                    appendRewardAudit(
+                        state,
+                        XPRewardSource::ArenaPerTurn,
+                        *p,
+                        xp,
+                        rngCounterBefore,
+                        false,
+                        PieceType::Pawn);
                 }
             }
         }

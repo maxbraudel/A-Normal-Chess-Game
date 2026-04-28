@@ -434,6 +434,11 @@ void GameEngine::clearWeatherMaskCache() {
     m_weatherMaskCache.clear();
 }
 
+void GameEngine::clearXPRewardAuditTrail() {
+    m_xpSystemState.rewardAuditTrail.clear();
+    m_xpSystemState.nextAuditSequence = 0;
+}
+
 bool GameEngine::validate(std::string* errorMessage) const {
     return GameStateValidator::validateRuntimeState(
         m_board,

@@ -11,6 +11,7 @@
 #include "Systems/CheckResponseRules.hpp"
 #include "Systems/EventLog.hpp"
 #include "Systems/TurnCommand.hpp"
+#include "Systems/XPTypes.hpp"
 
 class SaveManager;
 
@@ -23,6 +24,8 @@ struct GameDataTurnRecord {
     CheckTurnValidation activeValidation;
     CheckTurnValidation nextTurnValidation;
     std::vector<TurnCommand> queuedCommands;
+    std::vector<TurnCommandAuditEntry> commandAuditTrail;
+    std::vector<XPRewardAuditEntry> xpAuditTrail;
     std::vector<GameplayNotification> notifications;
     std::vector<EventLog::Event> newEvents;
     SaveData snapshot;
@@ -30,7 +33,7 @@ struct GameDataTurnRecord {
 
 class GameDataRecorder {
 public:
-    static constexpr int kSchemaVersion = 2;
+    static constexpr int kSchemaVersion = 4;
 
     void reset();
     void beginNewSession(const GameSessionConfig& session,
@@ -40,6 +43,8 @@ public:
                                    const std::string& dataFilePath,
                                    SaveManager& saveManager);
     void recordCommittedTurn(const std::vector<TurnCommand>& queuedCommands,
+                             const std::vector<TurnCommandAuditEntry>& commandAuditTrail,
+                             const std::vector<XPRewardAuditEntry>& xpAuditTrail,
                              int committedTurnNumber,
                              KingdomId committedActiveKingdom,
                              const CheckTurnValidation& activeValidation,
