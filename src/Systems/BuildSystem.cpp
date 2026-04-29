@@ -42,7 +42,7 @@ bool BuildSystem::canBuild(BuildingType type, sf::Vector2i origin,
         }
     }
 
-    return footprintHasAdjacentBuilder(origin, w, h, collectBuilderPositions(kingdom.pieces));
+    return footprintHasAdjacentBuilder(origin, w, h, collectBuilderPositions(kingdom.pieces, type));
 }
 
 Building BuildSystem::place(BuildingType type, sf::Vector2i origin,

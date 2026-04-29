@@ -132,10 +132,11 @@ std::vector<PendingTurnDroppedCommand> collectFinalCoverageDroppedBuilds(
     filteredCommands->clear();
     filteredCommands->reserve(normalizedCommands.size());
 
-    const std::vector<sf::Vector2i> builderPositions = collectBuilderPositions(
-        snapshot.kingdom(activeKingdom).pieces);
     for (std::size_t index = 0; index < normalizedCommands.size(); ++index) {
         const TurnCommand& command = normalizedCommands[index];
+        const std::vector<sf::Vector2i> builderPositions = command.type == TurnCommand::Build
+            ? collectBuilderPositions(snapshot.kingdom(activeKingdom).pieces, command.buildingType)
+            : std::vector<sf::Vector2i>{};
         if (buildHasFinalBuilderCoverage(command, builderPositions, config)) {
             filteredCommands->push_back(command);
             continue;

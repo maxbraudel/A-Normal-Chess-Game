@@ -929,7 +929,7 @@ bool ForwardModel::applyBuild(GameSnapshot& s, KingdomId k, BuildingType type,
     }
 
     if (!footprintHasAdjacentBuilder(pos, footprintWidth, footprintHeight,
-                                     collectBuilderPositions(myK.pieces))) {
+                                     collectBuilderPositions(myK.pieces, type))) {
         return false;
     }
 

@@ -177,8 +177,10 @@ InGameViewModel FrontendCoordinator::buildDashboardViewModel(const FrontendRunti
     }
 
     if (validation.activeKingInCheck) {
-        viewModel.activeMovementPointsText = "Only one move allowed";
-        viewModel.activeBuildPointsText = "No construction allowed in check";
+        if (validation.projectedKingInCheck) {
+            viewModel.activeMovementPointsText = "First queue one move that escapes check";
+            viewModel.activeBuildPointsText = "Construction unlocks after check is resolved";
+        }
     }
 
     viewModel.alerts = buildInGameAlerts(state, validation);
@@ -199,8 +201,8 @@ FrontendLeftPanelPresentation FrontendCoordinator::buildLeftPanelPresentation(
             if (permissions.canOpenBuildPanel) {
                 presentation.kind = FrontendLeftPanelKind::BuildTool;
                 presentation.allowBuild = permissions.canQueueNonMoveActions;
-                if (validation != nullptr && validation->activeKingInCheck) {
-                    presentation.buildDescription = "No construction allowed while your king is in check.";
+                if (validation != nullptr && validation->projectedKingInCheck) {
+                    presentation.buildDescription = "Queue a move that gets your king out of check before building.";
                 }
             }
             presentation.title = leftPanelTitle(presentation.kind);

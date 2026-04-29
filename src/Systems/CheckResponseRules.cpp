@@ -84,7 +84,7 @@ PendingTurnProjectionResult projectSingleCheckResponseMove(const GameSnapshot& c
 
     if (command.type != TurnCommand::Move) {
         result.valid = false;
-        result.errorMessage = "Check: exactly one move is allowed to escape.";
+        result.errorMessage = "Check: queue a move that gets the king out of check before any other action.";
         return result;
     }
 
@@ -255,50 +255,9 @@ CheckTurnValidation CheckResponseRules::validatePendingTurn(const TurnValidation
     if (validation.activeKingInCheck) {
         if (pendingCommands.empty()) {
             validation.valid = false;
-            validation.errorMessage = "Check: queue exactly one move to escape.";
+            validation.errorMessage = "Check: queue a move that gets the king out of check before any other action.";
             return validation;
         }
-
-        if (pendingCommands.size() != 1 || pendingCommands.front().type != TurnCommand::Move) {
-            validation.valid = false;
-            validation.errorMessage = "Check: exactly one move is allowed to escape.";
-            return validation;
-        }
-
-        const PendingTurnProjectionResult responseProjection = projectSingleCheckResponseMove(
-            currentSnapshot,
-            context.activeKingdom.id,
-            pendingCommands.front(),
-            context.config);
-        if (!responseProjection.valid) {
-            validation.valid = false;
-            validation.errorMessage = responseProjection.errorMessage;
-            return validation;
-        }
-
-        validation.projectedKingInCheck = ForwardModel::isInCheck(
-            responseProjection.snapshot,
-            context.activeKingdom.id,
-            context.config.getGlobalMaxRange());
-        if (validation.projectedKingInCheck) {
-            validation.valid = false;
-            validation.errorMessage = "The selected move does not get the king out of check.";
-            return validation;
-        }
-
-        const GameSnapshot endOfTurnSnapshot = simulateEndOfTurn(
-            responseProjection.snapshot,
-            context.activeKingdom.id,
-            context.config);
-        validation.projectedEndingGold = endOfTurnSnapshot.kingdom(context.activeKingdom.id).gold;
-        validation.bankrupt = validation.projectedEndingGold < 0;
-        if (validation.bankrupt) {
-            validation.valid = false;
-            validation.errorMessage = "Bankruptcy: the kingdom would end the turn at "
-                + std::to_string(validation.projectedEndingGold) + " gold.";
-        }
-
-        return validation;
     }
 
     bool projectedKingInCheck = validation.activeKingInCheck;
@@ -310,8 +269,37 @@ CheckTurnValidation CheckResponseRules::validatePendingTurn(const TurnValidation
         for (const TurnCommand& command : pendingCommands) {
             if (projectedKingInCheck && command.type != TurnCommand::Move) {
                 validation.valid = false;
-                validation.errorMessage = "Non-move actions stay locked until the queued move sequence has resolved the check.";
+                validation.errorMessage = "Check: queue a move that gets the king out of check before any non-move action.";
                 return validation;
+            }
+
+            if (projectedKingInCheck && command.type == TurnCommand::Move) {
+                const PendingTurnProjectionResult responseProjection = projectSingleCheckResponseMove(
+                    *finalSnapshot,
+                    context.activeKingdom.id,
+                    command,
+                    context.config);
+                if (!responseProjection.valid) {
+                    validation.valid = false;
+                    validation.errorMessage = responseProjection.errorMessage;
+                    return validation;
+                }
+
+                projectedKingInCheck = ForwardModel::isInCheck(
+                    responseProjection.snapshot,
+                    context.activeKingdom.id,
+                    context.config.getGlobalMaxRange());
+                if (projectedKingInCheck) {
+                    validation.valid = false;
+                    validation.errorMessage = "The selected move does not get the king out of check.";
+                    return validation;
+                }
+
+                prefixCommands.push_back(command);
+                finalProjection.snapshot = std::move(responseProjection.snapshot);
+                finalProjection.valid = true;
+                finalSnapshot = &finalProjection.snapshot;
+                continue;
             }
 
             prefixCommands.push_back(command);

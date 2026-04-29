@@ -10,3 +10,4 @@ build/saves/
 *.log
 *.tmp
 .DS_Store
+.ignore

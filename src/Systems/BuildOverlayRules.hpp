@@ -163,7 +163,7 @@ inline BuildOverlayMap collectBuildOverlayMap(const TurnValidationContext& conte
         return map;
     }
 
-    const std::vector<sf::Vector2i> builderPositions = collectBuilderPositions(projectedKingdom.pieces);
+    const std::vector<sf::Vector2i> builderPositions = collectBuilderPositions(projectedKingdom.pieces, buildingType);
     if (builderPositions.empty()) {
         return map;
     }

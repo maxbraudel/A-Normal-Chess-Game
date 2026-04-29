@@ -215,7 +215,9 @@ SelectionMoveOptions SelectionMoveRules::classifyPieceMoves(const TurnValidation
     const CheckTurnValidation turnValidation = CheckResponseRules::validatePendingTurn(
         context,
         pendingCommands);
-    const bool singleResponseMode = turnValidation.activeKingInCheck && turnValidation.hasAnyLegalResponse;
+    const bool singleResponseMode = turnValidation.activeKingInCheck
+        && turnValidation.hasAnyLegalResponse
+        && turnValidation.projectedKingInCheck;
 
     const PendingTurnProjectionResult projection = projectSelectionState(
         context,

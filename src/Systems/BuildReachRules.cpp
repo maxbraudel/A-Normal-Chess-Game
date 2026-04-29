@@ -6,6 +6,20 @@ bool isBuildSupportPieceType(PieceType type) {
     return type == PieceType::King || type == PieceType::Pawn;
 }
 
+bool canPieceTypeSupportBuild(PieceType type, BuildingType buildingType) {
+    if (type == PieceType::Pawn) {
+        return buildingType == BuildingType::Barracks
+            || buildingType == BuildingType::WoodWall
+            || buildingType == BuildingType::StoneWall;
+    }
+
+    if (type == PieceType::King) {
+        return buildingType == BuildingType::Barracks;
+    }
+
+    return false;
+}
+
 bool footprintHasAdjacentBuilder(sf::Vector2i origin,
                                  int width,
                                  int height,
