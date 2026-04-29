@@ -1312,7 +1312,8 @@ const DATA_COMPANION_URL = "../build/Data/KAZIMIRIUM%201.json";
   function normalizeInfernal(timeline) {
     const points = [];
     const spawnEvents = [];
-    const unitSpans = Object.create(null);
+    const activeUnitSpans = Object.create(null);
+    const completedUnitSpans = [];
 
     timeline.forEach(function (record) {
       const infernal = (record.analytics && record.analytics.infernal) || {};
@@ -1331,10 +1332,16 @@ const DATA_COMPANION_URL = "../build/Data/KAZIMIRIUM%201.json";
       record.structuredEvents.forEach(function (event) {
         if (event.typeKey === "infernal_spawned") {
           const unitId = toNumber(event.unitId, 0);
+          const unitIdKey = String(unitId);
           const unit = autonomousById[unitId] || null;
           const infernalData = (unit && unit.infernal) || {};
           const targetKingdomKey = keyOrFallback(infernalData.targetKingdomKey, "unknown");
           const manifestedPieceKey = keyOrFallback(infernalData.manifestedPieceTypeKey, "unknown");
+
+          if (activeUnitSpans[unitIdKey]) {
+            completedUnitSpans.push(activeUnitSpans[unitIdKey]);
+          }
+
           const spawnEvent = {
             turn: record.turn,
             unitId: unitId,
@@ -1344,7 +1351,7 @@ const DATA_COMPANION_URL = "../build/Data/KAZIMIRIUM%201.json";
             color: targetKingdomKey === "white" ? "rgba(233, 233, 223, 0.82)" : "rgba(62, 87, 125, 0.86)"
           };
           spawnEvents.push(spawnEvent);
-          unitSpans[String(unitId)] = {
+          activeUnitSpans[unitIdKey] = {
             unitId: unitId,
             turn: record.turn,
             targetKingdomKey: targetKingdomKey,
@@ -1356,17 +1363,22 @@ const DATA_COMPANION_URL = "../build/Data/KAZIMIRIUM%201.json";
 
         if (event.typeKey === "infernal_removed") {
           const unitId = String(toNumber(event.unitId, 0));
-          if (unitSpans[unitId]) {
-            unitSpans[unitId].removedTurn = record.turn;
+          if (activeUnitSpans[unitId]) {
+            activeUnitSpans[unitId].removedTurn = record.turn;
+            completedUnitSpans.push(activeUnitSpans[unitId]);
+            delete activeUnitSpans[unitId];
           }
         }
       });
     });
 
     const lastTurn = timeline.length ? timeline[timeline.length - 1].turn : 0;
-    const unitRows = Object.keys(unitSpans)
+    const unitRows = completedUnitSpans
+      .concat(Object.keys(activeUnitSpans).map(function (key) {
+        return activeUnitSpans[key];
+      }))
       .map(function (key) {
-        const span = unitSpans[key];
+        const span = key;
         const endTurn = span.removedTurn !== null ? span.removedTurn : lastTurn;
         const observedLifetime = Math.max(1, endTurn - span.turn + 1);
         return {
@@ -2028,9 +2040,20 @@ const DATA_COMPANION_URL = "../build/Data/KAZIMIRIUM%201.json";
         xTitle: "Turn",
         yTitle: "Blood debt",
         markers: infernal.spawnEvents.map(function (event) {
+          const matchingRow = infernal.unitRows.find(function (row) {
+            return row.unitId === event.unitId && row.spawnTurn === event.turn;
+          });
+          const labelEndTurn = matchingRow
+            ? (matchingRow.removedTurn !== null
+                ? matchingRow.removedTurn
+                : (matchingRow.spawnTurn + matchingRow.observedLifetime - 1))
+            : event.turn;
           return {
             x: event.turn,
             label: event.label,
+            labelX: matchingRow
+              ? (matchingRow.spawnTurn + labelEndTurn) / 2
+              : event.turn,
             color: event.color,
             lineDash: [3, 2],
             minLabelGap: 34
@@ -2040,15 +2063,13 @@ const DATA_COMPANION_URL = "../build/Data/KAZIMIRIUM%201.json";
         }).map(function (row) {
           return {
             x: row.removedTurn,
-            lineDash: []
+            lineDash: [3, 2]
           };
         })),
-        spans: infernal.unitRows.filter(function (row) {
-          return row.removedTurn !== null;
-        }).map(function (row) {
+        spans: infernal.unitRows.map(function (row) {
           return {
             xStart: row.spawnTurn,
-            xEnd: row.removedTurn,
+            xEnd: row.removedTurn !== null ? row.removedTurn : (row.spawnTurn + row.observedLifetime - 1),
             fillColor: "rgba(0, 0, 0, 0.3)"
           };
         })
@@ -2413,12 +2434,18 @@ const DATA_COMPANION_URL = "../build/Data/KAZIMIRIUM%201.json";
           lastLabelX = x;
 
           const labelText = String(marker.label);
+          const labelAnchorX = marker.labelX === undefined ? marker.x : marker.labelX;
+          const labelCenterX = xScale.getPixelForValue(labelAnchorX);
+          if (!Number.isFinite(labelCenterX)) {
+            return;
+          }
+
           ctx.setLineDash([]);
           ctx.font = "10px Segoe UI";
           const textWidth = ctx.measureText(labelText).width;
           const paddingX = 6;
           const labelWidth = textWidth + (paddingX * 2);
-          const labelX = clamp(x - (labelWidth / 2), chartArea.left, chartArea.right - labelWidth);
+          const labelX = clamp(labelCenterX - (labelWidth / 2), chartArea.left, chartArea.right - labelWidth);
           const labelY = chartArea.bottom + 8;
 
           ctx.fillStyle = "#000000";
