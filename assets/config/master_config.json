@@ -262,7 +262,7 @@
             },
             "tactical_grid": {
                 "checker_dark": { "r": 156, "g": 156, "b": 156, "a": 255 },
-                "checker_light": { "r": 236, "g": 236, "b": 236, "a": 255 },
+                "checker_light": { "r": 200, "g": 200, "b": 200, "a": 255 },
                 "blocked_terrain": { "r": 86, "g": 112, "b": 146, "a": 255 },
                 "blocked_structure": { "r": 54, "g": 54, "b": 54, "a": 255 }
             }

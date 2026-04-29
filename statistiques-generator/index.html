@@ -10,64 +10,7 @@
 </head>
 <body>
 <div class="dashboard-shell">
-  <aside class="command-rail">
-    <section class="hero-panel panel panel-cut">
-      <p class="eyebrow">A Normal Chess Game</p>
-      <h1>Statistiques Generator</h1>
-      <p class="hero-copy">
-        Page simple pour lire un companion Data V5 configure directement depuis
-        <strong>app.js</strong>.
-      </p>
-    </section>
-
-    <section class="panel panel-cut">
-      <div class="panel-heading compact-heading">
-        <div>
-          <p class="eyebrow">Source</p>
-          <h2>Fichier JSON configure</h2>
-        </div>
-      </div>
-      <div class="source-value" id="configuredSourceLabel">DATA_COMPANION_URL non configure.</div>
-      <div class="status-stack">
-        <div class="status-pill" id="loadStatus">Aucune source configuree.</div>
-        <div class="status-pill status-soft" id="schemaStatus">Definir DATA_COMPANION_URL en haut de app.js.</div>
-      </div>
-    </section>
-
-    <section class="panel panel-cut">
-      <div class="panel-heading compact-heading">
-        <div>
-          <p class="eyebrow">Radar</p>
-          <h2>Lecture rapide</h2>
-        </div>
-      </div>
-      <div class="metric-grid compact-grid" id="summaryCards"></div>
-    </section>
-
-    <section class="panel panel-cut">
-      <div class="panel-heading compact-heading">
-        <div>
-          <p class="eyebrow">Schema</p>
-          <h2>Topologie Data</h2>
-        </div>
-      </div>
-      <div class="topology-strip" id="topologyStrip"></div>
-      <div class="schema-list" id="rootKeyList"></div>
-    </section>
-
-    <section class="panel panel-cut">
-      <div class="panel-heading compact-heading">
-        <div>
-          <p class="eyebrow">Etat</p>
-          <h2>Alertes</h2>
-        </div>
-      </div>
-      <div class="alert-stack" id="alertStack"></div>
-    </section>
-  </aside>
-
-  <main class="analysis-stage">
-    <section class="banner-panel" id="historyBanner" hidden></section>
+  <main class="analysis-stage graphs-only">
 
     <section class="panel panel-cut empty-panel" id="emptyState">
       <p class="eyebrow">Pret</p>
@@ -78,20 +21,78 @@
       </p>
     </section>
 
-    <section class="panel panel-cut section-panel" id="sessionPanel">
-      <div class="panel-heading">
+    <section class="panel panel-cut section-panel" id="tempoPanel">
+      <div class="panel-heading split-heading">
         <div>
-          <p class="eyebrow">Session</p>
-          <h2>Portrait du companion</h2>
+          <p class="eyebrow">Tempo</p>
+          <h2>Duree du tour</h2>
+        </div>
+        <p class="panel-note">Le tour prend le max de turnElapsedMs observe par tour.</p>
+      </div>
+      <div class="chart-shell tall-chart">
+        <canvas id="tempoChart"></canvas>
+      </div>
+      <div class="metric-grid" id="tempoCards"></div>
+    </section>
+
+    <section class="panel panel-cut section-panel" id="decisionPanel">
+      <div class="panel-heading split-heading">
+        <div>
+          <p class="eyebrow">Decision</p>
+          <h2>Retours en arriere et hesitation</h2>
+        </div>
+        <p class="panel-note">Les backtracks comptent replace/cancel/reset; l'hesitation mesure le churn des moves par move commit.</p>
+      </div>
+      <div class="chart-block">
+        <h3 class="chart-subtitle">Retours en arriere</h3>
+        <div class="chart-shell tall-chart">
+          <canvas id="decisionChart"></canvas>
         </div>
       </div>
-      <div class="session-layout">
-        <div class="fact-grid" id="sessionFactGrid"></div>
-        <div class="signal-card">
-          <p class="signal-title">Schema de lecture</p>
-          <div class="signal-flow" id="signalFlow"></div>
+      <div class="chart-block">
+        <h3 class="chart-subtitle">Hesitation</h3>
+        <div class="chart-shell tall-chart">
+          <canvas id="decisionHesitationChart"></canvas>
         </div>
       </div>
+      <div class="metric-grid" id="decisionCards"></div>
+    </section>
+
+    <section class="panel panel-cut section-panel" id="economyPanel">
+      <div class="panel-heading split-heading">
+        <div>
+          <p class="eyebrow">Economie</p>
+          <h2>Income net par tour</h2>
+        </div>
+        <p class="panel-note">Courbes blanc, noir et total issues directement de snapshotMetrics.</p>
+      </div>
+      <div class="chart-shell tall-chart">
+        <canvas id="economyChart"></canvas>
+      </div>
+      <div class="metric-grid" id="economyCards"></div>
+    </section>
+
+    <section class="panel panel-cut section-panel" id="blockersPanel">
+      <div class="panel-heading split-heading">
+        <div>
+          <p class="eyebrow">Movement Blockers</p>
+          <h2>Eau, murs et cellules refusees</h2>
+        </div>
+        <p class="panel-note">Calcul exact depuis snapshot.grid, l'etat de breche des pieces et les cells de buildingIndex, detaille par royaume puis total.</p>
+      </div>
+      <div class="chart-block">
+        <h3 class="chart-subtitle">Eau</h3>
+        <div class="chart-shell tall-chart">
+          <canvas id="blockersWaterChart"></canvas>
+        </div>
+      </div>
+      <div class="chart-block">
+        <h3 class="chart-subtitle">Murs</h3>
+        <div class="chart-shell tall-chart">
+          <canvas id="blockersWallChart"></canvas>
+        </div>
+      </div>
+      <div class="metric-grid" id="blockersCards"></div>
     </section>
 
     <section class="panel panel-cut section-panel" id="weatherPanel">
@@ -133,7 +134,7 @@
           <p class="eyebrow">Infernal</p>
           <h2>Dette, spawns et duree de vie</h2>
         </div>
-        <p class="panel-note">Les marqueurs colorent le royaume cible et affichent la piece manifestee.</p>
+        <p class="panel-note">Les marqueurs signalent les spawns avec un contraste uniforme.</p>
       </div>
       <div class="chart-shell tall-chart">
         <canvas id="infernalChart"></canvas>
@@ -157,72 +158,6 @@
             </thead>
             <tbody id="infernalSpawnTableBody"></tbody>
           </table>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel panel-cut section-panel" id="xpPanel">
-      <div class="panel-heading split-heading">
-        <div>
-          <p class="eyebrow">XP</p>
-          <h2>Distribution robuste et audit brut</h2>
-        </div>
-        <p class="panel-note">Moyenne, mediane, moyenne tronquee et ventilation par source.</p>
-      </div>
-      <div class="dual-chart-grid">
-        <div class="chart-shell medium-chart">
-          <canvas id="xpTurnChart"></canvas>
-        </div>
-        <div class="chart-shell medium-chart">
-          <canvas id="xpSourceChart"></canvas>
-        </div>
-      </div>
-      <div class="metric-grid" id="xpCards"></div>
-
-      <div class="table-grid">
-        <div class="table-shell">
-          <div class="table-head">
-            <h3>Sources XP</h3>
-            <span id="xpSourceMeta"></span>
-          </div>
-          <div class="table-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Source</th>
-                  <th>Grants</th>
-                  <th>Total XP</th>
-                  <th>Moyenne</th>
-                </tr>
-              </thead>
-              <tbody id="xpSourceTableBody"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="table-shell">
-          <div class="table-head table-head-inline">
-            <h3>Grants XP</h3>
-            <label class="field-shell inline-field" for="xpGrantFilterInput">
-              <span>Filtre</span>
-              <input id="xpGrantFilterInput" type="text" placeholder="piece, source, royaume..." autocomplete="off">
-            </label>
-          </div>
-          <div class="table-scroll tall-scroll">
-            <table>
-              <thead>
-                <tr>
-                  <th>Turn</th>
-                  <th>Source</th>
-                  <th>XP</th>
-                  <th>Piece</th>
-                  <th>Royaume</th>
-                  <th>XP avant/apres</th>
-                </tr>
-              </thead>
-              <tbody id="xpGrantTableBody"></tbody>
-            </table>
-          </div>
         </div>
       </div>
     </section>
