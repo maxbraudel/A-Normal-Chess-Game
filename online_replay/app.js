@@ -192,6 +192,8 @@ function resolveRefs(root) {
     playPauseButton: mustGet(root, "playPauseButton"),
     nextTurnButton: mustGet(root, "nextTurnButton"),
     lastTurnButton: mustGet(root, "lastTurnButton"),
+    zoomInButton: mustGet(root, "zoomInButton"),
+    zoomOutButton: mustGet(root, "zoomOutButton"),
     turnSlider: mustGet(root, "turnSlider")
   };
 }
@@ -249,6 +251,14 @@ function bindEvents() {
     } else {
       startAutoplay();
     }
+  });
+
+  addManagedListener(refs.zoomInButton, "click", function () {
+    zoomCameraFromKeyboard(WHEEL_ZOOM_FACTOR);
+  });
+
+  addManagedListener(refs.zoomOutButton, "click", function () {
+    zoomCameraFromKeyboard(1 / WHEEL_ZOOM_FACTOR);
   });
 
   addManagedListener(refs.turnSlider, "input", function (event) {
@@ -625,6 +635,8 @@ function syncControlsState() {
   refs.nextTurnButton.disabled = !canNavigate || atEnd;
   refs.lastTurnButton.disabled = !canNavigate || atEnd;
   refs.playPauseButton.disabled = !canNavigate;
+  refs.zoomInButton.disabled = frameCount === 0;
+  refs.zoomOutButton.disabled = frameCount === 0;
   refs.turnSlider.disabled = !canNavigate;
 }
 

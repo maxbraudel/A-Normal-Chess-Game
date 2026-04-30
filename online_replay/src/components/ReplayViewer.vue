@@ -155,6 +155,27 @@ watch(
       <strong class="status-overlay-value" data-replay-ref="statusText">-</strong>
     </div>
 
+    <div class="zoom-controls" aria-label="Controles de zoom">
+      <button
+        type="button"
+        class="action-button zoom-action-button"
+        data-replay-ref="zoomInButton"
+        title="Zoom avant"
+        aria-label="Zoom avant"
+      >
+        +
+      </button>
+      <button
+        type="button"
+        class="action-button zoom-action-button"
+        data-replay-ref="zoomOutButton"
+        title="Zoom arriere"
+        aria-label="Zoom arriere"
+      >
+        -
+      </button>
+    </div>
+
     <div class="timeline-overlay">
       <div class="timeline-controls">
         <div class="playback-group">
