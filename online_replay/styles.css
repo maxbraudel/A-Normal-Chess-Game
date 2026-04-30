@@ -60,7 +60,6 @@ input {
   border: 1px solid var(--line);
   background: linear-gradient(180deg, rgba(22, 28, 23, 0.9), var(--overlay-strong));
   box-shadow: 0 24px 54px var(--shadow);
-  backdrop-filter: blur(18px);
   pointer-events: none;
   z-index: 2;
 }
@@ -89,6 +88,80 @@ input {
 
 .status-overlay-right {
   right: 16px;
+}
+
+.replay-toast-stack {
+  position: absolute;
+  top: calc(16px + env(safe-area-inset-top));
+  right: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  max-width: calc(100% - 32px);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.replay-toast {
+  --toast-accent-rgb: 240, 213, 143;
+  --toast-accent-alpha: 0.14;
+  --toast-border-alpha: 0.42;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 58px;
+  width: fit-content;
+  max-width: min(460px, 100%);
+  padding: 12px 14px;
+  border: 1px solid rgba(var(--toast-accent-rgb), var(--toast-border-alpha));
+  background:
+    linear-gradient(180deg, rgba(var(--toast-accent-rgb), var(--toast-accent-alpha)), rgba(var(--toast-accent-rgb), var(--toast-accent-alpha))),
+    linear-gradient(180deg, rgba(22, 28, 23, 0.9), var(--overlay-strong));
+  box-shadow: 0 24px 54px var(--shadow);
+}
+
+.replay-toast--warning {
+  --toast-accent-rgb: 240, 213, 143;
+  --toast-accent-alpha: 0.14;
+  --toast-border-alpha: 0.42;
+}
+
+.replay-toast--danger {
+  --toast-accent-rgb: 202, 87, 74;
+  --toast-accent-alpha: 0.18;
+  --toast-border-alpha: 0.5;
+}
+
+.replay-toast--success {
+  --toast-accent-rgb: 111, 188, 120;
+  --toast-accent-alpha: 0.16;
+  --toast-border-alpha: 0.48;
+}
+
+.replay-toast__meta {
+  min-width: 0;
+}
+
+.replay-toast .overlay-value {
+  line-height: 1.22;
+  overflow-wrap: anywhere;
+}
+
+.replay-toast-list-enter-active {
+  transition: none;
+}
+
+.replay-toast-list-leave-active,
+.replay-toast-list-move {
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease;
+}
+
+.replay-toast-list-leave-to {
+  opacity: 0;
+  transform: translateY(-14px);
 }
 
 .zoom-controls {
@@ -136,30 +209,6 @@ input {
   line-height: 1;
 }
 
-.status-overlay-status {
-  justify-content: center;
-  padding: 10px 14px;
-  border-color: rgba(240, 213, 143, 0.42);
-  background: rgba(240, 213, 143, 0.14);
-}
-
-.status-overlay-value {
-  color: var(--text);
-  font-size: 13px;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-}
-
-.status-overlay-status.is-check {
-  border-color: rgba(240, 213, 143, 0.42);
-  background: rgba(240, 213, 143, 0.14);
-}
-
-.status-overlay-status.is-checkmate {
-  border-color: rgba(202, 87, 74, 0.5);
-  background: rgba(202, 87, 74, 0.18);
-}
-
 .replay-canvas {
   width: 100%;
   height: 100%;
@@ -186,6 +235,50 @@ input {
   pointer-events: none;
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .timeline-overlay {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateX(-50%) translateY(14px);
+    transition:
+      opacity 160ms ease,
+      transform 160ms ease,
+      visibility 0s linear 160ms;
+  }
+
+  .replay-root:hover .timeline-overlay,
+  .replay-root:focus-within .timeline-overlay {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+    transition:
+      opacity 160ms ease,
+      transform 160ms ease,
+      visibility 0s linear 0s;
+  }
+
+  .zoom-controls {
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-50%) translateX(14px);
+    transition:
+      opacity 160ms ease,
+      transform 160ms ease,
+      visibility 0s linear 160ms;
+  }
+
+  .replay-root:hover .zoom-controls,
+  .replay-root:focus-within .zoom-controls {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(-50%) translateX(0);
+    transition:
+      opacity 160ms ease,
+      transform 160ms ease,
+      visibility 0s linear 0s;
+  }
+}
+
 .timeline-controls {
   pointer-events: auto;
   display: flex;
@@ -196,7 +289,6 @@ input {
   border: 1px solid var(--line);
   background: linear-gradient(180deg, rgba(22, 28, 23, 0.9), var(--overlay-strong));
   box-shadow: 0 24px 54px var(--shadow);
-  backdrop-filter: blur(18px);
 }
 
 .playback-group {
@@ -256,10 +348,6 @@ input {
   display: none;
 }
 
-.replay-root--hide-status-overlay .status-overlay-right {
-  display: none;
-}
-
 @media (max-width: 720px) {
   .status-overlay {
     top: calc(8px + env(safe-area-inset-top));
@@ -275,8 +363,15 @@ input {
     left: 8px;
   }
 
-  .status-overlay-right {
+  .replay-toast-stack {
+    top: calc(8px + env(safe-area-inset-top));
     right: 8px;
+    max-width: calc(100% - 16px);
+    gap: 8px;
+  }
+
+  .replay-toast {
+    padding: 10px 12px;
   }
 
   .zoom-controls {

@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { mountReplayViewer } from "../../app.js";
+import ReplayToast from "./ReplayToast.vue";
 
 const props = defineProps({
   replayUrl: {
@@ -16,6 +17,34 @@ const props = defineProps({
     default: undefined
   },
   autoplayIntervalMs: {
+    type: Number,
+    default: undefined
+  },
+  autoplayOnMount: {
+    type: Boolean,
+    default: false
+  },
+  loopPlayback: {
+    type: Boolean,
+    default: false
+  },
+  initialZoom: {
+    type: Number,
+    default: undefined
+  },
+  toastCooldownMs: {
+    type: Number,
+    default: 0
+  },
+  minTurn: {
+    type: Number,
+    default: undefined
+  },
+  maxTurn: {
+    type: Number,
+    default: undefined
+  },
+  initialTurn: {
     type: Number,
     default: undefined
   },
@@ -53,13 +82,17 @@ const props = defineProps({
 });
 
 const viewerRoot = ref(null);
+const toastItems = ref([]);
 let viewerInstance = null;
 
 const rootClasses = computed(() => ({
   "replay-root--hide-timeline": !props.showTimeline,
-  "replay-root--hide-turn-overlay": !props.showTurnOverlay,
-  "replay-root--hide-status-overlay": !props.showStatusOverlay
+  "replay-root--hide-turn-overlay": !props.showTurnOverlay
 }));
+
+function handleToastStateChange(nextToasts) {
+  toastItems.value = Array.isArray(nextToasts) ? nextToasts : [];
+}
 
 function buildMountOptions() {
   const options = {};
@@ -76,11 +109,29 @@ function buildMountOptions() {
   if (typeof props.autoplayIntervalMs === "number") {
     options.autoplayIntervalMs = props.autoplayIntervalMs;
   }
+  if (typeof props.initialZoom === "number") {
+    options.initialZoom = props.initialZoom;
+  }
+  if (typeof props.toastCooldownMs === "number") {
+    options.toastCooldownMs = props.toastCooldownMs;
+  }
+  if (typeof props.minTurn === "number") {
+    options.minTurn = props.minTurn;
+  }
+  if (typeof props.maxTurn === "number") {
+    options.maxTurn = props.maxTurn;
+  }
+  if (typeof props.initialTurn === "number") {
+    options.initialTurn = props.initialTurn;
+  }
 
+  options.autoplayOnMount = props.autoplayOnMount;
+  options.loopPlayback = props.loopPlayback;
   options.enableCellDebug = props.enableCellDebug;
   options.perspectiveEnabled = props.enablePerspective;
   options.perspectiveKingdom = props.perspectiveKingdom;
   options.trackedTarget = props.trackedTarget;
+  options.onToastStateChange = handleToastStateChange;
 
   return options;
 }
@@ -92,6 +143,7 @@ function destroyViewer() {
 
   viewerInstance.destroy();
   viewerInstance = null;
+  toastItems.value = [];
 }
 
 function mountViewer() {
@@ -116,6 +168,13 @@ watch(
     props.assetRoot,
     props.masterConfigUrl,
     props.autoplayIntervalMs,
+    props.autoplayOnMount,
+    props.loopPlayback,
+    props.initialZoom,
+    props.toastCooldownMs,
+    props.minTurn,
+    props.maxTurn,
+    props.initialTurn,
     props.enableCellDebug,
     props.enablePerspective,
     props.perspectiveKingdom,
@@ -145,15 +204,29 @@ watch(
       <div class="status-overlay" data-replay-ref="activeTurnOverlay" hidden>
         <img class="turn-indicator-icon" data-replay-ref="activeKingdomShield" alt="">
         <div class="overlay-meta">
-          <span class="overlay-label">Au trait</span>
-          <strong class="overlay-value" data-replay-ref="activeKingdomValue">-</strong>
+          <span class="overlay-label" data-replay-ref="activeKingdomLabel">-</span>
+          <strong class="overlay-value" data-replay-ref="activeTurnValue">Tour 0</strong>
         </div>
       </div>
     </div>
 
-    <div class="status-overlay status-overlay-right status-overlay-status" data-replay-ref="statusOverlay" hidden>
-      <strong class="status-overlay-value" data-replay-ref="statusText">-</strong>
-    </div>
+    <TransitionGroup
+      v-if="props.showStatusOverlay"
+      name="replay-toast-list"
+      tag="div"
+      class="replay-toast-stack"
+      aria-live="polite"
+    >
+      <ReplayToast
+        v-for="toast in toastItems"
+        :key="toast.id"
+        :shield-src="toast.shieldSrc"
+        :shield-alt="toast.shieldAlt"
+        :label="toast.label"
+        :message="toast.message"
+        :tone="toast.tone"
+      />
+    </TransitionGroup>
 
     <div class="zoom-controls" aria-label="Controles de zoom">
       <button

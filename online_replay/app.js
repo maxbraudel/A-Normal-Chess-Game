@@ -21,6 +21,7 @@ const MAX_CAMERA_ZOOM = 32;
 const TRACKPAD_PINCH_ZOOM_SENSITIVITY = 0.01;
 const TRACKPAD_PINCH_ZOOM_EXPONENT_LIMIT = 0.7;
 const WHEEL_ZOOM_FACTOR = 1.12;
+const toastDismissDelayMs = normalizeToastCooldownMs(replayConfig.toastCooldownMs);
 
 const DEFAULT_MASTER_CONFIG = {
   game: {
@@ -86,14 +87,29 @@ const WEATHER_FRONT_DIRECTION_KEYS = [
 const configuredPerspectiveKingdomKey = resolveConfiguredPerspectiveKingdomKey(replayConfig);
 const trackedTargetConfig = normalizeTrackedTargetConfig(replayConfig.trackedTarget);
 const isCellDebugEnabled = Boolean(replayConfig.enableCellDebug);
+const onToastStateChange = typeof replayConfig.onToastStateChange === "function"
+  ? replayConfig.onToastStateChange
+  : null;
 
 const state = {
   replay: null,
   frameIndex: 0,
+  playbackWindow: {
+    minFrameIndex: 0,
+    maxFrameIndex: 0,
+    initialFrameIndex: 0,
+    autoplayOnMount: false
+  },
   masterConfig: DEFAULT_MASTER_CONFIG,
   textures: new Map(),
   autoPlayHandle: null,
   statusMessage: "Chargement du replay...",
+  toast: {
+    slots: {
+      chest: createToastSlotState(),
+      status: createToastSlotState()
+    }
+  },
   camera: {
     zoom: 1,
     centerWorldX: 0,
@@ -122,6 +138,7 @@ return {
     isDestroyed = true;
     abortController.abort();
     stopAutoplay();
+    clearAllToastSlots();
     state.textures.clear();
     while (managedListeners.length) {
       const dispose = managedListeners.pop();
@@ -154,6 +171,8 @@ async function bootstrap() {
 
     state.masterConfig = masterConfig;
     state.replay = buildReplayModel(rawReplay, masterConfig);
+    state.playbackWindow = resolvePlaybackWindow(state.replay.frames, replayConfig);
+    state.frameIndex = state.playbackWindow.initialFrameIndex;
     state.statusMessage = "";
     await primeTextureCatalog(state.replay);
 
@@ -161,9 +180,12 @@ async function bootstrap() {
       return;
     }
 
-    resetCameraToFit(state.replay.frames[state.frameIndex]);
+    resetCameraToConfiguredInitialView(state.replay.frames[state.frameIndex]);
     syncTimelineBounds();
     renderCurrentFrame();
+    if (state.playbackWindow.autoplayOnMount) {
+      startAutoplay();
+    }
     setStatus(
       "Replay charge.",
       `${state.replay.meta.title} · ${state.replay.frames.length} frames disponibles`
@@ -180,13 +202,12 @@ function resolveRefs(root) {
   return {
     replayCanvas: mustGet(root, "replayCanvas"),
     activeTurnOverlay: mustGet(root, "activeTurnOverlay"),
+    activeKingdomLabel: mustGet(root, "activeKingdomLabel"),
     activeKingdomShield: mustGet(root, "activeKingdomShield"),
-    activeKingdomValue: mustGet(root, "activeKingdomValue"),
+    activeTurnValue: mustGet(root, "activeTurnValue"),
     perspectiveOverlay: mustGet(root, "perspectiveOverlay"),
     perspectiveKingdomShield: mustGet(root, "perspectiveKingdomShield"),
     perspectiveKingdomValue: mustGet(root, "perspectiveKingdomValue"),
-    statusOverlay: mustGet(root, "statusOverlay"),
-    statusText: mustGet(root, "statusText"),
     firstTurnButton: mustGet(root, "firstTurnButton"),
     prevTurnButton: mustGet(root, "prevTurnButton"),
     playPauseButton: mustGet(root, "playPauseButton"),
@@ -224,7 +245,7 @@ function bindEvents() {
 
   addManagedListener(refs.firstTurnButton, "click", function () {
     stopAutoplay();
-    setFrameIndex(0);
+    setFrameIndex(currentPlaybackWindow().minFrameIndex);
   });
 
   addManagedListener(refs.prevTurnButton, "click", function () {
@@ -242,7 +263,7 @@ function bindEvents() {
     if (!state.replay) {
       return;
     }
-    setFrameIndex(state.replay.frames.length - 1);
+    setFrameIndex(currentPlaybackWindow().maxFrameIndex);
   });
 
   addManagedListener(refs.playPauseButton, "click", function () {
@@ -342,6 +363,7 @@ function renderIdle() {
   syncTimelineBounds();
   syncControlsState();
   syncOverlays(null);
+  syncToastState(null);
   renderCanvasMessage(state.statusMessage);
 }
 
@@ -419,7 +441,8 @@ function buildReplayModel(data, masterConfig) {
       activeValidation: data.initialActiveValidation || null,
       nextTurnValidation: data.initialNextTurnValidation || null,
       label: "Etat initial",
-      rawEvents: Array.isArray(data.initialSnapshot.events) ? data.initialSnapshot.events : []
+      rawEvents: Array.isArray(data.initialSnapshot.events) ? data.initialSnapshot.events : [],
+      notifications: []
     }, data.referenceData, masterConfig));
   }
 
@@ -439,7 +462,8 @@ function buildReplayModel(data, masterConfig) {
       activeValidation: record.activeValidation || null,
       nextTurnValidation: record.nextTurnValidation || null,
       label: `Tour ${record.committedTurnNumber}`,
-      rawEvents: Array.isArray(record.newEvents) ? record.newEvents : []
+      rawEvents: Array.isArray(record.newEvents) ? record.newEvents : [],
+      notifications: Array.isArray(record.notifications) ? record.notifications : []
     }, data.referenceData, masterConfig));
   }
 
@@ -455,7 +479,8 @@ function buildReplayModel(data, masterConfig) {
       activeValidation: data.currentActiveValidation || data.currentStateSummary.activeValidation || null,
       nextTurnValidation: data.currentNextTurnValidation || data.currentStateSummary.nextTurnValidation || null,
       label: `Tour ${data.currentStateSummary.turnNumber || 0}`,
-      rawEvents: Array.isArray(data.currentStateSummary.events) ? data.currentStateSummary.events : []
+      rawEvents: Array.isArray(data.currentStateSummary.events) ? data.currentStateSummary.events : [],
+      notifications: []
     }, data.referenceData, masterConfig));
   }
 
@@ -476,6 +501,111 @@ function buildReplayModel(data, masterConfig) {
       cellSize: getCellSize(masterConfig)
     }
   };
+}
+
+function resolvePlaybackWindow(frames, config) {
+  if (!Array.isArray(frames) || !frames.length) {
+    return {
+      minFrameIndex: 0,
+      maxFrameIndex: 0,
+      initialFrameIndex: 0,
+      autoplayOnMount: false
+    };
+  }
+
+  const frameCount = frames.length;
+  const requestedInitialTurn = normalizeConfiguredTurn(config && config.initialTurn);
+  let requestedMinTurn = normalizeConfiguredTurn(config && config.minTurn);
+  let requestedMaxTurn = normalizeConfiguredTurn(config && config.maxTurn);
+
+  if (requestedMinTurn !== null && requestedMaxTurn !== null && requestedMinTurn > requestedMaxTurn) {
+    console.warn("[Replay config] minTurn est superieur a maxTurn. La plage demandee a ete reordonnee.");
+    const swappedTurn = requestedMinTurn;
+    requestedMinTurn = requestedMaxTurn;
+    requestedMaxTurn = swappedTurn;
+  }
+
+  const minFrameIndex = requestedMinTurn === null
+    ? 0
+    : (findFirstFrameIndexAtOrAfterTurn(frames, requestedMinTurn) ?? (frameCount - 1));
+  const maxFrameIndex = requestedMaxTurn === null
+    ? (frameCount - 1)
+    : (findLastFrameIndexAtOrBeforeTurn(frames, requestedMaxTurn) ?? 0);
+
+  if (minFrameIndex > maxFrameIndex) {
+    console.warn("[Replay config] La plage de tours demandee ne correspond a aucune frame exploitable. Le replay complet est utilise.");
+    return {
+      minFrameIndex: 0,
+      maxFrameIndex: frameCount - 1,
+      initialFrameIndex: resolveInitialPlaybackFrameIndex(frames, requestedInitialTurn, 0, frameCount - 1),
+      autoplayOnMount: Boolean(config && config.autoplayOnMount)
+    };
+  }
+
+  return {
+    minFrameIndex,
+    maxFrameIndex,
+    initialFrameIndex: resolveInitialPlaybackFrameIndex(frames, requestedInitialTurn, minFrameIndex, maxFrameIndex),
+    autoplayOnMount: Boolean(config && config.autoplayOnMount)
+  };
+}
+
+function currentPlaybackWindow() {
+  return state.playbackWindow || {
+    minFrameIndex: 0,
+    maxFrameIndex: 0,
+    initialFrameIndex: 0,
+    autoplayOnMount: false
+  };
+}
+
+function normalizeConfiguredTurn(value) {
+  return Number.isFinite(value) ? Math.trunc(value) : null;
+}
+
+function readFrameTurnNumber(frame) {
+  return Number.isFinite(frame && frame.committedTurnNumber)
+    ? Math.trunc(frame.committedTurnNumber)
+    : 0;
+}
+
+function findFirstFrameIndexAtOrAfterTurn(frames, turnNumber) {
+  for (let index = 0; index < frames.length; index += 1) {
+    if (readFrameTurnNumber(frames[index]) >= turnNumber) {
+      return index;
+    }
+  }
+
+  return null;
+}
+
+function findLastFrameIndexAtOrBeforeTurn(frames, turnNumber) {
+  for (let index = frames.length - 1; index >= 0; index -= 1) {
+    if (readFrameTurnNumber(frames[index]) <= turnNumber) {
+      return index;
+    }
+  }
+
+  return null;
+}
+
+function resolveInitialPlaybackFrameIndex(frames, requestedTurn, minFrameIndex, maxFrameIndex) {
+  if (requestedTurn === null) {
+    return minFrameIndex;
+  }
+
+  let closestFrameIndex = minFrameIndex;
+  let closestDistance = Number.POSITIVE_INFINITY;
+
+  for (let index = minFrameIndex; index <= maxFrameIndex; index += 1) {
+    const distance = Math.abs(readFrameTurnNumber(frames[index]) - requestedTurn);
+    if (distance < closestDistance) {
+      closestDistance = distance;
+      closestFrameIndex = index;
+    }
+  }
+
+  return closestFrameIndex;
 }
 
 function normalizeFrame(frameInput, referenceData, masterConfig) {
@@ -511,6 +641,7 @@ function normalizeFrame(frameInput, referenceData, masterConfig) {
     snapshot,
     analytics: frameInput.analytics,
     rawEvents: frameInput.rawEvents,
+    notifications: toArray(frameInput.notifications),
     grid: toArray(snapshot.grid),
     pieces: whitePieces.concat(blackPieces),
     piecesAnalytics: analyticsPieces,
@@ -616,16 +747,21 @@ function syncTimelineBounds() {
     return;
   }
 
-  refs.turnSlider.min = "0";
-  refs.turnSlider.max = String(Math.max(0, state.replay.frames.length - 1));
+  const playbackWindow = currentPlaybackWindow();
+  refs.turnSlider.min = String(playbackWindow.minFrameIndex);
+  refs.turnSlider.max = String(playbackWindow.maxFrameIndex);
   refs.turnSlider.value = String(state.frameIndex);
 }
 
 function syncControlsState() {
   const frameCount = state.replay ? state.replay.frames.length : 0;
-  const atStart = state.frameIndex <= 0;
-  const atEnd = !state.replay || state.frameIndex >= (frameCount - 1);
-  const canNavigate = frameCount > 1;
+  const playbackWindow = currentPlaybackWindow();
+  const playbackFrameCount = state.replay
+    ? Math.max(0, playbackWindow.maxFrameIndex - playbackWindow.minFrameIndex + 1)
+    : 0;
+  const atStart = state.frameIndex <= playbackWindow.minFrameIndex;
+  const atEnd = !state.replay || state.frameIndex >= playbackWindow.maxFrameIndex;
+  const canNavigate = playbackFrameCount > 1;
   const isAutoPlaying = Boolean(state.autoPlayHandle);
 
   refs.playPauseButton.textContent = isAutoPlaying ? "Pause" : "Lire";
@@ -645,7 +781,8 @@ function setFrameIndex(nextIndex) {
     return;
   }
 
-  const bounded = clamp(nextIndex, 0, state.replay.frames.length - 1);
+  const playbackWindow = currentPlaybackWindow();
+  const bounded = clamp(nextIndex, playbackWindow.minFrameIndex, playbackWindow.maxFrameIndex);
   const frameChanged = bounded !== state.frameIndex;
   state.frameIndex = bounded;
   if (frameChanged && trackedTargetConfig) {
@@ -655,12 +792,14 @@ function setFrameIndex(nextIndex) {
 }
 
 function startAutoplay() {
-  if (!state.replay || state.autoPlayHandle || state.replay.frames.length < 2) {
+  const playbackWindow = currentPlaybackWindow();
+  const playbackFrameCount = playbackWindow.maxFrameIndex - playbackWindow.minFrameIndex + 1;
+  if (!state.replay || state.autoPlayHandle || playbackFrameCount < 2) {
     return;
   }
 
-  if (state.frameIndex >= state.replay.frames.length - 1) {
-    state.frameIndex = 0;
+  if (state.frameIndex >= playbackWindow.maxFrameIndex) {
+    state.frameIndex = playbackWindow.initialFrameIndex;
     if (trackedTargetConfig) {
       state.camera.pendingTrackedRecenter = true;
     }
@@ -673,7 +812,11 @@ function startAutoplay() {
     }
 
     const nextIndex = state.frameIndex + 1;
-    if (nextIndex >= state.replay.frames.length) {
+    if (nextIndex > playbackWindow.maxFrameIndex) {
+      if (replayConfig.loopPlayback) {
+        setFrameIndex(playbackWindow.minFrameIndex);
+        return;
+      }
       stopAutoplay();
       return;
     }
@@ -707,6 +850,7 @@ function renderCurrentFrame() {
   syncControlsState();
   syncTrackedCamera(frame);
   syncOverlays(frame);
+  syncToastState(frame);
   renderCanvasFrame(frame);
 }
 
@@ -729,14 +873,12 @@ function syncOverlays(frame) {
   if (!frame) {
     refs.activeTurnOverlay.hidden = true;
     refs.perspectiveOverlay.hidden = true;
-    refs.statusOverlay.hidden = true;
-    refs.statusText.textContent = "";
-    refs.statusOverlay.className = "status-overlay status-overlay-right status-overlay-status";
     return;
   }
 
   refs.activeTurnOverlay.hidden = false;
-  refs.activeKingdomValue.textContent = frame.sideToMoveLabel;
+  refs.activeKingdomLabel.textContent = frame.sideToMoveLabel;
+  refs.activeTurnValue.textContent = formatTurnOverlayLabel(frame);
   refs.activeKingdomShield.src = resolveUrl(`${replayConfig.assetRoot}/${KINGDOM_SHIELD_PATHS[frame.sideToMoveKey] || KINGDOM_SHIELD_PATHS.white}`);
   refs.activeKingdomShield.alt = `Bouclier ${frame.sideToMoveLabel}`;
 
@@ -751,37 +893,283 @@ function syncOverlays(frame) {
     );
     refs.perspectiveKingdomShield.alt = `Bouclier ${perspective.label}`;
   }
+}
 
-  const statusBadge = buildStatusBadge(frame);
-  refs.statusOverlay.className = "status-overlay status-overlay-right status-overlay-status";
-  if (!statusBadge) {
-    refs.statusOverlay.hidden = true;
-    refs.statusText.textContent = "";
+function syncToastState(frame) {
+  if (!frame) {
+    clearAllToastSlots();
+    emitToastState(null);
     return;
   }
 
-  refs.statusOverlay.hidden = false;
-  refs.statusText.textContent = statusBadge.text;
-  refs.statusOverlay.classList.add(statusBadge.className);
+  syncToastSlot("status", resolveStatusToast(frame), state.frameIndex);
+  syncToastSlot("chest", resolveChestRewardToast(frame), state.frameIndex);
+
+  emitToastState(frame);
 }
 
-function buildStatusBadge(frame) {
+function resolveChestRewardToast(frame) {
+  const notification = toArray(frame.notifications).find(function (entry) {
+    return entry
+      && entry.kindKey === "chest_reward"
+      && entry.chestReward
+      && (typeof entry.kingdomKey === "string" || typeof entry.kingdom === "number");
+  });
+
+  if (!notification) {
+    return null;
+  }
+
+  const kingdomKey = resolveNotificationKingdomKey(frame.referenceData, notification);
+  const kingdomLabel = toastKingdomLabel(kingdomKey);
+  return buildToastViewModel({
+    id: buildChestToastId(notification, kingdomKey, state.frameIndex),
+    slotKey: "chest",
+    kingdomKey,
+    kingdomLabel,
+    message: `A gagne ${formatChestRewardToastText(notification)}.`,
+    tone: "success",
+    priority: 20
+  });
+}
+
+function buildChestToastId(notification, kingdomKey, sourceFrameIndex) {
+  const rewardTypeKey = notification && typeof notification.chestRewardTypeKey === "string"
+    ? notification.chestRewardTypeKey
+    : notification && notification.chestReward && typeof notification.chestReward.typeKey === "string"
+      ? notification.chestReward.typeKey
+      : "gold";
+  const rewardAmount = notification && Number.isFinite(notification.chestRewardAmount)
+    ? Math.trunc(notification.chestRewardAmount)
+    : notification && notification.chestReward && Number.isFinite(notification.chestReward.amount)
+      ? Math.trunc(notification.chestReward.amount)
+      : 0;
+
+  return `chest-reward:${sourceFrameIndex}:${kingdomKey}:${rewardTypeKey}:${rewardAmount}`;
+}
+
+function resolveNotificationKingdomKey(referenceData, notification) {
+  if (notification && typeof notification.kingdomKey === "string" && KINGDOM_SHIELD_PATHS[notification.kingdomKey]) {
+    return notification.kingdomKey;
+  }
+
+  const fallbackKingdomKey = kingdomKeyById(referenceData, notification && notification.kingdom);
+  return KINGDOM_SHIELD_PATHS[fallbackKingdomKey] ? fallbackKingdomKey : "white";
+}
+
+function toastKingdomLabel(kingdomKey) {
+  return kingdomKey === "black" ? "Noirs" : "Blancs";
+}
+
+function formatChestRewardToastText(notification) {
+  const reward = notification && notification.chestReward ? notification.chestReward : null;
+  const rewardTypeKey = reward && typeof reward.typeKey === "string"
+    ? reward.typeKey
+    : notification && typeof notification.chestRewardTypeKey === "string"
+      ? notification.chestRewardTypeKey
+      : "gold";
+  const rewardAmount = Number(
+    reward && Number.isFinite(reward.amount)
+      ? reward.amount
+      : notification && Number.isFinite(notification.chestRewardAmount)
+        ? notification.chestRewardAmount
+        : 0
+  );
+  const signedAmount = `${rewardAmount >= 0 ? "+" : ""}${Math.trunc(rewardAmount)}`;
+
+  if (rewardTypeKey === "movement_points_max_bonus") {
+    return `${signedAmount} point${Math.abs(Math.trunc(rewardAmount)) > 1 ? "s" : ""} de mouvement max par tour`;
+  }
+
+  if (rewardTypeKey === "build_points_max_bonus") {
+    return `${signedAmount} point${Math.abs(Math.trunc(rewardAmount)) > 1 ? "s" : ""} de construction max par tour`;
+  }
+
+  return `${signedAmount} or`;
+}
+
+function buildToastViewModel({ id, kingdomKey, kingdomLabel, message, priority, tone }) {
+  return {
+    id,
+    label: kingdomLabel,
+    message,
+    priority,
+    shieldAlt: `Bouclier ${kingdomLabel}`,
+    shieldSrc: resolveUrl(
+      `${replayConfig.assetRoot}/${KINGDOM_SHIELD_PATHS[kingdomKey] || KINGDOM_SHIELD_PATHS.white}`
+    ),
+    tone
+  };
+}
+
+function createToastSlotState() {
+  return {
+    current: null,
+    sourceFrameIndex: null,
+    hideHandle: null
+  };
+}
+
+function syncToastSlot(slotKey, nextToast, sourceFrameIndex) {
+  const slot = state.toast.slots[slotKey];
+  if (!slot) {
+    return;
+  }
+
+  if (nextToast) {
+    clearToastDismissTimer(slot);
+    slot.current = nextToast;
+    slot.sourceFrameIndex = sourceFrameIndex;
+    return;
+  }
+
+  if (!slot.current) {
+    clearToastDismissTimer(slot);
+    return;
+  }
+
+  if (slot.sourceFrameIndex === state.frameIndex) {
+    clearToastDismissTimer(slot);
+    return;
+  }
+
+  scheduleToastDismiss(slotKey);
+}
+
+function clearToastSlot(slotKey) {
+  const slot = state.toast.slots[slotKey];
+  if (!slot) {
+    return;
+  }
+
+  clearToastDismissTimer(slot);
+  slot.current = null;
+  slot.sourceFrameIndex = null;
+}
+
+function clearAllToastSlots() {
+  for (const slotKey of Object.keys(state.toast.slots)) {
+    clearToastSlot(slotKey);
+  }
+}
+
+function hideToastSlot(slotKey) {
+  clearToastSlot(slotKey);
+  emitToastState(currentFrame());
+}
+
+function scheduleToastDismiss(slotKey) {
+  const slot = state.toast.slots[slotKey];
+  if (!slot) {
+    return;
+  }
+
+  if (toastDismissDelayMs <= 0) {
+    hideToastSlot(slotKey);
+    return;
+  }
+
+  if (slot.hideHandle) {
+    return;
+  }
+
+  slot.hideHandle = window.setTimeout(function () {
+    slot.hideHandle = null;
+    if (!slot.current) {
+      return;
+    }
+
+    if (slot.sourceFrameIndex === state.frameIndex) {
+      return;
+    }
+
+    hideToastSlot(slotKey);
+  }, toastDismissDelayMs);
+}
+
+function clearToastDismissTimer(slot) {
+  if (!slot || !slot.hideHandle) {
+    return;
+  }
+
+  window.clearTimeout(slot.hideHandle);
+  slot.hideHandle = null;
+}
+
+function normalizeToastCooldownMs(value) {
+  const parsedValue = Number(value);
+  if (!Number.isFinite(parsedValue)) {
+    return 0;
+  }
+
+  return Math.max(0, parsedValue);
+}
+
+function emitToastState(frame) {
+  if (!onToastStateChange) {
+    return;
+  }
+
+  onToastStateChange(buildToastStack(frame));
+}
+
+function buildToastStack(frame) {
+  if (!frame) {
+    return [];
+  }
+
+  const items = [];
+  for (const slotKey of Object.keys(state.toast.slots)) {
+    const slot = state.toast.slots[slotKey];
+    if (slot && slot.current) {
+      items.push(slot.current);
+    }
+  }
+
+  return items.sort(function (left, right) {
+    return left.priority - right.priority;
+  });
+}
+
+function resolveStatusToast(frame) {
   const validation = frame.nextTurnValidation || frame.activeValidation;
+  const kingdomKey = KINGDOM_SHIELD_PATHS[frame.sideToMoveKey] ? frame.sideToMoveKey : "white";
+  const kingdomLabel = frame.sideToMoveLabel || toastKingdomLabel(kingdomKey);
+
   if (frame.gameOver) {
-    return {
-      text: "Echec et mat",
-      className: "is-checkmate"
-    };
+    return buildToastViewModel({
+      id: `status-checkmate:${kingdomKey}`,
+      slotKey: "status",
+      kingdomKey,
+      kingdomLabel,
+      message: "Echec et mat",
+      tone: "danger",
+      priority: 10
+    });
   }
 
   if (validation && validation.activeKingInCheck) {
-    return {
-      text: "Echec",
-      className: "is-check"
-    };
+    return buildToastViewModel({
+      id: `status-check:${kingdomKey}`,
+      slotKey: "status",
+      kingdomKey,
+      kingdomLabel,
+      message: "Echec",
+      tone: "warning",
+      priority: 10
+    });
   }
 
   return null;
+}
+
+function formatTurnOverlayLabel(frame) {
+  const committedTurnNumber = Number(frame && frame.committedTurnNumber);
+  const safeTurnNumber = Number.isFinite(committedTurnNumber)
+    ? Math.max(0, Math.trunc(committedTurnNumber))
+    : 0;
+
+  return `Tour ${safeTurnNumber}`;
 }
 
 function renderCanvasFrame(frame) {
@@ -858,6 +1246,17 @@ function resetCameraToFit(frame, metrics = getBoardMetrics(frame)) {
   state.camera.centerWorldY = metrics.boardHeight / 2;
   state.camera.initialized = true;
   state.camera.boardKey = metrics.boardKey;
+}
+
+function resetCameraToConfiguredInitialView(frame, metrics = getBoardMetrics(frame)) {
+  resetCameraToFit(frame, metrics);
+
+  const configuredInitialZoom = Number(replayConfig.initialZoom);
+  if (!Number.isFinite(configuredInitialZoom)) {
+    return;
+  }
+
+  state.camera.zoom = clamp(configuredInitialZoom, MIN_CAMERA_ZOOM, MAX_CAMERA_ZOOM);
 }
 
 function centerCameraOnGridPoint(frame, gridX, gridY) {

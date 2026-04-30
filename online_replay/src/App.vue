@@ -10,6 +10,17 @@ const CLOUD_TRACK = Object.freeze({
   kind: "cloud",
   index: 0
 });
+
+const FAST_WINDOWED_AUTOPLAY = Object.freeze({
+  minTurn: 80,
+  maxTurn: 100,
+  initialTurn: 80,
+  autoplayOnMount: true,
+  autoplayIntervalMs: 320,
+  loopPlayback: true,
+  initialZoom: 1.8,
+  toastCooldownMs: 3000
+});
 </script>
 
 <template>
@@ -39,12 +50,17 @@ const CLOUD_TRACK = Object.freeze({
           les pieces et batiments noirs caches sous les nuages disparaissent comme dans le jeu original.
         </p>
         <p>
-          Les trois viewers de demonstration activent aussi le clic debug sur les cellules. Le troisieme suit en plus
+          Les viewers de demonstration activent aussi le clic debug sur les cellules. Le troisieme suit en plus
           le roi blanc id 0 et recentre la camera sur lui a chaque changement de frame.
         </p>
         <p>
           Le quatrieme viewer montre le meme systeme sur un nuage. Comme les fronts meteo n'ont pas d'identifiant
           persistant dans le companion, le ciblage se fait logiquement par index de front actif, ici le nuage 0.
+        </p>
+        <p>
+          Le cinquieme viewer montre maintenant les nouveaux parametres du composant: il est borne aux tours 80 a 100,
+          demarre tout seul, boucle sur sa fenetre, commence avec un zoom plus serre et tourne a une vitesse de lecture
+          plus elevee que les autres.
         </p>
       </div>
 
@@ -78,7 +94,19 @@ const CLOUD_TRACK = Object.freeze({
         <article class="landing-viewer-card">
           <header class="landing-frame-header">Tracking du Nuage 0</header>
           <div class="landing-frame">
-            <ReplayViewer class="landing-replay" :enable-cell-debug="true" :tracked-target="CLOUD_TRACK" />
+            <ReplayViewer
+              class="landing-replay"
+              :enable-cell-debug="true"
+              :tracked-target="CLOUD_TRACK"
+              :toast-cooldown-ms="0"
+            />
+          </div>
+        </article>
+
+        <article class="landing-viewer-card">
+          <header class="landing-frame-header">Fenetre 80-100 · autoplay rapide</header>
+          <div class="landing-frame">
+            <ReplayViewer class="landing-replay" :enable-cell-debug="true" v-bind="FAST_WINDOWED_AUTOPLAY" />
           </div>
         </article>
       </div>
