@@ -1,0 +1,423 @@
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex.fmt)
+ restricted \write18 enabled.
+entering extended mode
+(KAZIMIRIUM 1.tex
+LaTeX2e <2025-11-01>
+L3 programming layer <2025-12-24>
+
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/base\article.c
+ls
+Document Class: article 2025/01/22 v1.4n Standard LaTeX document class
+
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/base\size11.cl
+o))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/base\inputenc.
+sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/base\fontenc.s
+ty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/babel\babel.
+sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/babel\txtbab
+el.def)
+*************************************
+* Local config file bblopts.cfg used
+*
+
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/arabi\bblopts.
+cfg)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale
+/fr\babel-french.tex)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/babel-french
+\french.ldf
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/babel-french
+\french3.ldf)))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/carlisle\scale
+fnt.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/lm\lmodern.sty
+)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/geometry\geome
+try.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/graphics\keyva
+l.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/iftex\ifvtex
+.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/iftex\iftex.
+sty))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/geometry\geome
+try.cfg))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/graphics\graph
+icx.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/graphics\graph
+ics.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/graphics\trig.
+sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/graphics-cfg\g
+raphics.cfg)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/graphics-def\p
+dftex.def)))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/booktabs\bookt
+abs.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/tools\tabularx
+.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/tools\array.st
+y))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/float\float.st
+y)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/xcolor\xcolor.
+sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/graphics-cfg\c
+olor.cfg)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/graphics\mathc
+olor.ltx))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\hyper
+ref.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/kvsetkeys\kvse
+tkeys.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/kvdefinekeys
+\kvdefinekeys.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/pdfescape\pd
+fescape.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/ltxcmds\ltxc
+mds.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/pdftexcmds\p
+dftexcmds.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/infwarerr\in
+fwarerr.sty)))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/hycolor\hycolo
+r.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\namer
+ef.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/refcount\refco
+unt.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/gettitlestri
+ng\gettitlestring.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/kvoptions\kvop
+tions.sty)))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/etoolbox\etool
+box.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/stringenc\st
+ringenc.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\pd1en
+c.def)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/intcalc\intc
+alc.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\puenc
+.def)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/url\url.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/bitset\bitse
+t.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/bigintcalc\b
+igintcalc.sty)))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\hpdft
+ex.def
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/rerunfilecheck
+\rerunfilecheck.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/uniquecounte
+r\uniquecounter.sty)))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/lm\t1lmr.fd)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/l3backend\l3ba
+ckend-pdftex.def) (KAZIMIRIUM 1.aux)
+*geometry* driver: auto-detecting
+*geometry* detected driver: pdftex
+
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/context/base/mkii\su
+pp-pdf.mkii
+[Loading MPS to PDF converter (version 2006.09.02).]
+)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/epstopdf-pkg\e
+pstopdf-base.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/00miktex\epsto
+pdf-sys.cfg)) (KAZIMIRIUM 1.out) (KAZIMIRIUM 1.out)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/lm\ot1lmr.fd)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/lm\omllmm.fd)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/lm\omslmsy.fd)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/lm\omxlmex.fd)
+(KAZIMIRIUM 1.toc) [1{C:/Users/famillebraudel/AppData/Local/MiKTeX/fonts/map/pd
+ftex/pdftex.map}{C:/Users/famillebraudel/AppData/Local/Programs/MiKTeX/fonts/en
+c/dvips/lm/lm-ec.enc}] [2] [3]
+Underfull \hbox (badness 1448) in paragraph at lines 113--113
+[]|\T1/lmr/m/n/10.95 Pieces im-pac-tees
+
+Underfull \hbox (badness 10000) in paragraph at lines 125--125
+[]|\T1/lmr/m/n/10.95 Echantillons
+
+Underfull \hbox (badness 1448) in paragraph at lines 134--134
+[]|\T1/lmr/m/n/10.95 Pieces im-pac-tees
+[4 <./charts/terrain_water_tax.png>] [5]
+Underfull \hbox (badness 7613) in paragraph at lines 199--199
+[]|\T1/lmr/m/n/10.95 Brouillard dis-si-
+
+Underfull \hbox (badness 10000) in paragraph at lines 199--199
+[]|\T1/lmr/m/n/10.95 Pieces en-ne-
+
+Underfull \hbox (badness 10000) in paragraph at lines 199--199
+\T1/lmr/m/n/10.95 mies mas-quees
+[6 <./charts/weather_pressure.png>]
+Underfull \hbox (badness 10000) in paragraph at lines 222--222
+[]|\T1/lmr/m/n/10.95 Ennemis caches
+[7]
+Underfull \hbox (badness 10000) in paragraph at lines 289--289
+[]|\T1/lmr/m/n/10.95 Tour ou-ver-
+
+Underfull \hbox (badness 10000) in paragraph at lines 289--289
+[]|\T1/lmr/m/n/10.95 Ecart brut
+
+Underfull \hbox (badness 10000) in paragraph at lines 289--289
+[]|\T1/lmr/m/n/10.95 Tours in-ter-
+
+Underfull \hbox (badness 10000) in paragraph at lines 289--289
+[]|\T1/lmr/m/n/10.95 Delai (re-
+
+Overfull \hbox (58.37144pt too wide) in paragraph at lines 289--289
+[]|\T1/lmr/m/n/10.95 build_points_max_bonus| 
+
+Overfull \hbox (58.37144pt too wide) in paragraph at lines 289--289
+[]|\T1/lmr/m/n/10.95 build_points_max_bonus| 
+
+Overfull \hbox (58.37144pt too wide) in paragraph at lines 289--289
+[]|\T1/lmr/m/n/10.95 build_points_max_bonus| 
+
+Overfull \hbox (82.70465pt too wide) in paragraph at lines 289--289
+[]|\T1/lmr/m/n/10.95 movement_points_max_bonus| 
+
+Overfull \hbox (82.70465pt too wide) in paragraph at lines 289--289
+[]|\T1/lmr/m/n/10.95 movement_points_max_bonus| 
+
+Overfull \hbox (82.70465pt too wide) in paragraph at lines 289--289
+[]|\T1/lmr/m/n/10.95 movement_points_max_bonus| 
+[8 <./charts/chest_rewards.png>] [9]
+Underfull \hbox (badness 10000) in paragraph at lines 345--345
+\T1/lmr/m/n/10.95 qu'au spawn
+[10 <./charts/infernal_pressure.png>] [11] [12 <./charts/behavior_regimes.png>]
+[13]
+Underfull \hbox (badness 5711) in paragraph at lines 493--493
+\T1/lmr/m/n/10.95 emit-ted as correlation-ready
+[14 <./charts/event_windows.png>] [15] (KAZIMIRIUM 1.aux) )
+(see the transcript file for additional information)<C:/Users/famillebraudel/Ap
+pData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmbx10.pfb><C:/Users/familleb
+raudel/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmbx12.pfb><C:/Users
+/famillebraudel/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmcsc10.pfb
+><C:/Users/famillebraudel/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/l
+mr10.pfb><C:/Users/famillebraudel/AppData/Local/Programs/MiKTeX/fonts/type1/pub
+lic/lm/lmr12.pfb><C:/Users/famillebraudel/AppData/Local/Programs/MiKTeX/fonts/t
+ype1/public/lm/lmr17.pfb><C:/Users/famillebraudel/AppData/Local/Programs/MiKTeX
+/fonts/type1/public/lm/lmri10.pfb>
+Output written on "C:\Users\famillebraudel\Documents\Developpement\A Normal Che
+ss Game\analysis-reporting\output\KAZIMIRIUM 1\KAZIMIRIUM 1.pdf" (15 pages, 105
+5580 bytes).
+Transcript written on "C:\Users\famillebraudel\Documents\Developpement\A Normal
+ Chess Game\analysis-reporting\output\KAZIMIRIUM 1\KAZIMIRIUM 1.log".
+
+pdflatex: major issue: So far, you have not checked for MiKTeX updates.
+
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex.fmt)
+ restricted \write18 enabled.
+entering extended mode
+(KAZIMIRIUM 1.tex
+LaTeX2e <2025-11-01>
+L3 programming layer <2025-12-24>
+
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/base\article.c
+ls
+Document Class: article 2025/01/22 v1.4n Standard LaTeX document class
+
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/base\size11.cl
+o))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/base\inputenc.
+sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/base\fontenc.s
+ty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/babel\babel.
+sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/babel\txtbab
+el.def)
+*************************************
+* Local config file bblopts.cfg used
+*
+
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/arabi\bblopts.
+cfg)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/babel/locale
+/fr\babel-french.tex)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/babel-french
+\french.ldf
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/babel-french
+\french3.ldf)))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/carlisle\scale
+fnt.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/lm\lmodern.sty
+)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/geometry\geome
+try.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/graphics\keyva
+l.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/iftex\ifvtex
+.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/iftex\iftex.
+sty))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/geometry\geome
+try.cfg))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/graphics\graph
+icx.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/graphics\graph
+ics.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/graphics\trig.
+sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/graphics-cfg\g
+raphics.cfg)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/graphics-def\p
+dftex.def)))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/booktabs\bookt
+abs.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/tools\tabularx
+.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/tools\array.st
+y))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/float\float.st
+y)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/xcolor\xcolor.
+sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/graphics-cfg\c
+olor.cfg)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/graphics\mathc
+olor.ltx))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\hyper
+ref.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/kvsetkeys\kvse
+tkeys.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/kvdefinekeys
+\kvdefinekeys.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/pdfescape\pd
+fescape.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/ltxcmds\ltxc
+mds.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/pdftexcmds\p
+dftexcmds.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/infwarerr\in
+fwarerr.sty)))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/hycolor\hycolo
+r.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\namer
+ef.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/refcount\refco
+unt.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/gettitlestri
+ng\gettitlestring.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/kvoptions\kvop
+tions.sty)))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/etoolbox\etool
+box.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/stringenc\st
+ringenc.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\pd1en
+c.def)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/intcalc\intc
+alc.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\puenc
+.def)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/url\url.sty)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/bitset\bitse
+t.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/bigintcalc\b
+igintcalc.sty)))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\hpdft
+ex.def
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/rerunfilecheck
+\rerunfilecheck.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/generic/uniquecounte
+r\uniquecounter.sty)))
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/lm\t1lmr.fd)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/l3backend\l3ba
+ckend-pdftex.def) (KAZIMIRIUM 1.aux)
+*geometry* driver: auto-detecting
+*geometry* detected driver: pdftex
+
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/context/base/mkii\su
+pp-pdf.mkii
+[Loading MPS to PDF converter (version 2006.09.02).]
+)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/epstopdf-pkg\e
+pstopdf-base.sty
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/00miktex\epsto
+pdf-sys.cfg)) (KAZIMIRIUM 1.out) (KAZIMIRIUM 1.out)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/lm\ot1lmr.fd)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/lm\omllmm.fd)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/lm\omslmsy.fd)
+(C:\Users\famillebraudel\AppData\Local\Programs\MiKTeX\tex/latex/lm\omxlmex.fd)
+(KAZIMIRIUM 1.toc) [1{C:/Users/famillebraudel/AppData/Local/MiKTeX/fonts/map/pd
+ftex/pdftex.map}{C:/Users/famillebraudel/AppData/Local/Programs/MiKTeX/fonts/en
+c/dvips/lm/lm-ec.enc}] [2] [3]
+Underfull \hbox (badness 1448) in paragraph at lines 113--113
+[]|\T1/lmr/m/n/10.95 Pieces im-pac-tees
+
+Underfull \hbox (badness 10000) in paragraph at lines 125--125
+[]|\T1/lmr/m/n/10.95 Echantillons
+
+Underfull \hbox (badness 1448) in paragraph at lines 134--134
+[]|\T1/lmr/m/n/10.95 Pieces im-pac-tees
+[4 <./charts/terrain_water_tax.png>] [5]
+Underfull \hbox (badness 7613) in paragraph at lines 199--199
+[]|\T1/lmr/m/n/10.95 Brouillard dis-si-
+
+Underfull \hbox (badness 10000) in paragraph at lines 199--199
+[]|\T1/lmr/m/n/10.95 Pieces en-ne-
+
+Underfull \hbox (badness 10000) in paragraph at lines 199--199
+\T1/lmr/m/n/10.95 mies mas-quees
+[6 <./charts/weather_pressure.png>]
+Underfull \hbox (badness 10000) in paragraph at lines 222--222
+[]|\T1/lmr/m/n/10.95 Ennemis caches
+[7]
+Underfull \hbox (badness 10000) in paragraph at lines 289--289
+[]|\T1/lmr/m/n/10.95 Tour ou-ver-
+
+Underfull \hbox (badness 10000) in paragraph at lines 289--289
+[]|\T1/lmr/m/n/10.95 Ecart brut
+
+Underfull \hbox (badness 10000) in paragraph at lines 289--289
+[]|\T1/lmr/m/n/10.95 Tours in-ter-
+
+Underfull \hbox (badness 10000) in paragraph at lines 289--289
+[]|\T1/lmr/m/n/10.95 Delai (re-
+
+Overfull \hbox (58.37144pt too wide) in paragraph at lines 289--289
+[]|\T1/lmr/m/n/10.95 build_points_max_bonus| 
+
+Overfull \hbox (58.37144pt too wide) in paragraph at lines 289--289
+[]|\T1/lmr/m/n/10.95 build_points_max_bonus| 
+
+Overfull \hbox (58.37144pt too wide) in paragraph at lines 289--289
+[]|\T1/lmr/m/n/10.95 build_points_max_bonus| 
+
+Overfull \hbox (82.70465pt too wide) in paragraph at lines 289--289
+[]|\T1/lmr/m/n/10.95 movement_points_max_bonus| 
+
+Overfull \hbox (82.70465pt too wide) in paragraph at lines 289--289
+[]|\T1/lmr/m/n/10.95 movement_points_max_bonus| 
+
+Overfull \hbox (82.70465pt too wide) in paragraph at lines 289--289
+[]|\T1/lmr/m/n/10.95 movement_points_max_bonus| 
+[8 <./charts/chest_rewards.png>] [9]
+Underfull \hbox (badness 10000) in paragraph at lines 345--345
+\T1/lmr/m/n/10.95 qu'au spawn
+[10 <./charts/infernal_pressure.png>] [11] [12 <./charts/behavior_regimes.png>]
+[13]
+Underfull \hbox (badness 5711) in paragraph at lines 493--493
+\T1/lmr/m/n/10.95 emit-ted as correlation-ready
+[14 <./charts/event_windows.png>] [15] (KAZIMIRIUM 1.aux) )
+(see the transcript file for additional information)<C:/Users/famillebraudel/Ap
+pData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmbx10.pfb><C:/Users/familleb
+raudel/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmbx12.pfb><C:/Users
+/famillebraudel/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmcsc10.pfb
+><C:/Users/famillebraudel/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/l
+mr10.pfb><C:/Users/famillebraudel/AppData/Local/Programs/MiKTeX/fonts/type1/pub
+lic/lm/lmr12.pfb><C:/Users/famillebraudel/AppData/Local/Programs/MiKTeX/fonts/t
+ype1/public/lm/lmr17.pfb><C:/Users/famillebraudel/AppData/Local/Programs/MiKTeX
+/fonts/type1/public/lm/lmri10.pfb>
+Output written on "C:\Users\famillebraudel\Documents\Developpement\A Normal Che
+ss Game\analysis-reporting\output\KAZIMIRIUM 1\KAZIMIRIUM 1.pdf" (15 pages, 105
+5580 bytes).
+Transcript written on "C:\Users\famillebraudel\Documents\Developpement\A Normal
+ Chess Game\analysis-reporting\output\KAZIMIRIUM 1\KAZIMIRIUM 1.log".
+
+pdflatex: major issue: So far, you have not checked for MiKTeX updates.

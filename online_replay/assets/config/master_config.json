@@ -1,0 +1,279 @@
+{
+    "version": 1,
+    "game": {
+        "map": {
+            "radius": 25,
+            "cell_size_px": 16,
+            "num_mines": 2,
+            "num_farms": 3,
+            "min_public_building_distance": 10,
+            "player_spawn_zone_percent": 25,
+            "ai_spawn_zone_percent": 25,
+            "terrain_noise_scale": 14,
+            "terrain_octaves": 3,
+            "dirt_coverage_percent": 14,
+            "water_coverage_percent": 4,
+            "num_dirt_blobs": 6,
+            "dirt_blob_min_radius": 2,
+            "dirt_blob_max_radius": 5,
+            "num_lakes": 3,
+            "lake_min_radius": 2,
+            "lake_max_radius": 3
+        },
+        "economy": {
+            "starting_gold": 0,
+            "mine_income_first_cell_per_turn": 10,
+            "mine_income_additional_cell_decrement": 2,
+            "mine_income_minimum_per_cell_per_turn": 4,
+            "farm_income_first_cell_per_turn": 5,
+            "farm_income_additional_cell_decrement": 1,
+            "farm_income_minimum_per_cell_per_turn": 2,
+            "barracks_cost": 50,
+            "wood_wall_cost": 20,
+            "stone_wall_cost": 40,
+            "arena_cost": 60,
+            "barracks_repair_cost_per_cell": 7,
+            "arena_repair_cost_per_cell": 7,
+            "bridge_repair_cost_per_cell": 5,
+            "pawn_recruit_cost": 10,
+            "knight_recruit_cost": 30,
+            "bishop_recruit_cost": 30,
+            "rook_recruit_cost": 60,
+            "pawn_upkeep_cost": 1,
+            "knight_upkeep_cost": 2,
+            "bishop_upkeep_cost": 2,
+            "rook_upkeep_cost": 4,
+            "queen_upkeep_cost": 7,
+            "king_upkeep_cost": 0,
+            "upgrade_pawn_to_knight_cost": 20,
+            "upgrade_pawn_to_bishop_cost": 20,
+            "upgrade_to_rook_cost": 50
+        },
+        "turn_points": {
+            "movement_points_per_turn": 5,
+            "build_points_per_turn": 4,
+            "pawn_move_point_cost": 1,
+            "knight_move_point_cost": 2,
+            "bishop_move_point_cost": 2,
+            "rook_move_point_cost": 4,
+            "queen_move_point_cost": 4,
+            "king_move_point_cost": 2,
+            "barracks_build_point_cost": 3,
+            "wood_wall_build_point_cost": 1,
+            "stone_wall_build_point_cost": 2,
+            "bridge_build_point_cost": 2,
+            "arena_build_point_cost": 4,
+            "pawn_move_allowance_per_turn": 1,
+            "knight_move_allowance_per_turn": 1,
+            "bishop_move_allowance_per_turn": 1,
+            "rook_move_allowance_per_turn": 1,
+            "queen_move_allowance_per_turn": 1,
+            "king_move_allowance_per_turn": 1
+        },
+        "production": {
+            "pawn_turns": 2,
+            "knight_turns": 4,
+            "bishop_turns": 4,
+            "rook_turns": 6
+        },
+        "xp": {
+            "thresholds": {
+                "pawn_to_knight_or_bishop": 100,
+                "to_rook": 300
+            },
+            "sources": {
+                "kill_pawn": {
+                    "mean": 20,
+                    "sigma_multiplier_times_100": 18,
+                    "clamp_sigma_multiplier_times_100": 200,
+                    "minimum": 1
+                },
+                "kill_knight": {
+                    "mean": 50,
+                    "sigma_multiplier_times_100": 16,
+                    "clamp_sigma_multiplier_times_100": 200,
+                    "minimum": 1
+                },
+                "kill_bishop": {
+                    "mean": 50,
+                    "sigma_multiplier_times_100": 16,
+                    "clamp_sigma_multiplier_times_100": 200,
+                    "minimum": 1
+                },
+                "kill_rook": {
+                    "mean": 100,
+                    "sigma_multiplier_times_100": 12,
+                    "clamp_sigma_multiplier_times_100": 200,
+                    "minimum": 1
+                },
+                "kill_queen": {
+                    "mean": 300,
+                    "sigma_multiplier_times_100": 10,
+                    "clamp_sigma_multiplier_times_100": 200,
+                    "minimum": 1
+                },
+                "destroy_block": {
+                    "mean": 10,
+                    "sigma_multiplier_times_100": 15,
+                    "clamp_sigma_multiplier_times_100": 200,
+                    "minimum": 1
+                },
+                "arena_per_turn": {
+                    "mean": 10,
+                    "sigma_multiplier_times_100": 15,
+                    "clamp_sigma_multiplier_times_100": 200,
+                    "minimum": 1
+                }
+            }
+        },
+        "combat": {
+            "wood_wall_hp": 1,
+            "stone_wall_hp": 3,
+            "barracks_cell_hp": 1,
+            "wood_wall_destroyed_cells_required": 3,
+            "stone_wall_destroyed_cells_required": 3,
+            "barracks_destroyed_cells_required": 3,
+            "bridge_destroyed_cells_required": 3,
+            "arena_destroyed_cells_required": 3,
+            "global_max_range": 8
+        },
+        "buildings": {
+            "barracks_width": 4,
+            "barracks_height": 3,
+            "church_width": 4,
+            "church_height": 3,
+            "mine_width": 6,
+            "mine_height": 6,
+            "farm_width": 6,
+            "farm_height": 4,
+            "arena_size": 9,
+            "arena_width": 4,
+            "arena_height": 4
+        },
+        "infernal": {
+            "min_spawn_turn": 3,
+            "respawn_cooldown_turns": 4,
+            "spawn_retry_turns": 1,
+            "poisson_lambda_base_times_1000": 20,
+            "poisson_lambda_per_debt_times_1000": 12,
+            "poisson_lambda_cap_times_1000": 250,
+            "blood_debt_decay_percent": 95,
+            "blood_debt_pawn": 1,
+            "blood_debt_knight": 2,
+            "blood_debt_bishop": 2,
+            "blood_debt_rook": 3,
+            "blood_debt_queen": 5,
+            "blood_debt_structure_damage": 1,
+            "target_weight_pawn": 8,
+            "target_weight_knight": 14,
+            "target_weight_bishop": 14,
+            "target_weight_rook": 26,
+            "target_weight_queen": 38,
+            "searching_random_move_chance_times_1000": 333
+        },
+        "chests": {
+            "current_loot_catch_up_enabled": true,
+            "early_gold_weight": 8,
+            "early_movement_bonus_weight": 3,
+            "early_build_bonus_weight": 3,
+            "gold_reward": {
+                "mean": 35,
+                "sigma_multiplier_times_100": 18,
+                "clamp_sigma_multiplier_times_100": 200,
+                "minimum": 1
+            },
+            "late_gold_weight": 4,
+            "late_movement_bonus_weight": 6,
+            "late_build_bonus_weight": 6
+        },
+        "weather": {
+            "cooldown_min_turns": 0,
+            "block_spawn_while_front_active": false,
+            "arrival_gamma_shape_times_100": 400,
+            "arrival_gamma_scale_times_100": 1000,
+            "duration_gamma_shape_times_100": 260,
+            "duration_gamma_scale_times_100": 180,
+            "speed_blocks_per_100_turns": 200,
+            "direction_weights": {
+                "north": 1,
+                "south": 1,
+                "east": 1,
+                "west": 1,
+                "north_east": 1,
+                "north_west": 1,
+                "south_east": 1,
+                "south_west": 1
+            },
+            "entry_center_weight_times_100": 180,
+            "entry_corner_weight_times_100": 70,
+            "coverage_min_percent": 5,
+            "coverage_max_percent": 20,
+            "aspect_ratio_min_times_100": 180,
+            "aspect_ratio_max_times_100": 260,
+            "shape_noise_cell_span": 6,
+            "shape_noise_amplitude_percent": 100,
+            "edge_softness_percent": 18,
+            "alpha_base_percent": 48,
+            "alpha_min_percent": 22,
+            "alpha_max_percent": 82,
+            "density_mu_times_100": -12,
+            "density_sigma_times_100": 35
+        },
+        "rendering": {
+            "damaged_structures": {
+                "opacity_percent": 70
+            },
+            "selection_overlay": {
+                "selection_frame": { "r": 80, "g": 160, "b": 255, "a": 240 },
+                "origin_cell_safe": { "r": 40, "g": 120, "b": 255, "a": 130 },
+                "reachable_cell": { "r": 0, "g": 255, "b": 0, "a": 80 },
+                "danger_cell": { "r": 255, "g": 40, "b": 40, "a": 90 }
+            },
+            "build_preview": {
+                "valid_fill": { "r": 36, "g": 196, "b": 84, "a": 88 },
+                "invalid_fill": { "r": 214, "g": 52, "b": 52, "a": 96 },
+                "valid_outline": { "r": 92, "g": 255, "b": 144, "a": 196 },
+                "invalid_outline": { "r": 255, "g": 120, "b": 120, "a": 208 }
+            },
+            "structure_overlay": {
+                "background": { "r": 24, "g": 24, "b": 28, "a": 220 },
+                "outline": { "r": 235, "g": 235, "b": 235, "a": 210 },
+                "fill": { "r": 80, "g": 160, "b": 255, "a": 220 },
+                "text": { "r": 248, "g": 248, "b": 248, "a": 240 },
+                "icon_size_px": 28,
+                "action_marker_size_px": 24,
+                "progress_width_px": 96,
+                "progress_height_px": 18,
+                "item_gap_px": 6,
+                "row_gap_px": 4,
+                "margin_above_building_px": 8,
+                "text_size_px": 13
+            },
+            "orientation_checkerboard": {
+                "dark": { "r": 36, "g": 36, "b": 36, "a": 96 },
+                "light": { "r": 255, "g": 255, "b": 255, "a": 48 }
+            },
+            "queued_move_paths": {
+                "color": { "r": 255, "g": 255, "b": 255, "a": 255 },
+                "layer_opacity_percent": 50,
+                "thickness_px": 10,
+                "dotted_dot_size_px": 5,
+                "dotted_gap_px": 4
+            },
+            "tactical_grid": {
+                "checker_dark": { "r": 156, "g": 156, "b": 156, "a": 255 },
+                "checker_light": { "r": 200, "g": 200, "b": 200, "a": 255 },
+                "blocked_terrain": { "r": 86, "g": 112, "b": 146, "a": 255 },
+                "blocked_structure": { "r": 54, "g": 54, "b": 54, "a": 255 }
+            }
+        },
+        "cheatcode": {
+            "enabled": true,
+            "shortcuts": {
+                "weather_fog": "Num1",
+                "chest_loot": "Num2",
+                "infernal_piece": "Num3"
+            }
+        }
+    }
+}

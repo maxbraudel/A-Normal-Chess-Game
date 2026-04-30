@@ -1,0 +1,1391 @@
+{
+  "metadata": {
+    "reportVersion": "0.1.0",
+    "analysisVersion": "0.3.0",
+    "inputFileName": "KAZIMIRIUM 1.json"
+  },
+  "insights": {
+    "metadata": {
+      "reportVersion": "0.1.0",
+      "generatedAtUtc": "2026-04-30T02:09:48.962844+00:00",
+      "analysisVersion": "0.3.0",
+      "analysisSourceName": "KAZIMIRIUM 1.analysis.json"
+    },
+    "executiveSummary": [
+      {
+        "title": "La partie presente un volume d'action eleve",
+        "confidence": "forte",
+        "conclusion": "Le match cumule 535 mouvements, 49 constructions, 64 captures et 4 upgrades sur 138 tours.",
+        "evidence": [
+          "Moyenne de mouvements par tour: 3.88.",
+          "Moyenne de constructions par tour: 0.36.",
+          "Moyenne d'audits de commandes par record: 3.36."
+        ],
+        "caveat": null
+      },
+      {
+        "title": "L'eau devient une vraie taxe de mobilite apres l'ouverture",
+        "confidence": "forte",
+        "conclusion": "La perte moyenne passe de 0.04 destination par record en Q1 a 19.48 en Q3, soit 6.4% de la mobilite seche disponible.",
+        "evidence": [
+          "Couverture eau de la carte jouable: 3.5%.",
+          "Perte moyenne globale: 10.39 destinations par record actif.",
+          "Nombre moyen de pieces impactees: 2.10."
+        ],
+        "caveat": "Le calcul compare chaque snapshot a une version seche du meme plateau; quelques etats speciaux de breche de mur restent approximes."
+      },
+      {
+        "title": "Quand le royaume actif est couvert, le pilotage ralentit nettement",
+        "confidence": "forte",
+        "conclusion": "Quand au moins une piece ennemie est cachee au royaume actif, les interactions montent de +7.53, les audits de +0.44, et le commit moyen prend +20.04 s de plus.",
+        "evidence": [
+          "Records couverts: 99, records degages: 177.",
+          "Ennemis caches moyens: couvert=7.46, degage=0.",
+          "Brouillard dissimulant moyen: couvert=254.59, degage=83.42."
+        ],
+        "caveat": "Lecture comparative: la couverture agit souvent avec d'autres contraintes de milieu, elle ne prouve pas a elle seule la causalite."
+      },
+      {
+        "title": "Les coffres favorisent surtout des bonus de capacite sur cette partie",
+        "confidence": "moderee",
+        "conclusion": "Le type de recompense le plus observe est build_points_max_bonus, avec 3 occurrences.",
+        "evidence": [
+          "Part des recompenses de bonus (mouvement/build): 75.0%.",
+          "Taux d'ouverture par spawn: 88.9%."
+        ],
+        "caveat": null
+      },
+      {
+        "title": "La boucle infernale s'ancre surtout sur une dette de camp, pas sur un total abstrait",
+        "confidence": "forte",
+        "conclusion": "La dette moyenne du camp noir atteint 6.02 contre 3.22 pour l'autre camp, et 4 spawns infernaux sur 5 ciblent ce meme camp.",
+        "evidence": [
+          "Pics de dette: blanc=23, noir=27.",
+          "Cibles de spawn: black=4, white=1.",
+          "Tours de spawn observes: 25, 75, 85, 95, 120."
+        ],
+        "caveat": null
+      },
+      {
+        "title": "Les fronts meteo reconfigurent fortement le pilotage",
+        "confidence": "forte",
+        "conclusion": "Quand un front meteo est actif, la charge de decision change nettement: interactions +16.97, audits +2.00, avec +0.65 mouvements et +0.13 constructions par record.",
+        "evidence": [
+          "Records front actif: 185, records sans front: 91.",
+          "Interactions moyennes: front actif=24.21, sans front=7.24.",
+          "Audits moyens: front actif=4.02, sans front=2.02.",
+          "Moves/builds moyens: front actif=2.15/0.22, sans front=1.51/0.09."
+        ],
+        "caveat": null
+      },
+      {
+        "title": "Les ouvertures de coffre se convertissent surtout en execution",
+        "confidence": "moderee",
+        "conclusion": "Autour de une ouverture de coffre, l'effet visible porte d'abord sur le pilotage: interactions +4.96, audits +1.29, pour un effet de plateau de +0.42 mouvements et +0.21 constructions.",
+        "evidence": [
+          "Fenetres observees: 8.",
+          "Delta mouvements: +0.42.",
+          "Delta constructions: +0.21.",
+          "Delta audits/interactions: +1.29 / +4.96."
+        ],
+        "caveat": "Les fenetres restent correlationnelles: elles montrent ce qui se passe juste avant/apres, pas une causalite prouvee."
+      },
+      {
+        "title": "Certaines conclusions doivent rester prudentes",
+        "confidence": "forte",
+        "conclusion": "Les comparaisons de fenetres et de regimes sont utiles pour produire des hypotheses solides, mais elles ne valent pas preuve causale a elles seules.",
+        "evidence": [
+          "Le JSON d'analyse declare explicitement des limites sur la causalite.",
+          "Nombre de limitations source remontees: 2."
+        ],
+        "caveat": null
+      }
+    ],
+    "sections": [
+      {
+        "key": "overview",
+        "title": "Vue d'ensemble du match",
+        "summary": "Cette partie oppose Max contre Ilan sur 138 tours, avec un volume d'action eleve et une telemetrie exploitable.",
+        "headlineMetrics": [
+          {
+            "label": "Tours",
+            "value": "138"
+          },
+          {
+            "label": "Records",
+            "value": "276"
+          },
+          {
+            "label": "Mouvements",
+            "value": "535"
+          },
+          {
+            "label": "Constructions",
+            "value": "49"
+          },
+          {
+            "label": "Captures",
+            "value": "64"
+          },
+          {
+            "label": "Upgrades",
+            "value": "4"
+          }
+        ],
+        "findings": [
+          {
+            "title": "La partie presente un volume d'action eleve",
+            "confidence": "forte",
+            "conclusion": "Le match cumule 535 mouvements, 49 constructions, 64 captures et 4 upgrades sur 138 tours.",
+            "evidence": [
+              "Moyenne de mouvements par tour: 3.88.",
+              "Moyenne de constructions par tour: 0.36.",
+              "Moyenne d'audits de commandes par record: 3.36."
+            ],
+            "caveat": null
+          },
+          {
+            "title": "La telemetrie est suffisamment riche pour une lecture comportementale",
+            "confidence": "forte",
+            "conclusion": "La partie dispose de 5828 evenements telemetry et d'une duree moyenne de record de 36939.14 ms.",
+            "evidence": [
+              "Behavioral telemetry active: oui.",
+              "Data collection active: oui."
+            ],
+            "caveat": null
+          }
+        ],
+        "tables": []
+      },
+      {
+        "key": "terrain",
+        "title": "Terrain aleatoire et taxe de mobilite",
+        "summary": "Le terrain genere aleatoirement n'est pas un simple decor: ici, l'eau retire durablement des destinations de mouvement et penalise surtout les pieces qui vivent sur des lignes ouvertes.",
+        "headlineMetrics": [
+          {
+            "label": "Cellules eau",
+            "value": "70"
+          },
+          {
+            "label": "Carte jouable en eau",
+            "value": "3.5%"
+          },
+          {
+            "label": "Destinations perdues moyennes",
+            "value": "10.39"
+          },
+          {
+            "label": "Mobilite seche perdue",
+            "value": "4.0%"
+          }
+        ],
+        "findings": [
+          {
+            "title": "L'eau devient une vraie taxe de mobilite apres l'ouverture",
+            "confidence": "forte",
+            "conclusion": "La perte moyenne passe de 0.04 destination par record en Q1 a 19.48 en Q3, soit 6.4% de la mobilite seche disponible.",
+            "evidence": [
+              "Couverture eau de la carte jouable: 3.5%.",
+              "Perte moyenne globale: 10.39 destinations par record actif.",
+              "Nombre moyen de pieces impactees: 2.10."
+            ],
+            "caveat": "Le calcul compare chaque snapshot a une version seche du meme plateau; quelques etats speciaux de breche de mur restent approximes."
+          },
+          {
+            "title": "La penalite touche surtout les pieces de longue portee",
+            "confidence": "forte",
+            "conclusion": "Les fous, tours et dames concentrent 99.9% des destinations perdues a cause de l'eau, alors que les pions n'en perdent aucune sur cet echantillon.",
+            "evidence": [
+              "Piece la plus penalisee en part relative: Queen (10.3%).",
+              "Fous: 6.2% de mobilite seche perdue.",
+              "Tours: 8.4% de mobilite seche perdue.",
+              "Dames: 10.3% de mobilite seche perdue."
+            ],
+            "caveat": null
+          }
+        ],
+        "tables": [
+          {
+            "title": "Taxe eau par quartile de match",
+            "columns": [
+              {
+                "key": "quartile",
+                "label": "Quartile"
+              },
+              {
+                "key": "recordCount",
+                "label": "Records"
+              },
+              {
+                "key": "averageLostDestinationCount",
+                "label": "Destinations perdues moyennes"
+              },
+              {
+                "key": "averageLostMobilityShare",
+                "label": "Part de mobilite seche perdue"
+              },
+              {
+                "key": "averageImpactedPieceCount",
+                "label": "Pieces impactees moyennes"
+              }
+            ],
+            "rows": [
+              {
+                "quartile": "Q1",
+                "recordCount": 69,
+                "averageLostDestinationCount": "0.04",
+                "averageLostMobilityShare": "0.3%",
+                "averageImpactedPieceCount": "0.03"
+              },
+              {
+                "quartile": "Q2",
+                "recordCount": 69,
+                "averageLostDestinationCount": "11.74",
+                "averageLostMobilityShare": "5.5%",
+                "averageImpactedPieceCount": "2.29"
+              },
+              {
+                "quartile": "Q3",
+                "recordCount": 69,
+                "averageLostDestinationCount": "19.48",
+                "averageLostMobilityShare": "6.4%",
+                "averageImpactedPieceCount": "3.70"
+              },
+              {
+                "quartile": "Q4",
+                "recordCount": 69,
+                "averageLostDestinationCount": "10.29",
+                "averageLostMobilityShare": "3.7%",
+                "averageImpactedPieceCount": "2.39"
+              }
+            ]
+          },
+          {
+            "title": "Sensibilite a l'eau par type de piece",
+            "columns": [
+              {
+                "key": "pieceTypeLabel",
+                "label": "Piece"
+              },
+              {
+                "key": "activePieceSampleCount",
+                "label": "Echantillons actifs"
+              },
+              {
+                "key": "lostDestinationCount",
+                "label": "Destinations perdues"
+              },
+              {
+                "key": "lostMobilityShare",
+                "label": "Part de mobilite perdue"
+              },
+              {
+                "key": "impactedPieceSampleRatio",
+                "label": "Taux d'impact"
+              }
+            ],
+            "rows": [
+              {
+                "pieceTypeLabel": "Queen",
+                "activePieceSampleCount": 31,
+                "lostDestinationCount": 83,
+                "lostMobilityShare": "10.3%",
+                "impactedPieceSampleRatio": "25.8%"
+              },
+              {
+                "pieceTypeLabel": "Rook",
+                "activePieceSampleCount": 150,
+                "lostDestinationCount": 280,
+                "lostMobilityShare": "8.4%",
+                "impactedPieceSampleRatio": "43.3%"
+              },
+              {
+                "pieceTypeLabel": "Bishop",
+                "activePieceSampleCount": 1839,
+                "lostDestinationCount": 2501,
+                "lostMobilityShare": "6.2%",
+                "impactedPieceSampleRatio": "27.4%"
+              },
+              {
+                "pieceTypeLabel": "King",
+                "activePieceSampleCount": 276,
+                "lostDestinationCount": 3,
+                "lostMobilityShare": "0.1%",
+                "impactedPieceSampleRatio": "1.1%"
+              },
+              {
+                "pieceTypeLabel": "Pawn",
+                "activePieceSampleCount": 3334,
+                "lostDestinationCount": 0,
+                "lostMobilityShare": "0.0%",
+                "impactedPieceSampleRatio": "0.0%"
+              }
+            ]
+          },
+          {
+            "title": "Taxe eau par royaume actif",
+            "columns": [
+              {
+                "key": "kingdomKey",
+                "label": "Royaume"
+              },
+              {
+                "key": "recordCount",
+                "label": "Records"
+              },
+              {
+                "key": "averageLostDestinationCount",
+                "label": "Destinations perdues moyennes"
+              },
+              {
+                "key": "averageLostMobilityShare",
+                "label": "Part de mobilite perdue"
+              },
+              {
+                "key": "averageImpactedPieceCount",
+                "label": "Pieces impactees moyennes"
+              }
+            ],
+            "rows": [
+              {
+                "kingdomKey": "black",
+                "recordCount": 138,
+                "averageLostDestinationCount": "12.23",
+                "averageLostMobilityShare": "5.4%",
+                "averageImpactedPieceCount": "2.61"
+              },
+              {
+                "kingdomKey": "white",
+                "recordCount": 138,
+                "averageLostDestinationCount": "8.54",
+                "averageLostMobilityShare": "2.6%",
+                "averageImpactedPieceCount": "1.59"
+              }
+            ]
+          },
+          {
+            "title": "Pics de pression eau",
+            "columns": [
+              {
+                "key": "turn",
+                "label": "Tour"
+              },
+              {
+                "key": "committedActiveKingdomKey",
+                "label": "Royaume actif"
+              },
+              {
+                "key": "activePieceCount",
+                "label": "Pieces actives"
+              },
+              {
+                "key": "lostDestinationCount",
+                "label": "Destinations perdues"
+              },
+              {
+                "key": "lostMobilityShare",
+                "label": "Part de mobilite perdue"
+              }
+            ],
+            "rows": [
+              {
+                "turn": 68,
+                "committedActiveKingdomKey": "white",
+                "activePieceCount": 33,
+                "lostDestinationCount": 36,
+                "lostMobilityShare": "8.7%"
+              },
+              {
+                "turn": 69,
+                "committedActiveKingdomKey": "white",
+                "activePieceCount": 32,
+                "lostDestinationCount": 33,
+                "lostMobilityShare": "8.7%"
+              },
+              {
+                "turn": 58,
+                "committedActiveKingdomKey": "black",
+                "activePieceCount": 22,
+                "lostDestinationCount": 32,
+                "lostMobilityShare": "12.1%"
+              },
+              {
+                "turn": 89,
+                "committedActiveKingdomKey": "black",
+                "activePieceCount": 29,
+                "lostDestinationCount": 32,
+                "lostMobilityShare": "10.3%"
+              },
+              {
+                "turn": 53,
+                "committedActiveKingdomKey": "black",
+                "activePieceCount": 18,
+                "lostDestinationCount": 31,
+                "lostMobilityShare": "13.7%"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "weather",
+        "title": "Meteo et brouillard aleatoire",
+        "summary": "La meteo est etudiee comme un systeme aleatoire de couverture: quelle surface est dissimulante, combien de pieces chaque camp perd reellement de vue, et comment ce brouillard change le pilotage du joueur actif.",
+        "headlineMetrics": [
+          {
+            "label": "Records meteo",
+            "value": "276"
+          },
+          {
+            "label": "Records avec front actif",
+            "value": "67.0%"
+          },
+          {
+            "label": "Brouillard dissimulant moyen",
+            "value": "144.82"
+          },
+          {
+            "label": "Pic de pieces masquees",
+            "value": "26"
+          },
+          {
+            "label": "Records couverts",
+            "value": "99"
+          }
+        ],
+        "findings": [
+          {
+            "title": "Quand le royaume actif est couvert, le pilotage ralentit nettement",
+            "confidence": "forte",
+            "conclusion": "Quand au moins une piece ennemie est cachee au royaume actif, les interactions montent de +7.53, les audits de +0.44, et le commit moyen prend +20.04 s de plus.",
+            "evidence": [
+              "Records couverts: 99, records degages: 177.",
+              "Ennemis caches moyens: couvert=7.46, degage=0.",
+              "Brouillard dissimulant moyen: couvert=254.59, degage=83.42."
+            ],
+            "caveat": "Lecture comparative: la couverture agit souvent avec d'autres contraintes de milieu, elle ne prouve pas a elle seule la causalite."
+          },
+          {
+            "title": "Le brouillard ne masque pas les deux camps de la meme facon",
+            "confidence": "forte",
+            "conclusion": "Sur cet echantillon, le camp noir joue en moyenne avec 2.97 pieces ennemies masquees contre 2.31 pour le camp blanc.",
+            "evidence": [
+              "Pic de pieces ennemies masquees: blanc=17, noir=26.",
+              "Records avec au moins une piece masquee: blanc=38.4%, noir=33.7%"
+            ],
+            "caveat": null
+          },
+          {
+            "title": "La meteo devient structurelle en fin de partie",
+            "confidence": "forte",
+            "conclusion": "Le front actif passe d'environ 0.0% dans le premier quartile a 92.8% dans le dernier, ce qui signale une presence beaucoup plus continue en fin de match.",
+            "evidence": [
+              "Taux d'activite global des fronts: 67.0%.",
+              "Brouillard dissimulant moyen: 144.82 cellules."
+            ],
+            "caveat": null
+          }
+        ],
+        "tables": [
+          {
+            "title": "Regimes meteo par quartile de match",
+            "columns": [
+              {
+                "key": "quartile",
+                "label": "Quartile"
+              },
+              {
+                "key": "recordCount",
+                "label": "Records"
+              },
+              {
+                "key": "activeRatio",
+                "label": "Front actif"
+              },
+              {
+                "key": "averageConcealingFogCellCount",
+                "label": "Brouillard dissimulant moyen"
+              },
+              {
+                "key": "averageHiddenEnemyPieces",
+                "label": "Pieces ennemies masquees moyennes"
+              }
+            ],
+            "rows": [
+              {
+                "quartile": "Q1",
+                "recordCount": 69,
+                "activeRatio": "0.0%",
+                "averageConcealingFogCellCount": "0",
+                "averageHiddenEnemyPieces": "0"
+              },
+              {
+                "quartile": "Q2",
+                "recordCount": 69,
+                "activeRatio": "75.4%",
+                "averageConcealingFogCellCount": "216.84",
+                "averageHiddenEnemyPieces": "5.90"
+              },
+              {
+                "quartile": "Q3",
+                "recordCount": 69,
+                "activeRatio": "100.0%",
+                "averageConcealingFogCellCount": "154.38",
+                "averageHiddenEnemyPieces": "5.84"
+              },
+              {
+                "quartile": "Q4",
+                "recordCount": 69,
+                "activeRatio": "92.8%",
+                "averageConcealingFogCellCount": "208.06",
+                "averageHiddenEnemyPieces": "9.38"
+              }
+            ]
+          },
+          {
+            "title": "Visibilite masquee par camp",
+            "columns": [
+              {
+                "key": "kingdomKey",
+                "label": "Camp"
+              },
+              {
+                "key": "averageHiddenEnemyPieces",
+                "label": "Pieces ennemies masquees moyennes"
+              },
+              {
+                "key": "peakHiddenEnemyPieces",
+                "label": "Pic masque"
+              },
+              {
+                "key": "hiddenRecordRatio",
+                "label": "Part des records avec masque"
+              }
+            ],
+            "rows": [
+              {
+                "kingdomKey": "white",
+                "averageHiddenEnemyPieces": "2.31",
+                "peakHiddenEnemyPieces": "17",
+                "hiddenRecordRatio": "38.4%"
+              },
+              {
+                "kingdomKey": "black",
+                "averageHiddenEnemyPieces": "2.97",
+                "peakHiddenEnemyPieces": "26",
+                "hiddenRecordRatio": "33.7%"
+              }
+            ]
+          },
+          {
+            "title": "Comportement du royaume actif sous couverture",
+            "columns": [
+              {
+                "key": "metric",
+                "label": "Metrique"
+              },
+              {
+                "key": "covered",
+                "label": "Couvert"
+              },
+              {
+                "key": "clear",
+                "label": "Degage"
+              },
+              {
+                "key": "delta",
+                "label": "Delta couvert - degage"
+              }
+            ],
+            "rows": [
+              {
+                "metric": "Ennemis caches moyens",
+                "metricKey": "hiddenPieces",
+                "covered": "7.46",
+                "clear": "0",
+                "delta": "+7.46",
+                "coveredValue": 7.4646464646464645,
+                "clearValue": 0.0,
+                "deltaValue": 7.4646464646464645
+              },
+              {
+                "metric": "Brouillard dissimulant moyen",
+                "metricKey": "concealingFog",
+                "covered": "254.59",
+                "clear": "83.42",
+                "delta": "+171.16",
+                "coveredValue": 254.58585858585857,
+                "clearValue": 83.42372881355932,
+                "deltaValue": 171.16212977229924
+              },
+              {
+                "metric": "Moves moyens",
+                "metricKey": "moves",
+                "covered": "2.05",
+                "clear": "1.88",
+                "delta": "+0.17",
+                "coveredValue": 2.0505050505050506,
+                "clearValue": 1.8757062146892656,
+                "deltaValue": 0.17479883581578504
+              },
+              {
+                "metric": "Builds moyens",
+                "metricKey": "builds",
+                "covered": "0.16",
+                "clear": "0.19",
+                "delta": "-0.02",
+                "coveredValue": 0.16161616161616163,
+                "clearValue": 0.1864406779661017,
+                "deltaValue": -0.024824516349940068
+              },
+              {
+                "metric": "Audits moyens",
+                "metricKey": "audits",
+                "covered": "3.65",
+                "clear": "3.20",
+                "delta": "+0.44",
+                "coveredValue": 3.6464646464646466,
+                "clearValue": 3.2033898305084745,
+                "deltaValue": 0.44307481595617215
+              },
+              {
+                "metric": "Interactions moyennes",
+                "metricKey": "interactions",
+                "covered": "23.44",
+                "clear": "15.92",
+                "delta": "+7.53",
+                "coveredValue": 23.444444444444443,
+                "clearValue": 15.915254237288135,
+                "deltaValue": 7.529190207156308
+              },
+              {
+                "metric": "Commit moyen (s)",
+                "metricKey": "commitSeconds",
+                "covered": "49.79",
+                "clear": "29.75",
+                "delta": "+20.04",
+                "coveredValue": 49.793151515151514,
+                "clearValue": 29.74960451977401,
+                "deltaValue": 20.043546995377504
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "chest",
+        "title": "Coffres et recompenses aleatoires",
+        "summary": "Les coffres sont analyses comme un systeme de gratification aleatoire: quelle recompense sort, et a quel rythme les joueurs la convertissent en actions.",
+        "headlineMetrics": [
+          {
+            "label": "Spawns de coffres",
+            "value": "9"
+          },
+          {
+            "label": "Ouvertures de coffres",
+            "value": "8"
+          },
+          {
+            "label": "Taux d'ouverture",
+            "value": "88.9%"
+          },
+          {
+            "label": "Delai max avant collecte (tours intermediaires)",
+            "value": "48"
+          }
+        ],
+        "findings": [
+          {
+            "title": "Les coffres favorisent surtout des bonus de capacite sur cette partie",
+            "confidence": "moderee",
+            "conclusion": "Le type de recompense le plus observe est build_points_max_bonus, avec 3 occurrences.",
+            "evidence": [
+              "Part des recompenses de bonus (mouvement/build): 75.0%.",
+              "Taux d'ouverture par spawn: 88.9%."
+            ],
+            "caveat": null
+          },
+          {
+            "title": "Les coffres observes pesent presque uniquement en phase tardive",
+            "confidence": "moderee",
+            "conclusion": "Sur cette partie, 8 ouvertures sur 8 arrivent apres le seuil tardif: l'effet aleatoire mesurable provient donc surtout du mix de fin de partie.",
+            "evidence": [
+              "Ouvertures early: 0.",
+              "Ouvertures late: 8.",
+              "Poids configures tardifs: buildBonus=37.5%, gold=25.0%, movementBonus=37.5%.",
+              "Mix observe tardif: buildBonus=37.5%, gold=25.0%, movementBonus=37.5%."
+            ],
+            "caveat": "Aucune ouverture en phase early: cet echantillon ne permet pas de verifier la bascule early->late des coffres."
+          },
+          {
+            "title": "La collecte des coffres alterne entre opportunisme rapide et attente longue",
+            "confidence": "moderee",
+            "conclusion": "Le delai moyen avant collecte est de 10 tours intermediaires, avec un maximum observe de 48 tours intermediaires.",
+            "evidence": [
+              "Nombre de coffres correctement apparies spawn->ouverture: 8.",
+              "Le delai est mesure ici comme le nombre de tours complets entre le spawn et l'ouverture, hors tour du spawn et tour de collecte."
+            ],
+            "caveat": null
+          }
+        ],
+        "tables": [
+          {
+            "title": "Distribution des recompenses de coffres",
+            "columns": [
+              {
+                "key": "rewardTypeKey",
+                "label": "Type de recompense"
+              },
+              {
+                "key": "count",
+                "label": "Occurrences"
+              }
+            ],
+            "rows": [
+              {
+                "rewardTypeKey": "build_points_max_bonus",
+                "count": 3
+              },
+              {
+                "rewardTypeKey": "gold",
+                "count": 2
+              },
+              {
+                "rewardTypeKey": "movement_points_max_bonus",
+                "count": 3
+              }
+            ]
+          },
+          {
+            "title": "Delais de collecte des coffres",
+            "columns": [
+              {
+                "key": "spawnTurn",
+                "label": "Tour spawn"
+              },
+              {
+                "key": "openTurn",
+                "label": "Tour ouverture"
+              },
+              {
+                "key": "turnSpan",
+                "label": "Ecart brut (tours)"
+              },
+              {
+                "key": "pickupLagTurns",
+                "label": "Tours intermediaires"
+              },
+              {
+                "key": "pickupDelayRecords",
+                "label": "Delai (records)"
+              },
+              {
+                "key": "rewardTypeKey",
+                "label": "Recompense"
+              }
+            ],
+            "rows": [
+              {
+                "spawnTurn": 10,
+                "openTurn": 20,
+                "turnSpan": 10,
+                "pickupLagTurns": 9,
+                "pickupDelayRecords": 19,
+                "rewardTypeKey": "build_points_max_bonus"
+              },
+              {
+                "spawnTurn": 23,
+                "openTurn": 31,
+                "turnSpan": 8,
+                "pickupLagTurns": 7,
+                "pickupDelayRecords": 16,
+                "rewardTypeKey": "build_points_max_bonus"
+              },
+              {
+                "spawnTurn": 37,
+                "openTurn": 42,
+                "turnSpan": 5,
+                "pickupLagTurns": 4,
+                "pickupDelayRecords": 10,
+                "rewardTypeKey": "build_points_max_bonus"
+              },
+              {
+                "spawnTurn": 50,
+                "openTurn": 55,
+                "turnSpan": 5,
+                "pickupLagTurns": 4,
+                "pickupDelayRecords": 10,
+                "rewardTypeKey": "gold"
+              },
+              {
+                "spawnTurn": 61,
+                "openTurn": 110,
+                "turnSpan": 49,
+                "pickupLagTurns": 48,
+                "pickupDelayRecords": 97,
+                "rewardTypeKey": "gold"
+              },
+              {
+                "spawnTurn": 113,
+                "openTurn": 116,
+                "turnSpan": 3,
+                "pickupLagTurns": 2,
+                "pickupDelayRecords": 5,
+                "rewardTypeKey": "movement_points_max_bonus"
+              },
+              {
+                "spawnTurn": 119,
+                "openTurn": 120,
+                "turnSpan": 1,
+                "pickupLagTurns": 0,
+                "pickupDelayRecords": 2,
+                "rewardTypeKey": "movement_points_max_bonus"
+              },
+              {
+                "spawnTurn": 124,
+                "openTurn": 131,
+                "turnSpan": 7,
+                "pickupLagTurns": 6,
+                "pickupDelayRecords": 14,
+                "rewardTypeKey": "movement_points_max_bonus"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "infernal",
+        "title": "Systeme infernal et dette de sang",
+        "summary": "Le systeme infernal est lu comme une boucle de dette par camp: on suit separement la dette blanche et la dette noire, puis on relie les spawns a la cible, a la piece manifestee et au niveau de dette atteint au moment du declenchement.",
+        "headlineMetrics": [
+          {
+            "label": "Spawns infernaux",
+            "value": "5"
+          },
+          {
+            "label": "Lifetime moyen",
+            "value": "14"
+          },
+          {
+            "label": "Dette blanche moyenne",
+            "value": "3.22"
+          },
+          {
+            "label": "Dette noire moyenne",
+            "value": "6.02"
+          }
+        ],
+        "findings": [
+          {
+            "title": "La boucle infernale s'ancre surtout sur une dette de camp, pas sur un total abstrait",
+            "confidence": "forte",
+            "conclusion": "La dette moyenne du camp noir atteint 6.02 contre 3.22 pour l'autre camp, et 4 spawns infernaux sur 5 ciblent ce meme camp.",
+            "evidence": [
+              "Pics de dette: blanc=23, noir=27.",
+              "Cibles de spawn: black=4, white=1.",
+              "Tours de spawn observes: 25, 75, 85, 95, 120."
+            ],
+            "caveat": null
+          },
+          {
+            "title": "La dette infernale semble comprimer la cadence de spawn",
+            "confidence": "exploratoire",
+            "conclusion": "Quand la cible porte deja une dette au moment d'un spawn, l'intervalle moyen jusqu'au spawn suivant tombe a 15 tours, contre 50 lorsqu'il n'y a pas de dette cible.",
+            "evidence": [
+              "Nombre de spawns observes: 5.",
+              "Lifetime moyen observe: 14 tours.",
+              "La mesure porte ici sur la prochaine cadence observee apres le spawn, ce qui capture mieux l'effet de la dette cible sur la boucle infernale."
+            ],
+            "caveat": "Lecture exploratoire: peu de transitions comparables pour isoler proprement l'effet de la dette."
+          }
+        ],
+        "tables": [
+          {
+            "title": "Dette infernale par royaume",
+            "columns": [
+              {
+                "key": "kingdomKey",
+                "label": "Camp"
+              },
+              {
+                "key": "averageDebt",
+                "label": "Dette moyenne"
+              },
+              {
+                "key": "maxDebt",
+                "label": "Pic de dette"
+              }
+            ],
+            "rows": [
+              {
+                "kingdomKey": "white",
+                "averageDebt": "3.22",
+                "maxDebt": "23",
+                "averageDebtValue": 3.2246376811594204,
+                "maxDebtValue": 23
+              },
+              {
+                "kingdomKey": "black",
+                "averageDebt": "6.02",
+                "maxDebt": "27",
+                "averageDebtValue": 6.018115942028985,
+                "maxDebtValue": 27
+              }
+            ]
+          },
+          {
+            "title": "Dette observee au moment des spawns infernaux",
+            "columns": [
+              {
+                "key": "turn",
+                "label": "Tour"
+              },
+              {
+                "key": "targetKingdomKey",
+                "label": "Cible"
+              },
+              {
+                "key": "manifestedPieceTypeKey",
+                "label": "Piece manifestee"
+              },
+              {
+                "key": "whiteDebtAtSpawn",
+                "label": "Dette blanche"
+              },
+              {
+                "key": "blackDebtAtSpawn",
+                "label": "Dette noire"
+              },
+              {
+                "key": "nextSpawnIntervalTurns",
+                "label": "Intervalle jusqu'au spawn suivant"
+              }
+            ],
+            "rows": [
+              {
+                "turn": 25,
+                "targetKingdomKey": "black",
+                "manifestedPieceTypeKey": "pawn",
+                "whiteDebtAtSpawn": 0,
+                "blackDebtAtSpawn": 0,
+                "targetDebtAtSpawn": 0,
+                "otherDebtAtSpawn": 0,
+                "totalDebtAtSpawn": 0,
+                "spawnIntervalTurns": null,
+                "nextSpawnIntervalTurns": 50
+              },
+              {
+                "turn": 75,
+                "targetKingdomKey": "white",
+                "manifestedPieceTypeKey": "bishop",
+                "whiteDebtAtSpawn": 3,
+                "blackDebtAtSpawn": 6,
+                "targetDebtAtSpawn": 3,
+                "otherDebtAtSpawn": 6,
+                "totalDebtAtSpawn": 9,
+                "spawnIntervalTurns": 50,
+                "nextSpawnIntervalTurns": 10
+              },
+              {
+                "turn": 85,
+                "targetKingdomKey": "black",
+                "manifestedPieceTypeKey": "rook",
+                "whiteDebtAtSpawn": 1,
+                "blackDebtAtSpawn": 5,
+                "targetDebtAtSpawn": 5,
+                "otherDebtAtSpawn": 1,
+                "totalDebtAtSpawn": 6,
+                "spawnIntervalTurns": 10,
+                "nextSpawnIntervalTurns": 10
+              },
+              {
+                "turn": 95,
+                "targetKingdomKey": "black",
+                "manifestedPieceTypeKey": "pawn",
+                "whiteDebtAtSpawn": 3,
+                "blackDebtAtSpawn": 11,
+                "targetDebtAtSpawn": 11,
+                "otherDebtAtSpawn": 3,
+                "totalDebtAtSpawn": 14,
+                "spawnIntervalTurns": 10,
+                "nextSpawnIntervalTurns": 25
+              },
+              {
+                "turn": 120,
+                "targetKingdomKey": "black",
+                "manifestedPieceTypeKey": "pawn",
+                "whiteDebtAtSpawn": 11,
+                "blackDebtAtSpawn": 14,
+                "targetDebtAtSpawn": 14,
+                "otherDebtAtSpawn": 11,
+                "totalDebtAtSpawn": 25,
+                "spawnIntervalTurns": 25,
+                "nextSpawnIntervalTurns": null
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "behavior",
+        "title": "Comportement joueur et charge de decision",
+        "summary": "La telemetrie de comportement permet de voir si les systemes aleatoires changent la densite d'actions et le temps de decision.",
+        "headlineMetrics": [
+          {
+            "label": "Audit moyen par record",
+            "value": "3.36"
+          },
+          {
+            "label": "Interactions moyennes par record",
+            "value": "18.62"
+          },
+          {
+            "label": "Delai moyen premiere action (ms)",
+            "value": "6166.70"
+          },
+          {
+            "label": "Delai moyen commit (ms)",
+            "value": "36939.14"
+          }
+        ],
+        "findings": [
+          {
+            "title": "Les fronts meteo reconfigurent fortement le pilotage",
+            "confidence": "forte",
+            "conclusion": "Quand un front meteo est actif, la charge de decision change nettement: interactions +16.97, audits +2.00, avec +0.65 mouvements et +0.13 constructions par record.",
+            "evidence": [
+              "Records front actif: 185, records sans front: 91.",
+              "Interactions moyennes: front actif=24.21, sans front=7.24.",
+              "Audits moyens: front actif=4.02, sans front=2.02.",
+              "Moves/builds moyens: front actif=2.15/0.22, sans front=1.51/0.09."
+            ],
+            "caveat": null
+          },
+          {
+            "title": "La pression infernale change surtout la charge de decision",
+            "confidence": "forte",
+            "conclusion": "Quand au moins un infernal est actif, la charge de decision change nettement: interactions +5.28, audits +1.06, avec +0.41 mouvements et +0.14 constructions par record.",
+            "evidence": [
+              "Records infernal actif: 133, records sans infernal: 143.",
+              "Interactions moyennes: infernal actif=21.35, sans infernal=16.07.",
+              "Audits moyens: infernal actif=3.91, sans infernal=2.85.",
+              "Moves/builds moyens: infernal actif=2.15/0.25, sans infernal=1.74/0.11."
+            ],
+            "caveat": null
+          },
+          {
+            "title": "Les joueurs reajustent regulierement leurs plans",
+            "confidence": "forte",
+            "conclusion": "Le match contient 64 remplacements de commandes et 69 annulations, signe d'un pilotage iteratif plutot que lineaire.",
+            "evidence": [
+              "Delai moyen premiere action: 6166.70 ms.",
+              "Delai moyen commit: 36939.14 ms."
+            ],
+            "caveat": null
+          }
+        ],
+        "tables": [
+          {
+            "title": "Comparaison de regimes meteo",
+            "columns": [
+              {
+                "key": "metric",
+                "label": "Metrique"
+              },
+              {
+                "key": "activeFront",
+                "label": "Front actif"
+              },
+              {
+                "key": "noFront",
+                "label": "Sans front"
+              },
+              {
+                "key": "delta",
+                "label": "Delta actif - sans front"
+              }
+            ],
+            "rows": [
+              {
+                "metric": "Moves moyens",
+                "activeFront": "2.15",
+                "noFront": "1.51",
+                "delta": "+0.65"
+              },
+              {
+                "metric": "Builds moyens",
+                "activeFront": "0.22",
+                "noFront": "0.09",
+                "delta": "+0.13"
+              },
+              {
+                "metric": "Audits moyens",
+                "activeFront": "4.02",
+                "noFront": "2.02",
+                "delta": "+2.00"
+              },
+              {
+                "metric": "Interactions moyennes",
+                "activeFront": "24.21",
+                "noFront": "7.24",
+                "delta": "+16.97"
+              }
+            ]
+          },
+          {
+            "title": "Comparaison de regimes infernaux",
+            "columns": [
+              {
+                "key": "metric",
+                "label": "Metrique"
+              },
+              {
+                "key": "activeInfernal",
+                "label": "Infernal actif"
+              },
+              {
+                "key": "noInfernal",
+                "label": "Sans infernal"
+              },
+              {
+                "key": "delta",
+                "label": "Delta actif - sans infernal"
+              }
+            ],
+            "rows": [
+              {
+                "metric": "Moves moyens",
+                "activeInfernal": "2.15",
+                "noInfernal": "1.74",
+                "delta": "+0.41"
+              },
+              {
+                "metric": "Builds moyens",
+                "activeInfernal": "0.25",
+                "noInfernal": "0.11",
+                "delta": "+0.14"
+              },
+              {
+                "metric": "Audits moyens",
+                "activeInfernal": "3.91",
+                "noInfernal": "2.85",
+                "delta": "+1.06"
+              },
+              {
+                "metric": "Interactions moyennes",
+                "activeInfernal": "21.35",
+                "noInfernal": "16.07",
+                "delta": "+5.28"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "cross_effects",
+        "title": "Effets croises entre aleatoire et comportement",
+        "summary": "Cette section croise les fenetres avant/apres evenement pour voir si un systeme aleatoire modifie le tempo observable juste autour de son apparition.",
+        "headlineMetrics": [
+          {
+            "label": "Fenetres meteo",
+            "value": "4"
+          },
+          {
+            "label": "Fenetres coffres",
+            "value": "8"
+          },
+          {
+            "label": "Fenetres infernales",
+            "value": "5"
+          }
+        ],
+        "findings": [
+          {
+            "title": "Les ouvertures de coffre se convertissent surtout en execution",
+            "confidence": "moderee",
+            "conclusion": "Autour de une ouverture de coffre, l'effet visible porte d'abord sur le pilotage: interactions +4.96, audits +1.29, pour un effet de plateau de +0.42 mouvements et +0.21 constructions.",
+            "evidence": [
+              "Fenetres observees: 8.",
+              "Delta mouvements: +0.42.",
+              "Delta constructions: +0.21.",
+              "Delta audits/interactions: +1.29 / +4.96."
+            ],
+            "caveat": "Les fenetres restent correlationnelles: elles montrent ce qui se passe juste avant/apres, pas une causalite prouvee."
+          },
+          {
+            "title": "Les spawns infernaux provoquent surtout un surcroit de pilotage",
+            "confidence": "exploratoire",
+            "conclusion": "Autour de un spawn infernal, l'effet visible porte d'abord sur le pilotage: interactions +3, audits +0.13, pour un effet de plateau de +0.27 mouvements et +0.07 constructions.",
+            "evidence": [
+              "Fenetres observees: 5.",
+              "Delta mouvements: +0.27.",
+              "Delta constructions: +0.07.",
+              "Delta audits/interactions: +0.13 / +3.00."
+            ],
+            "caveat": "Les fenetres restent correlationnelles: elles montrent ce qui se passe juste avant/apres, pas une causalite prouvee."
+          },
+          {
+            "title": "Les fronts meteo declenchent d'abord de la replanification",
+            "confidence": "exploratoire",
+            "conclusion": "Autour de un spawn de front meteo, l'effet visible porte d'abord sur le pilotage: interactions +2.50, audits +0.92, pour un effet de plateau de -0.33 mouvements et +0.08 constructions.",
+            "evidence": [
+              "Fenetres observees: 4.",
+              "Delta mouvements: -0.33.",
+              "Delta constructions: +0.08.",
+              "Delta audits/interactions: +0.92 / +2.50."
+            ],
+            "caveat": "Les fenetres restent correlationnelles: elles montrent ce qui se passe juste avant/apres, pas une causalite prouvee."
+          }
+        ],
+        "tables": [
+          {
+            "title": "Deltas moyens apres evenement",
+            "columns": [
+              {
+                "key": "windowLabel",
+                "label": "Evenement"
+              },
+              {
+                "key": "deltaAverageMoveCount",
+                "label": "Delta moves"
+              },
+              {
+                "key": "deltaAverageBuildCount",
+                "label": "Delta builds"
+              },
+              {
+                "key": "deltaAverageCommandAuditCount",
+                "label": "Delta audits"
+              },
+              {
+                "key": "deltaAverageInteractionEventCount",
+                "label": "Delta interactions"
+              }
+            ],
+            "rows": [
+              {
+                "windowLabel": "Spawn front meteo",
+                "deltaAverageMoveCount": "-0.33",
+                "deltaAverageBuildCount": "+0.08",
+                "deltaAverageCommandAuditCount": "+0.92",
+                "deltaAverageInteractionEventCount": "+2.50"
+              },
+              {
+                "windowLabel": "Ouverture coffre",
+                "deltaAverageMoveCount": "+0.42",
+                "deltaAverageBuildCount": "+0.21",
+                "deltaAverageCommandAuditCount": "+1.29",
+                "deltaAverageInteractionEventCount": "+4.96"
+              },
+              {
+                "windowLabel": "Spawn infernal",
+                "deltaAverageMoveCount": "+0.27",
+                "deltaAverageBuildCount": "+0.07",
+                "deltaAverageCommandAuditCount": "+0.13",
+                "deltaAverageInteractionEventCount": "+3.00"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "key": "limitations",
+        "title": "Limites d'interpretation",
+        "summary": "Le rapport doit rester credibile: les limites des donnees sont explicites et ne doivent pas etre masquees par les graphiques.",
+        "headlineMetrics": [
+          {
+            "label": "Nombre de limitations",
+            "value": "2"
+          }
+        ],
+        "findings": [
+          {
+            "title": "Certaines conclusions doivent rester prudentes",
+            "confidence": "forte",
+            "conclusion": "Les comparaisons de fenetres et de regimes sont utiles pour produire des hypotheses solides, mais elles ne valent pas preuve causale a elles seules.",
+            "evidence": [
+              "Le JSON d'analyse declare explicitement des limites sur la causalite.",
+              "Nombre de limitations source remontees: 2."
+            ],
+            "caveat": null
+          }
+        ],
+        "tables": [
+          {
+            "title": "Limitations source",
+            "columns": [
+              {
+                "key": "scope",
+                "label": "Scope"
+              },
+              {
+                "key": "level",
+                "label": "Niveau"
+              },
+              {
+                "key": "message",
+                "label": "Message"
+              }
+            ],
+            "rows": [
+              {
+                "scope": "xp",
+                "level": "direct",
+                "message": "No XP audit entries were found in the current companion."
+              },
+              {
+                "scope": "causality",
+                "level": "proxy",
+                "message": "Cross-system comparisons are emitted as correlation-ready windows, not as proven causal effects."
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "charts": [
+    {
+      "key": "terrain_water_tax",
+      "title": "Taxe de mobilite due a l'eau",
+      "caption": "Evolution de la mobilite seche perdue a cause de l'eau au fil du match, et sensibilite par type de piece.",
+      "sectionKey": "terrain",
+      "relativePath": "charts/terrain_water_tax.png"
+    },
+    {
+      "key": "weather_pressure",
+      "title": "Couverture meteo, visibilite masquee et effet comportemental",
+      "caption": "En haut, la surface nuageuse totale et dissimulante; au milieu, les pieces cachees a chaque camp; en bas, l'ecart relatif de comportement quand le royaume actif perd reellement de la vision.",
+      "sectionKey": "weather",
+      "relativePath": "charts/weather_pressure.png"
+    },
+    {
+      "key": "chest_rewards",
+      "title": "Coffres et delais de collecte",
+      "caption": "Distribution des recompenses et histogramme des delais de collecte des coffres.",
+      "sectionKey": "chest",
+      "relativePath": "charts/chest_rewards.png"
+    },
+    {
+      "key": "infernal_pressure",
+      "title": "Dette infernale par camp et contexte des spawns",
+      "caption": "En haut, les courbes de dette blanche/noire avec les spawns annotes par piece et camp cible; en bas, le niveau de dette de chaque camp au moment exact des manifestations.",
+      "sectionKey": "infernal",
+      "relativePath": "charts/infernal_pressure.png"
+    },
+    {
+      "key": "behavior_regimes",
+      "title": "Ecarts relatifs de comportement par regime",
+      "caption": "Variation relative des metriques de comportement entre regimes aleatoires actifs et inactifs, avec annotation du delta absolu par record.",
+      "sectionKey": "behavior",
+      "relativePath": "charts/behavior_regimes.png"
+    },
+    {
+      "key": "event_windows",
+      "title": "Chocs comportementaux autour des evenements",
+      "caption": "Chaque sous-graphe montre le delta moyen avant/apres evenement sur les metriques de comportement qui appuient directement le commentaire du rapport.",
+      "sectionKey": "cross_effects",
+      "relativePath": "charts/event_windows.png"
+    }
+  ]
+}

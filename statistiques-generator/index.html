@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Statistiques Generator - Data Companion V5</title>
+<link rel="stylesheet" href="./styles.css">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
+<script src="./app.js" defer></script>
+</head>
+<body>
+<div class="dashboard-shell">
+  <main class="analysis-stage graphs-only">
+
+    <section class="panel panel-cut empty-panel" id="emptyState">
+      <p class="eyebrow">Pret</p>
+      <h2>Le viewer attend une source configuree</h2>
+      <p>
+        Definir <strong>DATA_COMPANION_URL</strong> en haut de <strong>app.js</strong>,
+        puis recharger la page pour activer les graphiques et tables.
+      </p>
+    </section>
+
+    <section class="panel panel-cut section-panel" id="tempoPanel">
+      <div class="panel-heading split-heading">
+        <div>
+          <p class="eyebrow">Tempo</p>
+          <h2>Duree du tour</h2>
+        </div>
+        <p class="panel-note">Le tour prend le max de turnElapsedMs observe par tour.</p>
+      </div>
+      <div class="chart-shell tall-chart">
+        <canvas id="tempoChart"></canvas>
+      </div>
+      <div class="metric-grid" id="tempoCards"></div>
+    </section>
+
+    <section class="panel panel-cut section-panel" id="decisionPanel">
+      <div class="panel-heading split-heading">
+        <div>
+          <p class="eyebrow">Decision</p>
+          <h2>Retours en arriere et hesitation</h2>
+        </div>
+        <p class="panel-note">Les backtracks comptent replace/cancel/reset; l'hesitation mesure le churn des moves par move commit.</p>
+      </div>
+      <div class="chart-block">
+        <h3 class="chart-subtitle">Retours en arriere</h3>
+        <div class="chart-shell tall-chart">
+          <canvas id="decisionChart"></canvas>
+        </div>
+      </div>
+      <div class="chart-block">
+        <h3 class="chart-subtitle">Hesitation</h3>
+        <div class="chart-shell tall-chart">
+          <canvas id="decisionHesitationChart"></canvas>
+        </div>
+      </div>
+      <div class="metric-grid" id="decisionCards"></div>
+    </section>
+
+    <section class="panel panel-cut section-panel" id="economyPanel">
+      <div class="panel-heading split-heading">
+        <div>
+          <p class="eyebrow">Economie</p>
+          <h2>Income net par tour</h2>
+        </div>
+        <p class="panel-note">Courbes blanc, noir et total issues directement de snapshotMetrics.</p>
+      </div>
+      <div class="chart-shell tall-chart">
+        <canvas id="economyChart"></canvas>
+      </div>
+      <div class="metric-grid" id="economyCards"></div>
+    </section>
+
+    <section class="panel panel-cut section-panel" id="killsPanel">
+      <div class="panel-heading split-heading">
+        <div>
+          <p class="eyebrow">Combat</p>
+          <h2>Kills cumules</h2>
+        </div>
+        <p class="panel-note">Captures cumulees par royaume et au total.</p>
+      </div>
+      <div class="chart-shell tall-chart">
+        <canvas id="killsChart"></canvas>
+      </div>
+      <div class="metric-grid" id="killsCards"></div>
+    </section>
+
+    <section class="panel panel-cut section-panel" id="movesPanel">
+      <div class="panel-heading split-heading">
+        <div>
+          <p class="eyebrow">Mouvements</p>
+          <h2>Mouvements cumules</h2>
+        </div>
+        <p class="panel-note">Courbes cumulees par royaume et total; marqueurs sur les coffres donnant des movement points.</p>
+      </div>
+      <div class="chart-shell tall-chart">
+        <canvas id="movesChart"></canvas>
+      </div>
+      <div class="metric-grid" id="movesCards"></div>
+    </section>
+
+    <section class="panel panel-cut section-panel" id="buildsPanel">
+      <div class="panel-heading split-heading">
+        <div>
+          <p class="eyebrow">Constructions</p>
+          <h2>Constructions cumulees</h2>
+        </div>
+        <p class="panel-note">Courbes cumulees par royaume et total; marqueurs sur les coffres donnant des build points.</p>
+      </div>
+      <div class="chart-shell tall-chart">
+        <canvas id="buildsChart"></canvas>
+      </div>
+      <div class="metric-grid" id="buildsCards"></div>
+    </section>
+
+    <section class="panel panel-cut section-panel" id="blockersPanel">
+      <div class="panel-heading split-heading">
+        <div>
+          <p class="eyebrow">Movement Blockers</p>
+          <h2>Eau, murs et cellules refusees</h2>
+        </div>
+        <p class="panel-note">Calcul exact depuis snapshot.grid, l'etat de breche des pieces et les cells de buildingIndex, detaille par royaume puis total.</p>
+      </div>
+      <div class="chart-block">
+        <h3 class="chart-subtitle">Eau</h3>
+        <div class="chart-shell tall-chart">
+          <canvas id="blockersWaterChart"></canvas>
+        </div>
+      </div>
+      <div class="chart-block">
+        <h3 class="chart-subtitle">Murs</h3>
+        <div class="chart-shell tall-chart">
+          <canvas id="blockersWallChart"></canvas>
+        </div>
+      </div>
+      <div class="metric-grid" id="blockersCards"></div>
+    </section>
+
+    <section class="panel panel-cut section-panel" id="weatherPanel">
+      <div class="panel-heading split-heading">
+        <div>
+          <p class="eyebrow">Meteo</p>
+          <h2>Visibilite et fronts</h2>
+        </div>
+        <p class="panel-note">Les traits verticaux marquent les apparitions et fins de fronts.</p>
+      </div>
+      <div class="chart-shell tall-chart">
+        <canvas id="weatherChart"></canvas>
+      </div>
+      <div class="metric-grid" id="weatherCards"></div>
+      <div class="table-shell">
+        <div class="table-head">
+          <h3>Journal meteo recent</h3>
+          <span id="weatherTableMeta"></span>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Turn</th>
+                <th>Type</th>
+                <th>Front</th>
+                <th>Couverture</th>
+              </tr>
+            </thead>
+            <tbody id="weatherEventTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel panel-cut section-panel" id="infernalPanel">
+      <div class="panel-heading split-heading">
+        <div>
+          <p class="eyebrow">Infernal</p>
+          <h2>Dette, spawns et duree de vie</h2>
+        </div>
+        <p class="panel-note">Les marqueurs signalent les spawns avec un contraste uniforme.</p>
+      </div>
+      <div class="chart-shell tall-chart">
+        <canvas id="infernalChart"></canvas>
+      </div>
+      <div class="metric-grid" id="infernalCards"></div>
+      <div class="table-shell">
+        <div class="table-head">
+          <h3>Spawns infernaux</h3>
+          <span id="infernalTableMeta"></span>
+        </div>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Turn</th>
+                <th>Unite</th>
+                <th>Cible</th>
+                <th>Piece</th>
+                <th>Lifetime</th>
+              </tr>
+            </thead>
+            <tbody id="infernalSpawnTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>
