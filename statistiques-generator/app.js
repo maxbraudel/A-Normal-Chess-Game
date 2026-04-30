@@ -1,4 +1,4 @@
-const DATA_COMPANION_URL = "../build/Data/KAZIMIRIUM2.json";
+const DATA_COMPANION_URL = "../build/Data/KAZIMIRIUM 1.json";
 
 (function () {
   "use strict";

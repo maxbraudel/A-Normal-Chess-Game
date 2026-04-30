@@ -1,4 +1,5 @@
 <script setup>
+import IllustrationMap from "./IllustrationMap.vue";
 import InlineRichText from "./InlineRichText.vue";
 import MathFormula from "./MathFormula.vue";
 import RapportStatsBlock from "./RapportStatsBlock.vue";
@@ -67,6 +68,13 @@ defineProps({
     <div class="rapport-process-card__field">
       <span class="rapport-process-card__label">Structure de dépendance</span>
       <InlineRichText :text="item.dependence" />
+    </div>
+
+    <div v-if="item.illustration" class="rapport-process-card__field rapport-process-card__field--illustration">
+      <span class="rapport-process-card__label">Illustration</span>
+      <div class="rapport-process-illustration">
+        <IllustrationMap v-bind="item.illustration" />
+      </div>
     </div>
 
     <div v-if="observedData.length" class="rapport-process-card__field">

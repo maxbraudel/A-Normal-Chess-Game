@@ -1,5 +1,12 @@
 const L = String.raw;
 
+import { processIllustrationsByTitle } from "./randomnessIllustrations.js";
+
+function withProcessIllustration(process) {
+  const illustration = processIllustrationsByTitle[process.title];
+  return illustration ? { ...process, illustration } : process;
+}
+
 const uniformProcesses = [
   {
     title: "Seed Dirt global",
@@ -265,7 +272,7 @@ const uniformProcesses = [
     dependence:
       "Depend d'une analyse de plus court chemin prealable, donc du terrain et des obstacles courants."
   }
-];
+].map(withProcessIllustration);
 
 const permutationProcesses = [
   {
@@ -769,6 +776,11 @@ const proceduralProcesses = [
   }
 ];
 
+const illustratedPermutationProcesses = permutationProcesses.map(withProcessIllustration);
+const illustratedCategoricalProcesses = categoricalProcesses.map(withProcessIllustration);
+const illustratedBetaProcesses = betaProcesses.map(withProcessIllustration);
+const illustratedProceduralProcesses = proceduralProcesses.map(withProcessIllustration);
+
 export const randomnessReport = {
   hero: {
     kicker: "Rapport mathematique",
@@ -953,7 +965,7 @@ const float edgeDistance = effectiveBoundary - normalizedDistance;`
         "L'esperance d'une permutation en tant qu'objet du groupe symetrique n'est pas canonique; c'est pourquoi on passe par une statistique derivee comme le rang.",
         "Cette permutation agit ensuite en amont des tirages uniformes conditionnels de position."
       ],
-      processes: permutationProcesses
+      processes: illustratedPermutationProcesses
     },
     {
       id: "categorielles",
@@ -977,7 +989,7 @@ const float edgeDistance = effectiveBoundary - normalizedDistance;`
         "Des poids egaux redonnent une uniforme discrete, mais l'implementation reste la meme en code via `std::discrete_distribution`.",
         "Quand les poids dependent du plateau, de la dette ou de la visibilite, la loi devient conditionnelle a l'etat courant."
       ],
-      processes: categoricalProcesses
+      processes: illustratedCategoricalProcesses
     },
     {
       id: "bernoulli",
@@ -1165,7 +1177,7 @@ const float edgeDistance = effectiveBoundary - normalizedDistance;`
       notes: [
         "Avec `(\alpha, \beta) = (7, 2)`, la moyenne brute vaut `7/9`, donc les tirages se concentrent naturellement vers des valeurs elevees avant seuil et remappage."
       ],
-      processes: betaProcesses
+      processes: illustratedBetaProcesses
     },
     {
       id: "piecewise-linear",
@@ -1216,7 +1228,7 @@ const float edgeDistance = effectiveBoundary - normalizedDistance;`
         "Ici, la bonne unite mathematique n'est plus 'une realisation d'une loi scalaire', mais 'une realisation d'un champ spatial'.",
         "Les statistiques pertinentes sont alors la couverture, la taille des composantes, la correlation spatiale, la rugosite de bord ou la distribution des rayons effectifs."
       ],
-      processes: proceduralProcesses
+      processes: illustratedProceduralProcesses
     }
   ],
   dependenceNotes: [

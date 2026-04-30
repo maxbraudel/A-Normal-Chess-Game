@@ -84,8 +84,12 @@ const WEATHER_FRONT_DIRECTION_KEYS = [
   "south_west"
 ];
 
+const BUILDING_FLIP_HORIZONTAL_MASK = 1;
+const BUILDING_FLIP_VERTICAL_MASK = 2;
+
 const configuredPerspectiveKingdomKey = resolveConfiguredPerspectiveKingdomKey(replayConfig);
 const trackedTargetConfig = normalizeTrackedTargetConfig(replayConfig.trackedTarget);
+const shouldRecenterTrackedTargetOnFrameChange = replayConfig.recenterTrackedTargetOnFrameChange !== false;
 const isCellDebugEnabled = Boolean(replayConfig.enableCellDebug);
 const onToastStateChange = typeof replayConfig.onToastStateChange === "function"
   ? replayConfig.onToastStateChange
@@ -157,12 +161,12 @@ async function bootstrap() {
     return;
   }
 
-  setStatus("Chargement du replay...", replayConfig.replayUrl);
+  setStatus("Chargement du replay...", describeReplaySource(replayConfig));
 
   try {
     const [masterConfig, rawReplay] = await Promise.all([
       loadMasterConfig(replayConfig.masterConfigUrl),
-      loadReplay(replayConfig.replayUrl)
+      loadReplaySource(replayConfig)
     ]);
 
     if (isDestroyed) {
@@ -409,6 +413,33 @@ async function loadReplay(url) {
   const data = await response.json();
   validateReplay(data);
   return data;
+}
+
+async function loadReplaySource(config) {
+  if (config && config.replayData && typeof config.replayData === "object") {
+    validateReplay(config.replayData);
+    return config.replayData;
+  }
+
+  if (!config || !config.replayUrl) {
+    throw new Error("Aucune source de replay fournie au viewer.");
+  }
+
+  return loadReplay(config.replayUrl);
+}
+
+function describeReplaySource(config) {
+  if (config && typeof config.replayUrl === "string" && config.replayUrl) {
+    return config.replayUrl;
+  }
+
+  if (config && config.replayData && typeof config.replayData === "object") {
+    return config.replayData.saveName
+      || (config.replayData.initialSnapshot && config.replayData.initialSnapshot.gameName)
+      || "Scene integree";
+  }
+
+  return "Replay";
 }
 
 function validateReplay(data) {
@@ -785,7 +816,7 @@ function setFrameIndex(nextIndex) {
   const bounded = clamp(nextIndex, playbackWindow.minFrameIndex, playbackWindow.maxFrameIndex);
   const frameChanged = bounded !== state.frameIndex;
   state.frameIndex = bounded;
-  if (frameChanged && trackedTargetConfig) {
+  if (frameChanged && trackedTargetConfig && shouldRecenterTrackedTargetOnFrameChange) {
     state.camera.pendingTrackedRecenter = true;
   }
   renderCurrentFrame();
@@ -800,7 +831,7 @@ function startAutoplay() {
 
   if (state.frameIndex >= playbackWindow.maxFrameIndex) {
     state.frameIndex = playbackWindow.initialFrameIndex;
-    if (trackedTargetConfig) {
+    if (trackedTargetConfig && shouldRecenterTrackedTargetOnFrameChange) {
       state.camera.pendingTrackedRecenter = true;
     }
   }
@@ -1660,18 +1691,39 @@ function drawBuildings(context, frame, transform) {
   }
 
   for (const building of frame.buildings) {
-    const width = Number(building.w) || 1;
-    const height = Number(building.h) || 1;
-    for (let dy = 0; dy < height; dy += 1) {
-      for (let dx = 0; dx < width; dx += 1) {
+    const buildingKey = buildingTypeKey(frame.referenceData, building.type);
+    const baseWidth = Number(building.w) || 1;
+    const baseHeight = Number(building.h) || 1;
+    const usesChunkedTextures = Boolean(CHUNKED_BUILDINGS[buildingKey]);
+    const rotationQuarterTurns = Number(building.rot) || 0;
+    const flipMask = Number(building.fm) || 0;
+    const footprintWidth = getBuildingFootprintWidth(baseWidth, baseHeight, rotationQuarterTurns);
+    const footprintHeight = getBuildingFootprintHeight(baseWidth, baseHeight, rotationQuarterTurns);
+    const occupiedCells = usesChunkedTextures
+      ? buildLegacyOccupiedBuildingCellSet(building, footprintWidth, footprintHeight)
+      : null;
+    for (let dy = 0; dy < footprintHeight; dy += 1) {
+      for (let dx = 0; dx < footprintWidth; dx += 1) {
         const worldX = (Number(building.ox) || 0) + dx;
         const worldY = (Number(building.oy) || 0) + dy;
         if (shouldHideLegacyBuildingCellForPerspective(building, worldX, worldY, perspective, frame)) {
           continue;
         }
-        const screen = cellRect(worldX, worldY, transform);
-        context.fillStyle = fallbackBuildingColor(buildingTypeKey(frame.referenceData, building.type), 1);
-        context.fillRect(screen.x, screen.y, screen.width, screen.height);
+        let screen = cellRect(worldX, worldY, transform);
+        if (occupiedCells) {
+          screen = expandBuildingCellRect(screen, { x: worldX, y: worldY }, occupiedCells);
+        }
+        const sourceLocal = usesChunkedTextures
+          ? mapFootprintToSourceLocalFor(dx, dy, baseWidth, baseHeight, rotationQuarterTurns, flipMask)
+          : null;
+        const texturePath = resolveBuildingTexturePath(buildingKey, sourceLocal);
+        const image = texturePath ? state.textures.get(texturePath) || null : null;
+        if (image) {
+          drawCellImage(context, image, screen, rotationQuarterTurns, flipMask, 1);
+        } else {
+          context.fillStyle = fallbackBuildingColor(buildingKey, 1);
+          context.fillRect(screen.x, screen.y, screen.width, screen.height);
+        }
       }
     }
   }
@@ -1942,6 +1994,90 @@ function buildOccupiedBuildingCellSet(cells) {
     occupiedCells.add(`${worldCell.x},${worldCell.y}`);
   }
   return occupiedCells;
+}
+
+function buildLegacyOccupiedBuildingCellSet(building, width, height) {
+  const occupiedCells = new Set();
+  const origin = resolveBuildingOrigin(building);
+  if (!origin) {
+    return occupiedCells;
+  }
+
+  for (let dy = 0; dy < height; dy += 1) {
+    for (let dx = 0; dx < width; dx += 1) {
+      occupiedCells.add(`${origin.x + dx},${origin.y + dy}`);
+    }
+  }
+
+  return occupiedCells;
+}
+
+function normalizeBuildingRotationQuarterTurns(rotationQuarterTurns) {
+  if (!Number.isFinite(rotationQuarterTurns) || rotationQuarterTurns < 0) {
+    return 0;
+  }
+
+  return Math.trunc(rotationQuarterTurns) % 4;
+}
+
+function normalizeBuildingFlipMask(flipMask) {
+  if (!Number.isFinite(flipMask) || flipMask < 0) {
+    return 0;
+  }
+
+  return Math.trunc(flipMask) & (BUILDING_FLIP_HORIZONTAL_MASK | BUILDING_FLIP_VERTICAL_MASK);
+}
+
+function getBuildingFootprintWidth(baseWidth, baseHeight, rotationQuarterTurns) {
+  const normalizedRotation = normalizeBuildingRotationQuarterTurns(rotationQuarterTurns);
+  return normalizedRotation % 2 === 0 ? baseWidth : baseHeight;
+}
+
+function getBuildingFootprintHeight(baseWidth, baseHeight, rotationQuarterTurns) {
+  const normalizedRotation = normalizeBuildingRotationQuarterTurns(rotationQuarterTurns);
+  return normalizedRotation % 2 === 0 ? baseHeight : baseWidth;
+}
+
+function mapFootprintToSourceLocalFor(localX, localY, baseWidth, baseHeight, rotationQuarterTurns, flipMask) {
+  const normalizedRotation = normalizeBuildingRotationQuarterTurns(rotationQuarterTurns);
+  const footprintWidth = getBuildingFootprintWidth(baseWidth, baseHeight, normalizedRotation);
+  const footprintHeight = getBuildingFootprintHeight(baseWidth, baseHeight, normalizedRotation);
+  if (localX < 0 || localY < 0 || localX >= footprintWidth || localY >= footprintHeight) {
+    return { x: -1, y: -1 };
+  }
+
+  let sourceX = 0;
+  let sourceY = 0;
+  switch (normalizedRotation) {
+    case 0:
+      sourceX = localX;
+      sourceY = localY;
+      break;
+    case 1:
+      sourceX = localY;
+      sourceY = baseHeight - 1 - localX;
+      break;
+    case 2:
+      sourceX = baseWidth - 1 - localX;
+      sourceY = baseHeight - 1 - localY;
+      break;
+    case 3:
+      sourceX = baseWidth - 1 - localY;
+      sourceY = localX;
+      break;
+    default:
+      break;
+  }
+
+  const normalizedFlipMask = normalizeBuildingFlipMask(flipMask);
+  if ((normalizedFlipMask & BUILDING_FLIP_HORIZONTAL_MASK) !== 0) {
+    sourceX = baseWidth - 1 - sourceX;
+  }
+  if ((normalizedFlipMask & BUILDING_FLIP_VERTICAL_MASK) !== 0) {
+    sourceY = baseHeight - 1 - sourceY;
+  }
+
+  return { x: sourceX, y: sourceY };
 }
 
 function expandBuildingCellRect(screen, worldCell, occupiedCells) {
@@ -2607,7 +2743,15 @@ function resolveBuildingWidth(building) {
   }
 
   if (typeof (building && building.w) === "number") {
-    return building.w;
+    return getBuildingFootprintWidth(
+      building.w,
+      typeof building.h === "number" ? building.h : 1,
+      typeof building.rotationQuarterTurns === "number"
+        ? building.rotationQuarterTurns
+        : building && typeof building.rot === "number"
+          ? building.rot
+          : 0
+    );
   }
 
   return 1;
@@ -2619,7 +2763,15 @@ function resolveBuildingHeight(building) {
   }
 
   if (typeof (building && building.h) === "number") {
-    return building.h;
+    return getBuildingFootprintHeight(
+      typeof building.w === "number" ? building.w : 1,
+      building.h,
+      typeof building.rotationQuarterTurns === "number"
+        ? building.rotationQuarterTurns
+        : building && typeof building.rot === "number"
+          ? building.rot
+          : 0
+    );
   }
 
   return 1;
