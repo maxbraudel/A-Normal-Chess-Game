@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { mountReplayViewer } from "../../app.js";
+import { registerViewerVisibility, unregisterViewerVisibility } from "../utils/viewerVisibilityController.js";
 
 const props = defineProps({
   replayData: {
@@ -132,6 +133,10 @@ function buildMountOptions() {
 }
 
 function destroyViewer() {
+  if (viewerRoot.value) {
+    unregisterViewerVisibility(viewerRoot.value);
+  }
+
   if (!viewerInstance) {
     return;
   }
@@ -146,6 +151,7 @@ function mountViewer() {
   }
 
   viewerInstance = mountReplayViewer(viewerRoot.value, buildMountOptions());
+  registerViewerVisibility(viewerRoot.value, viewerInstance);
 }
 
 onMounted(() => {

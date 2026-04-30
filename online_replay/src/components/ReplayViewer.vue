@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { mountReplayViewer } from "../../app.js";
 import ReplayToast from "./ReplayToast.vue";
+import { registerViewerVisibility, unregisterViewerVisibility } from "../utils/viewerVisibilityController.js";
 
 const props = defineProps({
   replayUrl: {
@@ -137,6 +138,10 @@ function buildMountOptions() {
 }
 
 function destroyViewer() {
+  if (viewerRoot.value) {
+    unregisterViewerVisibility(viewerRoot.value);
+  }
+
   if (!viewerInstance) {
     return;
   }
@@ -152,6 +157,7 @@ function mountViewer() {
   }
 
   viewerInstance = mountReplayViewer(viewerRoot.value, buildMountOptions());
+  registerViewerVisibility(viewerRoot.value, viewerInstance);
 }
 
 onMounted(() => {

@@ -114,6 +114,11 @@ const state = {
       status: createToastSlotState()
     }
   },
+  suspension: {
+    reasons: new Set(),
+    resumeAutoplayOnUnsuspend: false,
+    pendingRender: false
+  },
   camera: {
     zoom: 1,
     centerWorldX: 0,
@@ -141,6 +146,9 @@ return {
   destroy() {
     isDestroyed = true;
     abortController.abort();
+    state.suspension.reasons.clear();
+    state.suspension.resumeAutoplayOnUnsuspend = false;
+    state.suspension.pendingRender = false;
     stopAutoplay();
     clearAllToastSlots();
     state.textures.clear();
@@ -150,8 +158,80 @@ return {
         dispose();
       }
     }
+  },
+
+  setSuspended(reason, suspended) {
+    setViewerSuspended(reason, suspended);
   }
 };
+
+function isViewerSuspended() {
+  return state.suspension.reasons.size > 0;
+}
+
+function setViewerSuspended(reason, suspended) {
+  if (isDestroyed || typeof reason !== "string" || !reason) {
+    return;
+  }
+
+  const reasons = state.suspension.reasons;
+  const wasSuspended = reasons.size > 0;
+
+  if (suspended) {
+    if (reasons.has(reason)) {
+      return;
+    }
+
+    reasons.add(reason);
+    if (!wasSuspended) {
+      state.suspension.resumeAutoplayOnUnsuspend = Boolean(state.autoPlayHandle);
+      pauseViewerForSuspension();
+    }
+    return;
+  }
+
+  if (!reasons.has(reason)) {
+    return;
+  }
+
+  reasons.delete(reason);
+  if (reasons.size === 0) {
+    resumeViewerAfterSuspension();
+  }
+}
+
+function pauseViewerForSuspension() {
+  clearAllToastDismissTimers();
+  cancelCameraInteraction();
+  stopAutoplay();
+}
+
+function resumeViewerAfterSuspension() {
+  const shouldResumeAutoplay = state.suspension.resumeAutoplayOnUnsuspend;
+  const hasPendingRender = state.suspension.pendingRender;
+
+  state.suspension.resumeAutoplayOnUnsuspend = false;
+  state.suspension.pendingRender = false;
+
+  if (shouldResumeAutoplay) {
+    startAutoplay();
+    return;
+  }
+
+  if (state.replay || hasPendingRender) {
+    renderCurrentFrame({ force: true });
+    return;
+  }
+
+  renderCanvasMessage(state.statusMessage);
+}
+
+function cancelCameraInteraction() {
+  state.camera.isDragging = false;
+  state.camera.pointerId = null;
+  state.camera.didDrag = false;
+  refs.replayCanvas.classList.remove("is-dragging");
+}
 
 async function bootstrap() {
   if (window.location.protocol === "file:") {
@@ -829,6 +909,11 @@ function startAutoplay() {
     return;
   }
 
+  if (isViewerSuspended()) {
+    state.suspension.resumeAutoplayOnUnsuspend = true;
+    return;
+  }
+
   if (state.frameIndex >= playbackWindow.maxFrameIndex) {
     state.frameIndex = playbackWindow.initialFrameIndex;
     if (trackedTargetConfig && shouldRecenterTrackedTargetOnFrameChange) {
@@ -868,7 +953,14 @@ function stopAutoplay() {
   syncControlsState();
 }
 
-function renderCurrentFrame() {
+function renderCurrentFrame(options = {}) {
+  if (!options.force && isViewerSuspended()) {
+    state.suspension.pendingRender = true;
+    return;
+  }
+
+  state.suspension.pendingRender = false;
+
   const frame = currentFrame();
   if (!frame) {
     renderCanvasMessage(state.statusMessage);
@@ -1081,6 +1173,12 @@ function clearToastSlot(slotKey) {
 function clearAllToastSlots() {
   for (const slotKey of Object.keys(state.toast.slots)) {
     clearToastSlot(slotKey);
+  }
+}
+
+function clearAllToastDismissTimers() {
+  for (const slot of Object.values(state.toast.slots)) {
+    clearToastDismissTimer(slot);
   }
 }
 
