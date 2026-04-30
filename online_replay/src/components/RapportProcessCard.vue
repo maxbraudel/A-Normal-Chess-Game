@@ -1,6 +1,7 @@
 <script setup>
 import InlineRichText from "./InlineRichText.vue";
 import MathFormula from "./MathFormula.vue";
+import { reportText } from "../utils/reportText.js";
 
 defineProps({
   item: {
@@ -14,10 +15,10 @@ defineProps({
   <article class="rapport-process-card">
     <header class="rapport-process-card__header">
       <div>
-        <p class="rapport-process-card__system">{{ item.system }}</p>
-        <h3>{{ item.title }}</h3>
+        <p class="rapport-process-card__system">{{ reportText(item.system) }}</p>
+        <h3>{{ reportText(item.title) }}</h3>
       </div>
-      <p class="rapport-process-card__law">{{ item.lawUse }}</p>
+      <p class="rapport-process-card__law">{{ reportText(item.lawUse) }}</p>
     </header>
 
     <div v-if="item.variable" class="rapport-process-card__field rapport-process-card__field--math">
@@ -26,12 +27,12 @@ defineProps({
     </div>
 
     <div class="rapport-process-card__field">
-      <span class="rapport-process-card__label">Phenomenon</span>
+      <span class="rapport-process-card__label">Phénomène</span>
       <InlineRichText :text="item.phenomenon" />
     </div>
 
     <div class="rapport-process-card__field">
-      <span class="rapport-process-card__label">Why this law</span>
+      <span class="rapport-process-card__label">Pourquoi cette loi</span>
       <InlineRichText :text="item.why" />
     </div>
 
@@ -41,12 +42,12 @@ defineProps({
     </div>
 
     <div class="rapport-process-card__field">
-      <span class="rapport-process-card__label">Parameter choice</span>
+      <span class="rapport-process-card__label">Choix des paramètres</span>
       <InlineRichText :text="item.parameterChoice" />
     </div>
 
     <div v-if="item.parameters?.length" class="rapport-process-card__field">
-      <span class="rapport-process-card__label">Parameters</span>
+      <span class="rapport-process-card__label">Paramètres</span>
       <ul class="rapport-process-card__list">
         <li v-for="parameter in item.parameters" :key="parameter">
           <InlineRichText :text="parameter" tag="span" />
@@ -55,7 +56,7 @@ defineProps({
     </div>
 
     <div class="rapport-process-card__field">
-      <span class="rapport-process-card__label">Dependence structure</span>
+      <span class="rapport-process-card__label">Structure de dépendance</span>
       <InlineRichText :text="item.dependence" />
     </div>
   </article>

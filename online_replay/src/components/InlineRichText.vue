@@ -1,6 +1,8 @@
 <script setup>
 import { computed } from "vue";
 
+import { reportText } from "../utils/reportText.js";
+
 const props = defineProps({
   text: {
     type: String,
@@ -25,12 +27,12 @@ const rendered = computed(() => {
   const chunks = props.text.split(/`([^`]+)`/g);
   return chunks
     .map((chunk, index) => {
-      const escaped = escapeHtml(chunk);
       if (index % 2 === 1) {
+        const escaped = escapeHtml(chunk);
         return `<code class="inline-token">${escaped}</code>`;
       }
 
-      return escaped;
+      return escapeHtml(reportText(chunk));
     })
     .join("");
 });
