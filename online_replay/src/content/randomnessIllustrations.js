@@ -2102,14 +2102,14 @@ export const processIllustrationsByTitle = {
   "Spawn du royaume blanc": buildIllustrationConfig(whiteSpawnReplayData),
   "Spawn du royaume noir": buildIllustrationConfig(blackSpawnReplayData),
   "Bord diagonal d'entree du front meteo": buildIllustrationConfig(diagonalEntryReplayData),
-  "Aspect ratio du front": buildIllustrationConfig(frontAspectRatioReplayData, { initialZoom: 1.45 }),
-  "shapeSeed du front": buildIllustrationConfig(frontShapeReplayData, { initialZoom: 1.45 }),
-  "densitySeed du front": buildIllustrationConfig(frontDensityReplayData, { initialZoom: 1.45 }),
+  "Aspect ratio du front": buildIllustrationConfig(frontAspectRatioReplayData),
+  "shapeSeed du front": buildIllustrationConfig(frontShapeReplayData),
+  "densitySeed du front": buildIllustrationConfig(frontDensityReplayData),
   "Ordre de placement des mines et fermes neutres": buildIllustrationConfig(placementOrderReplayData),
   "Direction du front meteo": buildIllustrationConfig(frontDirectionReplayData),
   "Luminosite de l'herbe": buildIllustrationConfig(grassBrightnessReplayData, { initialZoom: 1.7 }),
   "Champ spatial Dirt": buildIllustrationConfig(dirtFieldReplayData),
   "Champ spatial Water": buildIllustrationConfig(waterFieldReplayData),
   "Masque de flip des textures de terrain": buildIllustrationConfig(terrainFlipReplayData, { initialZoom: 1.7 }),
-  "Bruit de contour du front meteo": buildIllustrationConfig(frontContourReplayData, { initialZoom: 1.45 })
+  "Bruit de contour du front meteo": buildIllustrationConfig(frontContourReplayData)
 };

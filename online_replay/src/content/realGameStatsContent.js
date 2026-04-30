@@ -150,10 +150,10 @@ function buildInfernalBlock(infernal) {
     metrics: [
       { label: "Dette blanche moy.", value: formatStatNumber(infernal.averageWhiteDebt) },
       { label: "Dette noire moy.", value: formatStatNumber(infernal.averageBlackDebt) },
-      { label: "Spawns observes", value: formatInteger(infernal.spawnEvents.length) },
+      { label: "Apparitions observees", value: formatInteger(infernal.spawnEvents.length) },
       {
-        label: "Lifetime moyen",
-        value: infernal.averageLifetime ? `${formatStatNumber(infernal.averageLifetime)} tours` : "n/a"
+        label: "Duree de vie moyenne",
+        value: infernal.averageLifetime ? `${formatStatNumber(infernal.averageLifetime)} tours` : "n/d"
       }
     ],
     insights: [
@@ -165,9 +165,9 @@ function buildInfernalBlock(infernal) {
     chartHeight: 360,
     chartLabel: "Dette infernale, spawns et duree de vie sur la partie reelle",
     chartOption: buildInfernalTimelineOption({
-      xAxisName: "Turn",
+      xAxisName: "Tour",
       yAxes: [
-        { name: "Blood debt" }
+        { name: "Dette de sang" }
       ],
       markers: infernal.spawnEvents.map((event) => ({
         xIndex: event.xIndex,
@@ -189,8 +189,8 @@ function buildInfernalBlock(infernal) {
         labelText: buildInfernalSpawnLabel(row, row.unitId)
       })),
       series: [
-        buildTimelineSeriesSpec("White blood debt", infernal.points, "whiteDebt", LEGACY_COLORS.whiteKingdom, 0),
-        buildTimelineSeriesSpec("Black blood debt", infernal.points, "blackDebt", LEGACY_COLORS.blackKingdom, 0)
+        buildTimelineSeriesSpec("Dette de sang blanche", infernal.points, "whiteDebt", LEGACY_COLORS.whiteKingdom, 0),
+        buildTimelineSeriesSpec("Dette de sang noire", infernal.points, "blackDebt", LEGACY_COLORS.blackKingdom, 0)
       ]
     })
   };
@@ -213,20 +213,20 @@ function buildWeatherBlock(weather) {
     ],
     insights: [
       `${formatInteger(weather.spawnEvents.length)} spawns et ${formatInteger(weather.endEvents.length)} fins de fronts observes sur la partie reelle.`,
-      "La courbe `Total hidden enemy pieces` a ete retiree pour ne garder que les trois signaux utiles: blanc cache, noir cache et concealing fog cells."
+      "La courbe `Total pièces ennemies masquées` a ete retiree pour ne garder que les trois signaux utiles: blanc cache, noir cache et cellules de brouillard occultantes."
     ],
     chartHeight: 360,
     chartLabel: "Visibilite et fronts meteo sur la partie reelle",
     chartOption: buildTimelineOption({
-      xAxisName: "Turn",
+      xAxisName: "Tour",
       yAxes: [
-        { name: "Hidden pieces" },
-        { name: "Fog cells", position: "right" }
+        { name: "Pieces masquees" },
+        { name: "Cellules de brouillard", position: "right" }
       ],
       series: [
-        buildTimelineSeriesSpec("White hidden enemy pieces", weather.points, "whiteHiddenPieces", LEGACY_COLORS.whiteKingdom, 0),
-        buildTimelineSeriesSpec("Black hidden enemy pieces", weather.points, "blackHiddenPieces", LEGACY_COLORS.water, 0),
-        buildTimelineSeriesSpec("Concealing fog cells", weather.points, "concealingFogCellCount", LEGACY_COLORS.fog, 1)
+        buildTimelineSeriesSpec("Pieces ennemies masquees cote blanc", weather.points, "whiteHiddenPieces", LEGACY_COLORS.whiteKingdom, 0),
+        buildTimelineSeriesSpec("Pieces ennemies masquees cote noir", weather.points, "blackHiddenPieces", LEGACY_COLORS.water, 0),
+        buildTimelineSeriesSpec("Cellules de brouillard occultantes", weather.points, "concealingFogCellCount", LEGACY_COLORS.fog, 1)
       ]
     })
   };
@@ -235,7 +235,7 @@ function buildWeatherBlock(weather) {
 function buildWaterDeniedByKingdomBlock(waterDenied) {
   return {
     eyebrow: "Partie reelle",
-    title: "Water denied cells par royaume",
+    title: "Cellules refusees par l'eau par royaume",
     description:
       "Reprise de la metrique gameplay du generateur historique: nombre de cellules de mouvement refusees par l'eau, calcule a partir des pseudo-coups legaux du plateau reel et ventile par royaume.",
     metrics: [
@@ -248,15 +248,15 @@ function buildWaterDeniedByKingdomBlock(waterDenied) {
       `Le calcul repart des mouvements pseudo-legaux, comme dans le site \`statistiques-generator\`, au lieu d'utiliser une simple approximation geometrique des lacs. L'ecart moyen blanc/noir est de ${formatStatNumber(waterDenied.averageKingdomGap)} cellules refusees par enregistrement.`
     ],
     chartHeight: 330,
-    chartLabel: "Water denied cells par royaume sur la partie reelle",
+    chartLabel: "Cellules refusees par l'eau par royaume sur la partie reelle",
     chartOption: buildTimelineOption({
-      xAxisName: "Turn",
+      xAxisName: "Tour",
       yAxes: [
-        { name: "Denied water cells" }
+        { name: "Cellules refusees par l'eau" }
       ],
       series: [
-        buildTimelineSeriesSpec("White water denied cells", waterDenied.points, "whiteWaterDeniedCells", LEGACY_COLORS.whiteKingdom, 0),
-        buildTimelineSeriesSpec("Black water denied cells", waterDenied.points, "blackWaterDeniedCells", LEGACY_COLORS.blackKingdom, 0)
+        buildTimelineSeriesSpec("Cellules refusees par l'eau du royaume blanc", waterDenied.points, "whiteWaterDeniedCells", LEGACY_COLORS.whiteKingdom, 0),
+        buildTimelineSeriesSpec("Cellules refusees par l'eau du royaume noir", waterDenied.points, "blackWaterDeniedCells", LEGACY_COLORS.blackKingdom, 0)
       ]
     })
   };
@@ -1505,7 +1505,7 @@ function formatTimelineTooltip(params, xRows) {
 
 function buildTimelineTooltipHeader(row, param) {
   if (!row) {
-    return escapeHtml(`${param.axisValueLabel || "Turn"}`);
+    return escapeHtml(`${param.axisValueLabel || "Tour"}`);
   }
 
   const activeKingdomLabel = row.committedActiveKingdomKey === "white"
@@ -1513,16 +1513,16 @@ function buildTimelineTooltipHeader(row, param) {
     : row.committedActiveKingdomKey === "black"
       ? "noir"
       : null;
-  const sequenceLabel = Number.isFinite(row.xIndex) ? `, sequence ${row.xIndex + 1}` : "";
+  const sequenceLabel = Number.isFinite(row.xIndex) ? `, séquence ${row.xIndex + 1}` : "";
 
   return activeKingdomLabel
-    ? `Turn ${escapeHtml(row.turn)} (${activeKingdomLabel}${sequenceLabel})`
-    : `Turn ${escapeHtml(row.turn)}${sequenceLabel}`;
+    ? `Tour ${escapeHtml(row.turn)} (${activeKingdomLabel}${sequenceLabel})`
+    : `Tour ${escapeHtml(row.turn)}${sequenceLabel}`;
 }
 
 function formatTooltipNumber(value) {
   if (!Number.isFinite(Number(value))) {
-    return "n/a";
+    return "n/d";
   }
 
   return new Intl.NumberFormat("fr-FR", {
@@ -1574,7 +1574,7 @@ function kingdomBadgeShort(kingdomKey) {
 
 function formatInteger(value) {
   if (!Number.isFinite(value)) {
-    return "n/a";
+    return "n/d";
   }
   return new Intl.NumberFormat("fr-FR", {
     maximumFractionDigits: 0
@@ -1583,7 +1583,7 @@ function formatInteger(value) {
 
 function formatStatNumber(value, digits = 1) {
   if (!Number.isFinite(value)) {
-    return "n/a";
+    return "n/d";
   }
   return new Intl.NumberFormat("fr-FR", {
     minimumFractionDigits: digits,

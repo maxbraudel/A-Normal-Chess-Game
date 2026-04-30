@@ -325,7 +325,7 @@ const processStatsByTitle = {
   ],
   "Spawn des royaumes": [
     {
-      title: "Support observe des spawns blanc et noir",
+      title: "Support observe des zones d'apparition blanche et noire",
       description:
         "Les deux royaumes restent confines a des bandes laterales opposees. Le batch montre leurs supports effectifs sur le meme graphe, ce qui rend la symetrie et la separation initiale beaucoup plus lisibles qu'une lecture par fiches separees.",
       metrics: [
@@ -347,7 +347,7 @@ const processStatsByTitle = {
         "Les colonnes centrales restent hors support ou quasi hors support, ce qui rend la separation d'ouverture visible des le premier coup d'oeil."
       ],
       chartHeight: 310,
-      chartLabel: "Répartition des colonnes de spawn des royaumes blanc et noir",
+      chartLabel: "Répartition des colonnes d'apparition des royaumes blanc et noir",
       chartOption: buildGroupedBarOption({
         categories: spawnColumns.map(String),
         series: [
@@ -456,11 +456,11 @@ const processStatsByTitle = {
         "Le signal le plus utile ici n'est pas une moyenne, mais le deplacement des probabilites nominales entre debut et fin de partie. Le batch montre bien que l'or perd du poids relatif quand la phase tardive s'installe.",
       metrics: [
         {
-          label: "Or early observe",
+          label: "Or observe en debut de partie",
           value: formatPercent(earlyObserved.Gold * 100, 0)
         },
         {
-          label: "Or late observe",
+          label: "Or observe en fin de partie",
           value: formatPercent(lateObserved.Gold * 100, 0)
         },
         {
@@ -480,22 +480,22 @@ const processStatsByTitle = {
         yAxisName: "Probabilite observee",
         series: [
           {
-            name: "Early observe",
+            name: "Debut observe",
             color: COLORS.ink,
             data: [earlyObserved.Gold, earlyObserved["Movement Points"], earlyObserved["Build Points"]]
           },
           {
-            name: "Early attendu",
+            name: "Debut attendu",
             color: COLORS.mist,
             data: [earlyExpected.Gold, earlyExpected["Movement Points"], earlyExpected["Build Points"]]
           },
           {
-            name: "Late observe",
+            name: "Fin observee",
             color: COLORS.moss,
             data: [lateObserved.Gold, lateObserved["Movement Points"], lateObserved["Build Points"]]
           },
           {
-            name: "Late attendu",
+            name: "Fin attendue",
             color: COLORS.sand,
             data: [lateExpected.Gold, lateExpected["Movement Points"], lateExpected["Build Points"]]
           }

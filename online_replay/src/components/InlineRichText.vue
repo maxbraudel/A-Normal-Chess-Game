@@ -1,5 +1,6 @@
 <script setup>
 import { computed } from "vue";
+import katex from "katex";
 
 import { reportText } from "../utils/reportText.js";
 
@@ -23,16 +24,112 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
+function looksLikeStandaloneMath(value) {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.includes("`") || trimmed.includes("**")) {
+    return false;
+  }
+
+  const hasLatexSignal = /\\[a-zA-Z]+|[_^]|\\\{|\\\}|\\left|\\right|\\frac|\\min|\\max|\\cdot|\\mid|\\mathcal|\\mathrm/.test(trimmed);
+  if (!hasLatexSignal) {
+    return false;
+  }
+
+  const alphaTokens = trimmed.match(/[A-Za-zÀ-ÿ]+/g) || [];
+  const knownMathTokens = new Set([
+    "alpha",
+    "argmax",
+    "argmin",
+    "beta",
+    "bigl",
+    "bigr",
+    "ceil",
+    "clip",
+    "dens",
+    "delta",
+    "dist",
+    "dots",
+    "d",
+    "edge",
+    "epsilon",
+    "eta",
+    "eq",
+    "frac",
+    "gamma",
+    "inf",
+    "kappa",
+    "lambda",
+    "left",
+    "mathcal",
+    "max",
+    "mid",
+    "min",
+    "mu",
+    "omega",
+    "phi",
+    "pi",
+    "psi",
+    "rho",
+    "mathrm",
+    "right",
+    "round",
+    "shape",
+    "sigma",
+    "sim",
+    "sup",
+    "tau",
+    "theta",
+    "text",
+    "top"
+  ]);
+  const longPlainWords = alphaTokens.filter((token) => {
+    const normalized = token.toLowerCase();
+    return token.length > 5 && !knownMathTokens.has(normalized);
+  });
+
+  return longPlainWords.length === 0;
+}
+
+function renderMath(value, displayMode) {
+  const renderedMath = katex.renderToString(value, {
+    displayMode,
+    throwOnError: false,
+    strict: "ignore"
+  });
+
+  const className = displayMode
+    ? "math-formula math-formula--display inline-rich-text__math"
+    : "math-formula inline-rich-text__math";
+
+  return `<span class="${className}">${renderedMath}</span>`;
+}
+
+function renderPlainChunk(value) {
+  if (looksLikeStandaloneMath(value)) {
+    return renderMath(value.trim(), true);
+  }
+
+  return escapeHtml(reportText(value)).replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>");
+}
+
 const rendered = computed(() => {
   const chunks = props.text.split(/`([^`]+)`/g);
   return chunks
     .map((chunk, index) => {
       if (index % 2 === 1) {
+        if (looksLikeStandaloneMath(chunk)) {
+          return renderMath(chunk.trim(), false);
+        }
+
         const escaped = escapeHtml(chunk);
         return `<code class="inline-token">${escaped}</code>`;
       }
 
-      return escapeHtml(reportText(chunk));
+      return renderPlainChunk(chunk);
     })
     .join("");
 });

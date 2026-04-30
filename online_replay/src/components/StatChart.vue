@@ -1,6 +1,8 @@
 <script setup>
 import * as echarts from "echarts";
-import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+
+import { reportText } from "../utils/reportText.js";
 
 const props = defineProps({
   option: {
@@ -18,6 +20,27 @@ const props = defineProps({
 });
 
 const chartRoot = ref(null);
+
+function normalizeOptionText(value) {
+  if (typeof value === "string") {
+    return reportText(value);
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(normalizeOptionText);
+  }
+
+  if (value && typeof value === "object") {
+    return Object.entries(value).reduce((result, [key, nestedValue]) => {
+      result[key] = normalizeOptionText(nestedValue);
+      return result;
+    }, {});
+  }
+
+  return value;
+}
+
+const normalizedOption = computed(() => normalizeOptionText(props.option));
 
 let chartInstance;
 let resizeObserver;
@@ -37,7 +60,7 @@ onMounted(() => {
   }
 
   chartInstance = echarts.init(chartRoot.value, null, { renderer: "svg" });
-  renderChart(props.option);
+  renderChart(normalizedOption.value);
 
   resizeObserver = new ResizeObserver(() => {
     chartInstance?.resize();
@@ -46,7 +69,7 @@ onMounted(() => {
 });
 
 watch(
-  () => props.option,
+  normalizedOption,
   (option) => {
     renderChart(option);
   },

@@ -203,9 +203,9 @@ const uniformProcesses = [
     simulation:
       "Le `mt19937` du front produit une seconde sortie brute stockee dans le descripteur.",
     parameterChoice:
-      "La separation `shapeSeed` / `densitySeed` evite de coupler rigidement contour et densite locale.",
+      "La separation entre la graine de forme et la graine de densite evite de coupler rigidement contour et densite locale.",
     dependence:
-      "Couple au meme evenement de spawn que `shapeSeed`, mais utilise dans une chaine de hachage distincte par cellule."
+      "Couplee au meme evenement de spawn que la graine de forme, elle reste exploitee dans une chaine de hachage distincte par cellule."
   },
   {
     title: "Spawn fallback sur la frontiere pour l'infernal",
@@ -482,9 +482,9 @@ const poissonProcesses = [
     simulation:
       "Le runtime echantillonne `std::poisson_distribution<int>(lambda)` puis declenche le spawn si le resultat est au moins 1.",
     parameterChoice:
-      "Le cap a 0.25 borne `P(N >= 1) = 1 - e^{-\lambda}` en dessous de 0.221, donc l'infernal reste menaçant sans saturer la partie.",
+      "Le cap a 0.25 borne `P(N \\ge 1) = 1 - e^{-\\lambda}` en dessous de 0.221, donc l'infernal reste menaçant sans saturer la partie.",
     dependence:
-      "`\lambda_t` depend de la dette aggregatee, elle-meme mise a jour a chaque perte ou degat structurel."
+      "`\\lambda_t` depend de la dette aggregatee, elle-meme mise a jour a chaque perte ou degat structurel."
   }
 ];
 
@@ -625,7 +625,7 @@ const logNormalProcesses = [
     parameterChoice:
       "La moyenne geometrique legerement sous 1 et un sigma modere donnent surtout des variations fines, ensuite bornees par l'alpha min/max.",
     dependence:
-      "Toutes les cellules d'un meme front partagent `densitySeed`; le champ n'est donc pas i.i.d. a l'echelle du front."
+      "Toutes les cellules d'un meme front partagent la meme graine de densite; le champ n'est donc pas i.i.d. a l'echelle du front."
   }
 ];
 
@@ -758,7 +758,7 @@ const proceduralProcesses = [
     parameterChoice:
       "Une amplitude de 100 % autorise des bosses visibles, ensuite lisses par la grande echelle `span = 6` et le fondu de bord.",
     dependence:
-      "Toutes les cellules du meme front partagent `shapeSeed`, donc la correlation spatiale est intentionnellement forte."
+      "Toutes les cellules du meme front partagent la meme graine de forme, donc la correlation spatiale est intentionnellement forte."
   }
 ];
 
@@ -1221,7 +1221,7 @@ const float edgeDistance = effectiveBoundary - normalizedDistance;`
     "Le coeur du determinisme est `worldSeed + rngCounter`; cela cree une dependance structurelle commune a tous les tirages d'un meme systeme, tout en rendant la suite parfaitement replayable apres sauvegarde.",
     "Les lois conditionnelles dominent le gameplay reel: une uniforme ou une categorielle n'est presque jamais tiree sur un support absolu, mais sur un support deja filtre par la geometrie, la visibilite, l'occupation ou l'historique des choix precedents.",
     "Le mode `current_loot_catch_up_enabled` des coffres couple les recoltes des deux royaumes autour d'une meme recompense courante; les tirages ne sont donc pas independants entre joueurs quand ce mode est actif.",
-    "Les fronts meteo portent deux seeds internes (`shapeSeed`, `densitySeed`) qui induisent de fortes correlations spatiales intra-front, puis une dependance temporelle via la duree gamma et le prochain delai d'apparition.",
+    "Les fronts meteo portent deux graines internes, l'une pour la forme et l'autre pour la densite, qui induisent de fortes correlations spatiales intra-front, puis une dependance temporelle via la duree gamma et le prochain delai d'apparition.",
     "L'infernal n'est pas un systeme a parametres fixes: sa Bernoulli de royaume cible et sa Poisson de spawn dependent directement d'un etat dynamique, la dette de sang."
   ],
   difficulties: [
