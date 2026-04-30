@@ -4,7 +4,9 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import InlineRichText from "../components/InlineRichText.vue";
 import MathFormula from "../components/MathFormula.vue";
 import RapportLawSection from "../components/RapportLawSection.vue";
+import RapportStatsBlock from "../components/RapportStatsBlock.vue";
 import { randomnessReport } from "../content/randomnessReportContent.js";
+import { randomnessStatsReport } from "../content/randomnessStatsContent.js";
 import { reportText } from "../utils/reportText.js";
 
 const activeTocId = ref("cadre");
@@ -29,6 +31,8 @@ const tocItems = computed(() => [
   { id: "difficultes", number: "6", label: "Difficultés" },
   { id: "perspectives", number: "7", label: "Perspectives" }
 ]);
+
+const processStatsByTitle = randomnessStatsReport.processStatsByTitle;
 
 let sectionObserver;
 
@@ -152,6 +156,14 @@ onBeforeUnmount(() => {
               </ul>
             </article>
           </div>
+
+          <div class="rapport-stats-collection rapport-stats-collection--overview">
+            <RapportStatsBlock
+              v-for="block in randomnessStatsReport.overviewBlocks"
+              :key="block.title"
+              :block="block"
+            />
+          </div>
         </section>
 
         <section id="patterns" class="rapport-panel">
@@ -177,6 +189,8 @@ onBeforeUnmount(() => {
           :key="section.id"
           :section="section"
           :section-number="section.number"
+          :process-stats-by-title="processStatsByTitle"
+          :observed-data-label="randomnessStatsReport.observedDataLabel"
         />
 
         <section id="dependances" class="rapport-panel">

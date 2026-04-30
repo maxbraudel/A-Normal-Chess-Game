@@ -1,12 +1,21 @@
 <script setup>
 import InlineRichText from "./InlineRichText.vue";
 import MathFormula from "./MathFormula.vue";
+import RapportStatsBlock from "./RapportStatsBlock.vue";
 import { reportText } from "../utils/reportText.js";
 
 defineProps({
   item: {
     type: Object,
     required: true
+  },
+  observedData: {
+    type: Array,
+    default: () => []
+  },
+  observedDataLabel: {
+    type: String,
+    default: "Donnees observees"
   }
 });
 </script>
@@ -58,6 +67,13 @@ defineProps({
     <div class="rapport-process-card__field">
       <span class="rapport-process-card__label">Structure de dépendance</span>
       <InlineRichText :text="item.dependence" />
+    </div>
+
+    <div v-if="observedData.length" class="rapport-process-card__field">
+      <span class="rapport-process-card__label">{{ reportText(observedDataLabel) }}</span>
+      <div class="rapport-process-card__observed">
+        <RapportStatsBlock v-for="block in observedData" :key="block.title" :block="block" embedded />
+      </div>
     </div>
   </article>
 </template>

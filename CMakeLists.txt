@@ -197,6 +197,10 @@ set(APP_SOURCES
     src/main.cpp
 )
 
+set(BATCH_STATS_SOURCES
+    src/Batch/BatchStatisticsMain.cpp
+)
+
 # Core library
 add_library(${PROJECT_NAME}Core STATIC ${CORE_SOURCES})
 
@@ -238,6 +242,16 @@ else()
     target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
+add_executable(${PROJECT_NAME}BatchStats ${BATCH_STATS_SOURCES})
+
+target_link_libraries(${PROJECT_NAME}BatchStats PRIVATE ${PROJECT_NAME}Core)
+
+if(MSVC)
+    target_compile_options(${PROJECT_NAME}BatchStats PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(${PROJECT_NAME}BatchStats PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+
 # Sync assets into the build directory whenever any source asset changes.
 file(GLOB_RECURSE ASSET_INPUTS CONFIGURE_DEPENDS
     ${CMAKE_SOURCE_DIR}/assets/*
@@ -257,6 +271,7 @@ add_custom_command(
 
 add_custom_target(${PROJECT_NAME}Assets ALL DEPENDS ${ASSET_SYNC_STAMP})
 add_dependencies(${PROJECT_NAME} ${PROJECT_NAME}Assets)
+add_dependencies(${PROJECT_NAME}BatchStats ${PROJECT_NAME}Assets)
 
 # Copy saves directory
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD

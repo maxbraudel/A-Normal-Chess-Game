@@ -12,6 +12,14 @@ defineProps({
   sectionNumber: {
     type: String,
     required: true
+  },
+  processStatsByTitle: {
+    type: Object,
+    default: () => ({})
+  },
+  observedDataLabel: {
+    type: String,
+    default: "Donnees observees"
   }
 });
 </script>
@@ -45,7 +53,13 @@ defineProps({
     </ul>
 
     <div class="rapport-process-grid">
-      <RapportProcessCard v-for="item in section.processes" :key="item.title" :item="item" />
+      <RapportProcessCard
+        v-for="item in section.processes"
+        :key="item.title"
+        :item="item"
+        :observed-data="processStatsByTitle[item.title] || []"
+        :observed-data-label="observedDataLabel"
+      />
     </div>
   </section>
 </template>
