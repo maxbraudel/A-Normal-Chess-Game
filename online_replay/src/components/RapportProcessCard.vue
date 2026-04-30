@@ -10,6 +10,10 @@ defineProps({
     type: Object,
     required: true
   },
+  observedSections: {
+    type: Array,
+    default: () => []
+  },
   observedData: {
     type: Array,
     default: () => []
@@ -77,10 +81,24 @@ defineProps({
       </div>
     </div>
 
-    <div v-if="observedData.length" class="rapport-process-card__field">
-      <span class="rapport-process-card__label">{{ reportText(observedDataLabel) }}</span>
-      <div class="rapport-process-card__observed">
-        <RapportStatsBlock v-for="block in observedData" :key="block.title" :block="block" embedded />
+    <div
+      v-if="observedSections.length || observedData.length"
+      class="rapport-process-card__field"
+    >
+      <div
+        v-for="section in (observedSections.length ? observedSections : [{ label: observedDataLabel, blocks: observedData }])"
+        :key="section.label"
+        class="rapport-process-card__observed-section"
+      >
+        <span class="rapport-process-card__label">{{ reportText(section.label) }}</span>
+        <div class="rapport-process-card__observed">
+          <RapportStatsBlock
+            v-for="block in (section.blocks || [])"
+            :key="`${section.label}-${block.title}`"
+            :block="block"
+            embedded
+          />
+        </div>
       </div>
     </div>
   </article>

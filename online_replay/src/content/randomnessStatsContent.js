@@ -295,7 +295,7 @@ const aiSpawnValues = spawnColumns.map((index) => aiSpawnColumnMap.get(index) ||
 const dirtCoverageComparison = [run.config.dirtCoveragePercent, mapGeneration.summary.dirt_coverage_percent.mean];
 const waterCoverageComparison = [run.config.waterCoveragePercent, mapGeneration.summary.water_coverage_percent.mean];
 
-const observedDataLabel = `Donnees observees sur ${run.sampleCount} parties`;
+const observedDataLabel = `Donnees observees sur ${run.sampleCount} parties simulees`;
 
 const processStatsByTitle = {
   "Choix de position des batiments publics": [

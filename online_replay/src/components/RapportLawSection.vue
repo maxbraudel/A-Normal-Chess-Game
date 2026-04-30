@@ -17,6 +17,10 @@ defineProps({
     type: Object,
     default: () => ({})
   },
+  observedSectionsByTitle: {
+    type: Object,
+    default: () => ({})
+  },
   observedDataLabel: {
     type: String,
     default: "Donnees observees"
@@ -57,6 +61,7 @@ defineProps({
         v-for="item in section.processes"
         :key="item.title"
         :item="item"
+        :observed-sections="observedSectionsByTitle[item.title] || []"
         :observed-data="processStatsByTitle[item.title] || []"
         :observed-data-label="observedDataLabel"
       />

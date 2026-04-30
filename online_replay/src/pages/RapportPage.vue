@@ -6,10 +6,15 @@ import MathFormula from "../components/MathFormula.vue";
 import RapportLawSection from "../components/RapportLawSection.vue";
 import RapportStatsBlock from "../components/RapportStatsBlock.vue";
 import { randomnessReport } from "../content/randomnessReportContent.js";
+import { loadRealGameStatsReport } from "../content/realGameStatsContent.js";
 import { randomnessStatsReport } from "../content/randomnessStatsContent.js";
 import { reportText } from "../utils/reportText.js";
 
 const activeTocId = ref("cadre");
+const realGameStatsReport = ref({
+  observedDataLabel: "Donnees observees sur la partie reelle",
+  processStatsByTitle: {}
+});
 
 const numberedLawSections = computed(() =>
   randomnessReport.lawSections.map((section, index) => ({
@@ -33,6 +38,29 @@ const tocItems = computed(() => [
 ]);
 
 const processStatsByTitle = randomnessStatsReport.processStatsByTitle;
+const observedSectionsByTitle = computed(() =>
+  Object.fromEntries(
+    Array.from(new Set([
+      ...Object.keys(randomnessStatsReport.processStatsByTitle),
+      ...Object.keys(realGameStatsReport.value.processStatsByTitle || {})
+    ])).map((title) => {
+      const simulatedBlocks = randomnessStatsReport.processStatsByTitle[title] || [];
+      const realBlocks = (realGameStatsReport.value.processStatsByTitle || {})[title] || [];
+
+      return [
+        title,
+        [
+          ...(simulatedBlocks.length
+            ? [{ label: randomnessStatsReport.observedDataLabel, blocks: simulatedBlocks }]
+            : []),
+          ...(realBlocks.length
+            ? [{ label: realGameStatsReport.value.observedDataLabel, blocks: realBlocks }]
+            : [])
+        ]
+      ];
+    })
+  )
+);
 
 let sectionObserver;
 
@@ -60,6 +88,12 @@ onMounted(async () => {
     if (element) {
       sectionObserver.observe(element);
     }
+  }
+
+  try {
+    realGameStatsReport.value = await loadRealGameStatsReport();
+  } catch (error) {
+    console.error("Impossible de charger les stats de la partie reelle pour le rapport.", error);
   }
 });
 
@@ -190,6 +224,7 @@ onBeforeUnmount(() => {
           :section="section"
           :section-number="section.number"
           :process-stats-by-title="processStatsByTitle"
+          :observed-sections-by-title="observedSectionsByTitle"
           :observed-data-label="randomnessStatsReport.observedDataLabel"
         />
 
