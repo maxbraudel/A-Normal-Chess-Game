@@ -1,0 +1,39 @@
+import { createRouter, createWebHistory } from "vue-router";
+
+import ReplayLandingPage from "../pages/ReplayLandingPage.vue";
+import RapportPage from "../pages/RapportPage.vue";
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    {
+      path: "/",
+      name: "replay-home",
+      component: ReplayLandingPage
+    },
+    {
+      path: "/rapport",
+      name: "rapport",
+      component: RapportPage
+    }
+  ],
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) {
+      return savedPosition;
+    }
+
+    if (to.hash) {
+      return {
+        el: to.hash,
+        top: 92,
+        behavior: "smooth"
+      };
+    }
+
+    return {
+      top: 0
+    };
+  }
+});
+
+export default router;

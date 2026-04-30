@@ -1,0 +1,62 @@
+<script setup>
+import InlineRichText from "./InlineRichText.vue";
+import MathFormula from "./MathFormula.vue";
+
+defineProps({
+  item: {
+    type: Object,
+    required: true
+  }
+});
+</script>
+
+<template>
+  <article class="rapport-process-card">
+    <header class="rapport-process-card__header">
+      <div>
+        <p class="rapport-process-card__system">{{ item.system }}</p>
+        <h3>{{ item.title }}</h3>
+      </div>
+      <p class="rapport-process-card__law">{{ item.lawUse }}</p>
+    </header>
+
+    <div v-if="item.variable" class="rapport-process-card__field rapport-process-card__field--math">
+      <span class="rapport-process-card__label">Variable</span>
+      <MathFormula :formula="item.variable" :display="true" />
+    </div>
+
+    <div class="rapport-process-card__field">
+      <span class="rapport-process-card__label">Phenomenon</span>
+      <InlineRichText :text="item.phenomenon" />
+    </div>
+
+    <div class="rapport-process-card__field">
+      <span class="rapport-process-card__label">Why this law</span>
+      <InlineRichText :text="item.why" />
+    </div>
+
+    <div class="rapport-process-card__field">
+      <span class="rapport-process-card__label">Simulation</span>
+      <InlineRichText :text="item.simulation" />
+    </div>
+
+    <div class="rapport-process-card__field">
+      <span class="rapport-process-card__label">Parameter choice</span>
+      <InlineRichText :text="item.parameterChoice" />
+    </div>
+
+    <div v-if="item.parameters?.length" class="rapport-process-card__field">
+      <span class="rapport-process-card__label">Parameters</span>
+      <ul class="rapport-process-card__list">
+        <li v-for="parameter in item.parameters" :key="parameter">
+          <InlineRichText :text="parameter" tag="span" />
+        </li>
+      </ul>
+    </div>
+
+    <div class="rapport-process-card__field">
+      <span class="rapport-process-card__label">Dependence structure</span>
+      <InlineRichText :text="item.dependence" />
+    </div>
+  </article>
+</template>

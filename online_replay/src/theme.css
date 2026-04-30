@@ -4,6 +4,28 @@ body,
   min-height: 100%;
 }
 
+:root {
+  color-scheme: dark;
+  font-family: "Trebuchet MS", "Segoe UI Variable Text", sans-serif;
+  --surface-900: #090d0a;
+  --surface-850: #101811;
+  --surface-800: #151d16;
+  --surface-760: #1b241d;
+  --surface-720: #202a22;
+  --ink-strong: #f3e8c6;
+  --ink-soft: rgba(239, 229, 199, 0.8);
+  --ink-dim: rgba(239, 229, 199, 0.6);
+  --accent: #f0d58f;
+  --accent-deep: #bc9348;
+  --accent-muted: rgba(240, 213, 143, 0.18);
+  --panel-border: rgba(242, 218, 160, 0.16);
+  --panel-shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
+}
+
+html {
+  scroll-padding-top: 112px;
+}
+
 body {
   overflow-x: hidden;
   overflow-y: auto;
@@ -11,10 +33,110 @@ body {
     radial-gradient(circle at top left, rgba(240, 213, 143, 0.12), transparent 24%),
     radial-gradient(circle at 85% 18%, rgba(96, 122, 66, 0.18), transparent 28%),
     linear-gradient(180deg, #090d0a 0%, #101811 55%, #0a0d0b 100%);
+  color: var(--ink-strong);
 }
 
 #app {
   width: 100%;
+}
+
+body,
+p,
+li,
+a,
+button,
+input,
+textarea,
+select {
+  font-family: "Trebuchet MS", "Segoe UI Variable Text", sans-serif;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: Georgia, "Times New Roman", serif;
+  letter-spacing: 0.01em;
+}
+
+a {
+  color: inherit;
+}
+
+.site-shell {
+  width: 100%;
+}
+
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  border-bottom: 1px solid rgba(240, 213, 143, 0.08);
+  background: rgba(9, 13, 10, 0.72);
+  backdrop-filter: blur(18px);
+}
+
+.site-header__inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  width: min(1380px, calc(100vw - 40px));
+  margin: 0 auto;
+  padding: 16px 0;
+}
+
+.site-brand {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  text-decoration: none;
+}
+
+.site-brand__eyebrow {
+  color: rgba(240, 213, 143, 0.68);
+  font-size: 11px;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+.site-brand__title {
+  color: var(--ink-strong);
+  font-size: 17px;
+  font-weight: 700;
+}
+
+.site-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.site-nav__link {
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--ink-dim);
+  font-size: 13px;
+  letter-spacing: 0.1em;
+  text-decoration: none;
+  text-transform: uppercase;
+  transition:
+    color 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease,
+    transform 140ms ease;
+}
+
+.site-nav__link:hover,
+.site-nav__link.router-link-active {
+  color: var(--accent);
+  border-color: rgba(240, 213, 143, 0.22);
+  background: rgba(240, 213, 143, 0.08);
+  transform: translateY(-1px);
 }
 
 .landing-shell {
@@ -99,7 +221,635 @@ body {
   height: 100%;
 }
 
+.rapport-page {
+  width: min(1380px, calc(100vw - 40px));
+  margin: 0 auto;
+  padding: 32px 0 72px;
+}
+
+.rapport-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.95fr);
+  gap: 24px;
+  align-items: start;
+  margin-bottom: 28px;
+}
+
+.rapport-hero__copy {
+  display: grid;
+  gap: 16px;
+}
+
+.rapport-hero h1 {
+  max-width: 11ch;
+  margin: 0;
+  font-size: clamp(46px, 7vw, 86px);
+  line-height: 0.95;
+}
+
+.rapport-hero__source {
+  margin: 0;
+  max-width: 70ch;
+  color: rgba(239, 229, 199, 0.62);
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.rapport-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.rapport-summary-card,
+.rapport-panel,
+.rapport-output-card,
+.rapport-formula-card,
+.rapport-process-card,
+.rapport-code-card {
+  border: 1px solid var(--panel-border);
+  background:
+    linear-gradient(180deg, rgba(27, 36, 29, 0.9), rgba(14, 18, 15, 0.92)),
+    radial-gradient(circle at top left, rgba(240, 213, 143, 0.08), transparent 50%);
+  box-shadow: var(--panel-shadow);
+}
+
+.rapport-summary-card {
+  min-height: 148px;
+  padding: 18px 18px 20px;
+  border-radius: 22px;
+  display: grid;
+  gap: 8px;
+}
+
+.rapport-summary-card__value {
+  margin: 0;
+  color: var(--accent);
+  font-size: clamp(26px, 4vw, 38px);
+  font-weight: 700;
+  line-height: 1;
+}
+
+.rapport-summary-card__label,
+.rapport-summary-card__detail {
+  margin: 0;
+}
+
+.rapport-summary-card__label {
+  color: var(--ink-strong);
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.rapport-summary-card__detail {
+  color: var(--ink-dim);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.rapport-layout {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.rapport-toc {
+  position: sticky;
+  top: 94px;
+}
+
+.rapport-toc__inner {
+  display: grid;
+  gap: 10px;
+  padding: 18px 16px;
+  border: 1px solid rgba(240, 213, 143, 0.12);
+  border-radius: 18px;
+  background: rgba(14, 18, 15, 0.74);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.2);
+}
+
+.rapport-toc__eyebrow,
+.rapport-panel__eyebrow,
+.rapport-section__header p,
+.rapport-process-card__system,
+.rapport-process-card__label,
+.rapport-formula-card__label,
+.landing-frame-header {
+  margin: 0;
+  color: rgba(240, 213, 143, 0.72);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.rapport-toc__link {
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-size: 14px;
+  line-height: 1.45;
+  transition: color 140ms ease, transform 140ms ease;
+}
+
+.rapport-toc__link:hover {
+  color: var(--accent);
+  transform: translateX(3px);
+}
+
+.rapport-content {
+  display: grid;
+  gap: 24px;
+}
+
+.rapport-panel {
+  padding: 24px;
+  border-radius: 28px;
+}
+
+.rapport-section__header {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.rapport-section__header h2,
+.rapport-output-card h3,
+.rapport-code-card h3,
+.rapport-process-card h3 {
+  margin: 0;
+}
+
+.rapport-section__header h2 {
+  font-size: clamp(30px, 4vw, 42px);
+  line-height: 1.02;
+}
+
+.rapport-richtext {
+  display: grid;
+  gap: 14px;
+}
+
+.rapport-richtext p,
+.rapport-output-card p,
+.rapport-code-card p,
+.rapport-process-card p,
+.inline-rich-text,
+.rapport-note-list li,
+.rapport-process-card__list li {
+  color: var(--ink-soft);
+  font-size: 15px;
+  line-height: 1.72;
+}
+
+.rapport-richtext p,
+.rapport-output-card p,
+.rapport-code-card p,
+.rapport-process-card p,
+.inline-rich-text {
+  margin: 0;
+}
+
+.inline-token {
+  padding: 1px 7px 2px;
+  border: 1px solid rgba(240, 213, 143, 0.14);
+  border-radius: 999px;
+  background: rgba(240, 213, 143, 0.08);
+  color: var(--accent);
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.92em;
+}
+
+.rapport-formula-grid,
+.rapport-output-grid,
+.rapport-code-grid,
+.rapport-process-grid {
+  display: grid;
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.rapport-formula-grid,
+.rapport-output-grid,
+.rapport-code-grid {
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.rapport-process-grid {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.rapport-formula-card,
+.rapport-output-card,
+.rapport-code-card,
+.rapport-process-card {
+  border-radius: 22px;
+  padding: 18px;
+}
+
+.rapport-formula-card {
+  display: grid;
+  gap: 12px;
+}
+
+.rapport-formula-card__note {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.rapport-note-list,
+.rapport-process-card__list {
+  margin: 18px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 8px;
+}
+
+.rapport-note-list--compact {
+  margin-top: 12px;
+}
+
+.rapport-process-card {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+}
+
+.rapport-process-card__header {
+  display: grid;
+  gap: 12px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(240, 213, 143, 0.12);
+}
+
+.rapport-process-card__law {
+  margin: 0;
+  color: var(--accent);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.rapport-process-card__field {
+  display: grid;
+  gap: 8px;
+}
+
+.rapport-process-card__field--math {
+  gap: 10px;
+}
+
+.rapport-code {
+  overflow-x: auto;
+  margin: 0;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(240, 213, 143, 0.12);
+  background: rgba(8, 11, 9, 0.82);
+  color: #dce5d8;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.math-formula {
+  color: var(--ink-strong);
+}
+
+.math-formula--display {
+  overflow-x: auto;
+}
+
+.math-formula--display .katex-display {
+  margin: 0;
+}
+
+.site-shell--rapport {
+  min-height: 100vh;
+  background: #ffffff;
+  color: #101010;
+  --ink-strong: #111111;
+  --ink-soft: #202020;
+  --ink-dim: #5f5f5f;
+  --accent: #111111;
+  --accent-deep: #111111;
+  --accent-muted: rgba(0, 0, 0, 0.04);
+  --panel-border: #d9d9d9;
+  --panel-shadow: none;
+}
+
+.site-shell--rapport .site-header {
+  border-bottom: 1px solid #dcdcdc;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.site-shell--rapport .site-brand__eyebrow {
+  color: #7a7a7a;
+}
+
+.site-shell--rapport .site-brand__title {
+  color: #111111;
+}
+
+.site-shell--rapport .site-nav__link {
+  color: #4a4a4a;
+}
+
+.site-shell--rapport .site-nav__link:hover,
+.site-shell--rapport .site-nav__link.router-link-active {
+  color: #111111;
+  border-color: #d3d3d3;
+  background: #f5f5f5;
+  transform: none;
+}
+
+.site-shell--rapport .rapport-page {
+  width: min(1240px, calc(100vw - 56px));
+  padding: 34px 0 88px;
+}
+
+.site-shell--rapport .rapport-page,
+.site-shell--rapport .rapport-page p,
+.site-shell--rapport .rapport-page li,
+.site-shell--rapport .rapport-page a,
+.site-shell--rapport .rapport-page span {
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.site-shell--rapport .landing-kicker,
+.site-shell--rapport .rapport-toc__eyebrow,
+.site-shell--rapport .rapport-panel__eyebrow,
+.site-shell--rapport .rapport-section__header p,
+.site-shell--rapport .rapport-process-card__system,
+.site-shell--rapport .rapport-process-card__label,
+.site-shell--rapport .rapport-formula-card__label {
+  color: #6e6e6e;
+  font-family: "Trebuchet MS", "Segoe UI Variable Text", sans-serif;
+}
+
+.site-shell--rapport .rapport-hero {
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 46px;
+  align-items: start;
+  margin-bottom: 38px;
+}
+
+.site-shell--rapport .rapport-hero h1 {
+  max-width: none;
+  color: #111111;
+  font-size: clamp(40px, 5.8vw, 60px);
+  line-height: 1.06;
+}
+
+.site-shell--rapport .landing-lead,
+.site-shell--rapport .rapport-hero__source {
+  color: #202020;
+  font-size: 17px;
+  line-height: 1.75;
+}
+
+.site-shell--rapport .rapport-summary-grid {
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.site-shell--rapport .rapport-summary-card {
+  min-height: auto;
+  padding: 14px 16px;
+  border: 1px solid #dddddd;
+  border-radius: 8px;
+  background: #fafafa;
+  box-shadow: none;
+}
+
+.site-shell--rapport .rapport-summary-card__value {
+  color: #111111;
+  font-size: 30px;
+}
+
+.site-shell--rapport .rapport-summary-card__label {
+  color: #1f1f1f;
+  font-family: "Trebuchet MS", "Segoe UI Variable Text", sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+}
+
+.site-shell--rapport .rapport-summary-card__detail {
+  color: #5a5a5a;
+  font-size: 14px;
+}
+
+.site-shell--rapport .rapport-layout {
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 44px;
+}
+
+.site-shell--rapport .rapport-toc {
+  top: 92px;
+}
+
+.site-shell--rapport .rapport-toc__inner {
+  gap: 8px;
+  padding: 0 0 0 16px;
+  border: 0;
+  border-left: 1px solid #d9d9d9;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.site-shell--rapport .rapport-toc__link {
+  color: #444444;
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.site-shell--rapport .rapport-toc__link:hover {
+  color: #111111;
+  transform: none;
+  text-decoration: underline;
+}
+
+.site-shell--rapport .rapport-content {
+  gap: 34px;
+}
+
+.site-shell--rapport .rapport-panel,
+.site-shell--rapport .rapport-output-card,
+.site-shell--rapport .rapport-formula-card,
+.site-shell--rapport .rapport-process-card,
+.site-shell--rapport .rapport-code-card {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.site-shell--rapport .rapport-panel {
+  padding: 0 0 28px;
+  border-bottom: 1px solid #dddddd;
+}
+
+.site-shell--rapport .rapport-content > :last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.site-shell--rapport .rapport-section__header {
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.site-shell--rapport .rapport-section__header h2 {
+  color: #111111;
+  font-size: clamp(28px, 4vw, 38px);
+  line-height: 1.12;
+}
+
+.site-shell--rapport .rapport-richtext {
+  display: block;
+}
+
+.site-shell--rapport .rapport-richtext > * + * {
+  margin-top: 12px;
+}
+
+.site-shell--rapport .rapport-richtext p,
+.site-shell--rapport .rapport-output-card p,
+.site-shell--rapport .rapport-code-card p,
+.site-shell--rapport .rapport-process-card p,
+.site-shell--rapport .inline-rich-text,
+.site-shell--rapport .rapport-note-list li,
+.site-shell--rapport .rapport-process-card__list li {
+  color: #1f1f1f;
+  font-size: 17px;
+  line-height: 1.76;
+}
+
+.site-shell--rapport .inline-token {
+  padding: 0 4px;
+  border: 0;
+  border-radius: 0;
+  background: #f1f1f1;
+  color: #111111;
+}
+
+.site-shell--rapport .rapport-formula-grid,
+.site-shell--rapport .rapport-output-grid,
+.site-shell--rapport .rapport-code-grid,
+.site-shell--rapport .rapport-process-grid {
+  display: block;
+  margin-top: 20px;
+}
+
+.site-shell--rapport .rapport-formula-card,
+.site-shell--rapport .rapport-output-card,
+.site-shell--rapport .rapport-code-card,
+.site-shell--rapport .rapport-process-card {
+  padding: 0;
+}
+
+.site-shell--rapport .rapport-formula-card + .rapport-formula-card,
+.site-shell--rapport .rapport-output-card + .rapport-output-card,
+.site-shell--rapport .rapport-code-card + .rapport-code-card,
+.site-shell--rapport .rapport-process-card + .rapport-process-card {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #e3e3e3;
+}
+
+.site-shell--rapport .rapport-formula-card {
+  padding-left: 18px;
+  border-left: 3px solid #e3e3e3;
+}
+
+.site-shell--rapport .rapport-formula-card + .rapport-formula-card {
+  border-left-color: #e3e3e3;
+}
+
+.site-shell--rapport .rapport-formula-card__note {
+  color: #5f5f5f;
+  font-size: 14px;
+}
+
+.site-shell--rapport .rapport-note-list,
+.site-shell--rapport .rapport-process-card__list {
+  display: block;
+  margin: 14px 0 0;
+  padding-left: 24px;
+}
+
+.site-shell--rapport .rapport-note-list li + li,
+.site-shell--rapport .rapport-process-card__list li + li {
+  margin-top: 8px;
+}
+
+.site-shell--rapport .rapport-process-card {
+  display: block;
+}
+
+.site-shell--rapport .rapport-process-card__header {
+  gap: 6px;
+  margin-bottom: 10px;
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.site-shell--rapport .rapport-process-card h3,
+.site-shell--rapport .rapport-output-card h3,
+.site-shell--rapport .rapport-code-card h3 {
+  color: #111111;
+  font-size: 24px;
+  line-height: 1.24;
+}
+
+.site-shell--rapport .rapport-process-card__law {
+  color: #525252;
+  font-size: 15px;
+  font-style: italic;
+}
+
+.site-shell--rapport .rapport-process-card__field {
+  display: block;
+}
+
+.site-shell--rapport .rapport-process-card__field + .rapport-process-card__field {
+  margin-top: 12px;
+}
+
+.site-shell--rapport .rapport-process-card__field--math {
+  margin-top: 14px;
+}
+
+.site-shell--rapport .math-formula {
+  color: #111111;
+}
+
+.site-shell--rapport .math-formula--display {
+  overflow-x: auto;
+  padding: 6px 0;
+}
+
+.site-shell--rapport .rapport-code {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid #dddddd;
+  border-radius: 4px;
+  background: #fafafa;
+  color: #1b1b1b;
+}
+
 @media (max-width: 900px) {
+  .site-header__inner {
+    width: min(100vw - 20px, 1380px);
+    padding: 14px 0;
+  }
+
+  .site-nav {
+    gap: 8px;
+  }
+
   .landing-shell {
     width: min(100vw - 20px, 1180px);
     padding-top: 28px;
@@ -109,5 +859,86 @@ body {
   .landing-frame {
     min-height: 380px;
     height: min(54vh, 560px);
+  }
+
+  .rapport-page {
+    width: min(100vw - 20px, 1380px);
+    padding-top: 24px;
+    padding-bottom: 44px;
+  }
+
+  .rapport-hero {
+    grid-template-columns: 1fr;
+  }
+
+  .rapport-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .rapport-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .rapport-toc {
+    position: static;
+  }
+
+  .rapport-toc__inner {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+
+  .rapport-panel {
+    padding: 18px;
+    border-radius: 22px;
+  }
+
+  .rapport-formula-grid,
+  .rapport-output-grid,
+  .rapport-code-grid,
+  .rapport-process-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .site-shell--rapport .rapport-page {
+    width: min(100vw - 24px, 1240px);
+    padding-top: 22px;
+    padding-bottom: 40px;
+  }
+
+  .site-shell--rapport .rapport-hero {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .site-shell--rapport .rapport-layout {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .site-shell--rapport .rapport-toc__inner {
+    padding-left: 0;
+    padding-top: 12px;
+    border-left: 0;
+    border-top: 1px solid #d9d9d9;
+  }
+
+  .site-shell--rapport .rapport-panel {
+    padding-bottom: 24px;
+  }
+
+  .site-shell--rapport .rapport-richtext p,
+  .site-shell--rapport .rapport-output-card p,
+  .site-shell--rapport .rapport-code-card p,
+  .site-shell--rapport .rapport-process-card p,
+  .site-shell--rapport .inline-rich-text,
+  .site-shell--rapport .rapport-note-list li,
+  .site-shell--rapport .rapport-process-card__list li {
+    font-size: 16px;
+  }
+
+  .site-shell--rapport .rapport-process-card h3,
+  .site-shell--rapport .rapport-output-card h3,
+  .site-shell--rapport .rapport-code-card h3 {
+    font-size: 21px;
   }
 }
