@@ -1,8 +1,25 @@
-import { REPLAY_CONFIG } from "./config.js";
+import { REPLAY_CONFIG as DEFAULT_REPLAY_CONFIG } from "./config.js";
+
+export function mountReplayViewer(rootElement, configOverrides = {}) {
+if (!(rootElement instanceof HTMLElement)) {
+  throw new Error("mountReplayViewer requires a root HTMLElement.");
+}
+
+const replayConfig = {
+  ...DEFAULT_REPLAY_CONFIG,
+  ...configOverrides
+};
+const managedListeners = [];
+const abortController = new AbortController();
+let isDestroyed = false;
 
 const TARGET_SCHEMA_VERSION = 5;
+const CONCEALING_FOG_ALPHA_THRESHOLD = 40;
+const CLICK_DRAG_THRESHOLD_PX = 6;
 const MIN_CAMERA_ZOOM = 0.08;
 const MAX_CAMERA_ZOOM = 32;
+const TRACKPAD_PINCH_ZOOM_SENSITIVITY = 0.01;
+const TRACKPAD_PINCH_ZOOM_EXPONENT_LIMIT = 0.7;
 const WHEEL_ZOOM_FACTOR = 1.12;
 
 const DEFAULT_MASTER_CONFIG = {
@@ -50,6 +67,26 @@ const KINGDOM_SHIELD_PATHS = {
   black: "textures/ui/shield_black.png"
 };
 
+const KINGDOM_PERSPECTIVE_LABELS = {
+  white: "Blancs",
+  black: "Noirs"
+};
+
+const WEATHER_FRONT_DIRECTION_KEYS = [
+  "north",
+  "south",
+  "east",
+  "west",
+  "north_east",
+  "north_west",
+  "south_east",
+  "south_west"
+];
+
+const configuredPerspectiveKingdomKey = resolveConfiguredPerspectiveKingdomKey(replayConfig);
+const trackedTargetConfig = normalizeTrackedTargetConfig(replayConfig.trackedTarget);
+const isCellDebugEnabled = Boolean(replayConfig.enableCellDebug);
+
 const state = {
   replay: null,
   frameIndex: 0,
@@ -66,15 +103,34 @@ const state = {
     isDragging: false,
     pointerId: null,
     lastClientX: 0,
-    lastClientY: 0
+    lastClientY: 0,
+    dragStartClientX: 0,
+    dragStartClientY: 0,
+    didDrag: false,
+    pendingTrackedRecenter: Boolean(trackedTargetConfig)
   }
 };
 
-const refs = resolveRefs();
+const refs = resolveRefs(rootElement);
 
 bindEvents();
 renderIdle();
-bootstrap();
+void bootstrap();
+
+return {
+  destroy() {
+    isDestroyed = true;
+    abortController.abort();
+    stopAutoplay();
+    state.textures.clear();
+    while (managedListeners.length) {
+      const dispose = managedListeners.pop();
+      if (dispose) {
+        dispose();
+      }
+    }
+  }
+};
 
 async function bootstrap() {
   if (window.location.protocol === "file:") {
@@ -84,18 +140,27 @@ async function bootstrap() {
     return;
   }
 
-  setStatus("Chargement du replay...", REPLAY_CONFIG.replayUrl);
+  setStatus("Chargement du replay...", replayConfig.replayUrl);
 
   try {
     const [masterConfig, rawReplay] = await Promise.all([
-      loadMasterConfig(REPLAY_CONFIG.masterConfigUrl),
-      loadReplay(REPLAY_CONFIG.replayUrl)
+      loadMasterConfig(replayConfig.masterConfigUrl),
+      loadReplay(replayConfig.replayUrl)
     ]);
+
+    if (isDestroyed) {
+      return;
+    }
 
     state.masterConfig = masterConfig;
     state.replay = buildReplayModel(rawReplay, masterConfig);
     state.statusMessage = "";
     await primeTextureCatalog(state.replay);
+
+    if (isDestroyed) {
+      return;
+    }
+
     resetCameraToFit(state.replay.frames[state.frameIndex]);
     syncTimelineBounds();
     renderCurrentFrame();
@@ -104,54 +169,73 @@ async function bootstrap() {
       `${state.replay.meta.title} · ${state.replay.frames.length} frames disponibles`
     );
   } catch (error) {
+    if (isDestroyed || isAbortError(error)) {
+      return;
+    }
     setError(error instanceof Error ? error.message : String(error));
   }
 }
 
-function resolveRefs() {
+function resolveRefs(root) {
   return {
-    replayCanvas: mustGet("replayCanvas"),
-    activeTurnOverlay: mustGet("activeTurnOverlay"),
-    activeKingdomShield: mustGet("activeKingdomShield"),
-    activeKingdomValue: mustGet("activeKingdomValue"),
-    statusOverlay: mustGet("statusOverlay"),
-    statusText: mustGet("statusText"),
-    firstTurnButton: mustGet("firstTurnButton"),
-    prevTurnButton: mustGet("prevTurnButton"),
-    playPauseButton: mustGet("playPauseButton"),
-    nextTurnButton: mustGet("nextTurnButton"),
-    lastTurnButton: mustGet("lastTurnButton"),
-    turnSlider: mustGet("turnSlider")
+    replayCanvas: mustGet(root, "replayCanvas"),
+    activeTurnOverlay: mustGet(root, "activeTurnOverlay"),
+    activeKingdomShield: mustGet(root, "activeKingdomShield"),
+    activeKingdomValue: mustGet(root, "activeKingdomValue"),
+    perspectiveOverlay: mustGet(root, "perspectiveOverlay"),
+    perspectiveKingdomShield: mustGet(root, "perspectiveKingdomShield"),
+    perspectiveKingdomValue: mustGet(root, "perspectiveKingdomValue"),
+    statusOverlay: mustGet(root, "statusOverlay"),
+    statusText: mustGet(root, "statusText"),
+    firstTurnButton: mustGet(root, "firstTurnButton"),
+    prevTurnButton: mustGet(root, "prevTurnButton"),
+    playPauseButton: mustGet(root, "playPauseButton"),
+    nextTurnButton: mustGet(root, "nextTurnButton"),
+    lastTurnButton: mustGet(root, "lastTurnButton"),
+    turnSlider: mustGet(root, "turnSlider")
   };
 }
 
-function mustGet(id) {
-  const element = document.getElementById(id);
+function mustGet(root, refName) {
+  const element = root.querySelector(`[data-replay-ref="${refName}"]`);
   if (!element) {
-    throw new Error(`Missing required element #${id}`);
+    throw new Error(`Missing required replay ref ${refName}`);
   }
   return element;
 }
 
-function bindEvents() {
-  refs.replayCanvas.title = "Molette: zoom. Glisser: camera. Double-clic: recadrer.";
+function addManagedListener(target, type, listener, options) {
+  target.addEventListener(type, listener, options);
+  managedListeners.push(function () {
+    target.removeEventListener(type, listener, options);
+  });
+}
 
-  refs.firstTurnButton.addEventListener("click", function () {
+function bindEvents() {
+  if (!rootElement.hasAttribute("tabindex")) {
+    rootElement.tabIndex = 0;
+  }
+
+  refs.replayCanvas.title = isCellDebugEnabled
+    ? "Molette: zoom. Glisser: camera. Double-clic: recadrer. Clic: debug cellule dans la console."
+    : "Molette: zoom. Glisser: camera. Double-clic: recadrer.";
+
+  addManagedListener(refs.firstTurnButton, "click", function () {
     stopAutoplay();
     setFrameIndex(0);
   });
 
-  refs.prevTurnButton.addEventListener("click", function () {
+  addManagedListener(refs.prevTurnButton, "click", function () {
     stopAutoplay();
     setFrameIndex(state.frameIndex - 1);
   });
 
-  refs.nextTurnButton.addEventListener("click", function () {
+  addManagedListener(refs.nextTurnButton, "click", function () {
     stopAutoplay();
     setFrameIndex(state.frameIndex + 1);
   });
 
-  refs.lastTurnButton.addEventListener("click", function () {
+  addManagedListener(refs.lastTurnButton, "click", function () {
     stopAutoplay();
     if (!state.replay) {
       return;
@@ -159,7 +243,7 @@ function bindEvents() {
     setFrameIndex(state.replay.frames.length - 1);
   });
 
-  refs.playPauseButton.addEventListener("click", function () {
+  addManagedListener(refs.playPauseButton, "click", function () {
     if (state.autoPlayHandle) {
       stopAutoplay();
     } else {
@@ -167,18 +251,18 @@ function bindEvents() {
     }
   });
 
-  refs.turnSlider.addEventListener("input", function (event) {
+  addManagedListener(refs.turnSlider, "input", function (event) {
     stopAutoplay();
     const nextIndex = Number(event.target.value);
     setFrameIndex(nextIndex);
   });
 
-  refs.replayCanvas.addEventListener("pointerdown", onCanvasPointerDown);
-  refs.replayCanvas.addEventListener("pointermove", onCanvasPointerMove);
-  refs.replayCanvas.addEventListener("pointerup", onCanvasPointerUp);
-  refs.replayCanvas.addEventListener("pointercancel", onCanvasPointerUp);
-  refs.replayCanvas.addEventListener("wheel", onCanvasWheel, { passive: false });
-  refs.replayCanvas.addEventListener("dblclick", function () {
+  addManagedListener(refs.replayCanvas, "pointerdown", onCanvasPointerDown);
+  addManagedListener(refs.replayCanvas, "pointermove", onCanvasPointerMove);
+  addManagedListener(refs.replayCanvas, "pointerup", onCanvasPointerUp);
+  addManagedListener(refs.replayCanvas, "pointercancel", onCanvasPointerUp);
+  addManagedListener(refs.replayCanvas, "wheel", onCanvasWheel, { passive: false });
+  addManagedListener(refs.replayCanvas, "dblclick", function () {
     const frame = currentFrame();
     if (!frame) {
       return;
@@ -188,7 +272,7 @@ function bindEvents() {
     renderCurrentFrame();
   });
 
-  window.addEventListener("resize", function () {
+  addManagedListener(window, "resize", function () {
     if (state.replay) {
       renderCurrentFrame();
       return;
@@ -197,7 +281,7 @@ function bindEvents() {
     renderCanvasMessage(state.statusMessage);
   });
 
-  window.addEventListener("keydown", function (event) {
+  addManagedListener(rootElement, "keydown", function (event) {
     if (!state.replay) {
       return;
     }
@@ -268,7 +352,10 @@ function setError(message) {
 
 async function loadMasterConfig(url) {
   try {
-    const response = await fetch(resolveUrl(url), { cache: "no-store" });
+    const response = await fetch(resolveUrl(url), {
+      cache: "no-store",
+      signal: abortController.signal
+    });
     if (!response.ok) {
       throw new Error();
     }
@@ -279,7 +366,10 @@ async function loadMasterConfig(url) {
 }
 
 async function loadReplay(url) {
-  const response = await fetch(resolveUrl(url), { cache: "no-store" });
+  const response = await fetch(resolveUrl(url), {
+    cache: "no-store",
+    signal: abortController.signal
+  });
   if (!response.ok) {
     throw new Error(`Impossible de charger le replay: HTTP ${response.status} ${response.statusText}`);
   }
@@ -385,6 +475,11 @@ function normalizeFrame(frameInput, referenceData, masterConfig) {
   const whiteBuildings = toArray(snapshot.whiteKingdom && snapshot.whiteKingdom.buildings);
   const blackBuildings = toArray(snapshot.blackKingdom && snapshot.blackKingdom.buildings);
   const publicBuildings = toArray(snapshot.publicBuildings);
+  const analyticsPieces = frameInput.analytics
+    && frameInput.analytics.entities
+    && Array.isArray(frameInput.analytics.entities.pieceIndex)
+    ? frameInput.analytics.entities.pieceIndex
+    : null;
   const analyticsBuildings = frameInput.analytics
     && frameInput.analytics.entities
     && Array.isArray(frameInput.analytics.entities.buildingIndex)
@@ -408,6 +503,7 @@ function normalizeFrame(frameInput, referenceData, masterConfig) {
     rawEvents: frameInput.rawEvents,
     grid: toArray(snapshot.grid),
     pieces: whitePieces.concat(blackPieces),
+    piecesAnalytics: analyticsPieces,
     buildings: whiteBuildings.concat(blackBuildings).concat(publicBuildings),
     buildingsAnalytics: analyticsBuildings,
     mapObjects: toArray(snapshot.mapObjects),
@@ -538,7 +634,11 @@ function setFrameIndex(nextIndex) {
   }
 
   const bounded = clamp(nextIndex, 0, state.replay.frames.length - 1);
+  const frameChanged = bounded !== state.frameIndex;
   state.frameIndex = bounded;
+  if (frameChanged && trackedTargetConfig) {
+    state.camera.pendingTrackedRecenter = true;
+  }
   renderCurrentFrame();
 }
 
@@ -549,6 +649,9 @@ function startAutoplay() {
 
   if (state.frameIndex >= state.replay.frames.length - 1) {
     state.frameIndex = 0;
+    if (trackedTargetConfig) {
+      state.camera.pendingTrackedRecenter = true;
+    }
   }
 
   state.autoPlayHandle = window.setInterval(function () {
@@ -564,7 +667,7 @@ function startAutoplay() {
     }
 
     setFrameIndex(nextIndex);
-  }, REPLAY_CONFIG.autoplayIntervalMs);
+  }, replayConfig.autoplayIntervalMs);
 
   syncControlsState();
   renderCurrentFrame();
@@ -590,26 +693,55 @@ function renderCurrentFrame() {
   refs.turnSlider.setAttribute("aria-valuetext", frame.label);
   refs.turnSlider.title = frame.label;
   syncControlsState();
+  syncTrackedCamera(frame);
   syncOverlays(frame);
   renderCanvasFrame(frame);
+}
+
+function syncTrackedCamera(frame) {
+  if (!frame || !trackedTargetConfig || !state.camera.pendingTrackedRecenter) {
+    return;
+  }
+
+  const trackedPoint = resolveTrackedTargetGridPoint(frame, trackedTargetConfig);
+  state.camera.pendingTrackedRecenter = false;
+
+  if (!trackedPoint) {
+    return;
+  }
+
+  centerCameraOnGridPoint(frame, trackedPoint.x, trackedPoint.y);
 }
 
 function syncOverlays(frame) {
   if (!frame) {
     refs.activeTurnOverlay.hidden = true;
+    refs.perspectiveOverlay.hidden = true;
     refs.statusOverlay.hidden = true;
     refs.statusText.textContent = "";
-    refs.statusText.className = "status-chip";
+    refs.statusOverlay.className = "status-overlay status-overlay-right status-overlay-status";
     return;
   }
 
   refs.activeTurnOverlay.hidden = false;
   refs.activeKingdomValue.textContent = frame.sideToMoveLabel;
-  refs.activeKingdomShield.src = resolveUrl(`${REPLAY_CONFIG.assetRoot}/${KINGDOM_SHIELD_PATHS[frame.sideToMoveKey] || KINGDOM_SHIELD_PATHS.white}`);
+  refs.activeKingdomShield.src = resolveUrl(`${replayConfig.assetRoot}/${KINGDOM_SHIELD_PATHS[frame.sideToMoveKey] || KINGDOM_SHIELD_PATHS.white}`);
   refs.activeKingdomShield.alt = `Bouclier ${frame.sideToMoveLabel}`;
 
+  const perspective = resolvePerspectivePresentation(frame);
+  if (!perspective) {
+    refs.perspectiveOverlay.hidden = true;
+  } else {
+    refs.perspectiveOverlay.hidden = false;
+    refs.perspectiveKingdomValue.textContent = perspective.label;
+    refs.perspectiveKingdomShield.src = resolveUrl(
+      `${replayConfig.assetRoot}/${KINGDOM_SHIELD_PATHS[perspective.kingdomKey] || KINGDOM_SHIELD_PATHS.white}`
+    );
+    refs.perspectiveKingdomShield.alt = `Bouclier ${perspective.label}`;
+  }
+
   const statusBadge = buildStatusBadge(frame);
-  refs.statusText.className = "status-chip";
+  refs.statusOverlay.className = "status-overlay status-overlay-right status-overlay-status";
   if (!statusBadge) {
     refs.statusOverlay.hidden = true;
     refs.statusText.textContent = "";
@@ -618,7 +750,7 @@ function syncOverlays(frame) {
 
   refs.statusOverlay.hidden = false;
   refs.statusText.textContent = statusBadge.text;
-  refs.statusText.classList.add(statusBadge.className);
+  refs.statusOverlay.classList.add(statusBadge.className);
 }
 
 function buildStatusBadge(frame) {
@@ -716,6 +848,18 @@ function resetCameraToFit(frame, metrics = getBoardMetrics(frame)) {
   state.camera.boardKey = metrics.boardKey;
 }
 
+function centerCameraOnGridPoint(frame, gridX, gridY) {
+  const metrics = getBoardMetrics(frame);
+  state.camera.centerWorldX = gridX * metrics.cellSize;
+  state.camera.centerWorldY = gridY * metrics.cellSize;
+  state.camera.initialized = true;
+  state.camera.boardKey = metrics.boardKey;
+}
+
+function centerCameraOnCell(frame, x, y) {
+  centerCameraOnGridPoint(frame, x + 0.5, y + 0.5);
+}
+
 function screenToWorld(screenX, screenY, transform) {
   return {
     x: (screenX - transform.offsetX) / transform.scale,
@@ -772,10 +916,17 @@ function onCanvasPointerDown(event) {
     return;
   }
 
+  if (typeof rootElement.focus === "function") {
+    rootElement.focus({ preventScroll: true });
+  }
+
   state.camera.isDragging = true;
   state.camera.pointerId = event.pointerId;
   state.camera.lastClientX = event.clientX;
   state.camera.lastClientY = event.clientY;
+  state.camera.dragStartClientX = event.clientX;
+  state.camera.dragStartClientY = event.clientY;
+  state.camera.didDrag = false;
   refs.replayCanvas.classList.add("is-dragging");
   refs.replayCanvas.setPointerCapture(event.pointerId);
   event.preventDefault();
@@ -795,6 +946,12 @@ function onCanvasPointerMove(event) {
   const transform = computeBoardTransform(frame, canvasInfo.width, canvasInfo.height);
   const deltaX = (event.clientX - state.camera.lastClientX) * canvasInfo.devicePixelRatio;
   const deltaY = (event.clientY - state.camera.lastClientY) * canvasInfo.devicePixelRatio;
+  const travelledX = event.clientX - state.camera.dragStartClientX;
+  const travelledY = event.clientY - state.camera.dragStartClientY;
+
+  if (Math.hypot(travelledX, travelledY) >= CLICK_DRAG_THRESHOLD_PX) {
+    state.camera.didDrag = true;
+  }
 
   state.camera.centerWorldX -= deltaX / transform.scale;
   state.camera.centerWorldY -= deltaY / transform.scale;
@@ -809,6 +966,10 @@ function onCanvasPointerUp(event) {
     return;
   }
 
+  const shouldInspectCell = event.type === "pointerup"
+    && isCellDebugEnabled
+    && !state.camera.didDrag;
+
   state.camera.isDragging = false;
   state.camera.pointerId = null;
   refs.replayCanvas.classList.remove("is-dragging");
@@ -816,6 +977,144 @@ function onCanvasPointerUp(event) {
   if (refs.replayCanvas.hasPointerCapture(event.pointerId)) {
     refs.replayCanvas.releasePointerCapture(event.pointerId);
   }
+
+  if (shouldInspectCell) {
+    inspectCellFromPointerEvent(event);
+  }
+}
+
+function inspectCellFromPointerEvent(event) {
+  const frame = currentFrame();
+  if (!frame) {
+    return;
+  }
+
+  const canvasInfo = prepareCanvas(refs.replayCanvas);
+  const transform = computeBoardTransform(frame, canvasInfo.width, canvasInfo.height);
+  const screenX = (event.clientX - canvasInfo.rect.left) * canvasInfo.devicePixelRatio;
+  const screenY = (event.clientY - canvasInfo.rect.top) * canvasInfo.devicePixelRatio;
+  const world = screenToWorld(screenX, screenY, transform);
+  const cellX = Math.floor(world.x / transform.cellSize);
+  const cellY = Math.floor(world.y / transform.cellSize);
+
+  if (!isGridCoordinateInside(frame, cellX, cellY)) {
+    console.info("[Replay debug] Clic hors de la grille.", {
+      cell: { x: cellX, y: cellY },
+      frame: frame.label
+    });
+    return;
+  }
+
+  logCellDebug(frame, cellX, cellY);
+}
+
+function logCellDebug(frame, cellX, cellY) {
+  const payload = buildCellDebugPayload(frame, cellX, cellY);
+  const title = `[Replay debug] Cellule (${cellX}, ${cellY}) · ${frame.label}`;
+
+  if (typeof console.groupCollapsed === "function") {
+    console.groupCollapsed(title);
+    console.log("Resume", payload);
+    console.log("Terrain", payload.terrain);
+    console.log("Meteo", payload.weather);
+    console.log("Pieces", payload.pieces);
+    console.log("Batiments", payload.buildings);
+    console.log("Cellules de batiment", payload.buildingCells);
+    console.log("Objets", payload.mapObjects);
+    console.log("Unites autonomes", payload.autonomousUnits);
+    console.groupEnd();
+    return;
+  }
+
+  console.log(title, payload);
+}
+
+function buildCellDebugPayload(frame, cellX, cellY) {
+  const terrainCell = frame.grid[cellY] && frame.grid[cellY][cellX]
+    ? frame.grid[cellY][cellX]
+    : null;
+  const buildingsAnalytics = toArray(frame.buildingsAnalytics);
+  const matchingBuildingCells = [];
+  const matchingBuildings = [];
+  const seenBuildingIds = new Set();
+
+  for (const building of buildingsAnalytics) {
+    const matchingCells = toArray(building.cells).filter(function (cell) {
+      const worldCell = cell && cell.worldCell;
+      return worldCell && worldCell.x === cellX && worldCell.y === cellY;
+    });
+
+    if (!matchingCells.length) {
+      continue;
+    }
+
+    if (!seenBuildingIds.has(building.id)) {
+      seenBuildingIds.add(building.id);
+      matchingBuildings.push(summarizeBuilding(building));
+    }
+
+    for (const cell of matchingCells) {
+      matchingBuildingCells.push({
+        buildingId: building.id,
+        buildingTypeKey: building.buildingTypeKey || buildingTypeKey(frame.referenceData, building.buildingTypeId),
+        ownerKingdomKey: building.ownerKingdomKey || kingdomKeyById(frame.referenceData, building.ownerKingdomId),
+        destroyed: Boolean(cell.destroyed),
+        breached: Boolean(cell.breached),
+        hp: typeof cell.hp === "number" ? cell.hp : null,
+        hiddenFromWhite: readPerspectiveHiddenFlag(cell, "white"),
+        hiddenFromBlack: readPerspectiveHiddenFlag(cell, "black")
+      });
+    }
+  }
+
+  if (!matchingBuildings.length) {
+    for (const building of toArray(frame.buildings)) {
+      if (!legacyBuildingOccupiesCell(building, cellX, cellY)) {
+        continue;
+      }
+      matchingBuildings.push(summarizeLegacyBuilding(frame.referenceData, building));
+    }
+  }
+
+  return {
+    cell: {
+      x: cellX,
+      y: cellY,
+      frame: frame.label
+    },
+    terrain: summarizeTerrainCell(terrainCell),
+    weather: {
+      fogAlpha: weatherAlphaAtCell(frame, cellX, cellY),
+      concealingFog: cellHasConcealingFog(frame, cellX, cellY),
+      activeFronts: getActiveWeatherFronts(frame).map(function (front, index) {
+        return summarizeWeatherFront(front, index);
+      })
+    },
+    pieces: resolveDebugPieces(frame)
+      .filter(function (piece) {
+        const position = resolvePosition(piece);
+        return position && position.x === cellX && position.y === cellY;
+      })
+      .map(function (piece) {
+        return summarizePiece(frame.referenceData, piece);
+      }),
+    buildings: matchingBuildings,
+    buildingCells: matchingBuildingCells,
+    mapObjects: toArray(frame.mapObjects)
+      .filter(function (object) {
+        const position = resolvePosition(object);
+        return position && position.x === cellX && position.y === cellY;
+      })
+      .map(summarizeMapObject),
+    autonomousUnits: toArray(frame.autonomousUnits)
+      .filter(function (unit) {
+        const position = resolvePosition(unit);
+        return position && position.x === cellX && position.y === cellY;
+      })
+      .map(function (unit) {
+        return summarizeAutonomousUnit(frame.referenceData, unit);
+      })
+  };
 }
 
 function onCanvasWheel(event) {
@@ -824,11 +1123,16 @@ function onCanvasWheel(event) {
     return;
   }
 
+  const zoomMultiplier = resolveWheelZoomMultiplier(event);
+  if (!zoomMultiplier || zoomMultiplier === 1) {
+    return;
+  }
+
   event.preventDefault();
 
   const canvasInfo = prepareCanvas(refs.replayCanvas);
   const nextZoom = clamp(
-    state.camera.zoom * (event.deltaY < 0 ? WHEEL_ZOOM_FACTOR : 1 / WHEEL_ZOOM_FACTOR),
+    state.camera.zoom * zoomMultiplier,
     MIN_CAMERA_ZOOM,
     MAX_CAMERA_ZOOM
   );
@@ -847,6 +1151,38 @@ function onCanvasWheel(event) {
   renderCurrentFrame();
 }
 
+function resolveWheelZoomMultiplier(event) {
+  if (!event || event.deltaY === 0) {
+    return null;
+  }
+
+  if (isTrackpadPinchWheelEvent(event)) {
+    return Math.exp(clamp(
+      -event.deltaY * TRACKPAD_PINCH_ZOOM_SENSITIVITY,
+      -TRACKPAD_PINCH_ZOOM_EXPONENT_LIMIT,
+      TRACKPAD_PINCH_ZOOM_EXPONENT_LIMIT
+    ));
+  }
+
+  if (isTrackpadScrollWheelEvent(event)) {
+    return null;
+  }
+
+  return event.deltaY < 0 ? WHEEL_ZOOM_FACTOR : 1 / WHEEL_ZOOM_FACTOR;
+}
+
+function isTrackpadPinchWheelEvent(event) {
+  return Boolean(event && event.ctrlKey);
+}
+
+function isTrackpadScrollWheelEvent(event) {
+  if (!event || event.ctrlKey) {
+    return false;
+  }
+
+  return event.deltaMode === WheelEvent.DOM_DELTA_PIXEL;
+}
+
 function drawTerrain(context, frame, transform) {
   for (let y = 0; y < frame.grid.length; y += 1) {
     const row = frame.grid[y];
@@ -857,7 +1193,7 @@ function drawTerrain(context, frame, transform) {
       }
 
       const cellKey = CELL_TYPE_KEYS[cell.t] || "grass";
-      const texturePath = `${REPLAY_CONFIG.assetRoot}/textures/cells/${cellKey}.png`;
+      const texturePath = `${replayConfig.assetRoot}/textures/cells/${cellKey}.png`;
       const image = state.textures.get(texturePath) || null;
       const brightness = typeof cell.b === "number" ? clamp(cell.b, 0, 255) / 255 : 1;
       const screen = cellRect(x, y, transform);
@@ -873,6 +1209,7 @@ function drawTerrain(context, frame, transform) {
 }
 
 function drawBuildings(context, frame, transform) {
+  const perspective = resolvePerspectivePresentation(frame);
   if (Array.isArray(frame.buildingsAnalytics) && frame.buildingsAnalytics.length) {
     const damagedOpacity = getDamagedStructureOpacity(frame.masterConfig);
     for (const building of frame.buildingsAnalytics) {
@@ -883,6 +1220,9 @@ function drawBuildings(context, frame, transform) {
       const flipMask = Number(building.flipMask) || 0;
       const isPublic = Boolean(building.isPublic);
       for (const cell of toArray(building.cells)) {
+        if (shouldHideBuildingCellForPerspective(cell, building, perspective, frame)) {
+          continue;
+        }
         const worldCell = cell.worldCell;
         if (!worldCell) {
           continue;
@@ -913,7 +1253,12 @@ function drawBuildings(context, frame, transform) {
     const height = Number(building.h) || 1;
     for (let dy = 0; dy < height; dy += 1) {
       for (let dx = 0; dx < width; dx += 1) {
-        const screen = cellRect((Number(building.ox) || 0) + dx, (Number(building.oy) || 0) + dy, transform);
+        const worldX = (Number(building.ox) || 0) + dx;
+        const worldY = (Number(building.oy) || 0) + dy;
+        if (shouldHideLegacyBuildingCellForPerspective(building, worldX, worldY, perspective, frame)) {
+          continue;
+        }
+        const screen = cellRect(worldX, worldY, transform);
         context.fillStyle = fallbackBuildingColor(buildingTypeKey(frame.referenceData, building.type), 1);
         context.fillRect(screen.x, screen.y, screen.width, screen.height);
       }
@@ -928,7 +1273,7 @@ function drawMapObjects(context, frame, transform) {
       continue;
     }
     const screen = cellRect(position.x, position.y, transform);
-    const chestPath = `${REPLAY_CONFIG.assetRoot}/textures/objects/chest.png`;
+    const chestPath = `${replayConfig.assetRoot}/textures/objects/chest.png`;
     const image = state.textures.get(chestPath) || null;
     if (image) {
       drawCellImage(context, image, screen, 0, 0, 1);
@@ -945,15 +1290,24 @@ function drawMapObjects(context, frame, transform) {
 }
 
 function drawPieces(context, frame, transform) {
-  for (const piece of frame.pieces) {
+  const perspective = resolvePerspectivePresentation(frame);
+  const pieces = Array.isArray(frame.piecesAnalytics) && frame.piecesAnalytics.length
+    ? frame.piecesAnalytics
+    : frame.pieces;
+
+  for (const piece of pieces) {
+    if (shouldHidePieceForPerspective(piece, perspective, frame)) {
+      continue;
+    }
+
     const position = resolvePosition(piece);
     if (!position) {
       continue;
     }
 
-    const typeKey = pieceTypeKey(frame.referenceData, piece.type);
-    const kingdomKey = kingdomKeyById(frame.referenceData, piece.kingdom);
-    const texturePath = `${REPLAY_CONFIG.assetRoot}/textures/pieces/${kingdomKey}/${typeKey}.png`;
+    const typeKey = pieceTypeKey(frame.referenceData, resolvePieceTypeId(piece));
+    const kingdomKey = resolveKingdomKey(frame.referenceData, piece);
+    const texturePath = `${replayConfig.assetRoot}/textures/pieces/${kingdomKey}/${typeKey}.png`;
     const image = state.textures.get(texturePath) || null;
     const screen = cellRect(position.x, position.y, transform);
 
@@ -979,7 +1333,12 @@ function drawPieces(context, frame, transform) {
 }
 
 function drawAutonomousUnits(context, frame, transform) {
+  const perspective = resolvePerspectivePresentation(frame);
   for (const unit of frame.autonomousUnits) {
+    if (shouldHideAutonomousUnitForPerspective(unit, perspective, frame)) {
+      continue;
+    }
+
     const position = resolvePosition(unit);
     if (!position) {
       continue;
@@ -991,7 +1350,7 @@ function drawAutonomousUnits(context, frame, transform) {
         ? unit.targetPieceType
         : 4;
     const typeKey = pieceTypeKey(frame.referenceData, pieceType);
-    const texturePath = `${REPLAY_CONFIG.assetRoot}/textures/pieces/evil/${typeKey}.png`;
+    const texturePath = `${replayConfig.assetRoot}/textures/pieces/evil/${typeKey}.png`;
     const image = state.textures.get(texturePath) || null;
     const screen = cellRect(position.x, position.y, transform);
 
@@ -1007,11 +1366,7 @@ function drawAutonomousUnits(context, frame, transform) {
 }
 
 function drawWeather(context, frame, transform) {
-  const weatherMask = frame.snapshot
-    && frame.snapshot.weatherState
-    && frame.snapshot.weatherState.mask
-    ? frame.snapshot.weatherState.mask
-    : null;
+  const weatherMask = getWeatherMask(frame);
 
   if (!weatherMask || !Array.isArray(weatherMask.alphaByCell) || !Array.isArray(weatherMask.shadeByCell)) {
     return;
@@ -1035,6 +1390,112 @@ function drawWeather(context, frame, transform) {
       context.fillRect(screen.x, screen.y, screen.width, screen.height);
     }
   }
+}
+
+function getWeatherMask(frame) {
+  return frame
+    && frame.snapshot
+    && frame.snapshot.weatherState
+    && frame.snapshot.weatherState.mask
+    ? frame.snapshot.weatherState.mask
+    : null;
+}
+
+function weatherAlphaAtCell(frame, x, y) {
+  const weatherMask = getWeatherMask(frame);
+  if (!weatherMask || !Array.isArray(weatherMask.alphaByCell) || !Array.isArray(weatherMask.shadeByCell)) {
+    return 0;
+  }
+
+  const diameter = Number(weatherMask.diameter) || frame.grid.length;
+  if (!Number.isFinite(diameter) || diameter <= 0 || x < 0 || y < 0 || x >= diameter || y >= diameter) {
+    return 0;
+  }
+
+  const index = (y * diameter) + x;
+  return clamp(Number(weatherMask.alphaByCell[index]) || 0, 0, 255);
+}
+
+function cellHasConcealingFog(frame, x, y) {
+  return weatherAlphaAtCell(frame, x, y) >= CONCEALING_FOG_ALPHA_THRESHOLD;
+}
+
+function shouldHidePieceForPerspective(piece, perspective, frame) {
+  if (!perspective) {
+    return false;
+  }
+
+  const explicitHidden = readPerspectiveHiddenFlag(piece, perspective.kingdomKey);
+  if (typeof explicitHidden === "boolean") {
+    return explicitHidden;
+  }
+
+  const kingdomId = resolveKingdomId(piece);
+  if (kingdomId === null || perspective.kingdomId === null || kingdomId === perspective.kingdomId) {
+    return false;
+  }
+
+  const position = resolvePosition(piece);
+  return Boolean(position) && cellHasConcealingFog(frame, position.x, position.y);
+}
+
+function shouldHideBuildingCellForPerspective(cell, building, perspective, frame) {
+  if (!perspective) {
+    return false;
+  }
+
+  const explicitCellHidden = readPerspectiveHiddenFlag(cell, perspective.kingdomKey);
+  if (typeof explicitCellHidden === "boolean") {
+    return explicitCellHidden;
+  }
+
+  const explicitBuildingHidden = readPerspectiveHiddenFlag(building, perspective.kingdomKey);
+  if (typeof explicitBuildingHidden === "boolean" && !explicitBuildingHidden) {
+    return false;
+  }
+
+  if (Boolean(building && building.isPublic)) {
+    return false;
+  }
+
+  const ownerKingdomId = resolveOwnerKingdomId(building);
+  if (ownerKingdomId === null || perspective.kingdomId === null || ownerKingdomId === perspective.kingdomId) {
+    return false;
+  }
+
+  const position = resolvePosition(cell);
+  return Boolean(position) && cellHasConcealingFog(frame, position.x, position.y);
+}
+
+function shouldHideLegacyBuildingCellForPerspective(building, x, y, perspective, frame) {
+  if (!perspective) {
+    return false;
+  }
+
+  if (Boolean(building && building.isPublic)) {
+    return false;
+  }
+
+  const ownerKingdomId = resolveOwnerKingdomId(building);
+  if (ownerKingdomId === null || perspective.kingdomId === null || ownerKingdomId === perspective.kingdomId) {
+    return false;
+  }
+
+  return cellHasConcealingFog(frame, x, y);
+}
+
+function shouldHideAutonomousUnitForPerspective(unit, perspective, frame) {
+  if (!perspective) {
+    return false;
+  }
+
+  const explicitHidden = readPerspectiveHiddenFlag(unit, perspective.kingdomKey);
+  if (typeof explicitHidden === "boolean") {
+    return explicitHidden;
+  }
+
+  const position = resolvePosition(unit);
+  return Boolean(position) && cellHasConcealingFog(frame, position.x, position.y);
 }
 
 function cellRect(x, y, transform) {
@@ -1111,10 +1572,10 @@ async function primeTextureCatalog(replay) {
   const texturePaths = new Set();
 
   for (const cellKey of ["grass", "dirt", "water"]) {
-    texturePaths.add(`${REPLAY_CONFIG.assetRoot}/textures/cells/${cellKey}.png`);
+    texturePaths.add(`${replayConfig.assetRoot}/textures/cells/${cellKey}.png`);
   }
 
-  texturePaths.add(`${REPLAY_CONFIG.assetRoot}/textures/objects/chest.png`);
+  texturePaths.add(`${replayConfig.assetRoot}/textures/objects/chest.png`);
 
   const pieceTypes = toArray(replay.referenceData && replay.referenceData.pieceTypes)
     .map(function (entry) {
@@ -1122,10 +1583,10 @@ async function primeTextureCatalog(replay) {
     });
 
   for (const pieceKey of pieceTypes) {
-    texturePaths.add(`${REPLAY_CONFIG.assetRoot}/textures/pieces/white/${pieceKey}.png`);
-    texturePaths.add(`${REPLAY_CONFIG.assetRoot}/textures/pieces/black/${pieceKey}.png`);
+    texturePaths.add(`${replayConfig.assetRoot}/textures/pieces/white/${pieceKey}.png`);
+    texturePaths.add(`${replayConfig.assetRoot}/textures/pieces/black/${pieceKey}.png`);
     if (pieceKey !== "king") {
-      texturePaths.add(`${REPLAY_CONFIG.assetRoot}/textures/pieces/evil/${pieceKey}.png`);
+      texturePaths.add(`${replayConfig.assetRoot}/textures/pieces/evil/${pieceKey}.png`);
     }
   }
 
@@ -1147,7 +1608,7 @@ async function primeTextureCatalog(replay) {
   for (const buildingKey of buildingTypesSeen) {
     const basePath = BUILDING_TEXTURE_PATHS[buildingKey];
     if (basePath) {
-      texturePaths.add(`${REPLAY_CONFIG.assetRoot}/${basePath}`);
+      texturePaths.add(`${replayConfig.assetRoot}/${basePath}`);
     }
 
     const chunkConfig = CHUNKED_BUILDINGS[buildingKey];
@@ -1155,7 +1616,7 @@ async function primeTextureCatalog(replay) {
       for (let y = 0; y < chunkConfig.height; y += 1) {
         for (let x = 0; x < chunkConfig.width; x += 1) {
           texturePaths.add(
-            `${REPLAY_CONFIG.assetRoot}/textures/cells/structures/${chunkConfig.id}/${chunkConfig.id}_${x + 1}_${y + 1}.png`
+            `${replayConfig.assetRoot}/textures/cells/structures/${chunkConfig.id}/${chunkConfig.id}_${x + 1}_${y + 1}.png`
           );
         }
       }
@@ -1188,11 +1649,11 @@ async function loadTexture(path) {
 function resolveBuildingTexturePath(buildingKey, sourceLocal) {
   const chunkConfig = CHUNKED_BUILDINGS[buildingKey];
   if (chunkConfig && sourceLocal && typeof sourceLocal.x === "number" && typeof sourceLocal.y === "number") {
-    return `${REPLAY_CONFIG.assetRoot}/textures/cells/structures/${chunkConfig.id}/${chunkConfig.id}_${sourceLocal.x + 1}_${sourceLocal.y + 1}.png`;
+    return `${replayConfig.assetRoot}/textures/cells/structures/${chunkConfig.id}/${chunkConfig.id}_${sourceLocal.x + 1}_${sourceLocal.y + 1}.png`;
   }
 
   const directPath = BUILDING_TEXTURE_PATHS[buildingKey];
-  return directPath ? `${REPLAY_CONFIG.assetRoot}/${directPath}` : null;
+  return directPath ? `${replayConfig.assetRoot}/${directPath}` : null;
 }
 
 function resolvePosition(entity) {
@@ -1237,6 +1698,10 @@ function resolveUrl(path) {
   return new URL(path, window.location.href).href;
 }
 
+function isAbortError(error) {
+  return Boolean(error) && typeof error === "object" && error.name === "AbortError";
+}
+
 function kingdomKeyById(referenceData, id) {
   const kingdoms = toArray(referenceData && referenceData.kingdoms);
   const found = kingdoms.find(function (entry) {
@@ -1245,12 +1710,16 @@ function kingdomKeyById(referenceData, id) {
   return found && found.key ? found.key : (Number(id) === 1 ? "black" : "white");
 }
 
-function kingdomLabel(referenceData, id) {
+function kingdomIdByKey(referenceData, key) {
   const kingdoms = toArray(referenceData && referenceData.kingdoms);
   const found = kingdoms.find(function (entry) {
-    return Number(entry.id) === Number(id);
+    return String(entry.key || "").toLowerCase() === String(key || "").toLowerCase();
   });
-  return found && found.label ? found.label : (Number(id) === 1 ? "Black" : "White");
+  return found ? Number(found.id) : (key === "black" ? 1 : 0);
+}
+
+function kingdomLabel(referenceData, id) {
+  return localizedPerspectiveKingdomLabel(kingdomKeyById(referenceData, id));
 }
 
 function pieceTypeKey(referenceData, id) {
@@ -1261,12 +1730,532 @@ function pieceTypeKey(referenceData, id) {
   return found && found.key ? found.key : "pawn";
 }
 
+function resolvePieceTypeId(piece) {
+  if (typeof (piece && piece.type) === "number") {
+    return piece.type;
+  }
+
+  if (typeof (piece && piece.pieceTypeId) === "number") {
+    return piece.pieceTypeId;
+  }
+
+  if (typeof (piece && piece.pieceType) === "number") {
+    return piece.pieceType;
+  }
+
+  return 0;
+}
+
+function resolveKingdomId(entity) {
+  if (typeof (entity && entity.kingdom) === "number") {
+    return entity.kingdom;
+  }
+
+  if (typeof (entity && entity.kingdomId) === "number") {
+    return entity.kingdomId;
+  }
+
+  if (typeof (entity && entity.owner) === "number") {
+    return entity.owner;
+  }
+
+  if (typeof (entity && entity.ownerKingdomId) === "number") {
+    return entity.ownerKingdomId;
+  }
+
+  return null;
+}
+
+function resolveOwnerKingdomId(entity) {
+  if (typeof (entity && entity.owner) === "number") {
+    return entity.owner;
+  }
+
+  if (typeof (entity && entity.ownerKingdomId) === "number") {
+    return entity.ownerKingdomId;
+  }
+
+  return null;
+}
+
+function resolveKingdomKey(referenceData, entity) {
+  if (entity && typeof entity.kingdomKey === "string") {
+    return entity.kingdomKey;
+  }
+
+  return kingdomKeyById(referenceData, resolveKingdomId(entity));
+}
+
+function readPerspectiveHiddenFlag(entity, kingdomKey) {
+  if (!entity || typeof entity !== "object") {
+    return null;
+  }
+
+  const hiddenProperty = kingdomKey === "black" ? "hiddenFromBlack" : "hiddenFromWhite";
+  return typeof entity[hiddenProperty] === "boolean" ? entity[hiddenProperty] : null;
+}
+
+function normalizePerspectiveKingdomKey(value) {
+  if (typeof value === "number") {
+    return value === 1 ? "black" : "white";
+  }
+
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "white" || normalized === "black") {
+    return normalized;
+  }
+
+  return null;
+}
+
+function resolveConfiguredPerspectiveKingdomKey(config) {
+  if (config && config.perspectiveEnabled === false) {
+    return null;
+  }
+
+  if (config && config.perspectiveEnabled === true) {
+    return normalizePerspectiveKingdomKey(config.perspectiveKingdom)
+      || normalizePerspectiveKingdomKey(config.initialPerspective)
+      || "white";
+  }
+
+  return normalizePerspectiveKingdomKey(config && config.initialPerspective);
+}
+
+function localizedPerspectiveKingdomLabel(kingdomKey) {
+  return KINGDOM_PERSPECTIVE_LABELS[kingdomKey] || KINGDOM_PERSPECTIVE_LABELS.white;
+}
+
+function normalizeTrackedTargetConfig(value) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const kind = String(value.kind || value.type || "").trim().toLowerCase();
+  if (!kind) {
+    return null;
+  }
+
+  return {
+    kind,
+    id: typeof value.id === "number" ? value.id : null,
+    index: typeof value.index === "number" ? value.index : null,
+    x: typeof value.x === "number" ? value.x : null,
+    y: typeof value.y === "number" ? value.y : null
+  };
+}
+
+function resolveTrackedTargetGridPoint(frame, trackedTarget) {
+  if (!frame || !trackedTarget) {
+    return null;
+  }
+
+  if ((trackedTarget.kind === "terrain-cell" || trackedTarget.kind === "cell")
+    && isGridCoordinateInside(frame, trackedTarget.x, trackedTarget.y)) {
+    return resolveCellCenterPoint(trackedTarget.x, trackedTarget.y);
+  }
+
+  if (trackedTarget.kind === "building-cell" || trackedTarget.kind === "structure-cell") {
+    if (isGridCoordinateInside(frame, trackedTarget.x, trackedTarget.y)) {
+      return resolveCellCenterPoint(trackedTarget.x, trackedTarget.y);
+    }
+
+    if (typeof trackedTarget.id === "number") {
+      const building = findBuildingById(frame, trackedTarget.id);
+      if (building) {
+        const origin = resolveBuildingOrigin(building);
+        if (origin) {
+          return resolveCellCenterPoint(origin.x, origin.y);
+        }
+      }
+    }
+  }
+
+  if (trackedTarget.kind === "building" || trackedTarget.kind === "structure") {
+    const building = findBuildingById(frame, trackedTarget.id);
+    if (!building) {
+      return null;
+    }
+
+    return resolveBuildingCenterPoint(building);
+  }
+
+  if (trackedTarget.kind === "piece") {
+    const piece = findById(resolveDebugPieces(frame), trackedTarget.id);
+    const piecePosition = piece ? resolvePosition(piece) : null;
+    return piecePosition ? resolveCellCenterPoint(piecePosition.x, piecePosition.y) : null;
+  }
+
+  if (trackedTarget.kind === "map-object" || trackedTarget.kind === "object") {
+    const object = findById(toArray(frame.mapObjects), trackedTarget.id);
+    const objectPosition = object ? resolvePosition(object) : null;
+    return objectPosition ? resolveCellCenterPoint(objectPosition.x, objectPosition.y) : null;
+  }
+
+  if (trackedTarget.kind === "autonomous-unit" || trackedTarget.kind === "unit") {
+    const unit = findById(toArray(frame.autonomousUnits), trackedTarget.id);
+    const unitPosition = unit ? resolvePosition(unit) : null;
+    return unitPosition ? resolveCellCenterPoint(unitPosition.x, unitPosition.y) : null;
+  }
+
+  if (trackedTarget.kind === "cloud" || trackedTarget.kind === "front" || trackedTarget.kind === "weather-front") {
+    return resolveTrackedWeatherFrontPoint(frame, trackedTarget);
+  }
+
+  return null;
+}
+
+function resolveTrackedWeatherFrontPoint(frame, trackedTarget) {
+  const fronts = getActiveWeatherFronts(frame);
+  if (!fronts.length) {
+    return null;
+  }
+
+  const requestedIndex = typeof trackedTarget.index === "number"
+    ? trackedTarget.index
+    : typeof trackedTarget.id === "number"
+      ? trackedTarget.id
+      : 0;
+  const front = fronts[requestedIndex];
+  if (!front) {
+    return null;
+  }
+
+  return resolveWeatherFrontCenter(front);
+}
+
+function resolvePerspectivePresentation(frame) {
+  if (!frame || !configuredPerspectiveKingdomKey) {
+    return null;
+  }
+
+  return {
+    kingdomKey: configuredPerspectiveKingdomKey,
+    kingdomId: kingdomIdByKey(frame.referenceData, configuredPerspectiveKingdomKey),
+    label: localizedPerspectiveKingdomLabel(configuredPerspectiveKingdomKey)
+  };
+}
+
 function buildingTypeKey(referenceData, id) {
   const buildingTypes = toArray(referenceData && referenceData.buildingTypes);
   const found = buildingTypes.find(function (entry) {
     return Number(entry.id) === Number(id);
   });
   return found && found.key ? found.key : "barracks";
+}
+
+function getActiveWeatherFronts(frame) {
+  const analyticsFronts = frame
+    && frame.analytics
+    && frame.analytics.weather
+    && Array.isArray(frame.analytics.weather.fronts)
+    ? frame.analytics.weather.fronts
+    : null;
+
+  if (analyticsFronts) {
+    return analyticsFronts;
+  }
+
+  const snapshotFronts = frame
+    && frame.snapshot
+    && frame.snapshot.weatherState
+    && Array.isArray(frame.snapshot.weatherState.activeFronts)
+    ? frame.snapshot.weatherState.activeFronts
+    : [];
+
+  return snapshotFronts.map(function (front) {
+    return {
+      ...front,
+      directionId: typeof front.directionId === "number" ? front.directionId : front.direction,
+      directionKey: resolveWeatherFrontDirectionKey(front)
+    };
+  });
+}
+
+function resolveWeatherFrontDirectionKey(front) {
+  if (front && typeof front.directionKey === "string") {
+    return front.directionKey;
+  }
+
+  const directionId = typeof (front && front.directionId) === "number"
+    ? front.directionId
+    : typeof (front && front.direction) === "number"
+      ? front.direction
+      : null;
+
+  return directionId === null ? null : (WEATHER_FRONT_DIRECTION_KEYS[directionId] || null);
+}
+
+function resolveWeatherFrontCenter(front) {
+  if (!front || typeof front !== "object") {
+    return null;
+  }
+
+  const currentTurnStep = Number(front.currentTurnStep) || 0;
+  const centerStartX = Number(front.centerStartXTimes1000) || 0;
+  const centerStartY = Number(front.centerStartYTimes1000) || 0;
+  const stepX = Number(front.stepXTimes1000) || 0;
+  const stepY = Number(front.stepYTimes1000) || 0;
+
+  return {
+    x: (centerStartX + (currentTurnStep * stepX)) / 1000,
+    y: (centerStartY + (currentTurnStep * stepY)) / 1000
+  };
+}
+
+function summarizeWeatherFront(front, index) {
+  const center = resolveWeatherFrontCenter(front);
+  return {
+    index,
+    directionKey: resolveWeatherFrontDirectionKey(front),
+    currentTurnStep: Number(front && front.currentTurnStep) || 0,
+    totalTurnSteps: Number(front && front.totalTurnSteps) || 0,
+    centerX: center ? center.x : null,
+    centerY: center ? center.y : null,
+    radiusAlong: (Number(front && front.radiusAlongTimes1000) || 0) / 1000,
+    radiusAcross: (Number(front && front.radiusAcrossTimes1000) || 0) / 1000
+  };
+}
+
+function isGridCoordinateInside(frame, x, y) {
+  return Number.isInteger(x)
+    && Number.isInteger(y)
+    && y >= 0
+    && y < frame.grid.length
+    && x >= 0
+    && x < (frame.grid[y] ? frame.grid[y].length : 0);
+}
+
+function resolveDebugPieces(frame) {
+  return Array.isArray(frame.piecesAnalytics) && frame.piecesAnalytics.length
+    ? frame.piecesAnalytics
+    : frame.pieces;
+}
+
+function resolveCellCenterPoint(x, y) {
+  return {
+    x: x + 0.5,
+    y: y + 0.5
+  };
+}
+
+function summarizeTerrainCell(cell) {
+  if (!cell || typeof cell !== "object") {
+    return null;
+  }
+
+  return {
+    traversable: Boolean(cell.c),
+    terrainTypeId: typeof cell.t === "number" ? cell.t : null,
+    terrainTypeKey: CELL_TYPE_KEYS[cell.t] || "grass",
+    brightness: typeof cell.b === "number" ? cell.b : null,
+    flipMask: typeof cell.f === "number" ? cell.f : 0
+  };
+}
+
+function summarizePiece(referenceData, piece) {
+  const position = resolvePosition(piece);
+  return {
+    id: resolveEntityId(piece),
+    pieceTypeKey: pieceTypeKey(referenceData, resolvePieceTypeId(piece)),
+    kingdomKey: resolveKingdomKey(referenceData, piece),
+    x: position ? position.x : null,
+    y: position ? position.y : null,
+    xp: typeof piece.xp === "number" ? piece.xp : null,
+    hiddenFromWhite: readPerspectiveHiddenFlag(piece, "white"),
+    hiddenFromBlack: readPerspectiveHiddenFlag(piece, "black")
+  };
+}
+
+function summarizeBuilding(building) {
+  const origin = resolveBuildingOrigin(building);
+  return {
+    id: resolveEntityId(building),
+    buildingTypeKey: building.buildingTypeKey || null,
+    ownerKingdomKey: building.ownerKingdomKey || null,
+    isPublic: Boolean(building.isPublic),
+    originX: origin ? origin.x : null,
+    originY: origin ? origin.y : null,
+    width: resolveBuildingWidth(building),
+    height: resolveBuildingHeight(building),
+    hiddenFromWhite: readPerspectiveHiddenFlag(building, "white"),
+    hiddenFromBlack: readPerspectiveHiddenFlag(building, "black")
+  };
+}
+
+function summarizeLegacyBuilding(referenceData, building) {
+  return {
+    id: resolveEntityId(building),
+    buildingTypeKey: buildingTypeKey(referenceData, building.type),
+    ownerKingdomKey: kingdomKeyById(referenceData, building.owner),
+    isPublic: Boolean(building.isNeutral),
+    originX: typeof building.ox === "number" ? building.ox : null,
+    originY: typeof building.oy === "number" ? building.oy : null,
+    width: typeof building.w === "number" ? building.w : 1,
+    height: typeof building.h === "number" ? building.h : 1
+  };
+}
+
+function summarizeMapObject(object) {
+  const position = resolvePosition(object);
+  return {
+    id: resolveEntityId(object),
+    typeKey: resolveMapObjectTypeKey(object),
+    x: position ? position.x : null,
+    y: position ? position.y : null,
+    rewardType: typeof object.rewardType === "number" ? object.rewardType : null,
+    rewardAmount: typeof object.rewardAmount === "number" ? object.rewardAmount : null,
+    spawnTurn: typeof object.spawnTurn === "number" ? object.spawnTurn : null
+  };
+}
+
+function summarizeAutonomousUnit(referenceData, unit) {
+  const position = resolvePosition(unit);
+  const pieceType = typeof unit.pieceType === "number"
+    ? unit.pieceType
+    : typeof unit.targetPieceType === "number"
+      ? unit.targetPieceType
+      : 4;
+
+  return {
+    id: resolveEntityId(unit),
+    pieceTypeKey: pieceTypeKey(referenceData, pieceType),
+    x: position ? position.x : null,
+    y: position ? position.y : null,
+    hiddenFromWhite: readPerspectiveHiddenFlag(unit, "white"),
+    hiddenFromBlack: readPerspectiveHiddenFlag(unit, "black")
+  };
+}
+
+function resolveEntityId(entity) {
+  if (!entity || typeof entity !== "object") {
+    return null;
+  }
+
+  if (typeof entity.id === "number") {
+    return entity.id;
+  }
+
+  if (typeof entity.objectId === "number") {
+    return entity.objectId;
+  }
+
+  if (typeof entity.unitId === "number") {
+    return entity.unitId;
+  }
+
+  if (typeof entity.pieceId === "number") {
+    return entity.pieceId;
+  }
+
+  if (typeof entity.buildingId === "number") {
+    return entity.buildingId;
+  }
+
+  return null;
+}
+
+function findById(collection, id) {
+  if (typeof id !== "number") {
+    return null;
+  }
+
+  return toArray(collection).find(function (entry) {
+    return resolveEntityId(entry) === id;
+  }) || null;
+}
+
+function findBuildingById(frame, id) {
+  const analyticsMatch = findById(toArray(frame.buildingsAnalytics), id);
+  if (analyticsMatch) {
+    return analyticsMatch;
+  }
+
+  return findById(toArray(frame.buildings), id);
+}
+
+function resolveBuildingOrigin(building) {
+  if (!building || typeof building !== "object") {
+    return null;
+  }
+
+  if (building.origin && typeof building.origin.x === "number" && typeof building.origin.y === "number") {
+    return { x: building.origin.x, y: building.origin.y };
+  }
+
+  if (typeof building.ox === "number" && typeof building.oy === "number") {
+    return { x: building.ox, y: building.oy };
+  }
+
+  return null;
+}
+
+function resolveBuildingWidth(building) {
+  if (typeof (building && building.footprintWidth) === "number") {
+    return building.footprintWidth;
+  }
+
+  if (typeof (building && building.w) === "number") {
+    return building.w;
+  }
+
+  return 1;
+}
+
+function resolveBuildingHeight(building) {
+  if (typeof (building && building.footprintHeight) === "number") {
+    return building.footprintHeight;
+  }
+
+  if (typeof (building && building.h) === "number") {
+    return building.h;
+  }
+
+  return 1;
+}
+
+function resolveBuildingCenterCell(building) {
+  const origin = resolveBuildingOrigin(building);
+  if (!origin) {
+    return null;
+  }
+
+  return {
+    x: origin.x + ((resolveBuildingWidth(building) - 1) / 2),
+    y: origin.y + ((resolveBuildingHeight(building) - 1) / 2)
+  };
+}
+
+function resolveBuildingCenterPoint(building) {
+  const origin = resolveBuildingOrigin(building);
+  if (!origin) {
+    return null;
+  }
+
+  return {
+    x: origin.x + (resolveBuildingWidth(building) / 2),
+    y: origin.y + (resolveBuildingHeight(building) / 2)
+  };
+}
+
+function legacyBuildingOccupiesCell(building, x, y) {
+  const origin = resolveBuildingOrigin(building);
+  if (!origin) {
+    return false;
+  }
+
+  return x >= origin.x
+    && x < origin.x + resolveBuildingWidth(building)
+    && y >= origin.y
+    && y < origin.y + resolveBuildingHeight(building);
+}
+
+function resolveMapObjectTypeKey(object) {
+  if (object && typeof object.typeKey === "string") {
+    return object.typeKey;
+  }
+
+  return Number(object && object.type) === 0 ? "chest" : "object";
 }
 
 function fallbackBuildingColor(buildingKey, opacity) {
@@ -1293,4 +2282,6 @@ function shadeColor(hexColor, brightness) {
 
 function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
+}
+
 }

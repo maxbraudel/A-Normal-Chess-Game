@@ -11,3 +11,5 @@ build/saves/
 *.tmp
 .DS_Store
 .ignore
+online_replay/node_modules/
+online_replay/dist/

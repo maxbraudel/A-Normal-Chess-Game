@@ -4,38 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ANCG Online Replay</title>
-<link rel="stylesheet" href="./styles.css">
-<script type="module" src="./app.js" defer></script>
+<script type="module" src="./src/main.js"></script>
 </head>
 <body>
-<div class="replay-root">
-  <canvas id="replayCanvas" aria-label="Carte du replay"></canvas>
-
-  <div class="status-overlay status-overlay-left" id="activeTurnOverlay" hidden>
-    <img class="turn-indicator-icon" id="activeKingdomShield" alt="">
-    <div class="overlay-meta">
-      <span class="overlay-label">Au trait</span>
-      <strong class="overlay-value" id="activeKingdomValue">-</strong>
-    </div>
-  </div>
-
-  <div class="status-overlay status-overlay-right" id="statusOverlay" hidden>
-    <span class="status-chip" id="statusText">-</span>
-  </div>
-
-  <div class="timeline-overlay">
-    <div class="timeline-controls">
-      <div class="playback-group">
-        <button type="button" class="action-button" id="firstTurnButton" title="Aller au debut">|&lt;</button>
-        <button type="button" class="action-button" id="prevTurnButton" title="Tour precedent">&lt;</button>
-        <button type="button" class="action-button primary-action" id="playPauseButton" title="Lancer la lecture">Lire</button>
-        <button type="button" class="action-button" id="nextTurnButton" title="Tour suivant">&gt;</button>
-        <button type="button" class="action-button" id="lastTurnButton" title="Aller a la fin">&gt;|</button>
-      </div>
-
-      <input type="range" id="turnSlider" min="0" max="0" step="1" value="0" aria-label="Tour du replay">
-    </div>
-  </div>
-</div>
+<div id="app"></div>
 </body>
 </html>
