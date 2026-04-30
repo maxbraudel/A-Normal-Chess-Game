@@ -323,19 +323,19 @@ const processStatsByTitle = {
       ]
     }
   ],
-  "Spawn du royaume blanc": [
+  "Spawn des royaumes": [
     {
-      title: "Support observe du spawn blanc",
+      title: "Support observe des spawns blanc et noir",
       description:
-        "Le royaume blanc occupe bien une bande laterale gauche. Le batch montre le support effectif des colonnes de spawn admises, plutot qu'une uniforme theorique sans contexte geometrique.",
+        "Les deux royaumes restent confines a des bandes laterales opposees. Le batch montre leurs supports effectifs sur le meme graphe, ce qui rend la symetrie et la separation initiale beaucoup plus lisibles qu'une lecture par fiches separees.",
       metrics: [
         {
-          label: "Premiere colonne occupee",
-          value: String(firstOccupiedBucket(playerSpawnValues))
+          label: "Support blanc",
+          value: `${firstOccupiedBucket(playerSpawnValues)}-${lastOccupiedBucket(playerSpawnValues)}`
         },
         {
-          label: "Derniere colonne occupee",
-          value: String(lastOccupiedBucket(playerSpawnValues))
+          label: "Support noir",
+          value: `${firstOccupiedBucket(aiSpawnValues)}-${lastOccupiedBucket(aiSpawnValues)}`
         },
         {
           label: "Distance moyenne blanc-noir",
@@ -343,50 +343,25 @@ const processStatsByTitle = {
         }
       ],
       insights: [
-        "La bonne lecture mathematique est donc celle d'une **uniforme conditionnelle sur un support geometrique deja contraint**.",
-        "Le centre de la carte reste hors support pour ce royaume dans l'export courant."
+        "La bonne lecture mathematique est celle d'une **uniforme conditionnelle sur un support geometrique deja contraint**, appliquee symetriquement aux deux royaumes.",
+        "Les colonnes centrales restent hors support ou quasi hors support, ce qui rend la separation d'ouverture visible des le premier coup d'oeil."
       ],
-      chartHeight: 290,
-      chartLabel: "Répartition des colonnes de spawn du royaume blanc",
-      chartOption: buildHistogramOption({
+      chartHeight: 310,
+      chartLabel: "Répartition des colonnes de spawn des royaumes blanc et noir",
+      chartOption: buildGroupedBarOption({
         categories: spawnColumns.map(String),
-        values: playerSpawnValues,
-        color: COLORS.moss,
-        rotateLabels: true,
-        xAxisName: "Colonne de la carte",
-        yAxisName: "Occurrences"
-      })
-    }
-  ],
-  "Spawn du royaume noir": [
-    {
-      title: "Support observe du spawn noir",
-      description:
-        "Le royaume noir est symetriquement repousse vers la bande droite. La distribution observee confirme que la separation initiale est structurelle, pas accidentelle.",
-      metrics: [
-        {
-          label: "Premiere colonne occupee",
-          value: String(firstOccupiedBucket(aiSpawnValues))
-        },
-        {
-          label: "Derniere colonne occupee",
-          value: String(lastOccupiedBucket(aiSpawnValues))
-        },
-        {
-          label: "Distance minimale observee",
-          value: `${formatNumber(mapGeneration.summary.player_ai_spawn_distance.min, 1)} cases`
-        }
-      ],
-      insights: [
-        "La lecture par histogramme rend plus lisible la bande de support reelle que la simple phrase 'spawn en zone adverse opposee'.",
-        "Les colonnes centrales restent peu ou pas occupees, ce qui stabilise l'ouverture de partie."
-      ],
-      chartHeight: 290,
-      chartLabel: "Répartition des colonnes de spawn du royaume noir",
-      chartOption: buildHistogramOption({
-        categories: spawnColumns.map(String),
-        values: aiSpawnValues,
-        color: COLORS.sand,
+        series: [
+          {
+            name: "Royaume blanc",
+            data: playerSpawnValues,
+            color: COLORS.moss
+          },
+          {
+            name: "Royaume noir",
+            data: aiSpawnValues,
+            color: COLORS.sand
+          }
+        ],
         rotateLabels: true,
         xAxisName: "Colonne de la carte",
         yAxisName: "Occurrences"

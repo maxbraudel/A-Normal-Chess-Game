@@ -103,38 +103,24 @@ const uniformProcesses = [
       "Conditionne par les placements deja retenus, donc fortement dependante de l'historique de generation."
   },
   {
-    title: "Spawn du royaume blanc",
+    title: "Spawn des royaumes",
     system: "Carte",
-    lawUse: "Uniforme discrete sur la zone de depart blanche",
-    variable: L`P_W \sim \mathcal{U}_d(A_W)`,
+    lawUse: "Uniforme discrete sur les zones de depart des royaumes",
+    variable: L`P_K \sim \mathcal{U}_d(A_K),\; K \in \{W,B\}`,
     phenomenon:
-      "Choisit la cellule de depart du roi blanc parmi les cellules admissibles de sa zone.",
-    parameters: ["zone de spawn = 25 % du plateau cote blanc", "admissibilite geometrique et de terrain"],
+      "Choisit les cellules de depart des rois blanc et noir dans leurs bandes de depart respectives, avec les memes contraintes de terrain et de separation.",
+    parameters: [
+      "zone de spawn = 25 % du plateau sur chaque cote",
+      "admissibilite geometrique, terrain non bloque et separation strategique initiale"
+    ],
     why:
-      "Toutes les cellules admissibles de la zone de depart sont supposees equivalentes a priorite strategique fixe.",
+      "Les deux royaumes obeissent a la meme logique de tirage conditionnel; la bonne lecture est donc une uniforme discrete sur deux supports lateraux symetriques, pas deux mecanismes differents.",
     simulation:
-      "Le generateur collecte les cellules valides puis tire un index uniforme dans le vecteur de candidats.",
+      "Le generateur collecte les cellules valides de chaque bande laterale, puis tire un index uniforme dans le vecteur de candidats du royaume concerne.",
     parameterChoice:
-      "Le pourcentage 25 % vient de `player_spawn_zone_percent` et borne la dispersion initiale.",
+      "Le pourcentage 25 % vient de `player_spawn_zone_percent` et `ai_spawn_zone_percent`, gardes egaux pour ne pas introduire d'avantage structurel.",
     dependence:
-      "Depend du terrain deja genere, donc du couple `worldSeed` + champs proceduraux."
-  },
-  {
-    title: "Spawn du royaume noir",
-    system: "Carte",
-    lawUse: "Uniforme discrete sur la zone de depart noire",
-    variable: L`P_B \sim \mathcal{U}_d(A_B)`,
-    phenomenon:
-      "Choisit la cellule de depart du roi noir dans sa zone dediee.",
-    parameters: ["zone de spawn = 25 % du plateau cote noir", "respect des contraintes de terrain et d'occupation"],
-    why:
-      "La symetrie conceptuelle entre royaumes est conservee en utilisant la meme famille de loi que pour le blanc.",
-    simulation:
-      "Meme schema que pour le blanc, sur l'ensemble noir admissible.",
-    parameterChoice:
-      "Le meme pourcentage 25 % evite un avantage structurel de l'un des deux camps.",
-    dependence:
-      "Conditionne par le terrain et par la cellule deja retenue pour l'autre royaume si une distance minimale est imposee."
+      "Depend du terrain deja genere, donc du couple `worldSeed` + champs proceduraux, et de la contrainte de separation entre royaumes."
   },
   {
     title: "Bord diagonal d'entree du front meteo",

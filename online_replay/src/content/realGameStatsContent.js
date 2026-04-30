@@ -76,10 +76,7 @@ async function buildRealGameStatsReport() {
         ? [buildWeatherBlock(weather)]
         : [],
       "Champ spatial Water": waterDenied.points.length
-        ? [
-            buildWaterDeniedByKingdomBlock(waterDenied),
-            buildWaterDeniedComparisonBlock(waterDenied)
-          ]
+        ? [buildWaterDeniedByKingdomBlock(waterDenied)]
         : []
     }
   };
@@ -248,40 +245,10 @@ function buildWaterDeniedByKingdomBlock(waterDenied) {
     ],
     insights: [
       "Seules les cellules refusees par l'eau sont conservees ici: les murs sont volontairement exclus de cette tranche du rapport.",
-      "Le calcul repart des mouvements pseudo-legaux, comme dans le site `statistiques-generator`, au lieu d'utiliser une simple approximation geometrique des lacs."
+      `Le calcul repart des mouvements pseudo-legaux, comme dans le site \`statistiques-generator\`, au lieu d'utiliser une simple approximation geometrique des lacs. L'ecart moyen blanc/noir est de ${formatStatNumber(waterDenied.averageKingdomGap)} cellules refusees par enregistrement.`
     ],
     chartHeight: 330,
     chartLabel: "Water denied cells par royaume sur la partie reelle",
-    chartOption: buildTimelineOption({
-      xAxisName: "Turn",
-      yAxes: [
-        { name: "Denied water cells" }
-      ],
-      series: [
-        buildTimelineSeriesSpec("White water denied cells", waterDenied.points, "whiteWaterDeniedCells", LEGACY_COLORS.whiteKingdom, 0),
-        buildTimelineSeriesSpec("Black water denied cells", waterDenied.points, "blackWaterDeniedCells", LEGACY_COLORS.blackKingdom, 0)
-      ]
-    })
-  };
-}
-
-function buildWaterDeniedComparisonBlock(waterDenied) {
-  return {
-    eyebrow: "Partie reelle",
-    title: "Comparaison par royaume et par tour",
-    description:
-      "Lecture comparative strictement centree sur l'eau: pour chaque enregistrement de partie, le graphe oppose directement les cellules refusees au royaume blanc et au royaume noir.",
-    metrics: [
-      { label: "Eau blanche moy.", value: formatStatNumber(waterDenied.averageWhiteWaterDeniedCells) },
-      { label: "Eau noire moy.", value: formatStatNumber(waterDenied.averageBlackWaterDeniedCells) },
-      { label: "Ecart max W/B", value: formatInteger(waterDenied.peakKingdomGap) }
-    ],
-    insights: [
-      "La comparaison avec les constructions a ete retiree: la lecture pertinente ici est la comparaison directe blanc/noir des cellules effectivement refusees par l'eau.",
-      `L'ecart moyen entre les deux royaumes est de ${formatStatNumber(waterDenied.averageKingdomGap)} cellules refusees par enregistrement.`
-    ],
-    chartHeight: 330,
-    chartLabel: "Comparaison des water denied cells par royaume sur la partie reelle",
     chartOption: buildTimelineOption({
       xAxisName: "Turn",
       yAxes: [

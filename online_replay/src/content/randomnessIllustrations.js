@@ -1649,6 +1649,22 @@ function createReplayData({ saveName, frames }) {
   };
 }
 
+function getIllustrationBoardCenter(grid) {
+  const center = (grid.length - 1) / 2;
+  return { x: center, y: center };
+}
+
+function recenterFrontDescriptor(descriptor, targetCenter) {
+  const currentCenterX = frontCenterX(descriptor);
+  const currentCenterY = frontCenterY(descriptor);
+
+  return {
+    ...descriptor,
+    centerStartXTimes1000: toFixed(fromFixed(descriptor.centerStartXTimes1000) + (targetCenter.x - currentCenterX)),
+    centerStartYTimes1000: toFixed(fromFixed(descriptor.centerStartYTimes1000) + (targetCenter.y - currentCenterY))
+  };
+}
+
 function createWeatherFrame(grid, options) {
   const descriptor = buildSpawnedFrontDescriptor({
     grid,
@@ -1662,10 +1678,13 @@ function createWeatherFrame(grid, options) {
     currentTurnStep: options.currentTurnStep,
     weatherOverrides: options.weatherOverrides
   });
+  const normalizedDescriptor = options.centerAt
+    ? recenterFrontDescriptor(descriptor, options.centerAt)
+    : descriptor;
 
   return {
     grid,
-    weatherState: createWeatherState(grid, [descriptor], options.weatherOverrides)
+    weatherState: createWeatherState(grid, [normalizedDescriptor], options.weatherOverrides)
   };
 }
 
@@ -1752,14 +1771,23 @@ const placementVariantFrames = placementVariantOrders.map(function (order) {
 
 const staticContextBuildings = placementVariantFrames[0].publicBuildings;
 
+const whiteSpawnPositions = [
+  createLandPosition(contextualTerrainGrid, { x: 7, y: BOARD_RADIUS }),
+  createLandPosition(contextualTerrainGrid, { x: 9, y: BOARD_RADIUS - 4 }),
+  createLandPosition(contextualTerrainGrid, { x: 10, y: BOARD_RADIUS + 4 }),
+  createLandPosition(contextualTerrainGrid, { x: 8, y: BOARD_RADIUS + 1 })
+];
+
+const blackSpawnPositions = [
+  createLandPosition(contextualTerrainGrid, { x: BOARD_WIDTH - 8, y: BOARD_RADIUS }),
+  createLandPosition(contextualTerrainGrid, { x: BOARD_WIDTH - 10, y: BOARD_RADIUS - 4 }),
+  createLandPosition(contextualTerrainGrid, { x: BOARD_WIDTH - 9, y: BOARD_RADIUS + 4 }),
+  createLandPosition(contextualTerrainGrid, { x: BOARD_WIDTH - 7, y: BOARD_RADIUS + 1 })
+];
+
 const whiteSpawnReplayData = createReplayData({
   saveName: "illustration-white-spawn-zone",
-  frames: [
-    createLandPosition(contextualTerrainGrid, { x: 7, y: BOARD_RADIUS }),
-    createLandPosition(contextualTerrainGrid, { x: 9, y: BOARD_RADIUS - 4 }),
-    createLandPosition(contextualTerrainGrid, { x: 10, y: BOARD_RADIUS + 4 }),
-    createLandPosition(contextualTerrainGrid, { x: 8, y: BOARD_RADIUS + 1 })
-  ].map(function (position) {
+  frames: whiteSpawnPositions.map(function (position) {
     return {
       grid: contextualTerrainGrid,
       whitePieces: [createKing({ id: 0, kingdom: 0, x: position.x, y: position.y })],
@@ -1771,16 +1799,24 @@ const whiteSpawnReplayData = createReplayData({
 
 const blackSpawnReplayData = createReplayData({
   saveName: "illustration-black-spawn-zone",
-  frames: [
-    createLandPosition(contextualTerrainGrid, { x: BOARD_WIDTH - 8, y: BOARD_RADIUS }),
-    createLandPosition(contextualTerrainGrid, { x: BOARD_WIDTH - 10, y: BOARD_RADIUS - 4 }),
-    createLandPosition(contextualTerrainGrid, { x: BOARD_WIDTH - 9, y: BOARD_RADIUS + 4 }),
-    createLandPosition(contextualTerrainGrid, { x: BOARD_WIDTH - 7, y: BOARD_RADIUS + 1 })
-  ].map(function (position) {
+  frames: blackSpawnPositions.map(function (position) {
     return {
       grid: contextualTerrainGrid,
       whitePieces: [createKing({ id: 0, kingdom: 0, x: 7, y: BOARD_RADIUS })],
       blackPieces: [createKing({ id: 1, kingdom: 1, x: position.x, y: position.y })],
+      publicBuildings: staticContextBuildings
+    };
+  })
+});
+
+const combinedSpawnReplayData = createReplayData({
+  saveName: "illustration-kingdom-spawn-zones",
+  frames: whiteSpawnPositions.map(function (whitePosition, index) {
+    const blackPosition = blackSpawnPositions[index];
+    return {
+      grid: contextualTerrainGrid,
+      whitePieces: [createKing({ id: 0, kingdom: 0, x: whitePosition.x, y: whitePosition.y })],
+      blackPieces: [createKing({ id: 1, kingdom: 1, x: blackPosition.x, y: blackPosition.y })],
       publicBuildings: staticContextBuildings
     };
   })
@@ -1796,6 +1832,7 @@ const weatherTerrain = generateTerrainGrid({
   terrainVisualSeed: WEATHER_WORLD_SEED
 });
 const weatherBaseGrid = weatherTerrain.grid;
+const weatherIllustrationCenter = getIllustrationBoardCenter(weatherBaseGrid);
 const weatherMidEdge = BOARD_RADIUS;
 const weatherQuarterEdge = Math.floor(BOARD_WIDTH * 0.32);
 const weatherUpperEdge = Math.floor(BOARD_WIDTH * 0.68);
@@ -1903,11 +1940,12 @@ const frontAspectRatioReplayData = createReplayData({
       directionId: WEATHER_DIRECTION_EAST,
       entryEdge: ENTRY_EDGE_LEFT,
       edgePosition: weatherMidEdge,
-      coveragePercent: 14,
+      coveragePercent: 22,
       aspectRatio,
       shapeSeed: 51,
       densitySeed: 19,
-      currentTurnStep: 8
+      currentTurnStep: 8,
+      centerAt: weatherIllustrationCenter
     });
   })
 });
@@ -1919,11 +1957,12 @@ const frontShapeReplayData = createReplayData({
       directionId: WEATHER_DIRECTION_SOUTH_EAST,
       entryEdge: ENTRY_EDGE_TOP,
       edgePosition: weatherMidEdge,
-      coveragePercent: 16,
+      coveragePercent: 22,
       aspectRatio: 2.25,
       shapeSeed,
       densitySeed: 37,
-      currentTurnStep: 9
+      currentTurnStep: 9,
+      centerAt: weatherIllustrationCenter
     });
   })
 });
@@ -1935,11 +1974,12 @@ const frontDensityReplayData = createReplayData({
       directionId: WEATHER_DIRECTION_EAST,
       entryEdge: ENTRY_EDGE_LEFT,
       edgePosition: weatherMidEdge,
-      coveragePercent: 16,
+      coveragePercent: 22,
       aspectRatio: 2.25,
       shapeSeed: 59,
       densitySeed,
-      currentTurnStep: 9
+      currentTurnStep: 9,
+      centerAt: weatherIllustrationCenter
     });
   })
 });
@@ -1956,12 +1996,13 @@ const frontContourReplayData = createReplayData({
       directionId: WEATHER_DIRECTION_NORTH_EAST,
       entryEdge: ENTRY_EDGE_BOTTOM,
       edgePosition: weatherMidEdge,
-      coveragePercent: 18,
+      coveragePercent: 22,
       aspectRatio: 2.5,
       shapeSeed: options.shapeSeed,
       densitySeed: 53,
       currentTurnStep: 10,
-      weatherOverrides: options.weatherOverrides
+      weatherOverrides: options.weatherOverrides,
+      centerAt: weatherIllustrationCenter
     });
   })
 });
@@ -1999,12 +2040,46 @@ const grassBaseTerrain = generateTerrainGrid({
   terrainVisualSeed: BASE_VISUAL_SEED
 });
 
+const textureShowcaseTerrainGrid = (function () {
+  const grid = generateTerrainGrid({
+    terrainWorldSeed: 0x57c3a18d,
+    terrainVisualSeed: BASE_VISUAL_SEED,
+    dirtCoveragePercent: 22,
+    waterCoveragePercent: 8,
+    numDirtBlobs: 9,
+    numLakes: 5,
+    preserveSpawnCorridor: false
+  }).grid;
+  const showcasePatches = [
+    { type: TERRAIN_DIRT, x: BOARD_RADIUS - 2, y: BOARD_RADIUS + 2, radius: 4 },
+    { type: TERRAIN_WATER, x: BOARD_RADIUS + 5, y: BOARD_RADIUS - 3, radius: 3 },
+    { type: TERRAIN_DIRT, x: BOARD_RADIUS - 6, y: BOARD_RADIUS - 4, radius: 2 }
+  ];
+
+  showcasePatches.forEach(function (patch) {
+    for (let y = Math.max(0, patch.y - patch.radius); y <= Math.min(grid.length - 1, patch.y + patch.radius); y += 1) {
+      for (let x = Math.max(0, patch.x - patch.radius); x <= Math.min(grid[y].length - 1, patch.x + patch.radius); x += 1) {
+        const dx = x - patch.x;
+        const dy = y - patch.y;
+        if ((dx * dx) + (dy * dy) > patch.radius * patch.radius) {
+          continue;
+        }
+        if (!grid[y][x].c) {
+          continue;
+        }
+        grid[y][x].t = patch.type;
+      }
+    }
+  });
+
+  return grid;
+})();
+
 const grassBrightnessReplayData = createReplayData({
   saveName: "illustration-grass-brightness-beta",
   frames: [11, 37, 73, 109].map(function (brightnessSeed) {
     return {
-      grid: createGridWithBrightnessSeed(grassBaseTerrain.grid, brightnessSeed),
-      publicBuildings: [createCenteredChurchBuilding(0)]
+      grid: createGridWithBrightnessSeed(grassBaseTerrain.grid, brightnessSeed)
     };
   })
 });
@@ -2013,8 +2088,7 @@ const terrainFlipReplayData = createReplayData({
   saveName: "illustration-terrain-flip-mask",
   frames: [3, 17, 43, 79].map(function (flipSeed) {
     return {
-      grid: createGridWithFlipSeed(grassBaseTerrain.grid, flipSeed),
-      publicBuildings: [createCenteredChurchBuilding(0)]
+      grid: createGridWithFlipSeed(textureShowcaseTerrainGrid, flipSeed)
     };
   })
 });
@@ -2024,17 +2098,18 @@ export const processIllustrationsByTitle = {
   "Seed Water global": buildIllustrationConfig(waterFieldReplayData),
   "Rotation des mines et fermes neutres": buildIllustrationConfig(rotationReplayData),
   "Flip des mines et fermes neutres": buildIllustrationConfig(flipReplayData),
+  "Spawn des royaumes": buildIllustrationConfig(combinedSpawnReplayData),
   "Spawn du royaume blanc": buildIllustrationConfig(whiteSpawnReplayData),
   "Spawn du royaume noir": buildIllustrationConfig(blackSpawnReplayData),
   "Bord diagonal d'entree du front meteo": buildIllustrationConfig(diagonalEntryReplayData),
-  "Aspect ratio du front": buildIllustrationConfig(frontAspectRatioReplayData),
-  "shapeSeed du front": buildIllustrationConfig(frontShapeReplayData),
-  "densitySeed du front": buildIllustrationConfig(frontDensityReplayData),
+  "Aspect ratio du front": buildIllustrationConfig(frontAspectRatioReplayData, { initialZoom: 1.45 }),
+  "shapeSeed du front": buildIllustrationConfig(frontShapeReplayData, { initialZoom: 1.45 }),
+  "densitySeed du front": buildIllustrationConfig(frontDensityReplayData, { initialZoom: 1.45 }),
   "Ordre de placement des mines et fermes neutres": buildIllustrationConfig(placementOrderReplayData),
   "Direction du front meteo": buildIllustrationConfig(frontDirectionReplayData),
-  "Luminosite de l'herbe": buildIllustrationConfig(grassBrightnessReplayData),
+  "Luminosite de l'herbe": buildIllustrationConfig(grassBrightnessReplayData, { initialZoom: 1.7 }),
   "Champ spatial Dirt": buildIllustrationConfig(dirtFieldReplayData),
   "Champ spatial Water": buildIllustrationConfig(waterFieldReplayData),
-  "Masque de flip des textures de terrain": buildIllustrationConfig(terrainFlipReplayData),
-  "Bruit de contour du front meteo": buildIllustrationConfig(frontContourReplayData)
+  "Masque de flip des textures de terrain": buildIllustrationConfig(terrainFlipReplayData, { initialZoom: 1.7 }),
+  "Bruit de contour du front meteo": buildIllustrationConfig(frontContourReplayData, { initialZoom: 1.45 })
 };
