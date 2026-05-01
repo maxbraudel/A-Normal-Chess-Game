@@ -1,17 +1,27 @@
 const L = String.raw;
 
-import { processIllustrationsByTitle } from "./randomnessIllustrations.js";
+import { processIllustrationsByKey } from "./randomnessIllustrations.js";
 
 function withProcessIllustration(process) {
   const theory = processTheoryByTitle[process.title];
   const enrichedProcess = theory ? { ...process, theory } : process;
-  const illustration = processIllustrationsByTitle[enrichedProcess.title];
+  const illustration = enrichedProcess.illustrationKey
+    ? processIllustrationsByKey[enrichedProcess.illustrationKey]
+    : null;
+
+  if (import.meta.env.DEV && enrichedProcess.illustrationKey && !illustration) {
+    console.warn(
+      `[randomness-report] Missing illustration for key "${enrichedProcess.illustrationKey}" (${enrichedProcess.title}).`
+    );
+  }
+
   return illustration ? { ...enrichedProcess, illustration } : enrichedProcess;
 }
 
 const uniformProcesses = [
   {
     title: "Graine globale de la terre",
+    illustrationKey: "global-dirt-seed",
     system: "Carte",
     lawUse: "Uniforme discrète sur un espace de 32 bits",
     variable: L`S_{terre} \in \{0,\dots,2^{32}-1\}`,
@@ -32,6 +42,7 @@ const uniformProcesses = [
   },
   {
     title: "Graine globale de l'eau",
+    illustrationKey: "global-water-seed",
     system: "Carte",
     lawUse: "Uniforme discrète sur un espace de 32 bits",
     variable: L`S_{eau} \in \{0,\dots,2^{32}-1\}`,
@@ -52,6 +63,7 @@ const uniformProcesses = [
   },
   {
     title: "Rotation des mines et fermes neutres",
+    illustrationKey: "public-building-rotation",
     system: "Carte",
     lawUse: "Uniforme discrète sur quatre quarts de tour",
     variable: L`R \in \{0,1,2,3\}`,
@@ -75,6 +87,7 @@ placement.flipMask             = flipMaskDist(random);`,
   },
   {
     title: "Retournement des mines et fermes neutres",
+    illustrationKey: "public-building-flip",
     system: "Carte",
     lawUse: "Uniforme discrète sur les masques de symétrie",
     variable: L`F \in \{0,1,2,3\}`,
@@ -92,17 +105,18 @@ placement.flipMask             = flipMaskDist(random);`,
   },
   {
     title: "Choix de position des bâtiments publics",
+    illustrationKey: "public-building-position",
     system: "Carte",
     lawUse: "Uniforme conditionnelle sur le haut du classement de dispersion",
     variable: L`X \mid X \in A_{top}`,
     phenomenon:
-      "Sélectionne l'origine d'une mine ou d'une ferme parmi les meilleurs candidats au regard de la dispersion spatiale.",
+      "Sélectionne l'origine d'une mine ou d'une ferme dans un sous-ensemble des meilleurs candidats, classés selon leur score de dispersion spatiale.",
     parameters: [
       L`|A_{top}| = \min\left(n, \max\left(3, \left\lceil \frac{n}{6} \right\rceil\right)\right)`,
       "les candidats sont notés puis triés par score de distance"
     ],
     why:
-      "Un pur optimum rendrait la carte trop déterministe; un tirage uniforme dans le top conserve la qualité géométrique sans figer la même configuration. Choisir systématiquement la meilleure position selon le score de dispersion produirait exactement la même carte pour tout monde donné, ce qui est contraire à l'objectif de renouvellement des parties. La stratégie top-K avec tirage uniforme est un compromis : elle maintient la qualité en n'acceptant que des positions bien dispersées, tout en laissant de la variété à l'intérieur de cet ensemble de qualité.",
+      "Un pur optimum rendrait la carte trop déterministe; un tirage uniforme parmi les meilleurs candidats conserve la qualité géométrique sans figer la même configuration. Choisir systématiquement la meilleure position selon le score de dispersion produirait exactement la même carte pour tout monde donné, ce qui est contraire à l'objectif de renouvellement des parties. La stratégie retenue consiste à ne garder qu'un sous-ensemble des K meilleurs candidats, puis à tirer uniformément à l'intérieur de ce groupe : on préserve ainsi la qualité en n'acceptant que des positions bien dispersées, tout en laissant de la variété à l'intérieur de cet ensemble de qualité.",
     simulation:
       "`selectDispersedCandidate` trie les candidats, calcule `topCount`, puis tire uniformément un index dans ce sous-ensemble.",
     parameterChoice:
@@ -112,6 +126,7 @@ placement.flipMask             = flipMaskDist(random);`,
   },
   {
     title: "Apparition des royaumes",
+    illustrationKey: "kingdom-spawn-zones",
     system: "Carte",
     lawUse: "Uniforme discrète sur les zones de départ des royaumes",
     variable: L`P_K \sim \mathcal{U}_d(A_K),\; K \in \{W,B\}`,
@@ -132,6 +147,7 @@ placement.flipMask             = flipMaskDist(random);`,
   },
   {
     title: "Bord diagonal d'entrée du brouillard",
+    illustrationKey: "weather-front-diagonal-entry",
     system: "Météo",
     lawUse: "Uniforme discrète sur les deux bords compatibles avec la diagonale",
     variable: L`E \in \{e_1,e_2\}`,
@@ -154,7 +170,7 @@ placement.flipMask             = flipMaskDist(random);`,
     lawUse: "Uniforme continue sur un intervalle de pourcentage",
     variable: L`C \sim \mathcal{U}([0.05, 0.20])`,
     phenomenon:
-      "Fixe la proportion de cellules visibles que le nouveau brouillard doit recouvrir a sa naissance.",
+      "Fixe la proportion de cellules visibles que le nouveau brouillard doit recouvrir à sa naissance.",
     parameters: ["`coverage_min_percent = 5`", "`coverage_max_percent = 20`"],
     why:
       "Aucune taille privilégiée n'est imposée entre les bornes retenues; l'uniforme donne un éventail large mais lisible. Une Beta aurait permis de concentrer la masse vers une taille typique, mais l'objectif de design est justement d'éviter un gabarit répétitif : chaque brouillard doit pouvoir couvrir entre 5 % et 20 % du plateau avec autant de chances pour toute taille dans cet intervalle. Les bornes elles-mêmes sont les vraies contraintes de gameplay : en dessous de 5 %, le brouillard ne joue aucun rôle tactique ; au-dessus de 20 %, il occulterait trop de pièces pour rester lisible.",
@@ -175,6 +191,7 @@ int coveragePercent = coverageDist(generator); // ∈ [5, 20]`,
   },
   {
     title: "Allongement du brouillard",
+    illustrationKey: "weather-front-aspect-ratio",
     randomnessKind: "density",
     system: "Météo",
     lawUse: "Uniforme continue sur un intervalle borné",
@@ -193,6 +210,7 @@ int coveragePercent = coverageDist(generator); // ∈ [5, 20]`,
   },
   {
     title: "Graine de forme du brouillard",
+    illustrationKey: "weather-front-shape-seed",
     system: "Météo",
     lawUse: "Uniforme discrète sur 32 bits",
     variable: L`S_{shape} \in \{0,\dots,2^{32}-1\}`,
@@ -210,6 +228,7 @@ int coveragePercent = coverageDist(generator); // ∈ [5, 20]`,
   },
   {
     title: "Graine de densité du brouillard",
+    illustrationKey: "weather-front-density-seed",
     system: "Météo",
     lawUse: "Uniforme discrète sur 32 bits",
     variable: L`S_{densité} \in \{0,\dots,2^{32}-1\}`,
@@ -226,61 +245,29 @@ int coveragePercent = coverageDist(generator); // ∈ [5, 20]`,
       "Couplée au même événement d'apparition que la graine de forme, elle reste exploitée dans une chaîne de hachage distincte par cellule."
   },
   {
-    title: "Apparition de secours sur la frontière pour une pièce du diable",
-    system: "Pièces du diable",
-    lawUse: "Uniforme discrète sur les cases de bord encore admissibles",
-    variable: L`B \sim \mathcal{U}_d(A_{bord})`,
-    phenomenon:
-      "Quand aucune apparition ciblée n'est valide, choisit une case de frontière parmi celles encore autorisées.",
-    parameters: ["ensemble conditionne par le type de pièce, le relief et l'occupation"],
-    why:
-      "En situation de repli, toutes les issues de bord restantes jouent le même rôle logique. La politique de secours intervient uniquement lorsque l'algorithme de placement ciblé a échoué; à ce stade, on ne dispose plus de critère discriminant entre les candidats restants. Introduire une pondération secondaire ajouterait de la complexité sans garantie de meilleur résultat tactique, et pourrait masquer une défaillance de la logique primaire. Un tirage uniforme est donc la politique de repli la plus transparente et la plus facile à déboguer.",
-    simulation:
-      "Le système construit la liste `candidates`, puis appelle `std::uniform_int_distribution<std::size_t>` sur sa taille.",
-    parameterChoice:
-      "La politique de repli minimale reduit les heuristiques supplémentaires quand la cible principale est impossible.",
-    dependence:
-      "Dépend fortement du plateau courant, des pièces visibles et du type manifeste de la pièce du diable."
-  },
-  {
     title: "Choix d'un mouvement aléatoire en phase Searching",
+    illustrationKey: "infernal-searching-random-move",
     system: "Pièces du diable",
     lawUse: "Uniforme discrète sur les coups admissibles",
     variable: L`M \sim \mathcal{U}_d(A_{moves})`,
     phenomenon:
-      "Sélectionne un coup quand la pièce du diable entre dans sa **phase de recherche** (`Searching`), c'est-à-dire le moment où elle explore les coups encore possibles au lieu de poursuivre une cible déjà fixée.",
+      "Chaque pièce du diable choisit d'abord un royaume cible et garde ce royaume comme cible globale. Tant qu'elle voit des pièces de ce royaume, elle les chasse normalement. Si toutes ces pièces deviennent temporairement invisibles, par exemple parce qu'elles sont sous un brouillard, la pièce du diable perd sa cible précise sans pouvoir en reprendre une autre tout de suite. Elle passe alors en phase `Searching` : elle continue de viser le même royaume, mais comme elle ne voit plus personne, elle erre provisoirement avec des déplacements aléatoires. Dès qu'une pièce du royaume réapparaît à sa vue, elle repasse en `Hunting`; s'il n'existe plus de proie valable, elle bascule en `Returning`.",
     parameters: ["support = coups générés, puis filtres par la visibilité locale et les collisions interdites"],
     why:
-      "Une fois le mode aléatoire activé, aucun coup restant n'est prioritaire dans cette branche spécifique du comportement. La phase Searching est précisément la phase d'exploration non guidée : y introduire une pondération (par exemple vers les coups qui approchent la cible) contredit l'intention de la branche et rend le comportement moins lisible. Une catégorielle uniforme est la formulation la plus rigoureuse de l'absence de préférence, et elle est testable : si une case ressort trop souvent dans un replay, cela indique une anomalie dans le filtrage des coups plutôt qu'un biais voulu.",
+      "Dans cet état, le code a explicitement renoncé à toute cible individuelle: la pièce n'optimise plus une trajectoire vers une proie identifiée, puisqu'elle n'en a temporairement plus. Introduire une pondération supplémentaire vers certaines directions serait contradictoire avec cette perte de contact et rendrait la phase moins lisible. Une uniforme discrète est donc la lecture correcte: une fois l'errance autorisée, tous les coups encore admissibles doivent être traités à égalité, sinon on réintroduit en cachette une heuristique de chasse dans une phase qui n'est plus de la chasse.",
     simulation:
       "Le code génère tous les coups, filtre ceux qui violent la logique de visibilité, puis tire un index uniforme.",
     parameterChoice:
       "L'uniformité limite l'introduction d'une seconde heuristique dans un chemin déjà déclenché de façon probabiliste.",
     dependence:
-      "Conditionné par le tirage bernoulli d'entrée dans cette branche et par l'ensemble de coups restants."
+      "Conditionné par l'entrée préalable en phase `Searching`, par la Bernoulli qui autorise ou non l'errance ce tour-ci, et par l'ensemble de coups encore admissibles après filtrage."
   },
-  {
-    title: "Tie-break de retour vers le bord",
-    system: "Pièces du diable",
-    lawUse: "Uniforme discrète sur les sorties équivalentes",
-    variable: L`R_{edge} \sim \mathcal{U}_d(A_{eq})`,
-    phenomenon:
-      "Départage plusieurs trajectoires de repli équivalentes quand la pièce du diable veut revenir vers un bord.",
-    parameters: ["support = directions a même cout de chemin"],
-    why:
-      "Les options de même coût ne doivent pas être ordonnées arbitrairement par l'ordre de parcours du code. Sans tie-break probabiliste, la pièce du diable choisirait toujours la première direction admissible dans l'ordre d'itération du conteneur, produisant un biais systématique vers certaines directions selon le parcours. Le tirage uniforme rétablit l'équité entre options strictement équivalentes du point de vue du coût de chemin.",
-    simulation:
-      "Le tie-break se fait par tirage uniforme sur le sous-ensemble des directions ex aequo.",
-    parameterChoice:
-      "Un tirage conditionnel est suffisant car seules les directions de cout minimal entrent dans le support.",
-    dependence:
-      "Dépend d'une analyse de plus court chemin préalable, donc du terrain et des obstacles courants."
-  }
 ];
 
 const permutationProcesses = [
   {
     title: "Ordre de placement des mines et fermes neutres",
+    illustrationKey: "public-building-order",
     system: "Carte",
     lawUse: "Permutation uniforme sur les objets a placer",
     variable: L`\Pi \in \mathfrak{S}_n`,
@@ -361,10 +348,11 @@ switch (dist(generator)) {
     parameterChoice:
       "**À partir du tour 10**, les bonus d'action prennent plus de poids afin d'accélérer le milieu de partie.",
     dependence:
-      "Si le mode de rattrapage est actif, **le tirage suivant n'apparaît que lorsque les deux royaumes ont déjà pris la récompense courante**; l'état `currentRewardGeneration` lie donc directement les ouvertures de coffres des deux camps."
+        "Si le mode de rattrapage est actif, **le tirage suivant n'apparaît que lorsque les deux royaumes ont déjà pris la récompense courante**; les ouvertures de coffres des deux camps restent donc liées par une même récompense partagée tant qu'elle n'a pas été consommée des deux côtés."
   },
   {
     title: "Direction du brouillard",
+    illustrationKey: "weather-front-direction",
     system: "Météo",
     lawUse: "Catégorielle pondérée sur huit directions",
     variable: L`D \in \{N,S,E,W,NE,NW,SE,SW\}`,
@@ -429,7 +417,7 @@ switch (dist(generator)) {
       "Quand la cible initiale devient impossible, choisit un nouveau type de cible visible.",
     parameters: [
       "même base de poids (8, 14, 14, 26, 38)",
-      "si le type correspond à `preferredTargetType`, son poids est doublé"
+        "si le type correspond au type de cible précédemment privilégié, son poids est doublé"
     ],
     why:
       "Le remplacement doit rester cohérent avec la priorité précédente tout en laissant une vraie possibilité de redirection. Réinitialiser complètement la distribution rendrait le changement de cible trop imprévisible et difficile à lire pour les joueurs. Conserver les mêmes poids de base avec un bonus sur le type précédemment poursuivi modélise une inertie comportementale réaliste : la pièce du diable tend à persister dans sa stratégie, mais peut l'abandonner. Ce bonus est suffisamment simple pour être compris dans un rapport de debug et ajustable sans changer la logique du code.",
@@ -497,16 +485,16 @@ return dist(generator) ? KingdomId::White : KingdomId::Black;`,
     lawUse: "Bernoulli simple",
     variable: L`B \sim \mathrm{Bernoulli}(0.333)`,
     phenomenon:
-      "Décide si, lors d'un tour de **phase de recherche** (`Searching`), la pièce du diable tente effectivement un mouvement purement aléatoire plutôt qu'un déplacement entièrement piloté par ses heuristiques.",
+      "Pendant l'état `Searching` décrit ci-dessus, décide à chaque tour si la pièce du diable effectue réellement un déplacement d'errance aléatoire ce tour-ci, ou si elle reste sur place en attendant de retrouver une cible visible qui la ferait repasser en `Hunting`. Cette Bernoulli n'intervient donc ni pendant la chasse normale, ni pendant le retour au bord, mais seulement pendant cette phase intermédiaire de perte de contact avec la proie.",
     parameters: ["probabilité de 33,3 % (`searching_random_move_chance_times_1000 = 333`)"],
     why:
-      "Il s'agit d'un interrupteur oui/non sur une branche comportementale unique; la Bernoulli est la loi minimale adéquate. La décision est binaire par construction : soit la pièce du diable joue un coup aléatoire ce tour-ci, soit elle continue son comportement guidé. Une probabilité d'environ 1/3 a été retenue pour calibrer l'erraticité perçue : trop haute, la pièce devient imprévisible et frustrante ; trop basse, la phase Searching n'a aucun effet visible. L'implémentation via un entier uniforme sur [0, 999] comparé à un seuil de 333 est mathématiquement équivalente à `std::bernoulli_distribution(0.333)` mais plus pratique à régler depuis la config.",
+      "Il s'agit d'un interrupteur oui/non sur une branche comportementale unique; la Bernoulli est donc la loi minimale adéquate. La décision est binaire par construction : soit la pièce erre ce tour-ci, soit elle n'erre pas et laisse la priorité à une éventuelle reacquisition de cible au tour suivant. Une probabilité d'environ 1/3 a été retenue pour calibrer l'erraticité perçue : trop haute, la pièce devient chaotique et perd sa lisibilité ; trop basse, la phase `Searching` devient presque invisible dans la partie. L'implémentation via un entier uniforme sur [0, 999] comparé à un seuil de 333 est mathématiquement équivalente à `std::bernoulli_distribution(0.333)` mais plus pratique à régler depuis la config.",
     simulation:
       "Le système tire un entier uniforme sur `[0, 999]` et compare au seuil 333, ce qui réalise une Bernoulli discrétisée.",
     parameterChoice:
       "Une probabilité proche de 1/3 maintient de la pression sans rendre la branche erratique dominante.",
     dependence:
-      "Conditionné par l'existence d'au moins un coup admissible après filtrage."
+      "Conditionné par l'entrée préalable en phase `Searching` et par l'existence d'au moins un coup admissible après filtrage; si une cible visible est retrouvée avant cela, la pièce repasse en `Hunting` et cette Bernoulli ne s'applique plus."
   }
 ];
 
@@ -727,6 +715,7 @@ float multiplier = (float)dist(gen);
 const betaProcesses = [
   {
     title: "Luminosité de l'herbe",
+    illustrationKey: "grass-brightness-beta",
     system: "Carte",
     lawUse: "Beta transformée par seuil et contraste",
     variable: L`B \sim \mathrm{Beta}(7,2)`,
@@ -799,6 +788,7 @@ float position = (float)dist(generator);`,
 const proceduralProcesses = [
   {
     title: "Champ spatial de la terre",
+    illustrationKey: "dirt-field",
     system: "Carte",
     lawUse: "Champ procédural corrélé dérivé de bruit",
     variable: L`X_{terre}(c) = g_{S_{terre}}(c)`,
@@ -830,6 +820,7 @@ if (dirtScore > dirtThreshold)
   },
   {
     title: "Champ spatial de l'eau",
+    illustrationKey: "water-field",
     system: "Carte",
     lawUse: "Champ procédural corrélé dérivé de bruit",
     variable: L`X_{eau}(c) = h_{S_{eau}}(c)`,
@@ -851,6 +842,7 @@ if (dirtScore > dirtThreshold)
   },
   {
     title: "Masque de retournement des textures de terrain",
+    illustrationKey: "terrain-flip-mask",
     system: "Carte",
     lawUse: "Pseudo-uniforme par hachage de position",
     variable: L`F(c) = \mathrm{hash}(worldSeed, type, c) \bmod 4`,
@@ -868,6 +860,7 @@ if (dirtScore > dirtThreshold)
   },
   {
     title: "Bruit de contour du brouillard",
+    illustrationKey: "weather-front-contour-noise",
     system: "Météo",
     lawUse: "Champ procédurale de bord via value noise",
     variable: L`B(c) = 1 + (U(c)-0.5)\,a`,
@@ -996,23 +989,11 @@ const processTheoryByTitle = {
     L`S_{densité}`,
     "Cette seed conditionne tout le champ d'opacité local du brouillard."
   ),
-  "Apparition de secours sur la frontière pour une pièce du diable": makePositionTheory({
-    support: L`A_{bord}\subset \mathbb{Z}^2`,
-    law: L`\mathbb{P}(P=p\mid p\in A_{bord})=\frac{1}{|A_{bord}|}`,
-    note:
-      "Le support dépend des cases frontière encore libres au moment de l'apparition de secours."
-  }),
   "Choix d'un mouvement aléatoire en phase Searching": makeNominalTheory({
     support: L`\mathcal{M}_{adm}(t)`,
     law: L`\mathbb{P}(M=m\mid m\in \mathcal{M}_{adm}(t))=\frac{1}{|\mathcal{M}_{adm}(t)|}`,
     note:
       "Le support est l'ensemble des coups légalement atteignables pour la pièce au tour courant, donc il change avec l'état du plateau."
-  }),
-  "Tie-break de retour vers le bord": makeNominalTheory({
-    support: L`\mathcal{D}_{eq}(t)`,
-    law: L`\mathbb{P}(D=d\mid d\in \mathcal{D}_{eq}(t))=\frac{1}{|\mathcal{D}_{eq}(t)|}`,
-    note:
-      "Cette uniforme ne sert qu'à trancher entre plusieurs directions équivalentes lors du retour vers le bord."
   }),
   "Ordre de placement des mines et fermes neutres": createTheory({
     support: L`\mathfrak{S}_5`,
@@ -1390,7 +1371,7 @@ export const randomnessReport = {
       bullets: [
         "`worldSeed` fixe le monde de référence.",
         "`rngCounter` de XP, Coffres, Météo et Pièces du diable est sérialisé par système.",
-        "Les états dérivés comme `rewardRngCounter`, `currentRewardGeneration` et les descripteurs de brouillard conservent la continuité des lois conditionnelles."
+          "Les états dérivés comme le compteur interne des tirages de récompense, la récompense de coffre actuellement partagée et les descripteurs de brouillard conservent la continuité des lois conditionnelles."
       ]
     },
     {

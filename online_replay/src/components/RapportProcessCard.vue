@@ -219,6 +219,11 @@ defineProps({
       <div class="rapport-process-illustration">
         <IllustrationMap v-bind="item.illustration" />
       </div>
+      <InlineRichText
+        v-if="item.illustration.description"
+        class="rapport-process-illustration__description"
+        :text="item.illustration.description"
+      />
     </div>
 
     <div

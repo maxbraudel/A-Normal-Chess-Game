@@ -4,6 +4,7 @@ const BOARD_WIDTH = BOARD_RADIUS * 2;
 const BOARD_HEIGHT = BOARD_RADIUS * 2;
 const EMPTY_BUILDINGS = [];
 const EMPTY_PIECES = [];
+const EMPTY_AUTONOMOUS_UNITS = [];
 const FLIP_HORIZONTAL_MASK = 1;
 const FLIP_VERTICAL_MASK = 2;
 const EPSILON = 1e-6;
@@ -13,6 +14,13 @@ const TERRAIN_VOID = 0;
 const TERRAIN_GRASS = 1;
 const TERRAIN_DIRT = 2;
 const TERRAIN_WATER = 3;
+
+const PIECE_PAWN = 0;
+const PIECE_KNIGHT = 1;
+const PIECE_BISHOP = 2;
+const PIECE_ROOK = 3;
+const PIECE_QUEEN = 4;
+const PIECE_KING = 5;
 
 const WEATHER_DIRECTION_NORTH = 0;
 const WEATHER_DIRECTION_SOUTH = 1;
@@ -27,6 +35,9 @@ const ENTRY_EDGE_TOP = "top";
 const ENTRY_EDGE_BOTTOM = "bottom";
 const ENTRY_EDGE_LEFT = "left";
 const ENTRY_EDGE_RIGHT = "right";
+
+const INFERNAL_PHASE_HUNTING = 0;
+const INFERNAL_PHASE_SEARCHING = 2;
 
 const GAME_CONFIG = {
   map: {
@@ -86,7 +97,12 @@ const illustrationReferenceData = {
     { id: 1, key: "black", label: "Black" }
   ],
   pieceTypes: [
-    { id: 5, key: "king", label: "King" }
+    { id: PIECE_PAWN, key: "pawn", label: "Pawn" },
+    { id: PIECE_KNIGHT, key: "knight", label: "Knight" },
+    { id: PIECE_BISHOP, key: "bishop", label: "Bishop" },
+    { id: PIECE_ROOK, key: "rook", label: "Rook" },
+    { id: PIECE_QUEEN, key: "queen", label: "Queen" },
+    { id: PIECE_KING, key: "king", label: "King" }
   ],
   buildingTypes: [
     { id: 0, key: "church", label: "Church" },
@@ -981,10 +997,10 @@ function createCenteredChurchBuilding(id = 0) {
   });
 }
 
-function createKing({ id, kingdom, x, y }) {
+function createPiece({ id, type, kingdom, x, y }) {
   return {
     id,
-    type: 5,
+    type,
     kingdom,
     x,
     y,
@@ -995,6 +1011,22 @@ function createKing({ id, kingdom, x, y }) {
     hasWallBreachEntry: false,
     wallBreachCellX: -1,
     wallBreachCellY: -1
+  };
+}
+
+function createKing({ id, kingdom, x, y }) {
+  return createPiece({ id, type: PIECE_KING, kingdom, x, y });
+}
+
+function createInfernalUnit({ id, pieceType, x, y, targetKingdom = 0, phase = INFERNAL_PHASE_HUNTING }) {
+  return {
+    id,
+    x,
+    y,
+    pieceType,
+    targetKingdom,
+    phase,
+    spawnTurn: 0
   };
 }
 
@@ -1210,6 +1242,47 @@ function buildPlacementVariantFrame(terrainWorldSeed, placementRequests, order) 
     grid,
     publicBuildings: existingBuildings
   };
+}
+
+function buildPlacementBuildUpFrames(terrainWorldSeed, placementRequests, order) {
+  const generatedTerrain = generateTerrainGrid({ terrainWorldSeed });
+  const grid = generatedTerrain.grid;
+  const existingBuildings = [createCenteredChurchBuilding(0)];
+  const frames = [];
+
+  for (const requestIndex of order) {
+    const request = placementRequests[requestIndex];
+    const generator = createSeededGenerator(request.selectionSeed);
+    const origin = findValidBuildingPos(
+      grid,
+      existingBuildings,
+      request.footprintWidth,
+      request.footprintHeight,
+      GAME_CONFIG.map.minPublicBuildingDistance,
+      generatedTerrain.metadata.spawnLeftMax,
+      generatedTerrain.metadata.spawnRightMin,
+      request.type,
+      generator
+    );
+
+    existingBuildings.push(createPublicBuilding({
+      id: existingBuildings.length,
+      type: request.type,
+      ox: origin.x,
+      oy: origin.y,
+      w: request.width,
+      h: request.height,
+      rot: request.rotationQuarterTurns,
+      fm: request.flipMask
+    }));
+
+    frames.push({
+      grid,
+      publicBuildings: deepClone(existingBuildings)
+    });
+  }
+
+  return frames;
 }
 
 function hashUnitFloat(seed, x, y, salt = 0) {
@@ -1599,6 +1672,7 @@ function createSnapshot({
   whitePieces = EMPTY_PIECES,
   blackPieces = EMPTY_PIECES,
   publicBuildings = EMPTY_BUILDINGS,
+  autonomousUnits = EMPTY_AUTONOMOUS_UNITS,
   weatherState = null
 } = {}) {
   const snapshot = {
@@ -1614,7 +1688,7 @@ function createSnapshot({
     },
     publicBuildings: deepClone(publicBuildings),
     mapObjects: [],
-    autonomousUnits: []
+    autonomousUnits: deepClone(autonomousUnits)
   };
 
   if (weatherState) {
@@ -1684,7 +1758,11 @@ function createWeatherFrame(grid, options) {
 
   return {
     grid,
-    weatherState: createWeatherState(grid, [normalizedDescriptor], options.weatherOverrides)
+    weatherState: createWeatherState(grid, [normalizedDescriptor], options.weatherOverrides),
+    whitePieces: options.whitePieces || EMPTY_PIECES,
+    blackPieces: options.blackPieces || EMPTY_PIECES,
+    publicBuildings: options.publicBuildings || EMPTY_BUILDINGS,
+    autonomousUnits: options.autonomousUnits || EMPTY_AUTONOMOUS_UNITS
   };
 }
 
@@ -1785,30 +1863,6 @@ const blackSpawnPositions = [
   createLandPosition(contextualTerrainGrid, { x: BOARD_WIDTH - 7, y: BOARD_RADIUS + 1 })
 ];
 
-const whiteSpawnReplayData = createReplayData({
-  saveName: "illustration-white-spawn-zone",
-  frames: whiteSpawnPositions.map(function (position) {
-    return {
-      grid: contextualTerrainGrid,
-      whitePieces: [createKing({ id: 0, kingdom: 0, x: position.x, y: position.y })],
-      blackPieces: [createKing({ id: 1, kingdom: 1, x: BOARD_WIDTH - 8, y: BOARD_RADIUS })],
-      publicBuildings: staticContextBuildings
-    };
-  })
-});
-
-const blackSpawnReplayData = createReplayData({
-  saveName: "illustration-black-spawn-zone",
-  frames: blackSpawnPositions.map(function (position) {
-    return {
-      grid: contextualTerrainGrid,
-      whitePieces: [createKing({ id: 0, kingdom: 0, x: 7, y: BOARD_RADIUS })],
-      blackPieces: [createKing({ id: 1, kingdom: 1, x: position.x, y: position.y })],
-      publicBuildings: staticContextBuildings
-    };
-  })
-});
-
 const combinedSpawnReplayData = createReplayData({
   saveName: "illustration-kingdom-spawn-zones",
   frames: whiteSpawnPositions.map(function (whitePosition, index) {
@@ -1827,6 +1881,11 @@ const placementOrderReplayData = createReplayData({
   frames: placementVariantFrames
 });
 
+const placementBuildUpReplayData = createReplayData({
+  saveName: "illustration-public-building-position",
+  frames: buildPlacementBuildUpFrames(CONTEXT_WORLD_SEED, placementRequests, canonicalPlacementOrder)
+});
+
 const weatherTerrain = generateTerrainGrid({
   terrainWorldSeed: WEATHER_WORLD_SEED,
   terrainVisualSeed: WEATHER_WORLD_SEED
@@ -1836,6 +1895,21 @@ const weatherIllustrationCenter = getIllustrationBoardCenter(weatherBaseGrid);
 const weatherMidEdge = BOARD_RADIUS;
 const weatherQuarterEdge = Math.floor(BOARD_WIDTH * 0.32);
 const weatherUpperEdge = Math.floor(BOARD_WIDTH * 0.68);
+const weatherContextBuildings = [createCenteredChurchBuilding(0)];
+const weatherWhiteKingPosition = createLandPosition(weatherBaseGrid, { x: 6, y: BOARD_RADIUS + 6 });
+const weatherBlackKingPosition = createLandPosition(weatherBaseGrid, { x: BOARD_WIDTH - 7, y: BOARD_RADIUS - 6 });
+const weatherWhiteKing = createKing({
+  id: 301,
+  kingdom: 0,
+  x: weatherWhiteKingPosition.x,
+  y: weatherWhiteKingPosition.y
+});
+const weatherBlackKing = createKing({
+  id: 302,
+  kingdom: 1,
+  x: weatherBlackKingPosition.x,
+  y: weatherBlackKingPosition.y
+});
 
 const frontDirectionReplayData = createReplayData({
   saveName: "illustration-weather-front-direction",
@@ -1891,45 +1965,148 @@ const diagonalEntryReplayData = createReplayData({
     {
       directionId: WEATHER_DIRECTION_SOUTH_EAST,
       entryEdge: ENTRY_EDGE_TOP,
-      edgePosition: weatherQuarterEdge,
-      coveragePercent: 14,
-      aspectRatio: 2.1,
+      edgePosition: weatherUpperEdge,
+      coveragePercent: 19,
+      aspectRatio: 2.35,
       shapeSeed: 41,
       densitySeed: 17,
-      currentTurnStep: 8
-    },
-    {
-      directionId: WEATHER_DIRECTION_SOUTH_EAST,
-      entryEdge: ENTRY_EDGE_LEFT,
-      edgePosition: weatherQuarterEdge,
-      coveragePercent: 14,
-      aspectRatio: 2.1,
-      shapeSeed: 41,
-      densitySeed: 17,
-      currentTurnStep: 8
+      currentTurnStep: 2,
+      whitePieces: [weatherWhiteKing],
+      blackPieces: [weatherBlackKing],
+      publicBuildings: weatherContextBuildings
     },
     {
       directionId: WEATHER_DIRECTION_SOUTH_EAST,
       entryEdge: ENTRY_EDGE_TOP,
       edgePosition: weatherUpperEdge,
-      coveragePercent: 14,
-      aspectRatio: 2.1,
-      shapeSeed: 71,
+      coveragePercent: 19,
+      aspectRatio: 2.35,
+      shapeSeed: 41,
       densitySeed: 17,
-      currentTurnStep: 8
+      currentTurnStep: 8,
+      whitePieces: [weatherWhiteKing],
+      blackPieces: [weatherBlackKing],
+      publicBuildings: weatherContextBuildings
+    },
+    {
+      directionId: WEATHER_DIRECTION_SOUTH_EAST,
+      entryEdge: ENTRY_EDGE_TOP,
+      edgePosition: weatherUpperEdge,
+      coveragePercent: 19,
+      aspectRatio: 2.35,
+      shapeSeed: 41,
+      densitySeed: 17,
+      currentTurnStep: 14,
+      whitePieces: [weatherWhiteKing],
+      blackPieces: [weatherBlackKing],
+      publicBuildings: weatherContextBuildings
     },
     {
       directionId: WEATHER_DIRECTION_SOUTH_EAST,
       entryEdge: ENTRY_EDGE_LEFT,
       edgePosition: weatherUpperEdge,
-      coveragePercent: 14,
-      aspectRatio: 2.1,
-      shapeSeed: 71,
+      coveragePercent: 19,
+      aspectRatio: 2.35,
+      shapeSeed: 41,
       densitySeed: 17,
-      currentTurnStep: 8
+      currentTurnStep: 2,
+      whitePieces: [weatherWhiteKing],
+      blackPieces: [weatherBlackKing],
+      publicBuildings: weatherContextBuildings
+    },
+    {
+      directionId: WEATHER_DIRECTION_SOUTH_EAST,
+      entryEdge: ENTRY_EDGE_LEFT,
+      edgePosition: weatherUpperEdge,
+      coveragePercent: 19,
+      aspectRatio: 2.35,
+      shapeSeed: 41,
+      densitySeed: 17,
+      currentTurnStep: 8,
+      whitePieces: [weatherWhiteKing],
+      blackPieces: [weatherBlackKing],
+      publicBuildings: weatherContextBuildings
+    },
+    {
+      directionId: WEATHER_DIRECTION_SOUTH_EAST,
+      entryEdge: ENTRY_EDGE_LEFT,
+      edgePosition: weatherUpperEdge,
+      coveragePercent: 19,
+      aspectRatio: 2.35,
+      shapeSeed: 41,
+      densitySeed: 17,
+      currentTurnStep: 14,
+      whitePieces: [weatherWhiteKing],
+      blackPieces: [weatherBlackKing],
+      publicBuildings: weatherContextBuildings
     }
   ].map(function (options) {
     return createWeatherFrame(weatherBaseGrid, options);
+  })
+});
+
+const searchingCloudFrame = createWeatherFrame(weatherBaseGrid, {
+  directionId: WEATHER_DIRECTION_EAST,
+  entryEdge: ENTRY_EDGE_LEFT,
+  edgePosition: weatherMidEdge,
+  coveragePercent: 18,
+  aspectRatio: 1.9,
+  shapeSeed: 83,
+  densitySeed: 61,
+  currentTurnStep: 9,
+  centerAt: weatherIllustrationCenter,
+  publicBuildings: weatherContextBuildings,
+  weatherOverrides: {
+    alphaBasePercent: 52,
+    alphaMinPercent: 24,
+    alphaMaxPercent: 86
+  }
+});
+
+const searchingBlackKingPosition = createLandPosition(weatherBaseGrid, { x: BOARD_RADIUS + 1, y: BOARD_RADIUS - 1 });
+const searchingBlackPawnOnePosition = createLandPosition(weatherBaseGrid, { x: BOARD_RADIUS - 1, y: BOARD_RADIUS + 1 });
+const searchingBlackPawnTwoPosition = createLandPosition(weatherBaseGrid, { x: BOARD_RADIUS + 3, y: BOARD_RADIUS + 2 });
+const searchingWhiteKingPosition = createLandPosition(weatherBaseGrid, { x: 5, y: BOARD_RADIUS + 7 });
+
+const searchingBlackPieces = [
+  createPiece({ id: 401, type: PIECE_KING, kingdom: 1, x: searchingBlackKingPosition.x, y: searchingBlackKingPosition.y }),
+  createPiece({ id: 402, type: PIECE_PAWN, kingdom: 1, x: searchingBlackPawnOnePosition.x, y: searchingBlackPawnOnePosition.y }),
+  createPiece({ id: 403, type: PIECE_PAWN, kingdom: 1, x: searchingBlackPawnTwoPosition.x, y: searchingBlackPawnTwoPosition.y })
+];
+
+const searchingWhitePieces = [
+  createPiece({ id: 404, type: PIECE_KING, kingdom: 0, x: searchingWhiteKingPosition.x, y: searchingWhiteKingPosition.y })
+];
+
+const searchingInfernalWaypoints = [
+  createLandPosition(weatherBaseGrid, { x: 4, y: BOARD_RADIUS - 5 }),
+  createLandPosition(weatherBaseGrid, { x: 4, y: BOARD_RADIUS - 1 }),
+  createLandPosition(weatherBaseGrid, { x: 4, y: BOARD_RADIUS + 3 }),
+  createLandPosition(weatherBaseGrid, { x: 7, y: BOARD_RADIUS + 3 }),
+  createLandPosition(weatherBaseGrid, { x: 7, y: BOARD_RADIUS - 1 }),
+  createLandPosition(weatherBaseGrid, { x: 5, y: BOARD_RADIUS - 1 })
+];
+
+const infernalSearchingReplayData = createReplayData({
+  saveName: "illustration-infernal-searching-random-move",
+  frames: searchingInfernalWaypoints.map(function (position) {
+    return {
+      grid: weatherBaseGrid,
+      weatherState: searchingCloudFrame.weatherState,
+      whitePieces: searchingWhitePieces,
+      blackPieces: searchingBlackPieces,
+      publicBuildings: weatherContextBuildings,
+      autonomousUnits: [
+        createInfernalUnit({
+          id: 501,
+          pieceType: PIECE_ROOK,
+          x: position.x,
+          y: position.y,
+          targetKingdom: 1,
+          phase: INFERNAL_PHASE_SEARCHING
+        })
+      ]
+    };
   })
 });
 
@@ -2093,23 +2270,36 @@ const terrainFlipReplayData = createReplayData({
   })
 });
 
-export const processIllustrationsByTitle = {
-  "Graine globale de la terre": buildIllustrationConfig(dirtFieldReplayData),
-  "Graine globale de l'eau": buildIllustrationConfig(waterFieldReplayData),
-  "Rotation des mines et fermes neutres": buildIllustrationConfig(rotationReplayData),
-  "Retournement des mines et fermes neutres": buildIllustrationConfig(flipReplayData),
-  "Apparition des royaumes": buildIllustrationConfig(combinedSpawnReplayData),
-  "Spawn du royaume blanc": buildIllustrationConfig(whiteSpawnReplayData),
-  "Spawn du royaume noir": buildIllustrationConfig(blackSpawnReplayData),
-  "Bord diagonal d'entrée du brouillard": buildIllustrationConfig(diagonalEntryReplayData),
-  "Allongement du brouillard": buildIllustrationConfig(frontAspectRatioReplayData),
-  "Graine de forme du brouillard": buildIllustrationConfig(frontShapeReplayData),
-  "Graine de densité du brouillard": buildIllustrationConfig(frontDensityReplayData),
-  "Ordre de placement des mines et fermes neutres": buildIllustrationConfig(placementOrderReplayData),
-  "Direction du brouillard": buildIllustrationConfig(frontDirectionReplayData),
-  "Luminosité de l'herbe": buildIllustrationConfig(grassBrightnessReplayData, { initialZoom: 1.7 }),
-  "Champ spatial de la terre": buildIllustrationConfig(dirtFieldReplayData),
-  "Champ spatial de l'eau": buildIllustrationConfig(waterFieldReplayData),
-  "Masque de retournement des textures de terrain": buildIllustrationConfig(terrainFlipReplayData, { initialZoom: 1.7 }),
-  "Bruit de contour du brouillard": buildIllustrationConfig(frontContourReplayData)
+export const processIllustrationsByKey = {
+  "global-dirt-seed": buildIllustrationConfig(dirtFieldReplayData),
+  "global-water-seed": buildIllustrationConfig(waterFieldReplayData),
+  "public-building-rotation": buildIllustrationConfig(rotationReplayData),
+  "public-building-flip": buildIllustrationConfig(flipReplayData),
+  "public-building-position": buildIllustrationConfig(placementBuildUpReplayData, {
+    autoplayIntervalMs: 950,
+    description:
+      "À chaque tick, un bâtiment public supplémentaire est ajouté sur la même carte. Le placement privilégie les positions admissibles les mieux dispersées par rapport à l'église centrale et aux bâtiments déjà posés."
+  }),
+  "kingdom-spawn-zones": buildIllustrationConfig(combinedSpawnReplayData),
+  "weather-front-diagonal-entry": buildIllustrationConfig(diagonalEntryReplayData, {
+    autoplayIntervalMs: 900,
+    description:
+      "Ticks 1 à 3 : la diagonale entre par le haut. Ticks 4 à 6 : la même diagonale entre par la gauche. On voit ainsi plus nettement que la direction reste la même, mais que le bord d'entrée change."
+  }),
+  "weather-front-aspect-ratio": buildIllustrationConfig(frontAspectRatioReplayData),
+  "weather-front-shape-seed": buildIllustrationConfig(frontShapeReplayData),
+  "weather-front-density-seed": buildIllustrationConfig(frontDensityReplayData),
+  "public-building-order": buildIllustrationConfig(placementOrderReplayData),
+  "weather-front-direction": buildIllustrationConfig(frontDirectionReplayData),
+  "infernal-searching-random-move": buildIllustrationConfig(infernalSearchingReplayData, {
+    autoplayIntervalMs: 1000,
+    initialZoom: 1.25,
+    description:
+      "Ici, la pièce du diable vise le royaume noir. Les pièces noires restent cachées sous un brouillard fixe : elle ne retrouve donc aucune cible visible et erre aléatoirement autour du nuage jusqu'à revoir une pièce noire."
+  }),
+  "grass-brightness-beta": buildIllustrationConfig(grassBrightnessReplayData, { initialZoom: 1.7 }),
+  "dirt-field": buildIllustrationConfig(dirtFieldReplayData),
+  "water-field": buildIllustrationConfig(waterFieldReplayData),
+  "terrain-flip-mask": buildIllustrationConfig(terrainFlipReplayData, { initialZoom: 1.7 }),
+  "weather-front-contour-noise": buildIllustrationConfig(frontContourReplayData)
 };

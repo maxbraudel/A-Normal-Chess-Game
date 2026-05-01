@@ -66,6 +66,10 @@ const props = defineProps({
   trackedTarget: {
     type: Object,
     default: null
+  },
+  description: {
+    type: String,
+    default: undefined
   }
 });
 

@@ -866,6 +866,15 @@ a {
   height: 100%;
 }
 
+.rapport-process-illustration__description,
+.rapport-process-illustration__description .inline-rich-text,
+.rapport-process-illustration__description p {
+  margin-top: 10px;
+  color: var(--ink-dim);
+  font-size: 14px;
+  line-height: 1.58;
+}
+
 .illustration-map,
 .illustration-map__viewer {
   width: 100%;
@@ -1661,6 +1670,14 @@ a {
 .site-shell--rapport .rapport-process-illustration .replay-root {
   min-height: 100%;
   height: 100%;
+}
+
+.site-shell--rapport .rapport-process-illustration__description,
+.site-shell--rapport .rapport-process-illustration__description .inline-rich-text,
+.site-shell--rapport .rapport-process-illustration__description p {
+  color: #444444;
+  font-size: 15px;
+  line-height: 1.68;
 }
 
 .site-shell--rapport .math-formula {
