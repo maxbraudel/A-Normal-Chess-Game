@@ -333,7 +333,7 @@ const categoricalProcesses = [
     variable: L`D \in \{N,S,E,W,NE,NW,SE,SW\}`,
     phenomenon:
       "Choisit la direction cardinale ou diagonale du prochain brouillard.",
-    parameters: ["les huit poids valent actuellement 1.`"],
+    parameters: ["les huit poids valent actuellement 1."],
     why:
       "Le système est écrit de façon générique pour pouvoir biaiser certaines directions plus tard, mais la configuration active réalise une équiprobabilité via une catégorielle à poids égaux.",
     simulation:
@@ -355,18 +355,18 @@ const categoricalProcesses = [
       "les types absents du champ visible recoivent le poids 0"
     ],
     why:
-      "Le comportement cherche une priorisation strategicue explicite: les pièces majeures doivent être attirees plus souvent que les pions.",
+      "Le comportement cherche une priorisation stratégique explicite: les pièces majeures doivent être attirées plus souvent que les pions.",
     simulation:
-      "Le système construit `typeWeights`, met a zero les types indisponibles, puis tire via `std::discrete_distribution<std::size_t>`.",
+      "Le système construit `typeWeights`, met à zéro les types indisponibles, puis tire via `std::discrete_distribution<std::size_t>`.",
     parameterChoice:
       "Les poids croissants codent un ordre de valeur tactique sans rendre le choix déterministe.",
     dependence:
-      "Dépend de la visibilité courante et des types réellement presents chez le royaume cible."
+      "Dépend de la visibilité courante et des types réellement présents chez le royaume cible."
   },
   {
     title: "Option d'apparition ciblée d'une pièce du diable",
     system: "Pièces du diable",
-    lawUse: "Catégorielle pondérée par proximite de chemin",
+    lawUse: "Catégorielle pondérée par proximité de chemin",
     variable: L`O \in \{o_1,\dots,o_m\}`,
     phenomenon:
       "Choisit, parmi plusieurs options de projection vers une cible visible, celle qui sera retenue au moment de l'apparition.",
@@ -387,7 +387,7 @@ const categoricalProcesses = [
     title: "Type de remplacement d'une pièce du diable",
     system: "Pièces du diable",
     lawUse: "Catégorielle pondérée avec bonus de persistance",
-    variable: L`T' \in \{\text{pawn},\text{knight},\text{bishop},\text{rook},\text{queen}\}`,
+    variable: L`T \in \{\text{pawn},\text{knight},\text{bishop},\text{rook},\text{queen}\}`,
     phenomenon:
       "Quand la cible initiale devient impossible, choisit un nouveau type de cible visible.",
     parameters: [
@@ -409,7 +409,7 @@ const categoricalProcesses = [
     lawUse: "Catégorielle pondérée parmi les cibles atteignables du type retenu",
     variable: L`Y \in \{y_1,\dots,y_r\}`,
     phenomenon:
-      "Choisit la cible concrete une fois le type de remplacement fixe.",
+      "Choisit la cible concrète une fois le type de remplacement fixe.",
     parameters: [
       L`w(y)=\max\bigl(1, 2D-\mathrm{dist}(y)+1\bigr)`,
       "seules les cibles atteignables sont conservées"
