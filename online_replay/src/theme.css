@@ -24,6 +24,7 @@ body,
 
 html {
   scroll-padding-top: 112px;
+  -webkit-touch-callout: none;
 }
 
 body {
@@ -38,6 +39,20 @@ body {
 
 #app {
   width: 100%;
+}
+
+html,
+body,
+#app,
+#app * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+img,
+svg image {
+  -webkit-user-drag: none;
+  user-drag: none;
 }
 
 body,
