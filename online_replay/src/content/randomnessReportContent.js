@@ -230,8 +230,8 @@ const uniformProcesses = [
     lawUse: "Uniforme discrete sur les coups admissibles",
     variable: L`M \sim \mathcal{U}_d(A_{moves})`,
     phenomenon:
-      "Selectionne un coup quand l'entite infernale a decide de prendre une initiative aleatoire en phase de recherche.",
-    parameters: ["support = coups generes puis filtres par visibilite et collisions interdites"],
+      "Selectionne un coup quand l'entite infernale entre dans sa **phase de recherche** (`Searching`), c'est-a-dire le moment ou elle explore les coups encore possibles au lieu de poursuivre une cible deja fixee.",
+    parameters: ["support = coups generes, puis filtres par la visibilite locale et les collisions interdites"],
     why:
       "Une fois le mode aleatoire active, aucun coup restant n'est prioritaire dans cette branche specifique du comportement.",
     simulation:
@@ -308,21 +308,21 @@ const categoricalProcesses = [
     lawUse: "Categorielle ponderee a deux regimes temporels",
     variable: L`R \in \{\text{gold},\text{move},\text{build}\}`,
     phenomenon:
-      "Choisit si le coffre donne de l'or, un bonus de points de mouvement ou un bonus de points de construction.",
+      "Choisit si le coffre donne de l'or, un bonus permanent du **budget de mouvement par tour** ou un bonus permanent du **budget de construction par tour**.",
     parameters: [
       "debut de partie: poids (8, 3, 3)",
       "fin de partie: poids (4, 6, 6)",
-      "bascule a `late_game_turn = 10`",
-      "`current_loot_catch_up_enabled = true` dans la config active"
+      "**Bascule a partir du tour 10** (`late_game_turn = 10`)",
+      "Mode de rattrapage actif (`current_loot_catch_up_enabled = true`) : **les deux royaumes partagent la meme recompense courante** tant qu'ils ne l'ont pas tous les deux recueillie"
     ],
     why:
-      "Le design veut plus d'or tres tot puis davantage de capacite d'action ensuite; une categorielle ponderee est la loi naturelle pour ce genre de choix nominal.",
+      "Le systeme favorise **plus d'or tres tot**, puis **davantage de capacite d'action** ensuite; une categorielle ponderee est la loi naturelle pour ce genre de choix nominal.",
     simulation:
       "`sampleReward` construit le vecteur de poids selon le tour courant, puis appelle `std::discrete_distribution<int>`.",
     parameterChoice:
-      "Les poids actifs changent a partir du tour 10 afin d'accelerer les bonus d'action en milieu de partie.",
+      "**A partir du tour 10**, les bonus d'action prennent plus de poids afin d'accelerer le milieu de partie.",
     dependence:
-      "Couplage fort avec l'etat de progression `currentRewardGeneration` si le mode catch-up est active."
+      "Si le mode de rattrapage est actif, **le tirage suivant n'apparait que lorsque les deux royaumes ont deja pris la recompense courante**; l'etat `currentRewardGeneration` lie donc directement les ouvertures de coffres des deux camps."
   },
   {
     title: "Direction du front meteo",
@@ -450,8 +450,8 @@ const bernoulliProcesses = [
     lawUse: "Bernoulli simple",
     variable: L`B \sim \mathrm{Bernoulli}(0.333)`,
     phenomenon:
-      "Decide si, lors d'un tour de recherche, l'entite infernale tente effectivement un mouvement purement aleatoire.",
-    parameters: ["`searching_random_move_chance_times_1000 = 333`"],
+      "Decide si, lors d'un tour de **phase de recherche** (`Searching`), l'entite infernale tente effectivement un mouvement purement aleatoire plutot qu'un deplacement entierement pilote par ses heuristiques.",
+    parameters: ["probabilite de 33,3 % (`searching_random_move_chance_times_1000 = 333`)"],
     why:
       "Il s'agit d'un interrupteur oui/non sur une branche comportementale unique; la Bernoulli est la loi minimale adequate.",
     simulation:
@@ -805,7 +805,7 @@ export const randomnessReport = {
         title: "4. Les batiments publics donnent des ressources et des objectifs de carte",
         vignetteId: "economy",
         paragraphs: [
-          "La carte contient aussi des batiments publics, par exemple des mines, des fermes ou des eglises. Ils ne servent pas de decor: ils creent des points a controler pour gagner plus de valeur sur la duree.",
+          "La carte contient aussi des **batiments publics**, c'est-a-dire des **structures neutres a capturer**, par exemple des mines, des fermes ou des eglises. Ils ne servent pas de decor: ils creent des points a controler pour gagner plus de valeur sur la duree.",
           "**Par exemple, si une piece blanche occupe une mine, elle rapporte 10 d'or par tour.** Conquerir ces zones change donc directement l'economie. On ne joue pas seulement contre le roi adverse; on joue aussi pour tenir les secteurs qui donnent de l'or, de la production ou de la progression."
         ]
       },
@@ -821,7 +821,7 @@ export const randomnessReport = {
         title: "6. Arene et eglise permettent d'ameliorer une piece de maniere precise",
         vignetteId: "progression",
         paragraphs: [
-          "Une arene sert a faire progresser une piece, et une eglise sert a effectuer certaines transformations speciales. Ce systeme n'est donc pas abstrait: il passe par des batiments precis et par des combinaisons precises.",
+          "**Une arene fait progresser une piece en experience au fil des tours**, et **une eglise permet certaines transformations speciales**. Ce systeme n'est donc pas abstrait: il passe par des batiments precis et par des combinaisons precises.",
           "**Par exemple, si on reunit dans une eglise un roi, un fou et une tour, alors la tour se transforme en reine.** La demonstration a droite montre exactement ce cas, puis recommence en boucle."
         ]
       },
@@ -845,7 +845,7 @@ export const randomnessReport = {
         title: "9. L'infernal ajoute une menace autonome en plus des deux royaumes",
         vignetteId: "infernal",
         paragraphs: [
-          "Le jeu suit une **dette de sang** pour chaque royaume. Cette dette augmente quand des pieces sont capturees ou quand des structures subissent des degats, puis elle decroit progressivement avec le temps.",
+          "Le jeu suit une **dette de sang** pour chaque royaume, c'est-a-dire un **compteur de menace** qui monte quand les captures et les degats s'accumulent, puis redescend progressivement avec le temps.",
           "**Dans l'exemple, une tour infernale apparait sur le bord droit, capture d'abord le fou blanc le plus proche, puis le pion blanc.** Plus la dette totale monte, plus une unite infernale a de chances d'apparaitre au bord de la carte. Cette piece autonome cible un royaume, se deplace seule et ajoute une pression supplementaire qu'aucun des deux joueurs ne controle directement."
         ]
       }
@@ -1287,7 +1287,7 @@ export const randomnessReport = {
   dependenceNotes: [
     "Le coeur du determinisme est `worldSeed + rngCounter`; cela cree une dependance structurelle commune a tous les tirages d'un meme systeme, tout en rendant la suite parfaitement replayable apres sauvegarde.",
     "Les lois conditionnelles dominent le gameplay reel: une uniforme ou une categorielle n'est presque jamais tiree sur un support absolu, mais sur un support deja filtre par la geometrie, la visibilite, l'occupation ou l'historique des choix precedents.",
-    "Le mode `current_loot_catch_up_enabled` des coffres couple les recoltes des deux royaumes autour d'une meme recompense courante; les tirages ne sont donc pas independants entre joueurs quand ce mode est actif.",
+    "Le mode de rattrapage des coffres (`current_loot_catch_up_enabled`) signifie que **les deux royaumes partagent temporairement une meme recompense courante**; **le tirage suivant n'apparait que lorsque les deux l'ont deja collectee**. Les recompenses de coffre ne sont donc **pas independantes** entre royaumes quand ce mode est actif.",
     "Les fronts meteo portent deux graines internes, l'une pour la forme et l'autre pour la densite, qui induisent de fortes correlations spatiales intra-front, puis une dependance temporelle via la duree gamma et le prochain delai d'apparition.",
     "L'infernal n'est pas un systeme a parametres fixes: sa Bernoulli de royaume cible et sa Poisson de spawn dependent directement d'un etat dynamique, la dette de sang."
   ],
