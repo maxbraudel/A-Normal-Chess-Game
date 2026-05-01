@@ -42,7 +42,7 @@ const uniformProcesses = [
       "1 tirage au début de la génération du plateau"
     ],
     why:
-      "Le système d'eau doit être decorrélé de la terre tout en restant reproductible à seed fixe.",
+      "Le système d'eau doit être décorrélé de la terre tout en restant reproductible à seed fixe.",
     simulation:
       "Une sortie brute du générateur initialise la branche d'eau avant évaluation des champs spatiaux.",
     parameterChoice:
@@ -65,12 +65,12 @@ const uniformProcesses = [
     parameterChoice:
       "Quatre états correspondent exactement aux orientations de 90 degrés disponibles.",
     dependence:
-      "Dépend du flux de génération initial, mais plus du tout après serialisation de la carte."
+      "Dépend du flux de génération initial, mais plus du tout après sérialisation de la carte."
   },
   {
     title: "Retournement des mines et fermes neutres",
     system: "Carte",
-    lawUse: "Uniforme discrète sur les masques de symetrie",
+    lawUse: "Uniforme discrète sur les masques de symétrie",
     variable: L`F \in \{0,1,2,3\}`,
     phenomenon:
       "Active ou non le retournement horizontal et vertical des bâtiments publics.",
@@ -80,9 +80,9 @@ const uniformProcesses = [
     simulation:
       "Le code utilise `std::uniform_int_distribution<int>(0, 3)` et transmet le masque à la footprint du bâtiment.",
     parameterChoice:
-      "La cardinalite 4 vient de `kFlipHorizontalMask | kFlipVerticalMask`.",
+      "La cardinalité 4 vient de `kFlipHorizontalMask | kFlipVerticalMask`.",
     dependence:
-      "Statiquement derive de la génération de carte."
+      "Statiquement dérivé de la génération de carte."
   },
   {
     title: "Choix de position des bâtiments publics",
@@ -150,13 +150,13 @@ const uniformProcesses = [
       "Fixe la proportion de cellules visibles que le nouveau brouillard doit recouvrir a sa naissance.",
     parameters: ["`coverage_min_percent = 5`", "`coverage_max_percent = 20`"],
     why:
-      "Aucune taille privilégiée n'est imposee entre les bornes retenues; l'uniforme donne un eventail large mais lisible.",
+      "Aucune taille privilégiée n'est imposée entre les bornes retenues; l'uniforme donne un éventail large mais lisible.",
     simulation:
       "Le runtime tire un entier uniforme entre 5 et 20, puis convertit ce pourcentage en aire cible.",
     parameterChoice:
-      "La borné basse garde des brouillards non triviaux; la borné haute evite une occultation presque totale du plateau.",
+      "La borne basse garde des brouillards non triviaux; la borne haute évite une occultation presque totale du plateau.",
     dependence:
-      "Se combine ensuite avec l'aspect ratio et la direction pour construire la géométrie finale."
+      "Se combine ensuite avec le rapport d'aspect et la direction pour construire la géométrie finale."
   },
   {
     title: "Allongement du brouillard",
@@ -167,9 +167,9 @@ const uniformProcesses = [
       "Fixe l'allongement principal du brouillard avant déformation par le bruit de contour.",
     parameters: ["`aspect_ratio_min_times_100 = 180`", "`aspect_ratio_max_times_100 = 260`"],
     why:
-      "Le brouillard doit rester anisotrope sans toujours avoir la même excentricite; une plage uniforme contrôle cette variété.",
+      "Le brouillard doit rester anisotrope sans toujours avoir la même excentricité; une plage uniforme contrôle cette variété.",
     simulation:
-      "Le code tire un entier uniforme sur [180, 260], divise par 100, puis derive `radiusAlong` et `radiusAcross` a aire préservée.",
+      "Le code tire un entier uniforme sur [180, 260], divise par 100, puis dérive `radiusAlong` et `radiusAcross` à aire préservée.",
     parameterChoice:
       "Des ratios entre 1.8 et 2.6 donnent des bandes visibles sans devenir quasi linéaire.",
     dependence:
@@ -293,7 +293,7 @@ const categoricalProcesses = [
     parameters: [
       L`w(c)=1+\mathrm{centrality}(c)+\mathrm{contestation}(c)`,
       "`min_distance_from_kings = 6`",
-      "centralite mesuree par la distance au centre, contestation par l'équilibre des distances aux deux rois"
+      "centralité mesurée par la distance au centre, contestation par l'équilibre des distances aux deux rois"
     ],
     why:
       "Le système veut privilégier les zones contestables et centrales, pas seulement tirer une case uniforme.",
@@ -302,7 +302,7 @@ const categoricalProcesses = [
     parameterChoice:
       "Le poids `1 + centrality + contestation` garantit une probabilité strictement positive pour toute case admissible.",
     dependence:
-      "Dépend de la position instantanee des rois et de l'occupation du plateau au moment de l'apparition."
+      "Dépend de la position instantanée des rois et de l'occupation du plateau au moment de l'apparition."
   },
   {
     title: "Type de récompense du coffre",
@@ -553,7 +553,7 @@ const weibullProcesses = [
       "tour minimal de tout premier apparition = 4"
     ],
     why:
-      "La Weibull est adaptée aux temps d'attente flexibles: avec `k > 1`, le hazard croissant rend les réapparitions plus plausibles après plusieurs tours sans coffre.",
+      "La Weibull est adaptée aux temps d'attente flexibles: avec `k > 1`, le taux de risque croissant rend les réapparitions plus plausibles après plusieurs tours sans coffre.",
     simulation:
       "`sampleSpawnDelay` échantillonne `std::weibull_distribution<double>(shape, scale)`, arrondit, puis applique `max(respawnCooldown, randomDelay)`.",
     parameterChoice:
@@ -665,7 +665,7 @@ const piecewiseLinearProcesses = [
     phenomenon:
       "Choisit la position continue du centre du brouillard le long du bord d'entrée.",
     parameters: [
-      L`\text{noeuds } (0, \tfrac14 M, \tfrac12 M, \tfrac34 M, M)`,
+      L`\text{nœuds } (0, \tfrac14 M, \tfrac12 M, \tfrac34 M, M)`,
       "poids `(0.7, 1.8, 1.98, 1.8, 0.7)` dans la config active",
       "avec `1.98 = 1.1 * 1.8` pour le point median"
     ],
@@ -692,7 +692,7 @@ const proceduralProcesses = [
       "`terrain_noise_scale = 14`",
       "`terrain_octaves = 3`",
       "couverture cible terre = 14 %",
-      "post-traitement par composantes et amas: 6 amas, rayon 2 a 5"
+      "post-traitement par composantes et amas: 6 amas, rayon 2 à 5"
     ],
     why:
       "Une loi usuelle scalaire ne suffit pas ici: il faut un champ spatial corrélé pour faire émerger des tâches organiques.",
@@ -709,18 +709,18 @@ const proceduralProcesses = [
     lawUse: "Champ procédural corrélé dérivé de bruit",
     variable: L`X_{eau}(c) = h_{S_{eau}}(c)`,
     phenomenon:
-      "Construit les poches d'eau et les petits lacs sans casser la jouabilite du plateau.",
+      "Construit les poches d'eau et les petits lacs sans casser la jouabilité du plateau.",
     parameters: [
       "couverture cible eau = 4 %",
-      "post-traitement par 3 lacs de rayon 2 a 3",
+      "post-traitement par 3 lacs de rayon 2 à 3",
       "même échelle et même nombre d'octaves que la terre"
     ],
     why:
       "Comme pour la terre, on veut des zones spatialement cohérentes, pas une Bernoulli par cellule qui gribouillerait le plateau.",
     simulation:
-      "Le pipeline rederive un score de bruit, applique un seuil propre à l'eau, filtre par composantes puis injecte quelques lacs complementaires.",
+      "Le pipeline redérive un score de bruit, applique un seuil propre à l'eau, filtre par composantes puis injecte quelques lacs complémentaires.",
     parameterChoice:
-      "La faible couverture 4 % evite de couper brutalement les couloirs de circulation du jeu.",
+      "La faible couverture 4 % évite de couper brutalement les couloirs de circulation du jeu.",
     dependence:
       "Corrélation spatiale importante et dépendance indirecte au champ de la terre via les contraintes d'assemblage du plateau final."
   },
@@ -730,16 +730,16 @@ const proceduralProcesses = [
     lawUse: "Pseudo-uniforme par hachage de position",
     variable: L`F(c) = \mathrm{hash}(worldSeed, type, c) \bmod 4`,
     phenomenon:
-      "Retourne horizontalement et/ou verticalement les textures de terrain pour casser les repetitions visibles.",
+      "Retourne horizontalement et/ou verticalement les textures de terrain pour casser les répétitions visibles.",
     parameters: ["4 états de retournement", "hachage positionnel avec `worldSeed` et `CellType`"],
     why:
-      "Le besoin principal est la reproductibilite locale, pas un échantillonnage i.i.d. complet à chaque frame.",
+      "Le besoin principal est la reproductibilité locale, pas un échantillonnage i.i.d. complet à chaque frame.",
     simulation:
-      "`terrainFlipMaskFor` rederive un seed mélange, hache la position puis conserve les deux bits de retournement utiles.",
+      "`terrainFlipMaskFor` redérive un seed mélange, hache la position puis conserve les deux bits de retournement utiles.",
     parameterChoice:
       "Conserver uniquement deux bits suffit pour coder aucun retournement, horizontal, vertical ou double retournement.",
     dependence:
-      "Déterminisme strict par cellule; dependence quasi nulle a longue distance mais pas modelisee comme une loi scalaire autonome."
+      "Déterminisme strict par cellule; dépendance quasi nulle à longue distance mais pas modélisée comme une loi scalaire autonome."
   },
   {
     title: "Bruit de contour du brouillard",
@@ -812,7 +812,7 @@ function makeUniform32Theory(symbol, note) {
 const processTheoryByTitle = {
   "Graine globale de la terre": makeUniform32Theory(
     L`S_{terre}`,
-    "Les moments ci-dessus sont surtout formels: l'enjeu gameplay réel est l'uniformite de la seed et sa reproductibilite."
+    "Les moments ci-dessus sont surtout formels: l'enjeu gameplay réel est l'uniformité de la seed et sa reproductibilité."
   ),
   "Graine globale de l'eau": makeUniform32Theory(
     L`S_{eau}`,
@@ -854,14 +854,14 @@ const processTheoryByTitle = {
     law: L`f_C(c)=\frac{1}{0.15}\,\mathbf{1}_{[0.05,0.20]}(c)`,
     expectation: L`\mathbb{E}[C]=\frac{0.05+0.20}{2}=0.125`,
     variance: L`\mathrm{Var}(C)=\frac{(0.20-0.05)^2}{12}`,
-    note: "Cette variable fixe la part de plateau que le brouillard cherche a occuper avant discretisation sur la grille."
+    note: "Cette variable fixe la part de plateau que le brouillard cherche à occuper avant discrétisation sur la grille."
   }),
   "Allongement du brouillard": makeUniformFiniteTheory({
     support: L`A\in[1.80,2.60]`,
     law: L`f_A(a)=\frac{1}{0.80}\,\mathbf{1}_{[1.80,2.60]}(a)`,
     expectation: L`\mathbb{E}[A]=\frac{1.80+2.60}{2}=2.20`,
     variance: L`\mathrm{Var}(A)=\frac{(2.60-1.80)^2}{12}`,
-    note: "La valeur echantillonnée est ensuite transformée en ellipse et trajectoire discrètes."
+    note: "La valeur échantillonnée est ensuite transformée en ellipse et trajectoire discrètes."
   }),
   "Graine de forme du brouillard": makeUniform32Theory(
     L`S_{forme}`,
@@ -993,7 +993,7 @@ const processTheoryByTitle = {
     expectation: L`\mathbb{E}[T]=k\theta,\qquad \mathbb{E}[D]\approx m+k\theta`,
     variance: L`\mathrm{Var}(T)=k\theta^2`,
     note:
-      "Le plafond discretise la variable continue. Les moments affichés sont donc des références théoriques autour desquelles le runtime se concentre."
+      "Le plafond discrétise la variable continue. Les moments affichés sont donc des références théoriques autour desquelles le runtime se concentre."
   }),
   "Durée visible d'un brouillard": createTheory({
     support: L`V\in\{1,2,\dots\}`,
@@ -1120,7 +1120,7 @@ export const randomnessReport = {
         title: "5. Construire et produire des pièces fait partie du tour",
         vignetteId: "production",
         paragraphs: [
-          "Les **points de construction** servent notamment a poser ou reparer des structures. Les casernes permettent ensuite de produire de nouvelles pièces au lieu de se contenter de l'armée de départ.",
+          "Les **points de construction** servent notamment à poser ou réparer des structures. Les casernes permettent ensuite de produire de nouvelles pièces au lieu de se contenter de l'armée de départ.",
           "La partie devient donc un jeu de développement en plus d'un jeu tactique. Vous pouvez consolider votre base, ouvrir un nouvel axe d'attaque ou préparer une pièce supplémentaire pour les tours suivants."
         ]
       },
@@ -1220,10 +1220,10 @@ export const randomnessReport = {
     formulas: [
       {
         label: "Schéma déterministe transverse",
-        latex: L`U_t = G\bigl(worldSeed, rngCounter_t\bigr), \qquad X_t = \Phi\bigl(U_t, S_t\bigr)`
+        latex: L`U_t = G\bigl(worldSeed, rngCounter_t\bigr), \qquad X_t = \psi\bigl(U_t, S_t\bigr)`
       },
       {
-        label: "Evolution du compteur",
+        label: "Évolution du compteur",
         latex: L`rngCounter_{t+1} = rngCounter_t + 1 \quad \text{à chaque événement consommatif}`
       },
       {
@@ -1249,23 +1249,23 @@ export const randomnessReport = {
       ]
     },
     {
-      title: "Séries statistiques directement extractibles",
+      title: "Séries statistiques directement exploitables",
       text:
         "Le code et les exports JSON permettent déjà de reconstruire plusieurs séries quantitatives utiles pour la validation empirique du modèle.",
       bullets: [
         "Histogrammes d'XP par source et comparaison à la normale tronquée annoncée.",
-        "Retards de reapparition des coffres et repartition des recompenses par regime early/late.",
-        "Inter-arrivées météo, durées visibles, couverture, aspect ratio et opacités locales.",
+        "Retards de réapparition des coffres et répartition des récompenses par régime initial/tardif.",
+        "Inter-arrivées météo, durées visibles, couverture, rapport d'aspect et opacités locales.",
         "Dette de sang, intensité d'apparition induite et types de cibles effectivement sélectionnés."
       ]
     },
     {
       title: "Sorties déjà visibles dans le projet",
       text:
-        "Le depot contient déjà plusieurs supports de vérification pratique pour confronter la théorie au runtime.",
+        "Le dépôt contient déjà plusieurs supports de vérification pratique pour confronter la théorie au runtime.",
       bullets: [
-        "`debug_game_state/` contient des historiques de tours utiles pour relire les evenements stochastiques.",
-        "`saves/` et `PARTICULAR SAVES/` montrent la persistance des seeds et compteurs dans des etats concrets.",
+        "`debug_game_state/` contient des historiques de tours utiles pour relire les événements stochastiques.",
+        "`saves/` et `PARTICULAR SAVES/` montrent la persistance des seeds et compteurs dans des états concrets.",
         "`statistiques-generator/` offre une base naturelle pour automatiser demain des comparaisons entre distributions attendues et distributions observées."
       ]
     }
@@ -1370,8 +1370,8 @@ export const randomnessReport = {
         }
       ],
       notes: [
-        "La probabilité `p` peut être statique, comme 0.333, ou dependre dynamiquement de l'état du jeu comme la dette de sang.",
-        "Une Bernoulli sur un support binaire reste la loi la plus lisible pour decrire ces branchements même quand l'implémentation passe par un entier uniforme."
+        "La probabilité `p` peut être statique, comme 0.333, ou dépendre dynamiquement de l'état du jeu comme la dette de sang.",
+        "Une Bernoulli sur un support binaire reste la loi la plus lisible pour décrire ces branchements même quand l'implémentation passe par un entier uniforme."
       ],
       processes: illustratedBernoulliProcesses
     },
@@ -1380,8 +1380,8 @@ export const randomnessReport = {
       title: "Poisson et déclenchement d'arrivée",
       badge: "1 processus",
       description: [
-        "Les pièces du diable ne reposent pas sur une simple probabilité fixe d'apparition, mais sur un comptage d'arrivées potentielles modèle par une Poisson. Le gameplay observé seulement l'événement `N >= 1`, mais la variable latente est bien un nombre entier de tentatives.",
-        "Ce choix donne une interpretation propre de l'intensité comme dette de sang convertie en fréquence moyenne d'arrivées."
+        "Les pièces du diable ne reposent pas sur une simple probabilité fixe d'apparition, mais sur un comptage d'arrivées potentielles modélisé par une Poisson. Le gameplay n'observe que l'événement `N >= 1`, mais la variable latente est bien un nombre entier de tentatives.",
+        "Ce choix donne une interprétation propre de l'intensité comme dette de sang convertie en fréquence moyenne d'arrivées."
       ],
       formulaCards: [
         {
@@ -1430,7 +1430,7 @@ export const randomnessReport = {
         }
       ],
       notes: [
-        "L'arrondi et le minimum modifient légèrement l'espérance par rapport à la formule continue; la formule ci-dessus est donc la bonne référence théorique, pas la valeur exacte après discretisation.",
+        "L'arrondi et le minimum modifient légèrement l'espérance par rapport à la formule continue; la formule ci-dessus est donc la bonne référence théorique, pas la valeur exacte après discrétisation.",
         "Dans ce code, `sigma = max(1, mean * sigmaMultiplier)` et `a,b = mean +/- clampMultiplier * sigma`."
       ],
       processes: illustratedTruncatedNormalProcesses
@@ -1458,7 +1458,7 @@ export const randomnessReport = {
         }
       ],
       notes: [
-        "Avec `k > 1`, le hazard augmente avec le temps, ce qui correspond bien à l'intuition \"plus le coffre tarde, plus sa réapparition devient plausible\"."
+        "Avec `k > 1`, le taux de risque augmente avec le temps, ce qui correspond bien à l'intuition \"plus le coffre tarde, plus sa réapparition devient plausible\"."
       ],
       processes: illustratedWeibullProcesses
     },
@@ -1495,11 +1495,11 @@ export const randomnessReport = {
       badge: "1 processus",
       description: [
         "La log-normale apparaît dans la texture d'opacité des brouillards. Le choix est mathématiquement naturel dès qu'on veut des multiplicateurs strictement positifs, susceptibles d'être parfois un peu plus grands que 1 sans jamais devenir négatifs.",
-        "Le runtime rederive la graine par cellule à partir de `densitySeed`, puis re-borné le résultat via des `alphaMin` et `alphaMax`."
+        "Le runtime redérive la graine par cellule à partir de `densitySeed`, puis re-borne le résultat via des `alphaMin` et `alphaMax`."
       ],
       formulaCards: [
         {
-          label: "Definition",
+          label: "Définition",
           latex: L`X \sim \mathrm{LogNormal}(\mu,\sigma^2) \Longleftrightarrow \ln X \sim \mathcal{N}(\mu,\sigma^2)`
         },
         {
@@ -1517,7 +1517,7 @@ export const randomnessReport = {
       title: "Beta transformée",
       badge: "1 processus",
       description: [
-        "La Beta est utilisée pour la luminosité de l'herbe. C'est une bonne famille pour modéliser une variable naturellement bornée dans `[0,1]` avant remappage visuel.",
+        "La Beta est utilisée pour la luminosité de l'herbe. C'est une bonne famille pour modéliser une variable naturellement bornée dans `[0,1]` avant transformation visuelle.",
         "Le code ne l'obtient pas par API directe, mais via le quotient de deux Gammas, ce qui est mathématiquement standard."
       ],
       formulaCards: [
@@ -1550,7 +1550,7 @@ export const randomnessReport = {
       formulaCards: [
         {
           label: "Densité linéaire par morceaux",
-          latex: L`f(x)=\frac{\ell(x)}{\int_0^M \ell(u)\,du}, \qquad \ell \text{ linéaire sur chaque intervalle de noeuds}`
+          latex: L`f(x)=\frac{\ell(x)}{\int_0^M \ell(u)\,du}, \qquad \ell \text{ linéaire sur chaque intervalle de nœuds}`
         },
         {
           label: "Moments généraux",
@@ -1595,7 +1595,7 @@ export const randomnessReport = {
     "Le cœur du déterminisme est `worldSeed + rngCounter`; cela crée une dépendance structurelle commune à tous les tirages d'un même système, tout en rendant la suite parfaitement rejouable après sauvegarde.",
     "Les lois conditionnelles dominent le gameplay réel: une uniforme ou une catégorielle n'est presque jamais tirée sur un support absolu, mais sur un support déjà filtré par la géométrie, la visibilité, l'occupation ou l'historique des choix précédents.",
     "Le mode de rattrapage des coffres (`current_loot_catch_up_enabled`) signifie que **les deux royaumes partagent temporairement une même récompense courante**; **le tirage suivant n'apparaît que lorsque les deux l'ont déjà collectée**. Les récompenses de coffre ne sont donc **pas indépendantes** entre royaumes quand ce mode est actif.",
-    "Les brouillards portent deux graines internes, l'une pour la forme et l'autre pour la densité, qui induisent de fortes corrélations spatiales intra-brouillard, puis une dépendance temporelle via la durée gamma et le prochain délai d'apparition.",
+    "Les brouillards portent deux graines internes, l'une pour la forme et l'autre pour la densité, qui induisent de fortes corrélations spatiales intra-brouillard, puis une dépendance temporelle via la durée Gamma et le prochain délai d'apparition.",
     "Les pièces du diable ne reposent pas sur un système à paramètres fixes: leur Bernoulli de royaume cible et leur Poisson d'apparition dépendent directement d'un état dynamique, la dette de sang."
   ],
   difficulties: [

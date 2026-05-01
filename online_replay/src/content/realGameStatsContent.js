@@ -188,7 +188,7 @@ function buildInfernalBlock(infernal) {
       sourceKind: "real",
       label: "Exemple tiré de la partie réelle",
       description:
-        "Du tour 74 au tour 136, la caméra suit la pièce du diable active. Quand elle disparait, le cadre reste en place jusqu'à l'arrivée de la pièce du diable suivante, puis se recentre immédiatement sur la nouvelle menace.",
+        "Du tour 74 au tour 136, la caméra suit la pièce du diable active. Quand elle disparaît, le cadre reste en place jusqu'à l'arrivée de la pièce du diable suivante, puis se recentre immédiatement sur la nouvelle menace.",
       viewer: {
         replayUrl: REPLAY_CONFIG.replayUrl,
         minTurn: 74,
@@ -251,7 +251,7 @@ function buildWeatherBlock(weather) {
       { label: "Couverture moyenne", value: formatStatNumber(weather.averageCloudCoverage) },
       {
         label: "Intervalle moyen",
-        value: weather.averageSpawnInterval ? `${formatStatNumber(weather.averageSpawnInterval)} tours` : "n/a"
+        value: weather.averageSpawnInterval ? `${formatStatNumber(weather.averageSpawnInterval)} tours` : "n/d"
       },
       { label: "Brouillards observés", value: formatInteger(weather.spawnEvents.length) },
       { label: "Pic de pièces masquées", value: formatInteger(weather.peakHiddenPieces) }
@@ -324,7 +324,7 @@ function buildWaterDeniedByKingdomBlock(waterDenied) {
     chartHeight: 330,
     chartLabel: "Cellules refusées par l'eau par royaume sur la partie réelle",
     postChartInterpretation:
-      "**Interprétation : sur la première partie de cette partie réelle, la courbe noire dépasse nettement la courbe blanche. L'eau a donc beaucoup plus empêché les premiers déplacements du royaume noir que ceux du royaume blanc. Cette contrainte initiale a freiné le développement noir et a contribué à l'avance prise par les Blancs au début de la partie.**",
+      "**Interprétation : au début de la partie réelle, la courbe noire dépasse nettement la courbe blanche. L'eau a donc beaucoup plus empêché les premiers déplacements du royaume noir que ceux du royaume blanc. Cette contrainte initiale a freiné le développement noir et a contribué à l'avance prise par les Blancs au début de la partie.**",
     exampleReplay: {
       sourceTag: "Partie réelle avec joueur",
       sourceKind: "real",
@@ -352,11 +352,11 @@ function buildWaterDeniedByKingdomBlock(waterDenied) {
     chartOption: buildTimelineOption({
       xAxisName: "Tour",
       yAxes: [
-        { name: "Cellules refusees par l'eau" }
+        { name: "Cellules refusées par l'eau" }
       ],
       series: [
-        buildTimelineSeriesSpec("Cellules refusees par l'eau du royaume blanc", waterDenied.points, "whiteWaterDeniedCells", LEGACY_COLORS.whiteKingdom, 0),
-        buildTimelineSeriesSpec("Cellules refusees par l'eau du royaume noir", waterDenied.points, "blackWaterDeniedCells", LEGACY_COLORS.blackKingdom, 0)
+        buildTimelineSeriesSpec("Cellules refusées par l'eau du royaume blanc", waterDenied.points, "whiteWaterDeniedCells", LEGACY_COLORS.whiteKingdom, 0),
+        buildTimelineSeriesSpec("Cellules refusées par l'eau du royaume noir", waterDenied.points, "blackWaterDeniedCells", LEGACY_COLORS.blackKingdom, 0)
       ]
     })
   };

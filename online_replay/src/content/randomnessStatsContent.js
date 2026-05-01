@@ -302,7 +302,7 @@ const processStatsByTitle = {
     {
       title: "Distances observées entre bâtiments publics et lacs",
       description:
-        "Les placements publics ne sont pas seulement des tirages admissibles: le batch montre aussi la distance effective à l'eau après génération complete du terrain, ce qui renseigne mieux la jouabilite que la seule loi uniforme conditionnelle.",
+        "Les placements publics ne sont pas seulement des tirages admissibles: le batch montre aussi la distance effective à l'eau après génération complète du terrain, ce qui renseigne mieux la jouabilité que la seule loi uniforme conditionnelle.",
       metrics: [
         {
           label: "Mine -> lac le plus proche",
@@ -318,7 +318,7 @@ const processStatsByTitle = {
         }
       ],
       insights: [
-        "Ces valeurs donnent un résumé concret du placement final des structures, au lieu de laisser croire qu'un support admissible uniforme suffit a decrire toute la carte.",
+        "Ces valeurs donnent un résumé concret du placement final des structures, au lieu de laisser croire qu'un support admissible uniforme suffit à décrire toute la carte.",
         "La distance moyenne initiale entre royaumes est déjà visible ici car le placement des structures et celui des apparitions restent géométriquement liés au plateau généré."
       ]
     }
@@ -343,7 +343,7 @@ const processStatsByTitle = {
         }
       ],
       insights: [
-        "La bonne lecture mathématique est celle d'une **uniforme conditionnelle sur un support géométrique déjà contraint**, appliquee symetriquement aux deux royaumes.",
+        "La bonne lecture mathématique est celle d'une **uniforme conditionnelle sur un support géométrique déjà contraint**, appliquée symétriquement aux deux royaumes.",
         "Les colonnes centrales restent hors support ou quasi hors support, ce qui rend la séparation d'ouverture visible dès le premier coup d'œil."
       ],
       chartHeight: 310,
@@ -469,7 +469,7 @@ const processStatsByTitle = {
         }
       ],
       insights: [
-        "L'illustration la plus pertinente n'est donc pas seulement le type de reward brut, mais **l'écart entre les probabilités early et late** face aux poids configurés.",
+        "L'illustration la plus pertinente n'est donc pas seulement le type de récompense brut, mais **l'écart entre les probabilités early et late** face aux poids configurés.",
         `Dans le scénario synthétique de collecte immédiate sur ${run.turnBudget} tours, le batch observe en moyenne ${formatNumber(chestSystem.summary.timeline_total_gold.mean, 1)} d'or, ${formatNumber(chestSystem.summary.timeline_total_movement_bonus.mean, 1)} points de mouvement max et ${formatNumber(chestSystem.summary.timeline_total_build_bonus.mean, 1)} points de construction max.`
       ],
       chartHeight: 300,
@@ -505,7 +505,7 @@ const processStatsByTitle = {
   ],
   "Délai de réapparition d'un coffre": [
     {
-      title: "Le cooldown minimal de 4 tours se voit immédiatement dans la Weibull des coffres",
+      title: "Le délai minimal de 4 tours se voit immédiatement dans la Weibull des coffres",
       description:
         "C'est une des statistiques les plus parlantes du batch: la loi continue seule ne raconte pas le gameplay. La masse au seuil de `4` tours prouve que le cooldown plancher modifie fortement la forme observée.",
       metrics: [
@@ -518,12 +518,12 @@ const processStatsByTitle = {
           value: formatNumber(chestSystem.summary.spawn_delay_turns.mean, 2)
         },
         {
-          label: "Plancher impose",
+          label: "Plancher imposé",
           value: `${chestSystem.expected.spawnDelayCooldownFloor} tours`
         }
       ],
       insights: [
-        "**La Weibull parente existe, mais la runtime est celle d'une Weibull discrétisée puis bornée inférieurement**.",
+        "**La Weibull parente existe, mais la loi effective est celle d'une Weibull discrétisée puis bornée inférieurement**.",
         "L'histogramme et l'écart à la moyenne rendent cet écart théorie/runtime directement visible."
       ],
       chartHeight: 290,
@@ -616,7 +616,7 @@ const processStatsByTitle = {
         "Le batch montre qu'elle concentre effectivement la masse dans les classes de luminosité les plus élevées après remappage runtime.",
       metrics: [
         {
-          label: "Part des deux classes les plus clairs",
+          label: "Part des deux classes les plus claires",
           value: formatPercent((grassBrightTopTwo / grassBrightnessTotal) * 100, 1)
         },
         {
@@ -624,7 +624,7 @@ const processStatsByTitle = {
           value: new Intl.NumberFormat("fr-FR").format(grassBrightnessTotal)
         },
         {
-          label: "Classes sombres utilises",
+          label: "Classes sombres utilisées",
           value: "Quasi nuls"
         }
       ],
@@ -648,7 +648,7 @@ const processStatsByTitle = {
     {
       title: "La couverture finale de la terre est inférieure à la cible nominale",
       description:
-        "Le pourcentage configuré de la terre ne se retrouve pas tel quel sur la carte finale. La pipeline procédurale applique ensuite des contraintes de composantes et de connectivité qui déforment la couverture initialement visée.",
+        "Le pourcentage configuré de la terre ne se retrouve pas tel quel sur la carte finale. Le pipeline procédural applique ensuite des contraintes de composantes et de connectivité qui déforment la couverture initialement visée.",
       metrics: [
         {
           label: "Couverture ciblée",
@@ -668,7 +668,7 @@ const processStatsByTitle = {
         "C'est un vrai résultat empirique utile, pas un simple rappel de paramètre de config."
       ],
       chartHeight: 290,
-      chartLabel: "Comparaison entre la couverture la terre ciblée et observée",
+      chartLabel: "Comparaison entre la couverture de la terre ciblée et observée",
       chartOption: buildHistogramOption({
         categories: ["Cible", "Observée"],
         values: dirtCoverageComparison,
@@ -730,7 +730,7 @@ const processStatsByTitle = {
         }
       ],
       insights: [
-        "Cette statistique est bien plus pertinente qu'un retournement mask uniforme, parce qu'elle décrit directement la morphologie jouable du terrain.",
+        "Cette statistique est bien plus pertinente qu'un masque uniforme, parce qu'elle décrit directement la morphologie jouable du terrain.",
         "Elle illustre bien la phrase selon laquelle un champ procédural doit être résumé par des composantes, de la rugosité et de la topologie, pas par une loi scalaire i.i.d. fictive."
       ],
       chartHeight: 290,
@@ -748,7 +748,7 @@ const processStatsByTitle = {
     {
       title: "La couverture visible finale des brouillards dépasse parfois la consigne nominale",
       description:
-        "La couverture ciblée de la météo est paramétrée entre 5 % et 20 %, mais la forme réelle du brouillard après déformation de contour peut pousser la couverture visible un peu au-dela de la borné haute nominale.",
+        "La couverture configurée de la météo est paramétrée entre 5 % et 20 %, mais la forme réelle du brouillard après déformation de contour peut pousser la couverture visible un peu au-delà de la borne haute nominale.",
       metrics: [
         {
           label: "Couverture de pic moyenne",
