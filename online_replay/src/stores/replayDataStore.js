@@ -128,7 +128,7 @@ export function getCachedMasterConfig() {
  */
 function validateReplay(data) {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
-    throw new Error("Le companion charge n'est pas un objet JSON valide.");
+    throw new Error("Le companion chargé n'est pas un objet JSON valide.");
   }
 
   const TARGET_SCHEMA_VERSION = 5;

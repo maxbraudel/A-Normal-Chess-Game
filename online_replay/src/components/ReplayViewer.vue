@@ -234,7 +234,7 @@ watch(
       />
     </TransitionGroup>
 
-    <div class="zoom-controls" aria-label="Controles de zoom">
+    <div class="zoom-controls" aria-label="Contrôles de zoom">
       <button
         type="button"
         class="action-button zoom-action-button"
@@ -248,8 +248,8 @@ watch(
         type="button"
         class="action-button zoom-action-button"
         data-replay-ref="zoomOutButton"
-        title="Zoom arriere"
-        aria-label="Zoom arriere"
+        title="Zoom arrière"
+        aria-label="Zoom arrière"
       >
         -
       </button>
@@ -258,11 +258,11 @@ watch(
     <div class="timeline-overlay">
       <div class="timeline-controls">
         <div class="playback-group">
-          <button type="button" class="action-button" data-replay-ref="firstTurnButton" title="Aller au debut">|&lt;</button>
-          <button type="button" class="action-button" data-replay-ref="prevTurnButton" title="Tour precedent">&lt;</button>
+          <button type="button" class="action-button" data-replay-ref="firstTurnButton" title="Aller au début">|&lt;</button>
+          <button type="button" class="action-button" data-replay-ref="prevTurnButton" title="Tour précédent">&lt;</button>
           <button type="button" class="action-button primary-action" data-replay-ref="playPauseButton" title="Lancer la lecture">Lire</button>
           <button type="button" class="action-button" data-replay-ref="nextTurnButton" title="Tour suivant">&gt;</button>
-          <button type="button" class="action-button" data-replay-ref="lastTurnButton" title="Aller a la fin">&gt;|</button>
+          <button type="button" class="action-button" data-replay-ref="lastTurnButton" title="Aller à la fin">&gt;|</button>
         </div>
 
         <input

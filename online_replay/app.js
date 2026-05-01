@@ -286,7 +286,7 @@ async function bootstrap() {
       startAutoplay();
     }
     setStatus(
-      "Replay charge.",
+      "Replay chargé.",
       `${state.replay.meta.title} · ${state.replay.frames.length} frames disponibles`
     );
   } catch (error) {
@@ -526,7 +526,7 @@ function describeReplaySource(config) {
 
 function validateReplay(data) {
   if (!data || typeof data !== "object" || Array.isArray(data)) {
-    throw new Error("Le companion charge n'est pas un objet JSON valide.");
+    throw new Error("Le companion chargé n'est pas un objet JSON valide.");
   }
 
   if (Number(data.schemaVersion) !== TARGET_SCHEMA_VERSION) {
@@ -599,7 +599,7 @@ function buildReplayModel(data, masterConfig) {
   }
 
   if (!frames.length) {
-    throw new Error("Aucune frame replayable n'a ete construite depuis le companion.");
+    throw new Error("Aucune frame replayable n'a été construite depuis le companion.");
   }
 
   return {
@@ -921,6 +921,7 @@ function syncControlsState() {
 
   refs.playPauseButton.textContent = isAutoPlaying ? "Pause" : "Lire";
   refs.playPauseButton.title = isAutoPlaying ? "Mettre en pause" : "Lancer la lecture";
+  refs.playPauseButton.setAttribute("aria-label", isAutoPlaying ? "Mettre en pause" : "Lancer la lecture");
   refs.firstTurnButton.disabled = !canNavigate || atStart;
   refs.prevTurnButton.disabled = !canNavigate || atStart;
   refs.nextTurnButton.disabled = !canNavigate || atEnd;
@@ -1334,7 +1335,7 @@ function resolveStatusToast(frame) {
       slotKey: "status",
       kingdomKey,
       kingdomLabel,
-      message: "Echec et mat",
+      message: "Échec et mat",
       tone: "danger",
       priority: 10
     });
@@ -1346,7 +1347,7 @@ function resolveStatusToast(frame) {
       slotKey: "status",
       kingdomKey,
       kingdomLabel,
-      message: "Echec",
+      message: "Échec",
       tone: "warning",
       priority: 10
     });

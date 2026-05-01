@@ -1,4 +1,6 @@
 <script setup>
+import { reportText } from "../utils/reportText.js";
+
 const props = defineProps({
   shieldSrc: {
     type: String,
@@ -30,8 +32,8 @@ const props = defineProps({
   <article :class="['replay-toast', `replay-toast--${props.tone}`]">
     <img class="turn-indicator-icon" :src="props.shieldSrc" :alt="props.shieldAlt">
     <div class="overlay-meta replay-toast__meta">
-      <span class="overlay-label">{{ props.label }}</span>
-      <strong class="overlay-value">{{ props.message }}</strong>
+      <span class="overlay-label">{{ reportText(props.label) }}</span>
+      <strong class="overlay-value">{{ reportText(props.message) }}</strong>
     </div>
   </article>
 </template>

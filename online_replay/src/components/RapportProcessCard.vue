@@ -35,7 +35,7 @@ const FULL_WIDTH_THEORY_LAYOUTS = Object.freeze({
   "champ spatial de la terre": ["expectation", "variance"],
   "position d'entree le long du bord d'un brouillard": ["support", "law"],
   "densite locale d'un brouillard": ["support", "law"],
-  "montant d'or d'un coffre": ["expectation", "variance"],
+  "montant d'or d'un coffre": ["support", "law", "expectation", "variance"],
   "recompenses d'xp": ["expectation", "variance"]
 });
 
