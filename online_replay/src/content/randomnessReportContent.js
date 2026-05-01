@@ -1185,7 +1185,7 @@ export const randomnessReport = {
           "La troisieme couche exploite les donnees d'une partie complete jouee pendant plusieurs heures avec un ami. Les actions, les tours et les etats utiles ont ete enregistres pour confronter la theorie a un runtime reel et montrer des resultats lisibles en situation de jeu."
       }
     ],
-    replayTitle: "Replay instrumente de la partie reelle",
+    replayTitle: "Replay de la partie reelle",
     replayText:
       "Le viewer ci-dessous donne un apercu direct de la partie observee, en lecture automatique rapide, avec boucle et point de vue blanc. Il sert d'entree visuelle avant le detail statistique du rapport."
   },

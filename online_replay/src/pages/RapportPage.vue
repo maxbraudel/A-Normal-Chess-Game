@@ -133,6 +133,7 @@ onBeforeUnmount(() => {
 <template>
   <main class="rapport-page">
     <section class="rapport-hero">
+        <p class="rapport-hero__intro-note">Bonjour Monsieur Martinez, laissez-moi vous présenter...</p>
       <div class="rapport-hero__copy rapport-hero__copy--full">
         <p v-if="randomnessReport.hero.kicker" class="landing-kicker">{{ reportText(randomnessReport.hero.kicker) }}</p>
         <h1>{{ reportText(randomnessReport.hero.title) }}</h1>

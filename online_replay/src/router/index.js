@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
 
-import ReplayLandingPage from "../pages/ReplayLandingPage.vue";
 import RapportPage from "../pages/RapportPage.vue";
 
 const router = createRouter({
@@ -8,13 +7,12 @@ const router = createRouter({
   routes: [
     {
       path: "/",
-      name: "replay-home",
-      component: ReplayLandingPage
-    },
-    {
-      path: "/rapport",
       name: "rapport",
-      component: RapportPage
+      component: RapportPage,
+      alias: ["/rapport"],
+      meta: {
+        layout: "rapport"
+      }
     }
   ],
   scrollBehavior(to, from, savedPosition) {

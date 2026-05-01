@@ -244,6 +244,17 @@ a {
   max-width: 78ch;
 }
 
+.rapport-hero__intro-note {
+  justify-self: end;
+  width: min(34ch, 100%);
+  margin: 0;
+  color: rgba(239, 229, 199, 0.84);
+  font-size: clamp(20px, 2.3vw, 30px);
+  font-weight: 500;
+  line-height: 1.25;
+  text-align: right;
+}
+
 .rapport-hero h1 {
   max-width: 11ch;
   margin: 0;
@@ -760,6 +771,10 @@ a {
   background: rgba(11, 15, 12, 0.58);
 }
 
+.rapport-process-card__theory-item--full {
+  grid-column: 1 / -1;
+}
+
 .rapport-process-card__theory-label {
   margin: 0;
   color: rgba(240, 213, 143, 0.82);
@@ -1102,6 +1117,10 @@ a {
   color: #111111;
   font-size: clamp(40px, 5.8vw, 60px);
   line-height: 1.06;
+}
+
+.site-shell--rapport .rapport-hero__intro-note {
+  color: #4e493d;
 }
 
 .site-shell--rapport .landing-lead,

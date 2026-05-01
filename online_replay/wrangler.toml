@@ -1,0 +1,20 @@
+# Configuration for Cloudflare Pages deployment
+# This is a static site, no Workers needed
+
+name = "ancg-replay"
+type = "javascript"
+main = "dist/index.html"
+compatibility_date = "2024-12-01"
+
+# Build configuration
+[build]
+command = "npm run build"
+cwd = "."
+watch_paths = ["src/**/*.{js,ts,vue,json}", "public/**/*"]
+
+# Environment variable for Pages
+[env.production]
+routes = [
+  { pattern = "*.html", zone_name = "example.com" },
+  { pattern = "*.json", zone_name = "example.com" }
+]

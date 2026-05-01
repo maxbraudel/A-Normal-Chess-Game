@@ -30,6 +30,32 @@ function getObservedSourceMeta(label) {
   };
 }
 
+const FULL_WIDTH_THEORY_LAYOUTS = Object.freeze({
+  "champ spatial de l'eau": ["expectation", "variance"],
+  "champ spatial de la terre": ["expectation", "variance"],
+  "position d'entree le long du bord d'un brouillard": ["support", "law"],
+  "densite locale d'un brouillard": ["support", "law"],
+  "montant d'or d'un coffre": ["expectation", "variance"],
+  "recompenses d'xp": ["expectation", "variance"]
+});
+
+function normalizeProcessTitle(title) {
+  return reportText(title || "")
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim()
+    .toLowerCase();
+}
+
+function getTheoryItemClasses(title, slot) {
+  const fullWidthSlots = FULL_WIDTH_THEORY_LAYOUTS[normalizeProcessTitle(title)] || [];
+
+  return [
+    "rapport-process-card__theory-item",
+    fullWidthSlots.includes(slot) ? "rapport-process-card__theory-item--full" : ""
+  ];
+}
+
 defineProps({
   item: {
     type: Object,
@@ -73,19 +99,19 @@ defineProps({
     <div v-if="item.theory" class="rapport-process-card__field rapport-process-card__field--theory">
       <span class="rapport-process-card__label">Cadre theorique explicite</span>
       <div class="rapport-process-card__theory-grid">
-        <article class="rapport-process-card__theory-item">
+        <article :class="getTheoryItemClasses(item.title, 'support')">
           <p class="rapport-process-card__theory-label">Support / espace d'etat</p>
           <MathFormula :formula="item.theory.support" :display="true" />
         </article>
-        <article class="rapport-process-card__theory-item">
+        <article :class="getTheoryItemClasses(item.title, 'law')">
           <p class="rapport-process-card__theory-label">Formule de loi</p>
           <MathFormula :formula="item.theory.law" :display="true" />
         </article>
-        <article class="rapport-process-card__theory-item">
+        <article :class="getTheoryItemClasses(item.title, 'expectation')">
           <p class="rapport-process-card__theory-label">Esperance</p>
           <MathFormula :formula="item.theory.expectation" :display="true" />
         </article>
-        <article class="rapport-process-card__theory-item">
+        <article :class="getTheoryItemClasses(item.title, 'variance')">
           <p class="rapport-process-card__theory-label">Variance</p>
           <MathFormula :formula="item.theory.variance" :display="true" />
         </article>

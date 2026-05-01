@@ -3,16 +3,12 @@ import { computed } from "vue";
 import { RouterLink, RouterView, useRoute } from "vue-router";
 
 const route = useRoute();
-const isReportRoute = computed(() => route.path.startsWith("/rapport"));
+const isReportRoute = computed(() => route.matched.some((record) => record.meta.layout === "rapport"));
 
 const navigationItems = [
   {
-    label: "Replay",
-    to: "/"
-  },
-  {
     label: "Rapport",
-    to: "/rapport"
+    to: "/"
   }
 ];
 </script>
