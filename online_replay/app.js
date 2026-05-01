@@ -87,12 +87,16 @@ const WEATHER_FRONT_DIRECTION_KEYS = [
 const BUILDING_FLIP_HORIZONTAL_MASK = 1;
 const BUILDING_FLIP_VERTICAL_MASK = 2;
 
-const configuredPerspectiveKingdomKey = resolveConfiguredPerspectiveKingdomKey(replayConfig);
+let configuredPerspectiveKingdomKey = resolveConfiguredPerspectiveKingdomKey(replayConfig);
 const trackedTargetConfig = normalizeTrackedTargetConfig(replayConfig.trackedTarget);
 const shouldRecenterTrackedTargetOnFrameChange = replayConfig.recenterTrackedTargetOnFrameChange !== false;
+const isInteractionEnabled = replayConfig.interactionEnabled !== false;
 const isCellDebugEnabled = Boolean(replayConfig.enableCellDebug);
 const onToastStateChange = typeof replayConfig.onToastStateChange === "function"
   ? replayConfig.onToastStateChange
+  : null;
+const onFrameStateChange = typeof replayConfig.onFrameStateChange === "function"
+  ? replayConfig.onFrameStateChange
   : null;
 
 const state = {
@@ -162,6 +166,16 @@ return {
 
   setSuspended(reason, suspended) {
     setViewerSuspended(reason, suspended);
+  },
+
+  setPerspectiveKingdom(nextPerspectiveKingdomKey) {
+    const normalizedPerspectiveKingdomKey = normalizePerspectiveKingdomKey(nextPerspectiveKingdomKey);
+    if (configuredPerspectiveKingdomKey === normalizedPerspectiveKingdomKey) {
+      return;
+    }
+
+    configuredPerspectiveKingdomKey = normalizedPerspectiveKingdomKey;
+    renderCurrentFrame({ force: true });
   }
 };
 
@@ -319,13 +333,17 @@ function addManagedListener(target, type, listener, options) {
 }
 
 function bindEvents() {
-  if (!rootElement.hasAttribute("tabindex")) {
+  if (isInteractionEnabled && !rootElement.hasAttribute("tabindex")) {
     rootElement.tabIndex = 0;
+  } else if (!isInteractionEnabled) {
+    rootElement.removeAttribute("tabindex");
   }
 
-  refs.replayCanvas.title = isCellDebugEnabled
-    ? "Molette: zoom. Glisser: camera. Double-clic: recadrer. Clic: debug cellule dans la console."
-    : "Molette: zoom. Glisser: camera. Double-clic: recadrer.";
+  refs.replayCanvas.title = isInteractionEnabled
+    ? (isCellDebugEnabled
+      ? "Molette: zoom. Glisser: camera. Double-clic: recadrer. Clic: debug cellule dans la console."
+      : "Molette: zoom. Glisser: camera. Double-clic: recadrer.")
+    : "Illustration statique du plateau.";
 
   addManagedListener(refs.firstTurnButton, "click", function () {
     stopAutoplay();
@@ -372,20 +390,22 @@ function bindEvents() {
     setFrameIndex(nextIndex);
   });
 
-  addManagedListener(refs.replayCanvas, "pointerdown", onCanvasPointerDown);
-  addManagedListener(refs.replayCanvas, "pointermove", onCanvasPointerMove);
-  addManagedListener(refs.replayCanvas, "pointerup", onCanvasPointerUp);
-  addManagedListener(refs.replayCanvas, "pointercancel", onCanvasPointerUp);
-  addManagedListener(refs.replayCanvas, "wheel", onCanvasWheel, { passive: false });
-  addManagedListener(refs.replayCanvas, "dblclick", function () {
-    const frame = currentFrame();
-    if (!frame) {
-      return;
-    }
+  if (isInteractionEnabled) {
+    addManagedListener(refs.replayCanvas, "pointerdown", onCanvasPointerDown);
+    addManagedListener(refs.replayCanvas, "pointermove", onCanvasPointerMove);
+    addManagedListener(refs.replayCanvas, "pointerup", onCanvasPointerUp);
+    addManagedListener(refs.replayCanvas, "pointercancel", onCanvasPointerUp);
+    addManagedListener(refs.replayCanvas, "wheel", onCanvasWheel, { passive: false });
+    addManagedListener(refs.replayCanvas, "dblclick", function () {
+      const frame = currentFrame();
+      if (!frame) {
+        return;
+      }
 
-    resetCameraToFit(frame);
-    renderCurrentFrame();
-  });
+      resetCameraToFit(frame);
+      renderCurrentFrame();
+    });
+  }
 
   addManagedListener(window, "resize", function () {
     if (state.replay) {
@@ -396,51 +416,53 @@ function bindEvents() {
     renderCanvasMessage(state.statusMessage);
   });
 
-  addManagedListener(rootElement, "keydown", function (event) {
-    if (!state.replay) {
-      return;
-    }
-
-    if (event.key === "ArrowLeft") {
-      stopAutoplay();
-      setFrameIndex(state.frameIndex - 1);
-    }
-
-    if (event.key === "ArrowRight") {
-      stopAutoplay();
-      setFrameIndex(state.frameIndex + 1);
-    }
-
-    if (event.key === " ") {
-      event.preventDefault();
-      if (state.autoPlayHandle) {
-        stopAutoplay();
-      } else {
-        startAutoplay();
-      }
-    }
-
-    if (event.key === "+" || event.key === "=") {
-      event.preventDefault();
-      zoomCameraFromKeyboard(WHEEL_ZOOM_FACTOR);
-    }
-
-    if (event.key === "-" || event.key === "_") {
-      event.preventDefault();
-      zoomCameraFromKeyboard(1 / WHEEL_ZOOM_FACTOR);
-    }
-
-    if (event.key === "0") {
-      event.preventDefault();
-      const frame = currentFrame();
-      if (!frame) {
+  if (isInteractionEnabled) {
+    addManagedListener(rootElement, "keydown", function (event) {
+      if (!state.replay) {
         return;
       }
 
-      resetCameraToFit(frame);
-      renderCurrentFrame();
-    }
-  });
+      if (event.key === "ArrowLeft") {
+        stopAutoplay();
+        setFrameIndex(state.frameIndex - 1);
+      }
+
+      if (event.key === "ArrowRight") {
+        stopAutoplay();
+        setFrameIndex(state.frameIndex + 1);
+      }
+
+      if (event.key === " ") {
+        event.preventDefault();
+        if (state.autoPlayHandle) {
+          stopAutoplay();
+        } else {
+          startAutoplay();
+        }
+      }
+
+      if (event.key === "+" || event.key === "=") {
+        event.preventDefault();
+        zoomCameraFromKeyboard(WHEEL_ZOOM_FACTOR);
+      }
+
+      if (event.key === "-" || event.key === "_") {
+        event.preventDefault();
+        zoomCameraFromKeyboard(1 / WHEEL_ZOOM_FACTOR);
+      }
+
+      if (event.key === "0") {
+        event.preventDefault();
+        const frame = currentFrame();
+        if (!frame) {
+          return;
+        }
+
+        resetCameraToFit(frame);
+        renderCurrentFrame();
+      }
+    });
+  }
 }
 
 function renderIdle() {
@@ -964,6 +986,7 @@ function renderCurrentFrame(options = {}) {
   const frame = currentFrame();
   if (!frame) {
     renderCanvasMessage(state.statusMessage);
+    emitFrameState(null);
     return;
   }
 
@@ -975,6 +998,7 @@ function renderCurrentFrame(options = {}) {
   syncOverlays(frame);
   syncToastState(frame);
   renderCanvasFrame(frame);
+  emitFrameState(frame);
 }
 
 function syncTrackedCamera(frame) {
@@ -1257,6 +1281,23 @@ function buildToastStack(frame) {
 
   return items.sort(function (left, right) {
     return left.priority - right.priority;
+  });
+}
+
+function emitFrameState(frame) {
+  if (!onFrameStateChange) {
+    return;
+  }
+
+  if (!frame) {
+    onFrameStateChange(null);
+    return;
+  }
+
+  onFrameStateChange({
+    frameIndex: state.frameIndex,
+    committedTurnNumber: frame.committedTurnNumber,
+    label: frame.label
   });
 }
 

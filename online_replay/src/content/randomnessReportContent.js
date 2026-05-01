@@ -776,54 +776,87 @@ export const randomnessReport = {
     source: ""
   },
   gameIntroduction: {
-    paragraphs: [
-      "Unnormal Chess Game conserve le coeur d'un duel d'echecs, mais le deplace dans un cadre plus large ou la carte, les ressources et les evenements de partie comptent autant que la seule geometrie des pieces.",
-      "La partie reste lisible pour un joueur d'echecs, mais elle se joue dans un espace beaucoup plus vivant: il faut proteger son roi, ouvrir des lignes d'attaque, conserver du controle territorial et exploiter des opportunites qui n'existent pas sur un echiquier fixe."
-    ],
-    sections: [
+    blocks: [
       {
-        title: "Objectif et boucle de jeu",
+        title: "1. Deux royaumes, un roi a proteger",
+        vignetteId: "kingdoms",
         paragraphs: [
-          "L'objectif reste de faire basculer la partie a son avantage en preservant son royaume et en trouvant des sequences decisives contre l'adversaire. Chaque tour oblige a arbitrer entre tactique immediate, defense du roi, occupation de l'espace et preparation d'un avantage futur."
+          "Chaque joueur controle un royaume blanc ou noir avec un roi, des pieces inspirees des echecs et ses propres batiments. La condition centrale reste simple: proteger son roi et mettre le royaume adverse en echec.",
+          "La difference avec un echiquier classique, c'est que les pieces jouent sur une vraie carte. Les distances, les obstacles, les ressources et les evenements du terrain comptent autant que les mouvements eux-memes."
         ]
       },
       {
-        title: "Carte, territoire et economie",
+        title: "2. Chaque tour donne des points de mouvement et des points de construction",
+        vignetteId: "turnBudget",
         paragraphs: [
-          "La partie ne se joue pas sur un plateau standardise. Le terrain, l'eau, les zones praticables, les fermes et les mines structurent les ouvertures possibles, la circulation et la valeur strategique des zones de carte. Controler l'espace utile devient une composante centrale du jeu."
+          "Un tour ne correspond pas a un seul coup. Chaque royaume recoit un stock de **points de mouvement** pour deplacer ses pieces et un stock de **points de construction** pour poser, reparer ou lancer des batiments.",
+          "**Par exemple, bouger une tour coute 4 points de mouvement, alors que bouger un pion ne coute qu'1 point de mouvement.** Ces deux budgets imposent un arbitrage permanent. Si vous depensez vos points pour avancer vos pieces, vous construisez moins. Si vous investissez dans les batiments, vous ralentissez votre pression immediate sur la carte."
         ]
       },
       {
-        title: "Pieces, progression et opportunites",
+        title: "3. Le terrain et l'eau changent les chemins possibles",
+        vignetteId: "terrain",
         paragraphs: [
-          "Les pieces gardent une lecture echec, mais elles interagissent aussi avec des systemes de progression et de recompense. L'experience, les coffres et les timings de deplacement creent des ecarts de valeur qui se construisent dans la duree, pas seulement sur un echange tactique isole."
+          "La carte est regeneree a chaque partie. On y trouve de l'herbe, de la terre et surtout des zones d'eau qui bloquent certaines trajectoires.",
+          "L'eau force des detours, ferme des acces et protege parfois un cote du plateau. Avant meme de parler d'economie ou d'evenements aleatoires, il faut donc lire quels couloirs restent vraiment praticables."
         ]
       },
       {
-        title: "Systemes de pression dynamiques",
+        title: "4. Les batiments publics donnent des ressources et des objectifs de carte",
+        vignetteId: "economy",
         paragraphs: [
-          "La meteo, le brouillard, les recompenses aleatoires et les apparitions infernales injectent des contraintes supplementaires dans la partie. Le terrain reste strategique, mais il n'est jamais totalement fige: des phenomenes externes peuvent fermer des lignes, ouvrir des fenetres d'attaque ou modifier le rythme de la partie."
+          "La carte contient aussi des batiments publics, par exemple des mines, des fermes ou des eglises. Ils ne servent pas de decor: ils creent des points a controler pour gagner plus de valeur sur la duree.",
+          "**Par exemple, si une piece blanche occupe une mine, elle rapporte 10 d'or par tour.** Conquerir ces zones change donc directement l'economie. On ne joue pas seulement contre le roi adverse; on joue aussi pour tenir les secteurs qui donnent de l'or, de la production ou de la progression."
+        ]
+      },
+      {
+        title: "5. Construire et produire des pieces fait partie du tour",
+        vignetteId: "production",
+        paragraphs: [
+          "Les **points de construction** servent notamment a poser ou reparer des structures. Les casernes permettent ensuite de produire de nouvelles pieces au lieu de se contenter de l'armee de depart.",
+          "La partie devient donc un jeu de developpement en plus d'un jeu tactique. Vous pouvez consolider votre base, ouvrir un nouveau front ou preparer une piece supplementaire pour les tours suivants."
+        ]
+      },
+      {
+        title: "6. Arene et eglise permettent d'ameliorer une piece de maniere precise",
+        vignetteId: "progression",
+        paragraphs: [
+          "Une arene sert a faire progresser une piece, et une eglise sert a effectuer certaines transformations speciales. Ce systeme n'est donc pas abstrait: il passe par des batiments precis et par des combinaisons precises.",
+          "**Par exemple, si on reunit dans une eglise un roi, un fou et une tour, alors la tour se transforme en reine.** La demonstration a droite montre exactement ce cas, puis recommence en boucle."
+        ]
+      },
+      {
+        title: "7. Les coffres donnent de l'or ou augmentent les budgets du tour",
+        vignetteId: "chest",
+        paragraphs: [
+          "Des coffres apparaissent pendant la partie sur des cases visibles et contestables. Une piece qui atteint un coffre l'ouvre immediatement et obtient une recompense aleatoire.",
+          "Cette recompense peut etre de l'**or**, un bonus permanent de **mouvement** maximal par tour, ou un bonus permanent de **construction** maximale par tour. Comme ces gains modifient directement vos budgets, les coffres creent de vraies courses sur la carte."
+        ]
+      },
+      {
+        title: "8. Le brouillard peut cacher des pieces et des batiments ennemis",
+        vignetteId: "weather",
+        paragraphs: [
+          "Le brouillard ne sert pas seulement d'habillage visuel. Il peut cacher des pieces ou des batiments ennemis s'ils sont dans la zone couverte.",
+          "**Par exemple, un joueur peut se deplacer sous un brouillard pour mener une embuscade sur la base d'un autre joueur.** Le point important est que le cache est lie au point de vue. Les Blancs et les Noirs ne voient donc pas toujours les memes informations au meme moment."
+        ]
+      },
+      {
+        title: "9. L'infernal ajoute une menace autonome en plus des deux royaumes",
+        vignetteId: "infernal",
+        paragraphs: [
+          "Le jeu suit une **dette de sang** pour chaque royaume. Cette dette augmente quand des pieces sont capturees ou quand des structures subissent des degats, puis elle decroit progressivement avec le temps.",
+          "**Dans l'exemple, une tour infernale apparait sur le bord droit, capture d'abord le fou blanc le plus proche, puis le pion blanc.** Plus la dette totale monte, plus une unite infernale a de chances d'apparaitre au bord de la carte. Cette piece autonome cible un royaume, se deplace seule et ajoute une pression supplementaire qu'aucun des deux joueurs ne controle directement."
         ]
       }
     ]
   },
   randomnessLink: {
+    title: "Pourquoi les processus aleatoires sont essentiels au jeu",
     paragraphs: [
-      "L'aleatoire n'est pas un decor. Il sert a diversifier les cartes, a rendre les economies moins mecaniques, a creer des fenetres d'opportunite et a produire une incertitude que les joueurs doivent apprendre a lire plutot qu'a subir.",
-      "Par rapport a un jeu d'echecs classique, cette couche aleatoire apporte de la rejouabilite, renouvelle la valeur strategique des positions et deplace une partie de la maitrise vers l'anticipation des regimes possibles, la gestion du risque et l'adaptation aux evenements."
+      "Ce rapport montre pourquoi les processus aleatoires sont essentiels au jeu: ils renouvellent les parties, enrichissent les choix strategiques et apportent une vraie plus-value par rapport aux echecs classiques, tout en restant assez lisibles pour etre analyses, modelises et observes."
     ],
-    sections: [
-      {
-        title: "Une incertitude qui reste strategique",
-        text:
-          "Les tirages ne sont pas la pour casser arbitrairement une position. Ils sont bornes par des regles explicites, relies a `worldSeed`, consumes par des compteurs RNG serialises et reinterpretes par des contraintes de gameplay. Le hasard varie les situations sans effacer la competence des joueurs."
-      },
-      {
-        title: "Une vraie plus-value par rapport aux echecs classiques",
-        text:
-          "Le jeu ne se contente pas d'ajouter du bruit. Il cree des cartes differentes, des rythmes de partie plus riches, des economies plus vivantes et des lectures tactiques qui doivent integrer l'incertitude future. La profondeur vient justement du fait que ces processus aleatoires restent modelisables et observables."
-      }
-    ],
+    sections: [],
     reportDimensionsTitle: "Les trois dimensions du rapport",
     reportDimensions: [
       {
@@ -846,12 +879,6 @@ export const randomnessReport = {
     replayTitle: "Replay instrumente de la partie reelle",
     replayText:
       "Le viewer ci-dessous donne un apercu direct de la partie observee, en lecture automatique rapide, avec boucle et point de vue blanc. Il sert d'entree visuelle avant le detail statistique du rapport."
-  },
-  reportPrelude: {
-    paragraphs: [
-      "La suite entre dans le detail du rapport: table des matieres, familles de lois, statistiques simulees, observations issues de la partie reelle et limites du modele.",
-      "Le document pivot reste `documentation/RAPPORT_AUDIT_PROCESSUS_ALEATOIRES_RUNTIME.md`, complete ici par les donnees issues de la configuration runtime active, des simulations et de la partie instrumentee."
-    ]
   },
   summaryStats: [
     {
@@ -932,45 +959,6 @@ export const randomnessReport = {
         "`saves/` et `PARTICULAR SAVES/` montrent la persistance des seeds et compteurs dans des etats concrets.",
         "`statistiques-generator/` offre une base naturelle pour automatiser demain des comparaisons entre distributions attendues et distributions observees."
       ]
-    }
-  ],
-  codePatterns: [
-    {
-      title: "Schema RNG commun aux evenements",
-      description:
-        "Le coeur du determinisme runtime repose sur un melange seed de monde + compteur monotone. C'est le motif recurrent de la meteo, des coffres et de l'infernal.",
-      language: "cpp",
-      code: `std::mt19937 makeEventGenerator(State& state, std::uint32_t worldSeed) {
-    const std::uint32_t baseSeed = (worldSeed == 0) ? 1u : worldSeed;
-    return std::mt19937(mixSeed(baseSeed, state.rngCounter++));
-}`
-    },
-    {
-      title: "Normale tronquee puis discretisee",
-      description:
-        "Le moteur de profils de recompense sert a la fois pour l'XP et pour l'or des coffres. La loi continue est transformee par clamp, arrondi et minimum.",
-      language: "cpp",
-      code: `std::normal_distribution<double> distribution(mean, sigma);
-const double clamped = std::clamp(distribution(generator), minValue, maxValue);
-return std::max(minimum, static_cast<int>(std::lround(clamped)));`
-    },
-    {
-      title: "Categorielle ponderee",
-      description:
-        "Les choix nominaux du jeu utilisent en general `std::discrete_distribution`: c'est le bon outil quand seule la proportion relative des options importe.",
-      language: "cpp",
-      code: `std::vector<int> weights = buildWeights(state, config);
-std::discrete_distribution<std::size_t> distribution(weights.begin(), weights.end());
-const auto chosen = candidates[distribution(generator)];`
-    },
-    {
-      title: "Champ spatial de contour meteo",
-      description:
-        "Le contour du front n'est pas une variable simple: c'est une fonction de la cellule et d'une graine de forme. Ce point explique pourquoi la section procedurale ne se reduit pas a une loi scalaire.",
-      language: "cpp",
-      code: `const float boundaryNoise = valueNoise(front.shapeSeed, cellX, cellY, span);
-const float effectiveBoundary = 1.0f + ((boundaryNoise - 0.5f) * amplitude);
-const float edgeDistance = effectiveBoundary - normalizedDistance;`
     }
   ],
   lawSections: [

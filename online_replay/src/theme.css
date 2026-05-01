@@ -389,6 +389,10 @@ a {
   border-radius: 28px;
 }
 
+.rapport-panel--intro-heading {
+  padding-bottom: 12px;
+}
+
 .rapport-section__header {
   display: grid;
   gap: 8px;
@@ -420,6 +424,179 @@ a {
 
 .rapport-subsection__lead {
   margin: 0;
+}
+
+.rapport-intro-flow {
+  display: grid;
+  gap: 18px;
+}
+
+.rapport-intro-block {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(240px, 0.85fr);
+  gap: 22px;
+  align-items: center;
+  padding: 20px 22px;
+  border: 1px solid var(--panel-border);
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(27, 36, 29, 0.9), rgba(14, 18, 15, 0.92)),
+    radial-gradient(circle at top left, rgba(240, 213, 143, 0.08), transparent 50%);
+  box-shadow: var(--panel-shadow);
+}
+
+.rapport-intro-block__copy {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.rapport-intro-block__copy h3 {
+  margin: 0;
+  color: var(--ink-strong);
+  font-size: clamp(22px, 3vw, 28px);
+  line-height: 1.16;
+}
+
+.rapport-intro-block__media {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rapport-intro-vignette {
+  width: min(100%, 308px);
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid var(--panel-border);
+  border-radius: 20px;
+  background:
+    linear-gradient(180deg, rgba(27, 36, 29, 0.9), rgba(14, 18, 15, 0.92)),
+    radial-gradient(circle at top left, rgba(240, 213, 143, 0.08), transparent 50%);
+  box-shadow: var(--panel-shadow);
+}
+
+.rapport-intro-vignette .static-board-vignette,
+.rapport-intro-vignette .static-board-vignette__viewer,
+.rapport-intro-vignette .replay-root {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+}
+
+.rapport-intro-vignette .replay-canvas {
+  cursor: default;
+}
+
+.rapport-intro-vignette .static-board-vignette__viewer {
+  pointer-events: none;
+}
+
+.rapport-intro-vignette .status-overlay-group,
+.rapport-intro-vignette .replay-toast-stack,
+.rapport-intro-vignette .zoom-controls,
+.rapport-intro-vignette .timeline-overlay {
+  display: none !important;
+}
+
+.rapport-intro-vignette .static-board-vignette__custom-overlay-group {
+  display: none !important;
+}
+
+.rapport-intro-vignette.static-board-vignette--show-perspective .status-overlay-group {
+  display: flex !important;
+}
+
+.rapport-intro-vignette.static-board-vignette--show-perspective [data-replay-ref="activeTurnOverlay"] {
+  display: none !important;
+}
+
+.rapport-intro-vignette.static-board-vignette--show-perspective .status-overlay-group-left {
+  left: 10px;
+  top: 10px;
+}
+
+.rapport-intro-vignette.static-board-vignette--show-perspective .status-overlay {
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 14px;
+}
+
+.rapport-intro-vignette.static-board-vignette--show-perspective .turn-indicator-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.rapport-intro-vignette.static-board-vignette--show-perspective .overlay-label {
+  font-size: 10px;
+}
+
+.rapport-intro-vignette.static-board-vignette--show-perspective .overlay-value {
+  font-size: 13px;
+}
+
+.rapport-intro-vignette.static-board-vignette--show-toasts .replay-toast-stack {
+  display: flex !important;
+  top: 10px;
+  right: 10px;
+  left: 10px;
+  bottom: auto;
+  align-items: stretch;
+  gap: 8px;
+  max-width: none;
+}
+
+.rapport-intro-vignette.static-board-vignette--show-toasts .replay-toast {
+  width: 100%;
+  max-width: none;
+  min-height: 0;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+}
+
+.rapport-intro-vignette.static-board-vignette--show-toasts .turn-indicator-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.rapport-intro-vignette.static-board-vignette--show-toasts .overlay-label {
+  font-size: 10px;
+}
+
+.rapport-intro-vignette.static-board-vignette--show-toasts .overlay-value {
+  font-size: 13px;
+}
+
+.rapport-intro-vignette.static-board-vignette--show-status-overlay .static-board-vignette__custom-overlay-group {
+  display: flex !important;
+}
+
+.rapport-intro-vignette.static-board-vignette--show-status-overlay .static-board-vignette__custom-overlay-group {
+  left: 10px;
+  top: 10px;
+}
+
+.rapport-intro-vignette.static-board-vignette--show-status-overlay .static-board-vignette__custom-overlay {
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 14px;
+}
+
+.rapport-intro-vignette.static-board-vignette--show-status-overlay .static-board-vignette__custom-overlay .turn-indicator-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.rapport-intro-vignette.static-board-vignette--show-status-overlay .static-board-vignette__custom-overlay .overlay-label {
+  font-size: 10px;
+}
+
+.rapport-intro-vignette.static-board-vignette--show-status-overlay .static-board-vignette__custom-overlay .overlay-value {
+  font-size: 13px;
+}
+
+.rapport-output-card--primary {
+  margin-top: 18px;
 }
 
 .rapport-replay-frame {
@@ -949,6 +1126,10 @@ a {
   border-bottom: 1px solid #dddddd;
 }
 
+.site-shell--rapport .rapport-panel--intro-heading {
+  padding-bottom: 12px;
+}
+
 .site-shell--rapport .rapport-content > :last-child {
   border-bottom: 0;
   padding-bottom: 0;
@@ -976,6 +1157,33 @@ a {
   color: #1f1f1f;
   font-size: 17px;
   line-height: 1.76;
+}
+
+.site-shell--rapport .rapport-intro-flow {
+  gap: 16px;
+}
+
+.site-shell--rapport .rapport-intro-block {
+  grid-template-columns: minmax(0, 1.45fr) minmax(220px, 0.85fr);
+  gap: 18px;
+  padding: 16px 18px;
+  border: 1px solid #dddddd;
+  border-radius: 8px;
+  background: #fafafa;
+  box-shadow: none;
+}
+
+.site-shell--rapport .rapport-intro-block__copy h3 {
+  color: #111111;
+  font-size: clamp(21px, 3vw, 27px);
+}
+
+.site-shell--rapport .rapport-intro-vignette {
+  width: min(100%, 292px);
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  background: #f7f7f7;
+  box-shadow: none;
 }
 
 .site-shell--rapport .rapport-replay-frame {
@@ -1277,6 +1485,19 @@ a {
     padding-bottom: 4px;
   }
 
+  .rapport-intro-block {
+    grid-template-columns: 1fr;
+  }
+
+  .rapport-intro-block__media {
+    justify-content: stretch;
+  }
+
+  .rapport-intro-vignette {
+    width: 100%;
+    max-width: none;
+  }
+
   .rapport-summary-card--inline {
     min-width: min(260px, calc(100vw - 48px));
   }
@@ -1328,6 +1549,10 @@ a {
 
   .site-shell--rapport .rapport-summary-row {
     overflow-x: auto;
+  }
+
+  .site-shell--rapport .rapport-intro-block {
+    grid-template-columns: 1fr;
   }
 
   .site-shell--rapport .rapport-layout {

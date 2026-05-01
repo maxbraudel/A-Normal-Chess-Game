@@ -6,6 +6,8 @@ import MathFormula from "../components/MathFormula.vue";
 import RapportLawSection from "../components/RapportLawSection.vue";
 import RapportStatsBlock from "../components/RapportStatsBlock.vue";
 import ReplayViewer from "../components/ReplayViewer.vue";
+import StaticBoardVignette from "../components/StaticBoardVignette.vue";
+import { reportIntroVignettes } from "../content/reportIntroVignettes.js";
 import { randomnessReport } from "../content/randomnessReportContent.js";
 import { loadRealGameStatsReport } from "../content/realGameStatsContent.js";
 import { randomnessStatsReport } from "../content/randomnessStatsContent.js";
@@ -13,7 +15,7 @@ import { reportText } from "../utils/reportText.js";
 
 const REPORT_INTRO_REPLAY = Object.freeze({
   autoplayOnMount: true,
-  autoplayIntervalMs: 220,
+  autoplayIntervalMs: 100,
   loopPlayback: true,
   toastCooldownMs: 2400,
   enablePerspective: true,
@@ -26,25 +28,33 @@ const realGameStatsReport = ref({
   processStatsByTitle: {}
 });
 
+const gameIntroductionBlocks = computed(() =>
+  randomnessReport.gameIntroduction.blocks.map((block) => ({
+    ...block,
+    vignette: reportIntroVignettes[block.vignetteId] || null
+  }))
+);
+
+const firstReportDimension = computed(() => randomnessReport.randomnessLink.reportDimensions[0] || null);
+const remainingReportDimensions = computed(() => randomnessReport.randomnessLink.reportDimensions.slice(1));
+
 const numberedLawSections = computed(() =>
   randomnessReport.lawSections.map((section, index) => ({
     ...section,
-    number: `4.${index + 1}`
+    number: `2.${index + 1}`
   }))
 );
 
 const tocItems = computed(() => [
   { id: "cadre", number: "1", label: "Cadre probabiliste" },
-  { id: "sorties", number: "2", label: "Sorties statistiques" },
-  { id: "patterns", number: "3", label: "Schémas de simulation" },
   ...numberedLawSections.value.map((section) => ({
     id: section.id,
     number: section.number,
     label: reportText(section.title)
   })),
-  { id: "dependances", number: "5", label: "Dépendances" },
-  { id: "difficultes", number: "6", label: "Difficultés" },
-  { id: "perspectives", number: "7", label: "Perspectives" }
+  { id: "dependances", number: "3", label: "Dépendances" },
+  { id: "difficultes", number: "4", label: "Difficultés" },
+  { id: "perspectives", number: "5", label: "Perspectives" }
 ]);
 
 const processStatsByTitle = randomnessStatsReport.processStatsByTitle;
@@ -129,22 +139,24 @@ onBeforeUnmount(() => {
         <h2>Introduction au jeu</h2>
       </header>
 
-      <div class="rapport-richtext">
-        <InlineRichText
-          v-for="paragraph in randomnessReport.gameIntroduction.paragraphs"
-          :key="paragraph"
-          :text="paragraph"
-        />
-      </div>
+      <div class="rapport-intro-flow">
+        <article v-for="block in gameIntroductionBlocks" :key="block.title" class="rapport-intro-block">
+          <div class="rapport-intro-block__copy">
+            <h3>{{ reportText(block.title) }}</h3>
+            <div class="rapport-richtext rapport-richtext--compact">
+              <InlineRichText
+                v-for="paragraph in block.paragraphs"
+                :key="`${block.title}-${paragraph}`"
+                :text="paragraph"
+              />
+            </div>
+          </div>
 
-      <div class="rapport-output-grid">
-        <article v-for="section in randomnessReport.gameIntroduction.sections" :key="section.title" class="rapport-output-card">
-          <h3>{{ reportText(section.title) }}</h3>
-          <div class="rapport-richtext rapport-richtext--compact">
-            <InlineRichText
-              v-for="paragraph in section.paragraphs"
-              :key="`${section.title}-${paragraph}`"
-              :text="paragraph"
+          <div class="rapport-intro-block__media">
+            <StaticBoardVignette
+              v-if="block.vignette"
+              class="rapport-intro-vignette"
+              v-bind="block.vignette"
             />
           </div>
         </article>
@@ -154,7 +166,7 @@ onBeforeUnmount(() => {
     <section class="rapport-panel rapport-panel--intro">
       <header class="rapport-section__header">
         <p class="rapport-panel__eyebrow">Lecture stratégique</p>
-        <h2>Lien avec les processus aléatoires</h2>
+        <h2>{{ reportText(randomnessReport.randomnessLink.title || "Lien avec les processus aleatoires") }}</h2>
       </header>
 
       <div class="rapport-richtext">
@@ -165,7 +177,7 @@ onBeforeUnmount(() => {
         />
       </div>
 
-      <div class="rapport-output-grid">
+      <div v-if="randomnessReport.randomnessLink.sections?.length" class="rapport-output-grid">
         <article v-for="section in randomnessReport.randomnessLink.sections" :key="section.title" class="rapport-output-card">
           <h3>{{ reportText(section.title) }}</h3>
           <InlineRichText :text="section.text" />
@@ -173,24 +185,27 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="rapport-subsection">
-        <h3 class="rapport-subsection__title">{{ reportText(randomnessReport.randomnessLink.reportDimensionsTitle) }}</h3>
+        <article v-if="firstReportDimension" class="rapport-output-card rapport-output-card--primary">
+          <h3>{{ reportText(firstReportDimension.title) }}</h3>
+          <InlineRichText :text="firstReportDimension.text" />
+        </article>
 
-        <div class="rapport-output-grid">
+        <div v-if="firstReportDimension?.showSummaryStats" class="rapport-summary-row" aria-label="Résumé des processus aléatoires">
+          <article v-for="stat in randomnessReport.summaryStats" :key="stat.label" class="rapport-summary-card rapport-summary-card--inline">
+            <p class="rapport-summary-card__value">{{ stat.value }}</p>
+            <p class="rapport-summary-card__label">{{ reportText(stat.label) }}</p>
+            <p class="rapport-summary-card__detail">{{ reportText(stat.detail) }}</p>
+          </article>
+        </div>
+
+        <div v-if="remainingReportDimensions.length" class="rapport-output-grid">
           <article
-            v-for="dimension in randomnessReport.randomnessLink.reportDimensions"
+            v-for="dimension in remainingReportDimensions"
             :key="dimension.title"
             class="rapport-output-card"
           >
             <h3>{{ reportText(dimension.title) }}</h3>
             <InlineRichText :text="dimension.text" />
-          </article>
-        </div>
-
-        <div class="rapport-summary-row" aria-label="Résumé des processus aléatoires">
-          <article v-for="stat in randomnessReport.summaryStats" :key="stat.label" class="rapport-summary-card rapport-summary-card--inline">
-            <p class="rapport-summary-card__value">{{ stat.value }}</p>
-            <p class="rapport-summary-card__label">{{ reportText(stat.label) }}</p>
-            <p class="rapport-summary-card__detail">{{ reportText(stat.detail) }}</p>
           </article>
         </div>
       </div>
@@ -205,19 +220,11 @@ onBeforeUnmount(() => {
       </div>
     </section>
 
-    <section class="rapport-panel rapport-panel--intro">
+    <section class="rapport-panel rapport-panel--intro rapport-panel--intro-heading">
       <header class="rapport-section__header">
         <p class="rapport-panel__eyebrow">Rapport</p>
         <h2>Rapport des processus aléatoires</h2>
       </header>
-
-      <div class="rapport-richtext">
-        <InlineRichText
-          v-for="paragraph in randomnessReport.reportPrelude.paragraphs"
-          :key="paragraph"
-          :text="paragraph"
-        />
-      </div>
     </section>
 
     <div class="rapport-layout">
@@ -269,54 +276,6 @@ onBeforeUnmount(() => {
           </ul>
         </section>
 
-        <section id="sorties" class="rapport-panel">
-          <header class="rapport-section__header">
-            <p class="rapport-panel__eyebrow">Observation</p>
-            <h2>
-              <span class="rapport-section__number">2.</span>
-              Sorties statistiques déjà disponibles
-            </h2>
-          </header>
-
-          <div class="rapport-output-grid">
-            <article v-for="output in randomnessReport.outputStats" :key="output.title" class="rapport-output-card">
-              <h3>{{ reportText(output.title) }}</h3>
-              <InlineRichText :text="output.text" />
-              <ul class="rapport-note-list rapport-note-list--compact">
-                <li v-for="bullet in output.bullets" :key="bullet">
-                  <InlineRichText :text="bullet" tag="span" />
-                </li>
-              </ul>
-            </article>
-          </div>
-
-          <div class="rapport-stats-collection rapport-stats-collection--overview">
-            <RapportStatsBlock
-              v-for="block in randomnessStatsReport.overviewBlocks"
-              :key="block.title"
-              :block="block"
-            />
-          </div>
-        </section>
-
-        <section id="patterns" class="rapport-panel">
-          <header class="rapport-section__header">
-            <p class="rapport-panel__eyebrow">Simulation</p>
-            <h2>
-              <span class="rapport-section__number">3.</span>
-              Schémas de simulation récurrente
-            </h2>
-          </header>
-
-          <div class="rapport-code-grid">
-            <article v-for="pattern in randomnessReport.codePatterns" :key="pattern.title" class="rapport-code-card">
-              <h3>{{ reportText(pattern.title) }}</h3>
-              <InlineRichText :text="pattern.description" />
-              <pre class="rapport-code"><code>{{ pattern.code }}</code></pre>
-            </article>
-          </div>
-        </section>
-
         <RapportLawSection
           v-for="section in numberedLawSections"
           :key="section.id"
@@ -331,7 +290,7 @@ onBeforeUnmount(() => {
           <header class="rapport-section__header">
             <p class="rapport-panel__eyebrow">Dépendances</p>
             <h2>
-              <span class="rapport-section__number">5.</span>
+              <span class="rapport-section__number">3.</span>
               Structures de corrélation et de dépendance
             </h2>
           </header>
@@ -347,7 +306,7 @@ onBeforeUnmount(() => {
           <header class="rapport-section__header">
             <p class="rapport-panel__eyebrow">Analyse</p>
             <h2>
-              <span class="rapport-section__number">6.</span>
+              <span class="rapport-section__number">4.</span>
               Difficultés mathématiques réelles
             </h2>
           </header>
@@ -364,7 +323,7 @@ onBeforeUnmount(() => {
           <header class="rapport-section__header">
             <p class="rapport-panel__eyebrow">Suite</p>
             <h2>
-              <span class="rapport-section__number">7.</span>
+              <span class="rapport-section__number">5.</span>
               Perspectives de mesure et d'amélioration
             </h2>
           </header>
