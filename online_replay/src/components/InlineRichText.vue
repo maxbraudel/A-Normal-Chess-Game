@@ -24,7 +24,22 @@ function escapeHtml(value) {
     .replaceAll("'", "&#39;");
 }
 
-function looksLikeStandaloneMath(value) {
+function looksLikeCodeSnippet(value) {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  return /::|\.json\b|\b(?:true|false|null)\b|[A-Za-z]+(?:_[A-Za-z0-9]+){1,}|[A-Za-z][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_.-]*/.test(trimmed);
+}
+
+function looksLikeStandaloneMath(value, options = {}) {
+  const { codeChunk = false } = options;
+
   if (typeof value !== "string") {
     return false;
   }
@@ -34,9 +49,20 @@ function looksLikeStandaloneMath(value) {
     return false;
   }
 
-  const hasLatexSignal = /\\[a-zA-Z]+|[_^]|\\\{|\\\}|\\left|\\right|\\frac|\\min|\\max|\\cdot|\\mid|\\mathcal|\\mathrm/.test(trimmed);
+  const hasExplicitLatexCommand = /\\[a-zA-Z]+/.test(trimmed);
+  const hasLatexSignal = hasExplicitLatexCommand
+    || /[_^]|\\\{|\\\}|\\left|\\right|\\frac|\\min|\\max|\\cdot|\\mid|\\mathcal|\\mathrm/.test(trimmed);
+
   if (!hasLatexSignal) {
     return false;
+  }
+
+  if (codeChunk && !hasExplicitLatexCommand && looksLikeCodeSnippet(trimmed)) {
+    return false;
+  }
+
+  if (hasExplicitLatexCommand) {
+    return true;
   }
 
   const alphaTokens = trimmed.match(/[A-Za-zÀ-ÿ]+/g) || [];
@@ -121,7 +147,7 @@ const rendered = computed(() => {
   return chunks
     .map((chunk, index) => {
       if (index % 2 === 1) {
-        if (looksLikeStandaloneMath(chunk)) {
+        if (looksLikeStandaloneMath(chunk, { codeChunk: true })) {
           return renderMath(chunk.trim(), false);
         }
 

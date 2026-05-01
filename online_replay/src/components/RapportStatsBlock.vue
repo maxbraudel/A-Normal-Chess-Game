@@ -8,6 +8,14 @@ defineProps({
     type: Object,
     required: true
   },
+  sourceKind: {
+    type: String,
+    default: ""
+  },
+  sourceTag: {
+    type: String,
+    default: ""
+  },
   embedded: {
     type: Boolean,
     default: false
@@ -19,7 +27,16 @@ defineProps({
   <article class="rapport-stats-block" :class="{ 'rapport-stats-block--embedded': embedded }">
     <header class="rapport-stats-block__header">
       <p v-if="block.eyebrow" class="rapport-stats-block__eyebrow">{{ reportText(block.eyebrow) }}</p>
-      <h3>{{ reportText(block.title) }}</h3>
+      <div class="rapport-stats-block__title-row">
+        <span
+          v-if="sourceTag"
+          class="rapport-source-tag"
+          :class="sourceKind ? `rapport-source-tag--${sourceKind}` : ''"
+        >
+          {{ reportText(sourceTag) }}
+        </span>
+        <h3>{{ reportText(block.title) }}</h3>
+      </div>
       <InlineRichText v-if="block.description" class="rapport-stats-block__description" :text="block.description" />
     </header>
 

@@ -38,6 +38,14 @@ const gameIntroductionBlocks = computed(() =>
 const firstReportDimension = computed(() => randomnessReport.randomnessLink.reportDimensions[0] || null);
 const remainingReportDimensions = computed(() => randomnessReport.randomnessLink.reportDimensions.slice(1));
 
+function reportDimensionHighlightClasses(dimension) {
+  if (!dimension?.sourceKind) {
+    return [];
+  }
+
+  return ["rapport-source-highlight", `rapport-source-highlight--${dimension.sourceKind}`];
+}
+
 const numberedLawSections = computed(() =>
   randomnessReport.lawSections.map((section, index) => ({
     ...section,
@@ -186,7 +194,9 @@ onBeforeUnmount(() => {
 
       <div class="rapport-subsection">
         <article v-if="firstReportDimension" class="rapport-output-card rapport-output-card--primary">
-          <h3>{{ reportText(firstReportDimension.title) }}</h3>
+          <h3>
+            <span :class="reportDimensionHighlightClasses(firstReportDimension)">{{ reportText(firstReportDimension.title) }}</span>
+          </h3>
           <InlineRichText :text="firstReportDimension.text" />
         </article>
 
@@ -204,7 +214,9 @@ onBeforeUnmount(() => {
             :key="dimension.title"
             class="rapport-output-card"
           >
-            <h3>{{ reportText(dimension.title) }}</h3>
+            <h3>
+              <span :class="reportDimensionHighlightClasses(dimension)">{{ reportText(dimension.title) }}</span>
+            </h3>
             <InlineRichText :text="dimension.text" />
           </article>
         </div>

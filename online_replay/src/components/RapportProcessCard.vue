@@ -5,6 +5,31 @@ import MathFormula from "./MathFormula.vue";
 import RapportStatsBlock from "./RapportStatsBlock.vue";
 import { reportText } from "../utils/reportText.js";
 
+function getObservedSourceMeta(label) {
+  const normalizedLabel = reportText(label || "");
+  const loweredLabel = normalizedLabel.toLowerCase();
+  const simulatedMatch = loweredLabel.match(/(\d+)\s+parties?\s+simul/);
+
+  if (simulatedMatch) {
+    return {
+      kind: "simulated",
+      tag: `${simulatedMatch[1]} parties simulées`
+    };
+  }
+
+  if (loweredLabel.includes("partie réelle") || loweredLabel.includes("partie reelle")) {
+    return {
+      kind: "real",
+      tag: "Partie réelle avec joueur"
+    };
+  }
+
+  return {
+    kind: "",
+    tag: normalizedLabel || "Données observées"
+  };
+}
+
 defineProps({
   item: {
     type: Object,
@@ -90,12 +115,13 @@ defineProps({
         :key="section.label"
         class="rapport-process-card__observed-section"
       >
-        <span class="rapport-process-card__label">{{ reportText(section.label) }}</span>
         <div class="rapport-process-card__observed">
           <RapportStatsBlock
             v-for="block in (section.blocks || [])"
             :key="`${section.label}-${block.title}`"
             :block="block"
+            :source-kind="getObservedSourceMeta(section.label).kind"
+            :source-tag="getObservedSourceMeta(section.label).tag"
             embedded
           />
         </div>

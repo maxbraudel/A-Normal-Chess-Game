@@ -867,11 +867,13 @@ export const randomnessReport = {
       },
       {
         title: "2. 500 parties simulees",
+        sourceKind: "simulated",
         text:
           "La seconde couche repose sur 500 simulations theoriques. Il ne s'agit pas de matchs entre IA ni de parties humaines accelerees: on simule directement les mecanismes concernes, par exemple la generation du terrain, les coffres, la meteo ou les spawns infernaux, afin d'estimer leur comportement attendu."
       },
       {
         title: "3. Une partie reelle instrumentee",
+        sourceKind: "real",
         text:
           "La troisieme couche exploite les donnees d'une partie complete jouee pendant plusieurs heures avec un ami. Les actions, les tours et les etats utiles ont ete enregistres pour confronter la theorie a un runtime reel et montrer des resultats lisibles en situation de jeu."
       }
