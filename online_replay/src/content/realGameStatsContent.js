@@ -222,6 +222,23 @@ function buildWeatherBlock(weather) {
     ],
     chartHeight: 360,
     chartLabel: "Visibilite et fronts meteo sur la partie reelle",
+    exampleReplay: {
+      label: "Exemple tire d'une partie reelle",
+      description:
+        "Entre les tours 120 et 133, un nuage imprevisible ouvre un renversement total au centre de la carte: les Noirs prennent les Blancs en embuscade et les deux reines sont eliminees.",
+      viewer: {
+        replayUrl: REPLAY_CONFIG.replayUrl,
+        minTurn: 120,
+        maxTurn: 133,
+        initialTurn: 120,
+        autoplayOnMount: true,
+        loopPlayback: true,
+        initialZoom: 2.4,
+        enablePerspective: true,
+        perspectiveKingdom: "white",
+        showStatusOverlay: false
+      }
+    },
     chartOption: buildTimelineOption({
       xAxisName: "Tour",
       yAxes: [

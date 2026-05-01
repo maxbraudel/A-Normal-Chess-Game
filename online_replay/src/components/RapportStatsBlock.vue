@@ -1,5 +1,6 @@
 <script setup>
 import InlineRichText from "./InlineRichText.vue";
+import ReplayViewer from "./ReplayViewer.vue";
 import StatChart from "./StatChart.vue";
 import { reportText } from "../utils/reportText.js";
 
@@ -59,5 +60,19 @@ defineProps({
       :height="400"
       :aria-label="reportText(block.chartLabel || block.title)"
     />
+
+    <section v-if="block.exampleReplay" class="rapport-stats-example">
+      <p v-if="block.exampleReplay.label" class="rapport-stats-example__label">
+        {{ reportText(block.exampleReplay.label) }}
+      </p>
+      <InlineRichText
+        v-if="block.exampleReplay.description"
+        class="rapport-stats-example__description"
+        :text="block.exampleReplay.description"
+      />
+      <div class="rapport-replay-frame rapport-stats-example__frame">
+        <ReplayViewer class="rapport-replay rapport-stats-example__viewer" v-bind="block.exampleReplay.viewer || {}" />
+      </div>
+    </section>
   </article>
 </template>

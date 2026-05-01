@@ -889,6 +889,7 @@ a {
 }
 
 .rapport-stats-metric__value {
+  font-weight: 700;
   color: var(--ink-strong);
   font-size: 26px;
   line-height: 1.08;
@@ -904,6 +905,30 @@ a {
 
 .rapport-stats-block__insights {
   margin-top: 0;
+}
+
+.rapport-stats-example {
+  display: grid;
+  gap: 12px;
+}
+
+.rapport-stats-example__label {
+  margin: 0;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.rapport-stats-example__description {
+  color: var(--ink-dim);
+}
+
+.rapport-stats-example__frame {
+  margin-top: 0;
+  min-height: clamp(300px, 46vw, 560px);
+  aspect-ratio: 16 / 10;
 }
 
 .rapport-stats-block--embedded {
@@ -1377,6 +1402,26 @@ a {
   color: #1f1f1f;
   font-size: 17px;
   line-height: 1.76;
+}
+
+.site-shell--rapport .rapport-stats-example__label {
+  color: #6e6e6e;
+  font-family: "Trebuchet MS", "Segoe UI Variable Text", sans-serif;
+}
+
+.site-shell--rapport .rapport-stats-example__description,
+.site-shell--rapport .rapport-stats-example__description .inline-rich-text,
+.site-shell--rapport .rapport-stats-example__description p {
+  color: #1f1f1f;
+  font-size: 16px;
+  line-height: 1.68;
+}
+
+.site-shell--rapport .rapport-stats-example__frame {
+  border-color: #d9d9d9;
+  border-radius: 6px;
+  background: #f7f7f7;
+  box-shadow: none;
 }
 
 .site-shell--rapport .rapport-stats-block__metrics {
