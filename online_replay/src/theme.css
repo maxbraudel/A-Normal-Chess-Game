@@ -875,6 +875,13 @@ a {
   background: linear-gradient(transparent 52%, rgba(181, 92, 37, 0.18) 52%);
 }
 
+.rapport-source-explainer {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  margin-top: 14px;
+}
+
 .rapport-stats-block__eyebrow {
   margin: 0;
   color: var(--accent);

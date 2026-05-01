@@ -1164,25 +1164,31 @@ export const randomnessReport = {
       "Ce rapport montre pourquoi les processus aléatoires sont essentiels au jeu: ils renouvellent les parties, enrichissent les choix stratégiques et apportent une vraie plus-value par rapport aux échecs classiques, tout en restant assez lisibles pour être analysés, modélisés et observés."
     ],
     sections: [],
-    reportDimensionsTitle: "Les trois dimensions du rapport",
+    reportDimensionsTitle: "Les trois volets du rapport",
     reportDimensions: [
       {
         title: "1. Inventaire des processus aléatoires",
         text:
-          "La première couche du site recense les variables aléatoires actives de la codebase, leur famille de loi, leurs paramètres, leur support, leur méthode de simulation et leur ancrage déterministe dans `worldSeed` et les compteurs RNG sérialisés.",
+          "Le premier volet du rapport recense les variables aléatoires actives de la codebase, leur famille de loi, leurs paramètres, leur support, leur méthode de simulation et leur ancrage déterministe dans `worldSeed` et les compteurs RNG sérialisés.",
         showSummaryStats: true
       },
       {
         title: "2. 500 parties simulées",
         sourceKind: "simulated",
+        sourceTag: "500 parties simulées",
+        sourceTagText:
+          "Quand ce tag apparaît dans le rapport, les données et visualisations qui suivent proviennent du batch de 500 parties simulées.",
         text:
-          "La seconde couche repose sur 500 simulations théoriques. Il ne s'agit pas de matchs entre IA ni de parties humaines accélérées: on simule directement les mécanismes concernés, par exemple la génération du terrain, les coffres, la météo ou les apparitions infernales, afin d'estimer leur comportement attendu."
+          "Le deuxième volet s'appuie sur 500 simulations théoriques. Il ne s'agit pas de matchs entre IA ni de parties humaines accélérées: on simule directement les mécanismes concernés, par exemple la génération du terrain, les coffres, la météo ou les apparitions infernales, afin d'estimer leur comportement attendu."
       },
       {
         title: "3. Une partie réelle instrumentée",
         sourceKind: "real",
+        sourceTag: "Partie réelle avec joueur",
+        sourceTagText:
+          "Quand ce tag apparaît dans le rapport, les données et visualisations qui suivent proviennent de la partie réelle instrumentée rejouée dans le viewer.",
         text:
-          "La troisième couche exploite les données d'une partie complète jouée pendant plusieurs heures avec un ami. Les actions, les tours et les états utiles ont été enregistrés pour confronter la théorie à un runtime réel et montrer des résultats lisibles en situation de jeu."
+          "Le troisième volet exploite les données d'une partie complète jouée pendant plusieurs heures avec un ami. Les actions, les tours et les états utiles ont été enregistrés pour confronter la théorie à un runtime réel et montrer des résultats lisibles en situation de jeu."
       }
     ],
     replayTitle: "Replay de la partie réelle",

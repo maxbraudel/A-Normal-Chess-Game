@@ -240,6 +240,15 @@ onBeforeUnmount(() => {
             <span :class="reportDimensionHighlightClasses(firstReportDimension)">{{ firstReportDimension.title }}</span>
           </h3>
           <InlineRichText :text="firstReportDimension.text" />
+          <div v-if="firstReportDimension.sourceTag && firstReportDimension.sourceTagText" class="rapport-source-explainer">
+            <span
+              class="rapport-source-tag"
+              :class="firstReportDimension.sourceKind ? `rapport-source-tag--${firstReportDimension.sourceKind}` : ''"
+            >
+              {{ firstReportDimension.sourceTag }}
+            </span>
+            <InlineRichText :text="firstReportDimension.sourceTagText" />
+          </div>
         </article>
 
         <div v-if="firstReportDimension?.showSummaryStats" class="rapport-summary-row" aria-label="Résumé des processus aléatoires">
@@ -260,6 +269,15 @@ onBeforeUnmount(() => {
               <span :class="reportDimensionHighlightClasses(dimension)">{{ dimension.title }}</span>
             </h3>
             <InlineRichText :text="dimension.text" />
+            <div v-if="dimension.sourceTag && dimension.sourceTagText" class="rapport-source-explainer">
+              <span
+                class="rapport-source-tag"
+                :class="dimension.sourceKind ? `rapport-source-tag--${dimension.sourceKind}` : ''"
+              >
+                {{ dimension.sourceTag }}
+              </span>
+              <InlineRichText :text="dimension.sourceTagText" />
+            </div>
           </article>
         </div>
       </div>
