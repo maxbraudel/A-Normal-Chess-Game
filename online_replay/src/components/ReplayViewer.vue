@@ -68,6 +68,14 @@ const props = defineProps({
     type: Object,
     default: null
   },
+  updateCameraOnEveryTick: {
+    type: Boolean,
+    default: false
+  },
+  lockCamera: {
+    type: Boolean,
+    default: false
+  },
   showTimeline: {
     type: Boolean,
     default: true
@@ -95,9 +103,12 @@ const rootClasses = computed(() => ({
 const interactionTooltipItems = computed(() => {
   const items = [
     { key: "Ctrl + molette", value: "Zoom" },
-    { key: "Glisser", value: "Caméra" },
     { key: "Double-clic", value: "Recadrer" }
   ];
+
+  if (!props.lockCamera) {
+    items.splice(1, 0, { key: "Glisser", value: "Caméra" });
+  }
 
   if (props.enableCellDebug) {
     items.push({ key: "Clic", value: "Debug cellule" });
@@ -107,6 +118,10 @@ const interactionTooltipItems = computed(() => {
 });
 
 function showReplayTooltip() {
+  if (!interactionTooltipItems.value.length) {
+    return;
+  }
+
   showInteractionTooltip.value = true;
 }
 
@@ -155,6 +170,8 @@ function buildMountOptions() {
   options.perspectiveEnabled = props.enablePerspective;
   options.perspectiveKingdom = props.perspectiveKingdom;
   options.trackedTarget = props.trackedTarget;
+  options.updateCameraOnEveryTick = props.updateCameraOnEveryTick;
+  options.lockCamera = props.lockCamera;
   options.onToastStateChange = handleToastStateChange;
 
   return options;
@@ -208,7 +225,9 @@ watch(
     props.enableCellDebug,
     props.enablePerspective,
     props.perspectiveKingdom,
-    props.trackedTarget
+    props.trackedTarget,
+    props.updateCameraOnEveryTick,
+    props.lockCamera
   ],
   async () => {
     destroyViewer();

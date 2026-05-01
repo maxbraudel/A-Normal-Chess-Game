@@ -186,9 +186,9 @@ function buildInfernalBlock(infernal) {
     exampleReplay: {
       sourceTag: "Partie réelle avec joueur",
       sourceKind: "real",
-      label: "Exemple tiré de la partie réelle",
+      label: "LE REPLAY MONTRE LES PIÈCES DU DIABLE CIBLER LE MÊME ROYAUME",
       description:
-        "Du tour 74 au tour 136, le cadrage initial met en évidence la zone où évolue la pièce du diable active. Vous pouvez ensuite conserver ce cadrage ou déplacer librement la caméra: le passage d'un tour à l'autre ne la réinitialise plus.",
+        "Du tour 74 au tour 136, la caméra suit automatiquement la pièce du diable active et se met à jour à chaque tour. Le déplacement manuel est verrouillé sur cet exemple pour conserver une lecture stable des apparitions, des suppressions et de la durée de vie des menaces infernales, mais le zoom reste disponible.",
       viewer: {
         replayUrl: REPLAY_CONFIG.replayUrl,
         minTurn: 74,
@@ -201,6 +201,8 @@ function buildInfernalBlock(infernal) {
         trackedTarget: {
           kind: "active-infernal-unit"
         },
+        updateCameraOnEveryTick: true,
+        lockCamera: true,
         showStatusOverlay: false
       }
     },
@@ -279,7 +281,7 @@ function buildWeatherBlock(weather) {
         initialZoom: 2.4,
         enablePerspective: true,
         perspectiveKingdom: "white",
-        showStatusOverlay: false
+        showStatusOverlay: true
       }
     },
     chartOption: buildTimelineOption({

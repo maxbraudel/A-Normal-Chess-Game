@@ -89,7 +89,9 @@ const BUILDING_FLIP_VERTICAL_MASK = 2;
 
 let configuredPerspectiveKingdomKey = resolveConfiguredPerspectiveKingdomKey(replayConfig);
 const trackedTargetConfig = normalizeTrackedTargetConfig(replayConfig.trackedTarget);
-const shouldRecenterTrackedTargetOnFrameChange = replayConfig.recenterTrackedTargetOnFrameChange === true;
+const shouldUpdateCameraOnEveryTick = replayConfig.updateCameraOnEveryTick === true
+  || replayConfig.recenterTrackedTargetOnFrameChange === true;
+const isCameraPanLocked = replayConfig.lockCamera === true;
 const isInteractionEnabled = replayConfig.interactionEnabled !== false;
 const isCellDebugEnabled = Boolean(replayConfig.enableCellDebug);
 const onToastStateChange = typeof replayConfig.onToastStateChange === "function"
@@ -136,7 +138,7 @@ const state = {
     dragStartClientX: 0,
     dragStartClientY: 0,
     didDrag: false,
-    pendingTrackedRecenter: Boolean(trackedTargetConfig)
+    pendingRuleCameraUpdate: Boolean(trackedTargetConfig)
   }
 };
 
@@ -386,11 +388,14 @@ function bindEvents() {
     setFrameIndex(nextIndex);
   });
 
-  if (isInteractionEnabled) {
+  if (isInteractionEnabled && !isCameraPanLocked) {
     addManagedListener(refs.replayCanvas, "pointerdown", onCanvasPointerDown);
     addManagedListener(refs.replayCanvas, "pointermove", onCanvasPointerMove);
     addManagedListener(refs.replayCanvas, "pointerup", onCanvasPointerUp);
     addManagedListener(refs.replayCanvas, "pointercancel", onCanvasPointerUp);
+  }
+
+  if (isInteractionEnabled) {
     addManagedListener(refs.replayCanvas, "wheel", onCanvasWheel, { passive: false });
     addManagedListener(refs.replayCanvas, "dblclick", function () {
       const frame = currentFrame();
@@ -936,8 +941,8 @@ function setFrameIndex(nextIndex) {
   const bounded = clamp(nextIndex, playbackWindow.minFrameIndex, playbackWindow.maxFrameIndex);
   const frameChanged = bounded !== state.frameIndex;
   state.frameIndex = bounded;
-  if (frameChanged && trackedTargetConfig && shouldRecenterTrackedTargetOnFrameChange) {
-    state.camera.pendingTrackedRecenter = true;
+  if (frameChanged && shouldUpdateCameraOnEveryTick) {
+    state.camera.pendingRuleCameraUpdate = true;
   }
   renderCurrentFrame();
 }
@@ -956,8 +961,8 @@ function startAutoplay() {
 
   if (state.frameIndex >= playbackWindow.maxFrameIndex) {
     state.frameIndex = playbackWindow.initialFrameIndex;
-    if (trackedTargetConfig && shouldRecenterTrackedTargetOnFrameChange) {
-      state.camera.pendingTrackedRecenter = true;
+    if (shouldUpdateCameraOnEveryTick) {
+      state.camera.pendingRuleCameraUpdate = true;
     }
   }
 
@@ -1012,20 +1017,26 @@ function renderCurrentFrame(options = {}) {
   refs.turnSlider.setAttribute("aria-valuetext", frame.label);
   refs.turnSlider.title = frame.label;
   syncControlsState();
-  syncTrackedCamera(frame);
+  syncConfiguredCamera(frame);
   syncOverlays(frame);
   syncToastState(frame);
   renderCanvasFrame(frame);
   emitFrameState(frame);
 }
 
-function syncTrackedCamera(frame) {
-  if (!frame || !trackedTargetConfig || !state.camera.pendingTrackedRecenter) {
+function syncConfiguredCamera(frame) {
+  if (!frame || !state.camera.pendingRuleCameraUpdate) {
+    return;
+  }
+
+  state.camera.pendingRuleCameraUpdate = false;
+
+  if (!trackedTargetConfig) {
+    resetCameraToConfiguredInitialView(frame);
     return;
   }
 
   const trackedPoint = resolveTrackedTargetGridPoint(frame, trackedTargetConfig);
-  state.camera.pendingTrackedRecenter = false;
 
   if (!trackedPoint) {
     return;
