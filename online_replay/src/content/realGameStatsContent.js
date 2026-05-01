@@ -299,7 +299,7 @@ function buildWaterDeniedByKingdomBlock(waterDenied) {
       sourceKind: "real",
       label: "Exemple tire d'une partie reelle",
       description:
-        "Du tour 40 au tour 90, la camera reste fixee **quatre cases au-dessus de l'eglise centrale** pour montrer la zone de passage la plus sensible. On voit les Noirs devoir contourner plus tot et plus souvent l'eau centrale, pendant que les Blancs prennent plus vite l'initiative dans cette ouverture.",
+        "Du tour 40 au tour 90, on voit les Noirs devoir contourner plus tot et plus souvent l'eau centrale, pendant que les Blancs prennent plus vite contrôle de l'église : une zone qui permet la promotion de reines.",
       viewer: {
         replayUrl: REPLAY_CONFIG.replayUrl,
         minTurn: 40,
