@@ -737,8 +737,43 @@ a {
   gap: 10px;
 }
 
+.rapport-process-card__field--theory {
+  gap: 12px;
+}
+
 .rapport-process-card__field--illustration {
   gap: 12px;
+}
+
+.rapport-process-card__theory-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.rapport-process-card__theory-item {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid rgba(240, 213, 143, 0.12);
+  border-radius: 16px;
+  background: rgba(11, 15, 12, 0.58);
+}
+
+.rapport-process-card__theory-label {
+  margin: 0;
+  color: rgba(240, 213, 143, 0.82);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rapport-process-card__theory-note {
+  margin: 0;
+  color: var(--ink-dim);
+  font-size: 14px;
+  line-height: 1.7;
 }
 
 .rapport-process-illustration {
@@ -1517,8 +1552,38 @@ a {
   margin-top: 14px;
 }
 
+.site-shell--rapport .rapport-process-card__field--theory {
+  margin-top: 14px;
+}
+
 .site-shell--rapport .rapport-process-card__field--illustration {
   margin-top: 16px;
+}
+
+.site-shell--rapport .rapport-process-card__theory-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.site-shell--rapport .rapport-process-card__theory-item {
+  padding: 10px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 6px;
+  background: #fafafa;
+}
+
+.site-shell--rapport .rapport-process-card__theory-label {
+  color: #555555;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.site-shell--rapport .rapport-process-card__theory-note {
+  margin-top: 10px;
+  color: #454545;
 }
 
 .site-shell--rapport .rapport-process-illustration {

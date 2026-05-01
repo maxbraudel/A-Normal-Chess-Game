@@ -70,6 +70,33 @@ defineProps({
       <InlineRichText :text="item.phenomenon" />
     </div>
 
+    <div v-if="item.theory" class="rapport-process-card__field rapport-process-card__field--theory">
+      <span class="rapport-process-card__label">Cadre theorique explicite</span>
+      <div class="rapport-process-card__theory-grid">
+        <article class="rapport-process-card__theory-item">
+          <p class="rapport-process-card__theory-label">Support / espace d'etat</p>
+          <MathFormula :formula="item.theory.support" :display="true" />
+        </article>
+        <article class="rapport-process-card__theory-item">
+          <p class="rapport-process-card__theory-label">Formule de loi</p>
+          <MathFormula :formula="item.theory.law" :display="true" />
+        </article>
+        <article class="rapport-process-card__theory-item">
+          <p class="rapport-process-card__theory-label">Esperance</p>
+          <MathFormula :formula="item.theory.expectation" :display="true" />
+        </article>
+        <article class="rapport-process-card__theory-item">
+          <p class="rapport-process-card__theory-label">Variance</p>
+          <MathFormula :formula="item.theory.variance" :display="true" />
+        </article>
+      </div>
+      <InlineRichText
+        v-if="item.theory.note"
+        class="rapport-process-card__theory-note"
+        :text="item.theory.note"
+      />
+    </div>
+
     <div class="rapport-process-card__field">
       <span class="rapport-process-card__label">Pourquoi cette loi</span>
       <InlineRichText :text="item.why" />

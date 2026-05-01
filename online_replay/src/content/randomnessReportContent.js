@@ -3,8 +3,10 @@ const L = String.raw;
 import { processIllustrationsByTitle } from "./randomnessIllustrations.js";
 
 function withProcessIllustration(process) {
-  const illustration = processIllustrationsByTitle[process.title];
-  return illustration ? { ...process, illustration } : process;
+  const theory = processTheoryByTitle[process.title];
+  const enrichedProcess = theory ? { ...process, theory } : process;
+  const illustration = processIllustrationsByTitle[enrichedProcess.title];
+  return illustration ? { ...enrichedProcess, illustration } : enrichedProcess;
 }
 
 const uniformProcesses = [
@@ -258,7 +260,7 @@ const uniformProcesses = [
     dependence:
       "Depend d'une analyse de plus court chemin prealable, donc du terrain et des obstacles courants."
   }
-].map(withProcessIllustration);
+];
 
 const permutationProcesses = [
   {
@@ -762,9 +764,314 @@ const proceduralProcesses = [
   }
 ];
 
+function createTheory({ support, law, expectation, variance, note = "" }) {
+  return { support, law, expectation, variance, note };
+}
+
+const NOMINAL_EXPECTATION = L`\text{Pas d esperance canonique sans score auxiliaire } g`;
+const NOMINAL_VARIANCE = L`\text{Pas de variance canonique sans score auxiliaire } g`;
+const POSITION_EXPECTATION = L`\text{Pas d esperance scalaire canonique sur une position 2D}`;
+const POSITION_VARIANCE = L`\text{Pas de variance scalaire canonique sur une position 2D}`;
+const FIELD_EXPECTATION = L`\text{Le resume pertinent est spatial ou agrégé, pas cellule par cellule}`;
+const FIELD_VARIANCE = L`\text{La variance utile est estimee sur la couverture ou la rugosite du champ}`;
+
+function makeUniformFiniteTheory({ support, law, expectation, variance, note = "" }) {
+  return createTheory({ support, law, expectation, variance, note });
+}
+
+function makePositionTheory({ support, law, note = "" }) {
+  return createTheory({
+    support,
+    law,
+    expectation: POSITION_EXPECTATION,
+    variance: POSITION_VARIANCE,
+    note
+  });
+}
+
+function makeNominalTheory({ support, law, note = "" }) {
+  return createTheory({
+    support,
+    law,
+    expectation: NOMINAL_EXPECTATION,
+    variance: NOMINAL_VARIANCE,
+    note
+  });
+}
+
+function makeUniform32Theory(symbol, note) {
+  return makeUniformFiniteTheory({
+    support: L`\{0,\dots,2^{32}-1\}`,
+    law: L`\mathbb{P}(${symbol}=k)=\frac{1}{2^{32}}`,
+    expectation: L`\mathbb{E}[${symbol}]=\frac{2^{32}-1}{2}`,
+    variance: L`\mathrm{Var}(${symbol})=\frac{2^{64}-1}{12}`,
+    note
+  });
+}
+
+const processTheoryByTitle = {
+  "Graine globale de la terre": makeUniform32Theory(
+    L`S_{terre}`,
+    "Les moments ci-dessus sont surtout formels: l'enjeu gameplay reel est l'uniformite de la seed et sa reproductibilite."
+  ),
+  "Graine globale de l'eau": makeUniform32Theory(
+    L`S_{eau}`,
+    "Comme pour la terre, la moyenne n'est pas interpretee directement en jeu; la seed sert a indexer un monde procedural reproductible."
+  ),
+  "Rotation des mines et fermes neutres": makeUniformFiniteTheory({
+    support: L`\{0,1,2,3\}`,
+    law: L`\mathbb{P}(R=r)=\frac{1}{4}`,
+    expectation: L`\mathbb{E}[R]=\frac{3}{2}`,
+    variance: L`\mathrm{Var}(R)=\frac{5}{4}`,
+    note: "Le codage 0,1,2,3 represente simplement les quatre quarts de tour equiprobables."
+  }),
+  "Flip des mines et fermes neutres": makeUniformFiniteTheory({
+    support: L`\{0,1,2,3\}`,
+    law: L`\mathbb{P}(F=f)=\frac{1}{4}`,
+    expectation: L`\mathbb{E}[F]=\frac{3}{2}`,
+    variance: L`\mathrm{Var}(F)=\frac{5}{4}`,
+    note: "On reutilise un codage a deux bits pour les quatre etats de flip possibles."
+  }),
+  "Choix de position des batiments publics": makePositionTheory({
+    support: L`A_{top}\subset \mathbb{Z}^2`,
+    law: L`\mathbb{P}(P=p\mid p\in A_{top})=\frac{1}{|A_{top}|}`,
+    note:
+      "La loi est uniforme sur les cellules admissibles du plateau courant, mais une position 2D n'a pas de moment scalaire canonique tant qu'on n'introduit pas une distance ou un score."
+  }),
+  "Spawn des royaumes": makePositionTheory({
+    support: L`A_W\cup A_B\subset \mathbb{Z}^2`,
+    law: L`\mathbb{P}(P_K=p\mid p\in A_K)=\frac{1}{|A_K|}`,
+    note:
+      "Chaque royaume echantillonne uniformement une case de spawn compatible avec sa zone. Le bon objet mathematique est une position, pas un scalaire."
+  }),
+  "Bord diagonal d'entree du brouillard": makeNominalTheory({
+    support: L`\{e_1,e_2\}`,
+    law: L`\mathbb{P}(E=e_i)=\frac{1}{2}`,
+    note: "Les deux diagonales admissibles sont symetriques et equiprobables."
+  }),
+  "Couverture cible du brouillard": makeUniformFiniteTheory({
+    support: L`C\in[0.05,0.20]`,
+    law: L`f_C(c)=\frac{1}{0.15}\,\mathbf{1}_{[0.05,0.20]}(c)`,
+    expectation: L`\mathbb{E}[C]=\frac{0.05+0.20}{2}=0.125`,
+    variance: L`\mathrm{Var}(C)=\frac{(0.20-0.05)^2}{12}`,
+    note: "Cette variable fixe la part de plateau que le brouillard cherche a occuper avant discretisation sur la grille."
+  }),
+  "Allongement du brouillard": makeUniformFiniteTheory({
+    support: L`A\in[1.80,2.60]`,
+    law: L`f_A(a)=\frac{1}{0.80}\,\mathbf{1}_{[1.80,2.60]}(a)`,
+    expectation: L`\mathbb{E}[A]=\frac{1.80+2.60}{2}=2.20`,
+    variance: L`\mathrm{Var}(A)=\frac{(2.60-1.80)^2}{12}`,
+    note: "La valeur echantillonnee est ensuite transformee en ellipse et trajectoire discretes."
+  }),
+  "Graine de forme du brouillard": makeUniform32Theory(
+    L`S_{forme}`,
+    "La seed n'est pas interpretee seule: elle alimente le bruit de contour et doit surtout etre uniformement repartie."
+  ),
+  "Graine de densite du brouillard": makeUniform32Theory(
+    L`S_{densite}`,
+    "Cette seed conditionne tout le champ d'opacite local du brouillard."
+  ),
+  "Apparition de secours sur la frontiere pour une piece du diable": makePositionTheory({
+    support: L`A_{bord}\subset \mathbb{Z}^2`,
+    law: L`\mathbb{P}(P=p\mid p\in A_{bord})=\frac{1}{|A_{bord}|}`,
+    note:
+      "Le support depend des cases frontiere encore libres au moment du spawn de secours."
+  }),
+  "Choix d'un mouvement aleatoire en phase Searching": makeNominalTheory({
+    support: L`\mathcal{M}_{adm}(t)`,
+    law: L`\mathbb{P}(M=m\mid m\in \mathcal{M}_{adm}(t))=\frac{1}{|\mathcal{M}_{adm}(t)|}`,
+    note:
+      "Le support est l'ensemble des coups legalement atteignables pour la piece au tour courant, donc il change avec l'etat du plateau."
+  }),
+  "Tie-break de retour vers le bord": makeNominalTheory({
+    support: L`\mathcal{D}_{eq}(t)`,
+    law: L`\mathbb{P}(D=d\mid d\in \mathcal{D}_{eq}(t))=\frac{1}{|\mathcal{D}_{eq}(t)|}`,
+    note:
+      "Cette uniforme ne sert qu'a trancher entre plusieurs directions equivalentes lors du retour vers le bord."
+  }),
+  "Ordre de placement des mines et fermes neutres": createTheory({
+    support: L`\mathfrak{S}_5`,
+    law: L`\mathbb{P}(\Pi=\pi)=\frac{1}{5!}`,
+    expectation: L`\mathbb{E}[R_i]=\frac{5+1}{2}=3`,
+    variance: L`\mathrm{Var}(R_i)=\frac{5^2-1}{12}=2`,
+    note:
+      "Une permutation n'a pas de moment canonique en tant qu'objet global; les moments affiches sont ceux du rang d'un batiment fixe dans l'ordre melange."
+  }),
+  "Case de spawn d'un coffre": makePositionTheory({
+    support: L`A_{coffre}\subset \mathbb{Z}^2`,
+    law: L`\mathbb{P}(C=c_i)=\frac{w_i}{\sum_j w_j}`,
+    note:
+      "Les poids favorisent certaines cellules admissibles, mais l'analyse de moyenne/variance ne devient pertinente qu'apres choix d'un score spatial auxiliaire."
+  }),
+  "Type de recompense du coffre": makeNominalTheory({
+    support: L`\{\text{or},\text{mouvement},\text{construction}\}`,
+    law: L`\mathbb{P}(T=t_i)=\frac{w_i}{\sum_j w_j}`,
+    note:
+      "La variable est nominale: on ne prend pas la moyenne d'indices arbitraires, on etudie les probabilites de chaque categorie."
+  }),
+  "Direction du brouillard": makeNominalTheory({
+    support: L`\{N,S,E,O,NE,NO,SE,SO\}`,
+    law: L`\mathbb{P}(D=d_i)=\frac{w_i}{\sum_j w_j}`,
+    note:
+      "La direction est une categorie orientee; l'objet statistique central est la frequence de chaque orientation."
+  }),
+  "Type de cible primaire d'une piece du diable": makeNominalTheory({
+    support: L`\{t_1,\dots,t_m\}`,
+    law: L`\mathbb{P}(T=t_i)=\frac{w_i}{\sum_j w_j}`,
+    note:
+      "Le code choisit une famille de cible prioritaire plutot qu'une grandeur numerique."
+  }),
+  "Option d'apparition ciblee d'une piece du diable": makeNominalTheory({
+    support: L`\{o_1,\dots,o_m\}`,
+    law: L`\mathbb{P}(O=o_i)=\frac{w_i}{\sum_j w_j}`,
+    note:
+      "Cette categorielle arbitre entre plusieurs heuristiques de spawn cible. Les poids varient avec l'etat tactique."
+  }),
+  "Type de remplacement d'une piece du diable": makeNominalTheory({
+    support: L`\{\text{pawn},\text{knight},\text{bishop},\text{rook},\text{queen}\}`,
+    law: L`\mathbb{P}(T=t_i)=\frac{w_i}{\sum_j w_j}`,
+    note:
+      "Le tirage porte sur une categorie de piece, pas sur une valeur numerique ordonnee."
+  }),
+  "Cible de remplacement d'une piece du diable": makeNominalTheory({
+    support: L`\{c_1,\dots,c_m\}`,
+    law: L`\mathbb{P}(C=c_i)=\frac{w_i}{\sum_j w_j}`,
+    note:
+      "Le support regroupe les cibles admissibles pour le remplacement. On compare donc des poids et non des moyennes."
+  }),
+  "Royaume cible d'une piece du diable": createTheory({
+    support: L`K_t\in\{0,1\}`,
+    law: L`K_t\sim\mathrm{Bernoulli}(p_t)`,
+    expectation: L`\mathbb{E}[K_t]=p_t`,
+    variance: L`\mathrm{Var}(K_t)=p_t(1-p_t)`,
+    note:
+      "Le parametre dynamique `p_t` est derive de la dette de sang normalisee; 1 peut etre code comme 'royaume blanc cible'."
+  }),
+  "Activation d'un mouvement aleatoire en phase Searching": createTheory({
+    support: L`A_t\in\{0,1\}`,
+    law: L`A_t\sim\mathrm{Bernoulli}(p),\qquad p=0.333`,
+    expectation: L`\mathbb{E}[A_t]=p=0.333`,
+    variance: L`\mathrm{Var}(A_t)=p(1-p)`,
+    note:
+      "Cette Bernoulli decide si la piece infernale abandonne sa trajectoire guidee pour un coup aleatoire au tour courant."
+  }),
+  "Declenchement d'apparition d'une piece du diable": createTheory({
+    support: L`N_t\in\mathbb{N}`,
+    law: L`N_t\sim\mathrm{Poisson}(\lambda_t)`,
+    expectation: L`\mathbb{E}[N_t]=\lambda_t`,
+    variance: L`\mathrm{Var}(N_t)=\lambda_t`,
+    note:
+      "Le runtime transforme ensuite ce comptage en evenement booléen via `N_t \ge 1`, mais la loi parente reste bien une Poisson."
+  }),
+  "Recompenses d'XP": createTheory({
+    support: L`Y\in\{m,m+1,\dots,b\}`,
+    law: L`Y=\max\!\bigl(m,\mathrm{round}(\mathrm{clip}(X,[a,b]))\bigr),\quad X\sim\mathcal{N}(\mu,\sigma^2)`,
+    expectation: L`\mathbb{E}[X\mid a\le X\le b]=\mu+\sigma\,\frac{\varphi(\alpha)-\varphi(\beta)}{\Phi(\beta)-\Phi(\alpha)}`,
+    variance: L`\mathrm{Var}(X\mid a\le X\le b)=\sigma^2\!\left[1+\frac{\alpha\varphi(\alpha)-\beta\varphi(\beta)}{\Phi(\beta)-\Phi(\alpha)}-\left(\frac{\varphi(\alpha)-\varphi(\beta)}{\Phi(\beta)-\Phi(\alpha)}\right)^2\right]`,
+    note:
+      "Les formules affichent les moments de la normale tronquee parente, avec `\alpha=(a-\mu)/\sigma` et `\beta=(b-\mu)/\sigma`. L'arrondi et le minimum du runtime deplacent legerement la moyenne finale."
+  }),
+  "Montant d'or d'un coffre": createTheory({
+    support: L`G\in\{1,2,\dots\}`,
+    law: L`G=\max\!\bigl(1,\mathrm{round}(\mathrm{clip}(X,[\mu-2\sigma,\mu+2\sigma]))\bigr),\quad X\sim\mathcal{N}(\mu,\sigma^2)`,
+    expectation: L`\mathbb{E}[X\mid a\le X\le b]=\mu+\sigma\,\frac{\varphi(\alpha)-\varphi(\beta)}{\Phi(\beta)-\Phi(\alpha)}`,
+    variance: L`\mathrm{Var}(X\mid a\le X\le b)=\sigma^2\!\left[1+\frac{\alpha\varphi(\alpha)-\beta\varphi(\beta)}{\Phi(\beta)-\Phi(\alpha)}-\left(\frac{\varphi(\alpha)-\varphi(\beta)}{\Phi(\beta)-\Phi(\alpha)}\right)^2\right]`,
+    note:
+      "On note ici `a=\mu-2\sigma` et `b=\mu+2\sigma`. Comme pour l'XP, le runtime applique ensuite un arrondi et un plancher a 1."
+  }),
+  "Delai de reapparition d'un coffre": createTheory({
+    support: L`D\in\{c,c+1,\dots\}`,
+    law: L`D=\max\!\bigl(c,\mathrm{round}(T)\bigr),\quad T\sim\mathrm{Weibull}(k,\lambda)`,
+    expectation: L`\mathbb{E}[T]=\lambda\,\Gamma\!\left(1+\frac{1}{k}\right),\qquad \mathbb{E}[D]\approx \max\!\left(c,\mathbb{E}[T]\right)`,
+    variance: L`\mathrm{Var}(T)=\lambda^2\!\left[\Gamma\!\left(1+\frac{2}{k}\right)-\Gamma\!\left(1+\frac{1}{k}\right)^2\right]`,
+    note:
+      "Les moments fermes ci-dessus sont ceux de la Weibull continue; l'effet exact du `round` puis du plancher `c` est traite empiriquement dans les histogrammes."
+  }),
+  "Delai entre deux brouillards": createTheory({
+    support: L`D\in\{m,m+1,\dots\}`,
+    law: L`D=m+\lceil T\rceil,\quad T\sim\Gamma(k,\theta)`,
+    expectation: L`\mathbb{E}[T]=k\theta,\qquad \mathbb{E}[D]\approx m+k\theta`,
+    variance: L`\mathrm{Var}(T)=k\theta^2`,
+    note:
+      "Le plafond discretise la variable continue. Les moments affiches sont donc des references theoriques autour desquelles le runtime se concentre."
+  }),
+  "Duree visible d'un brouillard": createTheory({
+    support: L`V\in\{1,2,\dots\}`,
+    law: L`V=\max(1,\lceil T\rceil),\quad T\sim\Gamma(k,\theta)`,
+    expectation: L`\mathbb{E}[T]=k\theta,\qquad \mathbb{E}[V]\approx \max(1,k\theta)`,
+    variance: L`\mathrm{Var}(T)=k\theta^2`,
+    note:
+      "La Gamma fournit la duree cible continue, puis le runtime la convertit en nombre entier de tours visibles."
+  }),
+  "Densite locale d'un brouillard": createTheory({
+    support: L`A(c)\in[0.22,0.82]`,
+    law: L`A(c)=\mathrm{clip}(0.48\,X(c),0.22,0.82),\quad X(c)\sim\mathrm{LogNormal}(\mu,\sigma^2)`,
+    expectation: L`\mathbb{E}[X(c)]=e^{\mu+\sigma^2/2}`,
+    variance: L`\mathrm{Var}(X(c))=(e^{\sigma^2}-1)e^{2\mu+\sigma^2}`,
+    note:
+      "Les moments affiches sont ceux de la log-normale parente. Le `clip` d'alpha et le partage d'une meme seed de densite deformant ensuite la loi finale observee."
+  }),
+  "Luminosite de l'herbe": createTheory({
+    support: L`Y\in[0.68,1]`,
+    law: L`Y=h(B),\quad B\sim\mathrm{Beta}(7,2)`,
+    expectation: L`\mathbb{E}[Y]=\int_0^1 h(b)\,f_{\mathrm{Beta}(7,2)}(b)\,db`,
+    variance: L`\mathrm{Var}(Y)=\int_0^1 h(b)^2 f_{\mathrm{Beta}(7,2)}(b)\,db-\mathbb{E}[Y]^2`,
+    note:
+      "La transformation deterministe `h` encode le seuil a 0.90, le remappage vers `[0.68,1]` et l'exposant de contraste 1.8."
+  }),
+  "Position d'entree le long du bord d'un brouillard": createTheory({
+    support: L`X\in[0,M]`,
+    law: L`f_X(x)=\mathrm{piecewiseLinear}(x;\,0,\tfrac14M,\tfrac12M,\tfrac34M,M;\,0.7,1.8,1.98,1.8,0.7)`,
+    expectation: L`\mathbb{E}[X]=\int_0^M x\,f_X(x)\,dx`,
+    variance: L`\mathrm{Var}(X)=\int_0^M x^2 f_X(x)\,dx-\mathbb{E}[X]^2`,
+    note:
+      "Les integrales sont calculees numeriquement par la bibliotheque de distribution piecewise linear, ce qui colle exactement a la methode de simulation du runtime."
+  }),
+  "Champ spatial de la terre": createTheory({
+    support: L`X_{terre}:\mathcal{G}\to\{0,1\}`,
+    law: L`X_{terre}(c)=\mathbf{1}\{n_{terre}(c;S_{terre})+p_{terre}(c)>\tau_{terre}\}`,
+    expectation: L`\mathbb{E}[\bar X_{terre}]\approx 0.14,\qquad \bar X_{terre}=\frac{1}{|\mathcal{G}|}\sum_{c\in\mathcal{G}} X_{terre}(c)`,
+    variance: L`\mathrm{Var}(\bar X_{terre})\text{ est estimee par simulation car les cellules sont correlees}`,
+    note:
+      "Pour un champ procedural, on ne presente pas la moyenne d'une cellule abstraite mais celle d'un resume interpretable: ici la couverture totale en terre."
+  }),
+  "Champ spatial de l'eau": createTheory({
+    support: L`X_{eau}:\mathcal{G}\to\{0,1\}`,
+    law: L`X_{eau}(c)=\mathbf{1}\{n_{eau}(c;S_{eau})+p_{eau}(c)>\tau_{eau}\}`,
+    expectation: L`\mathbb{E}[\bar X_{eau}]\approx 0.04,\qquad \bar X_{eau}=\frac{1}{|\mathcal{G}|}\sum_{c\in\mathcal{G}} X_{eau}(c)`,
+    variance: L`\mathrm{Var}(\bar X_{eau})\text{ est estimee par simulation car la structure spatiale n'est pas i.i.d.}`,
+    note:
+      "Comme pour la terre, la quantite suivie est la couverture d'eau du plateau et non un pseudo-tirage independant cellule par cellule."
+  }),
+  "Masque de flip des textures de terrain": createTheory({
+    support: L`F(c)\in\{0,1,2,3\}`,
+    law: L`\mathbb{P}(F(c)=f)\approx \frac{1}{4}`,
+    expectation: L`\mathbb{E}[F(c)]\approx \frac{3}{2}`,
+    variance: L`\mathrm{Var}(F(c))\approx \frac{5}{4}`,
+    note:
+      "La loi est seulement pseudo-uniforme car elle provient d'un hachage deterministe de la position. Les moments sont ceux du codage entier des quatre flips."
+  }),
+  "Bruit de contour du brouillard": createTheory({
+    support: L`B(c)\in[0.5,1.5]`,
+    law: L`B(c)=1+(U(c)-0.5)\,a,\qquad a=1`,
+    expectation: L`\mathbb{E}[B(c)]\approx 1`,
+    variance: L`\mathrm{Var}(B(c))=a^2\,\mathrm{Var}(U(c))\quad \text{(estimee empiriquement)}`,
+    note:
+      "`U(c)` vient d'un value noise spatialement correle, pas d'une uniforme i.i.d.; la variance vraiment utile est donc mesuree sur la rugosite de contour observee."
+  })
+};
+
+const illustratedUniformProcesses = uniformProcesses.map(withProcessIllustration);
 const illustratedPermutationProcesses = permutationProcesses.map(withProcessIllustration);
 const illustratedCategoricalProcesses = categoricalProcesses.map(withProcessIllustration);
+const illustratedBernoulliProcesses = bernoulliProcesses.map(withProcessIllustration);
+const illustratedPoissonProcesses = poissonProcesses.map(withProcessIllustration);
+const illustratedTruncatedNormalProcesses = truncatedNormalProcesses.map(withProcessIllustration);
+const illustratedWeibullProcesses = weibullProcesses.map(withProcessIllustration);
+const illustratedGammaProcesses = gammaProcesses.map(withProcessIllustration);
+const illustratedLogNormalProcesses = logNormalProcesses.map(withProcessIllustration);
 const illustratedBetaProcesses = betaProcesses.map(withProcessIllustration);
+const illustratedPiecewiseLinearProcesses = piecewiseLinearProcesses.map(withProcessIllustration);
 const illustratedProceduralProcesses = proceduralProcesses.map(withProcessIllustration);
 
 export const randomnessReport = {
@@ -994,7 +1301,7 @@ export const randomnessReport = {
         "Pour les seeds 32 bits, la formule pertinente est celle de l'uniforme discrete sur un grand espace fini; leur esperance existe mais n'a pas d'interet gameplay direct.",
         "Quand le support depend de filtres geometriques, la loi observable n'est pas la loi brute mais la loi conditionnelle sur l'ensemble admissible courant."
       ],
-      processes: uniformProcesses
+      processes: illustratedUniformProcesses
     },
     {
       id: "permutation-uniforme",
@@ -1066,7 +1373,7 @@ export const randomnessReport = {
         "La probabilite `p` peut etre statique, comme 0.333, ou dependre dynamiquement de l'etat du jeu comme la dette de sang.",
         "Une Bernoulli sur un support binaire reste la loi la plus lisible pour decrire ces branchements meme quand l'implementation passe par un entier uniforme."
       ],
-      processes: bernoulliProcesses
+      processes: illustratedBernoulliProcesses
     },
     {
       id: "poisson",
@@ -1094,7 +1401,7 @@ export const randomnessReport = {
         "Dans le gameplay courant, seule la classe d'evenement `0` contre `>= 1` est exploitée, mais raisonner sur `N` reste plus juste que d'ecrire directement une Bernoulli arbitraire.",
         "La dette de sang agit ici comme un parametre d'intensite, pas comme un poids categoriel."
       ],
-      processes: poissonProcesses
+      processes: illustratedPoissonProcesses
     },
     {
       id: "normales-tronquees",
@@ -1126,7 +1433,7 @@ export const randomnessReport = {
         "L'arrondi et le minimum modifient legerement l'esperance par rapport a la formule continue; la formule ci-dessus est donc la bonne reference theorique, pas la valeur exacte apres discretisation.",
         "Dans ce code, `sigma = max(1, mean * sigmaMultiplier)` et `a,b = mean +/- clampMultiplier * sigma`."
       ],
-      processes: truncatedNormalProcesses
+      processes: illustratedTruncatedNormalProcesses
     },
     {
       id: "weibull",
@@ -1153,7 +1460,7 @@ export const randomnessReport = {
       notes: [
         "Avec `k > 1`, le hazard augmente avec le temps, ce qui correspond bien a l'intuition 'plus le coffre tarde, plus sa reapparition devient plausible'."
       ],
-      processes: weibullProcesses
+      processes: illustratedWeibullProcesses
     },
     {
       id: "gamma",
@@ -1180,7 +1487,7 @@ export const randomnessReport = {
       notes: [
         "La meteo utilise deux Gammas distinctes: l'une pour l'attente avant apparition, l'autre pour la duree visible cible."
       ],
-      processes: gammaProcesses
+      processes: illustratedGammaProcesses
     },
     {
       id: "lognormale",
@@ -1203,7 +1510,7 @@ export const randomnessReport = {
       notes: [
         "La variable finale vue a l'ecran est encore transformee par `alpha = clamp(alphaBase * X, alphaMin, alphaMax)`, donc les moments exacts apres clamp doivent etre estimes numeriquement."
       ],
-      processes: logNormalProcesses
+      processes: illustratedLogNormalProcesses
     },
     {
       id: "beta",
@@ -1253,7 +1560,7 @@ export const randomnessReport = {
       notes: [
         "Les moments exacts se calculent numeriquement a partir des noeuds et poids, ce qui est approprie puisque la densite est entierement specifiee par ces donnees."
       ],
-      processes: piecewiseLinearProcesses
+      processes: illustratedPiecewiseLinearProcesses
     },
     {
       id: "procedural-fields",
@@ -1293,24 +1600,29 @@ export const randomnessReport = {
   ],
   difficulties: [
     {
-      title: "Ne pas confondre loi brute et loi observee",
+      title: "Transformer une loi theorique en variable runtime jouable",
       text:
-        "La plupart des tirages passent par un `clamp`, un `round`, un `ceil` ou un filtrage de support. Les formules des lois standard restent indispensables, mais elles doivent etre lues comme des lois parentes, pas comme les histogrammes finaux exacts du runtime."
+        "Dans ce projet, presque aucune loi standard n'arrive brute a l'ecran. Les recompenses d'XP et d'or sont tronquees, arrondies et bornees par un minimum; les delais Weibull et Gamma passent par `round` ou `ceil`; l'opacite du brouillard est encore `clamp`ee apres la log-normale. La difficulte reelle a donc ete de documenter a la fois la loi parente et la variable effectivement utilisee par le runtime, sans faire croire qu'un histogramme discret final est exactement une Gaussienne, une Gamma ou une Weibull continues."
     },
     {
-      title: "Variables nominales sans moment canonique",
+      title: "Donner une lecture statistique correcte a des variables non numeriques",
       text:
-        "Une direction, un type de piece ou une recompense n'ont pas d'esperance mathematique propre tant qu'on n'a pas defini une fonction de score. Ecrire directement une moyenne d'indices serait faux si les indices ne portent pas de metrique pertinente."
+        "Une direction de brouillard, un type de recompense de coffre ou un type de piece du diable ne portent pas naturellement une moyenne ou une variance. La difficulte n'etait pas de calculer un nombre coute que coute, mais d'eviter une erreur de modelisation. Pour ces variables, j'ai donc choisi d'expliciter le support, la loi categorielle et les poids, puis de reserver les moments aux cas ou une variable numerique ou un score auxiliaire avaient un sens."
     },
     {
-      title: "Champs spatiaux non i.i.d.",
+      title: "Mesurer des champs spatiaux correles sans les reduire a du i.i.d.",
       text:
-        "`i.i.d.` (**independantes et identiquement distribuees**) : chaque cellule serait tiree separement, avec la meme loi partout, sans influencer ses voisines. Ce n'est pas ce que fait le jeu pour la terre, l'eau ou les contours du brouillard: des cellules proches se ressemblent justement parce qu'elles sont produites par une meme structure de bruit et un meme post-traitement spatial. **Exemple concret:** un lac doit former une masse continue qui bloque un couloir; si chaque cellule etait tiree i.i.d., on obtiendrait surtout une poussiere de cases isolees, pas un obstacle coherent."
+        "La terre, l'eau et les contours de brouillard sont produits par du bruit procedural partageant une meme seed et un meme post-traitement spatial. Une statistique cellule par cellule aurait masque le vrai phenomene, qui est l'apparition de regions coherentes, de lacs, de couloirs et de silhouettes. La difficulte a donc ete de choisir comme variables observees des resumes adaptes a un champ: couverture totale, cellules refusees, rugosite de bord, duree visible ou nombre de pieces masquees, plutot qu'une fausse Bernoulli independante par cellule."
     },
     {
-      title: "Non-stationnarite de gameplay",
+      title: "Instrumenter le runtime reel sans perdre le determinisme des parties",
       text:
-        "Plusieurs parametres changent avec l'etat: regime early/late des coffres, dette de sang, visibilite des cibles, ensemble des coups admissibles. La loi d'un meme processus n'est donc pas stationnaire sur toute la partie."
+        "Le rapport ne repose pas seulement sur des simulations hors ligne: il fallait aussi extraire une partie reelle instrumentee, rejouable, et comparer ses trajectoires a des lois theoriques. Cela oblige a serialiser correctement `worldSeed`, les compteurs RNG, les etats de brouillard, la dette de sang et les evenements de spawn pour qu'une sauvegarde et un replay racontent exactement la meme histoire statistique. Sans cette instrumentation, les jolies formules du rapport seraient restees decouplees du jeu execute."
+    },
+    {
+      title: "Relier batch simule et partie reelle sans surinterpreter",
+      text:
+        "Les 500 parties simulees donnent des tendances robustes sur les familles de lois, mais une partie reelle unique reste fortement dependante de son histoire tactique. La difficulte finale a donc ete d'assumer cette asymetrie: utiliser le batch pour verifier les supports, les ordres de grandeur et les histogrammes globaux, puis utiliser la partie instrumentee pour montrer comment les dependances d'etat, la visibilite et la dette de sang deformaient concrètement ces lois pendant une vraie partie."
     }
   ],
   perspectives: [
