@@ -747,7 +747,7 @@ a {
 
 .rapport-process-card__theory-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -1562,7 +1562,7 @@ a {
 
 .site-shell--rapport .rapport-process-card__theory-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -1699,6 +1699,11 @@ a {
   .rapport-code-grid,
   .rapport-process-grid,
   .rapport-stats-block__metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .rapport-process-card__theory-grid,
+  .site-shell--rapport .rapport-process-card__theory-grid {
     grid-template-columns: 1fr;
   }
 
