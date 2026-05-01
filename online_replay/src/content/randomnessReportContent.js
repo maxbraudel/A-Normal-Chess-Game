@@ -770,7 +770,7 @@ const illustratedProceduralProcesses = proceduralProcesses.map(withProcessIllust
 export const randomnessReport = {
   hero: {
     kicker: "",
-    title: "Unnormal Chess Game",
+    title: "A Normal Chess Game",
     lead:
       "Un jeu d'echecs de conquete ou le territoire, l'economie, la meteo et le brouillard recomposent chaque partie.",
     source: ""
@@ -781,7 +781,7 @@ export const randomnessReport = {
         title: "1. Deux royaumes, un roi a proteger",
         vignetteId: "kingdoms",
         paragraphs: [
-          "Chaque joueur controle un royaume blanc ou noir avec un roi, des pieces inspirees des echecs et ses propres batiments. La condition centrale reste simple: proteger son roi et mettre le royaume adverse en echec.",
+          "Chaque joueur controle un royaume blanc ou noir avec un roi, des pieces et ses propres batiments. Les règles de déplacement sont les mêmes que dans un jeu d'échecs classique (quelques ajustements ont été nécessaires pour le pion afin qu'il puisse bouger dans toutes les directions). La condition centrale reste simple: proteger son roi et mettre le royaume adverse en echec.",
           "La difference avec un echiquier classique, c'est que les pieces jouent sur une vraie carte. Les distances, les obstacles, les ressources et les evenements du terrain comptent autant que les mouvements eux-memes."
         ]
       },
