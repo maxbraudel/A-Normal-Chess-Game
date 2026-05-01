@@ -758,16 +758,24 @@ a {
 
 .rapport-process-card__code {
   margin: 0;
-  padding: 12px 14px;
-  background: rgb(21, 21, 21);
+  padding: 0;
+  background: #050505;
   border: 1px solid rgba(240, 213, 143, 0.14);
   border-radius: 10px;
+  overflow: hidden;
+  overflow-x: auto;
+}
+
+.rapport-process-card__code .hljs {
+  display: block;
   font-family: "Cascadia Code", "Fira Mono", "Consolas", monospace;
   font-size: 12.5px;
   line-height: 1.6;
-  color: #c8d4b0;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: #050505 !important;
+  color: #abb2bf;
   white-space: pre;
-  overflow-x: auto;
 }
 
 .rapport-density-badge {

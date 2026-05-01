@@ -1,8 +1,17 @@
 <script setup>
+import hljs from "highlight.js/lib/core";
+import cpp from "highlight.js/lib/languages/cpp";
+import "highlight.js/styles/atom-one-dark.css";
+hljs.registerLanguage("cpp", cpp);
+
 import IllustrationMap from "./IllustrationMap.vue";
 import InlineRichText from "./InlineRichText.vue";
 import MathFormula from "./MathFormula.vue";
 import RapportStatsBlock from "./RapportStatsBlock.vue";
+
+function highlightCpp(code) {
+  return hljs.highlight(code, { language: "cpp" }).value;
+}
 
 function getObservedSourceMeta(label) {
   const normalizedLabel = label || "";
@@ -134,7 +143,7 @@ defineProps({
 
     <div v-if="item.codeSnippet" class="rapport-process-card__field">
       <span class="rapport-process-card__label">Extrait de code (C++)</span>
-      <pre class="rapport-process-card__code"><code>{{ item.codeSnippet }}</code></pre>
+      <pre class="rapport-process-card__code"><code class="hljs language-cpp" v-html="highlightCpp(item.codeSnippet)"></code></pre>
     </div>
 
     <div v-if="item.simulationFromUniform" class="rapport-process-card__field">
