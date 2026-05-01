@@ -1979,12 +1979,7 @@ function drawAutonomousUnits(context, frame, transform) {
       continue;
     }
 
-    const pieceType = typeof unit.pieceType === "number"
-      ? unit.pieceType
-      : typeof unit.targetPieceType === "number"
-        ? unit.targetPieceType
-        : 4;
-    const typeKey = pieceTypeKey(frame.referenceData, pieceType);
+    const typeKey = resolveAutonomousUnitPieceTypeKey(frame.referenceData, unit);
     const texturePath = `${replayConfig.assetRoot}/textures/pieces/evil/${typeKey}.png`;
     const image = state.textures.get(texturePath) || null;
     const screen = cellRect(position.x, position.y, transform);
@@ -2449,6 +2444,49 @@ function pieceTypeKey(referenceData, id) {
   return found && found.key ? found.key : "pawn";
 }
 
+function resolveAutonomousUnitPieceTypeKey(referenceData, unit) {
+  if (!unit || typeof unit !== "object") {
+    return "pawn";
+  }
+
+  const infernal = unit.infernal && typeof unit.infernal === "object"
+    ? unit.infernal
+    : null;
+  const explicitTypeKey = [
+    unit.manifestedPieceTypeKey,
+    unit.manifestedPieceKey,
+    infernal && infernal.manifestedPieceTypeKey,
+    infernal && infernal.manifestedPieceKey
+  ].find(function (candidate) {
+    return typeof candidate === "string" && candidate;
+  });
+
+  if (explicitTypeKey) {
+    return explicitTypeKey;
+  }
+
+  const explicitTypeId = [
+    unit.manifestedPieceType,
+    unit.manifestedPieceTypeId,
+    unit.pieceType,
+    unit.pieceTypeId,
+    unit.targetPieceType,
+    infernal && infernal.manifestedPieceType,
+    infernal && infernal.manifestedPieceTypeId,
+    infernal && infernal.pieceType,
+    infernal && infernal.pieceTypeId,
+    infernal && infernal.targetPieceType
+  ].find(function (candidate) {
+    return Number.isFinite(candidate);
+  });
+
+  if (Number.isFinite(explicitTypeId)) {
+    return pieceTypeKey(referenceData, explicitTypeId);
+  }
+
+  return "pawn";
+}
+
 function resolvePieceTypeId(piece) {
   if (typeof (piece && piece.type) === "number") {
     return piece.type;
@@ -2865,15 +2903,10 @@ function summarizeMapObject(object) {
 
 function summarizeAutonomousUnit(referenceData, unit) {
   const position = resolvePosition(unit);
-  const pieceType = typeof unit.pieceType === "number"
-    ? unit.pieceType
-    : typeof unit.targetPieceType === "number"
-      ? unit.targetPieceType
-      : 4;
 
   return {
     id: resolveEntityId(unit),
-    pieceTypeKey: pieceTypeKey(referenceData, pieceType),
+    pieceTypeKey: resolveAutonomousUnitPieceTypeKey(referenceData, unit),
     x: position ? position.x : null,
     y: position ? position.y : null,
     hiddenFromWhite: readPerspectiveHiddenFlag(unit, "white"),
