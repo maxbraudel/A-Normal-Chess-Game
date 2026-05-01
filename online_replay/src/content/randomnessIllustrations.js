@@ -2097,8 +2097,8 @@ export const processIllustrationsByTitle = {
   "Graine globale de la terre": buildIllustrationConfig(dirtFieldReplayData),
   "Graine globale de l'eau": buildIllustrationConfig(waterFieldReplayData),
   "Rotation des mines et fermes neutres": buildIllustrationConfig(rotationReplayData),
-  "Flip des mines et fermes neutres": buildIllustrationConfig(flipReplayData),
-  "Spawn des royaumes": buildIllustrationConfig(combinedSpawnReplayData),
+  "Retournement des mines et fermes neutres": buildIllustrationConfig(flipReplayData),
+  "Apparition des royaumes": buildIllustrationConfig(combinedSpawnReplayData),
   "Spawn du royaume blanc": buildIllustrationConfig(whiteSpawnReplayData),
   "Spawn du royaume noir": buildIllustrationConfig(blackSpawnReplayData),
   "Bord diagonal d'entrée du brouillard": buildIllustrationConfig(diagonalEntryReplayData),
@@ -2110,6 +2110,6 @@ export const processIllustrationsByTitle = {
   "Luminosité de l'herbe": buildIllustrationConfig(grassBrightnessReplayData, { initialZoom: 1.7 }),
   "Champ spatial de la terre": buildIllustrationConfig(dirtFieldReplayData),
   "Champ spatial de l'eau": buildIllustrationConfig(waterFieldReplayData),
-  "Masque de flip des textures de terrain": buildIllustrationConfig(terrainFlipReplayData, { initialZoom: 1.7 }),
+  "Masque de retournement des textures de terrain": buildIllustrationConfig(terrainFlipReplayData, { initialZoom: 1.7 }),
   "Bruit de contour du brouillard": buildIllustrationConfig(frontContourReplayData)
 };
