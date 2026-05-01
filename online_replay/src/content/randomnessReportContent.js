@@ -497,7 +497,7 @@ const truncatedNormalProcesses = [
     lawUse: "Normale tronquée puis arrondie à l'entier",
     variable: L`Y = \max\bigl(m, \mathrm{round}(\mathrm{clip}(X,[a,b]))\bigr)`,
     phenomenon:
-      "Attribue l'XP pour les kills, la destruction de bloc et le gain passif d'arene.",
+      "Attribue l'XP pour les kills, la destruction de bloc et le gain passif d'arène (une pièce gagne de l'XP chaque tour passé dans une arène).",
     parameters: [
       "kill_pawn: mean 20, sigma = 3.6, clamp = +/- 7.2, minimum = 1",
       "kill_knight / kill_bishop: mean 50, sigma = 8, clamp = +/- 16, minimum = 1",
@@ -1399,7 +1399,7 @@ export const randomnessReport = {
       ],
       notes: [
         "Dans le gameplay courant, seule la classe d'événement `0` contre `>= 1` est exploitée, mais raisonner sur `N` reste plus juste que d'écrire directement une Bernoulli arbitraire.",
-        "La dette de sang agit ici comme un paramètre d'intensité, pas comme un poids categoriel."
+        "La dette de sang agit ici comme un paramètre d'intensité, pas comme un poids catégoriel."
       ],
       processes: illustratedPoissonProcesses
     },
@@ -1408,8 +1408,8 @@ export const randomnessReport = {
       title: "Normales tronquées et discrétisées",
       badge: "2 processus",
       description: [
-        "L'XP et l'or des coffres reutilisent le même patron: une normale centree sur une moyenne conception, tronquée a un multiple de son écart-type, arrondie à l'entier puis soumise a un plancher minimal.",
-        "La loi effectivement jouee n'est donc pas une gaussienne pure: c'est une gaussienne transformée par clamp et quantification."
+        "L'XP et l'or des coffres réutilisent le même patron: une normale centrée sur une moyenne conception, tronquée à un multiple de son écart-type, arrondie à l'entier puis soumise à un plancher minimal.",
+        "La loi effectivement jouée n'est donc pas une gaussienne pure: c'est une gaussienne transformée par clamp et quantification."
       ],
       formulaCards: [
         {
@@ -1458,7 +1458,7 @@ export const randomnessReport = {
         }
       ],
       notes: [
-        "Avec `k > 1`, le hazard augmente avec le temps, ce qui correspond bien à l'intuition 'plus le coffre tarde, plus sa réapparition devient plausible'."
+        "Avec `k > 1`, le hazard augmente avec le temps, ce qui correspond bien à l'intuition \"plus le coffre tarde, plus sa réapparition devient plausible\"."
       ],
       processes: illustratedWeibullProcesses
     },
