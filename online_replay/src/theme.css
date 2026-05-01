@@ -1097,7 +1097,8 @@ a {
 }
 
 .site-shell--rapport .rapport-page {
-  width: min(1240px, calc(100vw - 56px));
+  width: min(1400px, 90vw);
+  max-width: 90vw;
   padding: 34px 0 88px;
 }
 
@@ -1258,6 +1259,7 @@ a {
 }
 
 .site-shell--rapport .rapport-content {
+  min-width: 0;
   gap: 34px;
 }
 
@@ -1270,6 +1272,7 @@ a {
   border-radius: 0;
   background: transparent;
   box-shadow: none;
+  min-width: 0;
 }
 
 .site-shell--rapport .rapport-panel {
@@ -1747,7 +1750,8 @@ a {
   }
 
   .site-shell--rapport .rapport-page {
-    width: min(100vw - 24px, 1240px);
+    width: min(1240px, 90vw);
+    max-width: 90vw;
     padding-top: 22px;
     padding-bottom: 40px;
   }
@@ -1772,6 +1776,10 @@ a {
   .site-shell--rapport .rapport-layout {
     grid-template-columns: 1fr;
     gap: 24px;
+  }
+
+  .site-shell--rapport .rapport-toc {
+    display: none;
   }
 
   .site-shell--rapport .rapport-toc__inner {
@@ -1807,5 +1815,21 @@ a {
 
   .rapport-replay-frame {
     min-height: 320px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .site-shell--rapport .rapport-layout {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .site-shell--rapport .rapport-toc {
+    display: none;
+  }
+
+  .site-shell--rapport .rapport-page {
+    width: min(1240px, 90vw);
+    max-width: 90vw;
   }
 }

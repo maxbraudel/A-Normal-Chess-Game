@@ -415,7 +415,7 @@ const processStatsByTitle = {
   ],
   "Montant d'or d'un coffre": [
     {
-      title: "L'or des coffres partage le meme patron gaussien tronque",
+      title: "L'or des coffres partage le meme patron gaussien tronqué",
       description:
         "Le meme schema statistique reapparait pour l'or des coffres. Le batch ne le montre pas comme une loi abstraite, mais comme une distribution entiere effectivement tombee apres clamp et arrondi.",
       metrics: [

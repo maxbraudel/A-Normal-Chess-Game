@@ -186,7 +186,7 @@ function buildInfernalBlock(infernal) {
     exampleReplay: {
       sourceTag: "Partie reelle avec joueur",
       sourceKind: "real",
-      label: "Exemple tire de la partie reelle",
+      label: "Exemple tiré de la partie réelle",
       description:
         "Du tour 74 au tour 136, la camera suit la piece du diable active. Quand elle disparait, le cadre reste en place jusqu'a l'arrivee de la piece du diable suivante, puis se recentre immediatement sur la nouvelle menace.",
       viewer: {
@@ -260,11 +260,11 @@ function buildWeatherBlock(weather) {
     chartHeight: 360,
     chartLabel: "Visibilite et brouillards sur la partie reelle",
     postChartInterpretation:
-      "**Interprétation : on remarque que vers la fin de la partie, avant l'échec et mat, une grande partie des pièces ennemies, en pratique des pièces noires du point de vue blanc, sont masquées. Cela traduit une embuscade du joueur noir, qui va finalement lui permettre de gagner la partie, comme on peut le voir dans l'exemple qui suit.**",
+      "**Interprétation : on remarque que vers la fin de la partie, avant l'échec et mat, une partie des pièces ennemies, en pratique des pièces noires du point de vue blanc, sont masquées. Cela traduit une embuscade du joueur noir, qui va finalement lui permettre de gagner la partie, comme on peut le voir dans l'exemple qui suit.**",
     exampleReplay: {
       sourceTag: "Partie reelle avec joueur",
       sourceKind: "real",
-      label: "Exemple tire de la partie reelle",
+      label: "Exemple tiré de la partie réelle",
       description:
         "Entre les tours 120 et 133, un nuage imprevisible ouvre un renversement total au centre de la carte: les Noirs prennent les Blancs en embuscade et les deux reines sont eliminees.",
       viewer: {
@@ -296,7 +296,7 @@ function buildWeatherBlock(weather) {
 function buildWaterDeniedByKingdomBlock(waterDenied) {
   return {
     eyebrow: "Partie reelle",
-    title: "Cellules refusees par l'eau par royaume",
+    title: "Cellules refusées par l'eau par royaume",
     description:
       "Cette metrique recompte, a chaque enregistrement de la partie, **les cases de destination qui seraient atteignables si l'eau etait retiree**, puis soustrait les pseudo-coups reellement autorises sur le plateau courant. Le resultat est ensuite **somme sur toutes les pieces d'un royaume**: une courbe haute signifie donc que l'eau supprime beaucoup d'options de deplacement a cet instant, pas qu'un royaume est bloque partout sur la carte. Les murs et les autres obstacles restent inchanges pendant ce recalcul; **on isole uniquement l'effet de l'eau**.",
     metrics: [
@@ -308,13 +308,13 @@ function buildWaterDeniedByKingdomBlock(waterDenied) {
       `Le calcul repart des mouvements pseudo-legaux, comme dans le site \`statistiques-generator\`, au lieu d'utiliser une simple approximation geometrique des lacs. L'ecart moyen blanc/noir est ici de ${formatStatNumber(waterDenied.averageKingdomGap)} cellules refusees par enregistrement.`
     ],
     chartHeight: 330,
-    chartLabel: "Cellules refusees par l'eau par royaume sur la partie reelle",
+    chartLabel: "Cellules refusées par l'eau par royaume sur la partie reelle",
     postChartInterpretation:
       "**Interprétation : sur la premiere partie de cette partie reelle, la courbe noire depasse nettement la courbe blanche. L'eau a donc beaucoup plus empeche les premiers deplacements du royaume noir que ceux du royaume blanc. Cette contrainte initiale a freine le developpement noir et a contribue a l'avance prise par les Blancs au debut de la partie.**",
     exampleReplay: {
       sourceTag: "Partie reelle avec joueur",
       sourceKind: "real",
-      label: "Exemple tire de la partie reelle",
+      label: "Exemple tiré de la partie réelle",
       description:
         "Du tour 40 au tour 90, on voit les Noirs devoir contourner plus tot et plus souvent l'eau centrale, pendant que les Blancs prennent plus vite contrôle de l'église : une zone qui permet la promotion de reines.",
       viewer: {
