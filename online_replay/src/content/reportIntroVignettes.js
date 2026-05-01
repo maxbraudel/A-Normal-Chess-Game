@@ -481,7 +481,7 @@ function createEconomyGoldCycleFrames({ saveName, grid, weatherState }) {
     weatherState,
     whiteGold: gold,
     whitePieces: [
-      createPiece({ id: 41, type: PIECE_KING, kingdom: 0, x: 1, y: 8 }),
+      createPiece({ id: 41, type: PIECE_KING, kingdom: 0, x: 7, y: 0 }),
       createPiece({ id: 42, type: PIECE_PAWN, kingdom: 0, x: pawnX, y: pawnY })
     ],
     blackPieces: [
@@ -815,7 +815,7 @@ export const reportIntroVignettes = Object.freeze({
     ],
     whiteGold: 0,
     whitePieces: [
-      createPiece({ id: 41, type: PIECE_KING, kingdom: 0, x: 1, y: 8 }),
+      createPiece({ id: 41, type: PIECE_KING, kingdom: 0, x: 7, y: 0 }),
       createPiece({ id: 42, type: PIECE_PAWN, kingdom: 0, x: 0, y: 3 })
     ],
     blackPieces: [

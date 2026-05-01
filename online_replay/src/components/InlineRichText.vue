@@ -35,6 +35,19 @@ function looksLikeCodeSnippet(value) {
   return /::|\.json\b|\b(?:true|false|null)\b|[A-Za-z]+(?:_[A-Za-z0-9]+){1,}|[A-Za-z][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_.-]*/.test(trimmed);
 }
 
+function looksLikeSimpleMathIdentifier(value) {
+  if (typeof value !== "string") {
+    return false;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return false;
+  }
+
+  return /^[A-Za-z](?:_(?:[A-Za-z0-9]+|\{[^{}]+\})|\^(?:[A-Za-z0-9]+|\{[^{}]+\}))+$/u.test(trimmed);
+}
+
 function looksLikeStandaloneMath(value, options = {}) {
   const { codeChunk = false } = options;
 
@@ -55,7 +68,7 @@ function looksLikeStandaloneMath(value, options = {}) {
     return false;
   }
 
-  if (codeChunk && !hasExplicitLatexCommand && looksLikeCodeSnippet(trimmed)) {
+  if (codeChunk && !hasExplicitLatexCommand && !looksLikeSimpleMathIdentifier(trimmed) && looksLikeCodeSnippet(trimmed)) {
     return false;
   }
 

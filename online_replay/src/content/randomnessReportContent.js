@@ -461,7 +461,7 @@ const bernoulliProcesses = [
     parameterChoice:
       "Une probabilité proche de 1/3 maintient de la pression sans rendre la branche erratique dominante.",
     dependence:
-      "Conditionne par l'existence d'au moins un coup admissible après filtrage."
+      "Conditionné par l'existence d'au moins un coup admissible après filtrage."
   }
 ];
 
@@ -945,7 +945,7 @@ const processTheoryByTitle = {
     expectation: L`\mathbb{E}[K_t]=p_t`,
     variance: L`\mathrm{Var}(K_t)=p_t(1-p_t)`,
     note:
-      "Le paramètre dynamique `p_t` est dérivé de la dette de sang normalisée; 1 peut être codé comme 'royaume blanc cible'."
+      "Le paramètre dynamique `p_t` est dérivé de la dette de sang normalisée; 1 peut être codé comme \"royaume blanc cible\"."
   }),
   "Activation d'un mouvement aléatoire en phase Searching": createTheory({
     support: L`A_t\in\{0,1\}`,
