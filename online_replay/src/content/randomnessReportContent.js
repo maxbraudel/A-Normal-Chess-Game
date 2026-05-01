@@ -331,7 +331,7 @@ const categoricalProcesses = [
     variable: L`D \in \{N,S,E,W,NE,NW,SE,SW\}`,
     phenomenon:
       "Choisit la direction cardinale ou diagonale du prochain front.",
-    parameters: ["les huit poids valent actuellement 1 dans `master_config.json`"],
+    parameters: ["les huit poids valent actuellement 1.`"],
     why:
       "Le systeme est ecrit de facon generique pour pouvoir biaiser certaines directions plus tard, mais la configuration active realise une equiprobabilite via une categorielle a poids egaux.",
     simulation:
@@ -571,7 +571,7 @@ const gammaProcesses = [
       "Fixe le nombre de tours avant le prochain essai de spawn d'un front.",
     parameters: [
       "config active: `k = 4.00`, `theta = 10.00`, minimum `m = 0`",
-      "par heritage code, la version par defaut etait `k = 3.20`, `theta = 2.40` avant surcharge par `master_config.json`"
+      "par heritage code, la version par defaut etait `k = 3.20`, `theta = 2.40`"
     ],
     why:
       "Une Gamma controle naturellement des temps d'attente positifs et asymetriques, plus souples qu'une exponentielle simple.",
