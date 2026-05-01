@@ -59,7 +59,7 @@ const uniformProcesses = [
       "Choisit l'orientation sprite des bâtiments publics déjà placés afin d'éviter un rendu trop mécanique.",
     parameters: ["support = {0, 1, 2, 3}"],
     why:
-      "Les quatre rotations sont géométriquement symétriques pour ces assets; aucune ne doit être favorisée. Une rotation discrète ne peut prendre que des valeurs dans un ensemble fini de symétries — ici les quatre quarts de tour — ce qui exclut d'emblée toute loi continue. L'uniforme discrète sur quatre valeurs est la seule famille sans biais sur un groupe cyclique d'ordre 4 : choisir une catégorielle pondérée introduirait artificiellement une orientation préférée sans justification visuelle ni stratégique.",
+      "Les quatre rotations sont géométriquement symétriques pour ces assets; aucune ne doit être favorisée. Une rotation discrète ne peut prendre que des valeurs dans un ensemble fini de symétries, ici les quatre quarts de tour, ce qui exclut d'emblée toute loi continue. L'uniforme discrète sur quatre valeurs est la seule famille sans biais sur un groupe cyclique d'ordre 4 : choisir une catégorielle pondérée introduirait artificiellement une orientation préférée sans justification visuelle ni stratégique.",
     simulation:
       "Le code utilise `std::uniform_int_distribution<int>(0, 3)` pendant la génération du plateau.",
     parameterChoice:
@@ -76,7 +76,7 @@ const uniformProcesses = [
       "Active ou non le retournement horizontal et vertical des bâtiments publics.",
     parameters: ["0 = aucun retournement", "1 = horizontal", "2 = vertical", "3 = double retournement"],
     why:
-      "Les masques de symétrie disponibles sont équiprobables dès lors qu'on ne veut pas marquer de biais visuel. Les quatre états forment un groupe d'isométries planaires — identité, réflexion horizontale, réflexion verticale, double réflexion — qui sont structurellement équivalents sur un plateau de jeu. Tout biais de pondération créerait une asymétrie visuelle injustifiée entre les exemplaires du même bâtiment public sur la carte.",
+      "Les masques de symétrie disponibles sont équiprobables dès lors qu'on ne veut pas marquer de biais visuel. Les quatre états forment un groupe d'isométries planaires, identité, réflexion horizontale, réflexion verticale, double réflexion, qui sont structurellement équivalents sur un plateau de jeu. Tout biais de pondération créerait une asymétrie visuelle injustifiée entre les exemplaires du même bâtiment public sur la carte.",
     simulation:
       "Le code utilise `std::uniform_int_distribution<int>(0, 3)` et transmet le masque à la footprint du bâtiment.",
     parameterChoice:
@@ -201,7 +201,7 @@ const uniformProcesses = [
       "Fournit la graine qui module localement l'opacité du brouillard via une loi log-normale.",
     parameters: ["1 tirage `generator()` par brouillard"],
     why:
-      "La texture d'opacité doit être reproductible mais différente du contour; il faut donc une graine propre. Si la densité d'opacité utilisait la même graine que le bruit de contour, les zones les plus opaques coïncideraient systématiquement avec les bosses de bord, créant un artefact visuel involontaire. Deux couches indépendantes — forme et densité — permettent au pipeline de séparer complètement les décisions géométriques (bord de l'ellipse) des décisions d'opacité (texture interne).",
+      "La texture d'opacité doit être reproductible mais différente du contour; il faut donc une graine propre. Si la densité d'opacité utilisait la même graine que le bruit de contour, les zones les plus opaques coïncideraient systématiquement avec les bosses de bord, créant un artefact visuel involontaire. Deux couches indépendantes, forme et densité, permettent au pipeline de séparer complètement les décisions géométriques (bord de l'ellipse) des décisions d'opacité (texture interne).",
     simulation:
       "Le `mt19937` du brouillard produit une seconde sortie brute stockée dans le descripteur.",
     parameterChoice:
@@ -506,7 +506,7 @@ const truncatedNormalProcesses = [
       "destroy_block / arena_per_turn: mean 10, sigma = 1.5, clamp = +/- 3, minimum = 1"
     ],
     why:
-      "Une variable gaussienne tronquée préserve une moyenne intuitive tout en autorisant une dispersion contrôlée autour de chaque source d'XP. La loi normale est choisie parce que son paramétrage en (μ, σ) traduit directement le langage du design : « cette action rapporte en moyenne μ points, avec une variabilité de σ ». Une loi exponentielle ou log-normale introduirait une asymétrie non voulue — des valeurs très hautes plus probables que très basses — inappropriée pour une récompense centrée sur une valeur cible précise. La **troncature** est indispensable pour deux raisons : éliminer les valeurs négatives ou nulles, incohérentes avec une récompense, et éviter les pics extrêmes qui déstabiliseraient l'économie d'XP. Le minimum final (plancher à 1) garantit qu'un kill rapporte toujours quelque chose même après arrondi.",
+      "Une variable gaussienne tronquée préserve une moyenne intuitive tout en autorisant une dispersion contrôlée autour de chaque source d'XP. La loi normale est choisie parce que son paramétrage en (μ, σ) traduit directement le langage du design : « cette action rapporte en moyenne μ points, avec une variabilité de σ ». Une loi exponentielle ou log-normale introduirait une asymétrie non voulue, des valeurs très hautes plus probables que très basses, inappropriée pour une récompense centrée sur une valeur cible précise. La **troncature** est indispensable pour deux raisons : éliminer les valeurs négatives ou nulles, incohérentes avec une récompense, et éviter les pics extrêmes qui déstabiliseraient l'économie d'XP. Le minimum final (plancher à 1) garantit qu'un kill rapporte toujours quelque chose même après arrondi.",
     simulation:
       "`RewardProfileSampling::sampleTruncatedNormal` tire une normale, la tronque sur `[mean - delta, mean + delta]`, puis arrondit et applique le minimum.",
     parameterChoice:
@@ -670,7 +670,7 @@ const piecewiseLinearProcesses = [
       "avec `1.98 = 1.1 * 1.8` pour le point median"
     ],
     why:
-      "Le jeu veut privilégier les entrées centrales tout en conservant une probabilité non nulle de départ par les coins; la linéaire par morceaux est idéale pour cette densité dessinée à la main. Une uniforme donnerait autant de chances aux coins qu'au centre, ne respectant pas l'intention visuelle d'un brouillard qui entre plutôt par le milieu. Une distribution triangulaire concentrerait la masse au centre mais sans permettre le réglage fin des poids aux différents points de contrôle. La linéaire par morceaux est la seule famille standard qui permet de spécifier la densité point par point — ici cinq nœuds répartis régulièrement — et de l'ajuster directement depuis la config sans changer de modèle. C'est une densité entièrement dessinée à la main, ce qui est la formulation honnête de décisions de design qui ne découlent pas d'un modèle mathématique préexistant.",
+      "Le jeu veut privilégier les entrées centrales tout en conservant une probabilité non nulle de départ par les coins; la linéaire par morceaux est idéale pour cette densité dessinée à la main. Une uniforme donnerait autant de chances aux coins qu'au centre, ne respectant pas l'intention visuelle d'un brouillard qui entre plutôt par le milieu. Une distribution triangulaire concentrerait la masse au centre mais sans permettre le réglage fin des poids aux différents points de contrôle. La linéaire par morceaux est la seule famille standard qui permet de spécifier la densité point par point, ici cinq nœuds répartis régulièrement, et de l'ajuster directement depuis la config sans changer de modèle. C'est une densité entièrement dessinée à la main, ce qui est la formulation honnête de décisions de design qui ne découlent pas d'un modèle mathématique préexistant.",
     simulation:
       "`sampleEdgePosition` construit les bornes et les hauteurs puis utilise `std::piecewise_linear_distribution<double>`.",
     parameterChoice:
