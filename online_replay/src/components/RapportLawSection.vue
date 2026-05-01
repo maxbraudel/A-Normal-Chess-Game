@@ -3,6 +3,46 @@ import InlineRichText from "./InlineRichText.vue";
 import MathFormula from "./MathFormula.vue";
 import RapportProcessCard from "./RapportProcessCard.vue";
 
+function resolveRandomnessKind(kind, isDensity) {
+  if (kind) {
+    return kind;
+  }
+
+  return isDensity ? "density" : "";
+}
+
+function getRandomnessBadgeLabel(kind) {
+  if (kind === "density") {
+    return "loi continue";
+  }
+
+  if (kind === "discrete") {
+    return "loi discrète";
+  }
+
+  return "";
+}
+
+function getRandomnessBadgeClasses(kind) {
+  return [
+    "rapport-source-tag",
+    "rapport-randomness-badge",
+    kind ? `rapport-randomness-badge--${kind}` : ""
+  ];
+}
+
+function getDefaultProcessRandomnessKind(section) {
+  if (section.randomnessKind) {
+    return section.randomnessKind;
+  }
+
+  if (section.id === "uniformes") {
+    return "discrete";
+  }
+
+  return "";
+}
+
 defineProps({
   section: {
     type: Object,
@@ -31,10 +71,17 @@ defineProps({
   <section :id="section.id" class="rapport-section rapport-panel">
     <header class="rapport-section__header">
       <p class="rapport-panel__eyebrow">{{ section.badge }}</p>
-      <h2>
-        <span class="rapport-section__number">{{ sectionNumber }}</span>
-        {{ section.title }}
-        <span v-if="section.isDensity" class="rapport-density-badge">loi à densité</span>
+      <h2 class="rapport-section__title">
+        <span class="rapport-section__title-text">
+          <span class="rapport-section__number">{{ sectionNumber }}</span>
+          {{ section.title }}
+        </span>
+        <span
+          v-if="resolveRandomnessKind(section.randomnessKind, section.isDensity)"
+          :class="getRandomnessBadgeClasses(resolveRandomnessKind(section.randomnessKind, section.isDensity))"
+        >
+          {{ getRandomnessBadgeLabel(resolveRandomnessKind(section.randomnessKind, section.isDensity)) }}
+        </span>
       </h2>
     </header>
 
@@ -61,6 +108,7 @@ defineProps({
         v-for="item in section.processes"
         :key="item.title"
         :item="item"
+        :default-randomness-kind="getDefaultProcessRandomnessKind(section)"
         :observed-sections="observedSectionsByTitle[item.title] || []"
         :observed-data="processStatsByTitle[item.title] || []"
         :observed-data-label="observedDataLabel"

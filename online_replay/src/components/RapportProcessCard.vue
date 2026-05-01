@@ -64,10 +64,46 @@ function getTheoryItemClasses(title, slot) {
   ];
 }
 
+function resolveRandomnessKind(itemKind, isDensity, defaultKind) {
+  if (itemKind) {
+    return itemKind;
+  }
+
+  if (isDensity) {
+    return "density";
+  }
+
+  return defaultKind || "";
+}
+
+function getRandomnessBadgeLabel(kind) {
+  if (kind === "density") {
+    return "loi continue";
+  }
+
+  if (kind === "discrete") {
+    return "loi discrète";
+  }
+
+  return "";
+}
+
+function getRandomnessBadgeClasses(kind) {
+  return [
+    "rapport-source-tag",
+    "rapport-randomness-badge",
+    kind ? `rapport-randomness-badge--${kind}` : ""
+  ];
+}
+
 defineProps({
   item: {
     type: Object,
     required: true
+  },
+  defaultRandomnessKind: {
+    type: String,
+    default: ""
   },
   observedSections: {
     type: Array,
@@ -89,7 +125,15 @@ defineProps({
     <header class="rapport-process-card__header">
       <div>
         <p class="rapport-process-card__system">{{ item.system }}</p>
-        <h3>{{ item.title }}</h3>
+        <h3 class="rapport-process-card__title">
+          <span>{{ item.title }}</span>
+          <span
+            v-if="resolveRandomnessKind(item.randomnessKind, item.isDensity, defaultRandomnessKind)"
+            :class="getRandomnessBadgeClasses(resolveRandomnessKind(item.randomnessKind, item.isDensity, defaultRandomnessKind))"
+          >
+            {{ getRandomnessBadgeLabel(resolveRandomnessKind(item.randomnessKind, item.isDensity, defaultRandomnessKind)) }}
+          </span>
+        </h3>
       </div>
       <p class="rapport-process-card__law">{{ item.lawUse }}</p>
     </header>

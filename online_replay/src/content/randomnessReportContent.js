@@ -149,6 +149,7 @@ placement.flipMask             = flipMaskDist(random);`,
   },
   {
     title: "Couverture cible du brouillard",
+    randomnessKind: "density",
     system: "Météo",
     lawUse: "Uniforme continue sur un intervalle de pourcentage",
     variable: L`C \sim \mathcal{U}([0.05, 0.20])`,
@@ -174,6 +175,7 @@ int coveragePercent = coverageDist(generator); // ∈ [5, 20]`,
   },
   {
     title: "Allongement du brouillard",
+    randomnessKind: "density",
     system: "Météo",
     lawUse: "Uniforme continue sur un intervalle borné",
     variable: L`A \sim \mathcal{U}([1.80, 2.60])`,
@@ -1416,12 +1418,11 @@ export const randomnessReport = {
   lawSections: [
     {
       id: "uniformes",
-      title: "Uniformes, continues et conditionnelles",
+      title: "Uniformes : discrètes, continues et conditionnelles",
       badge: "15 processus",
-      isDensity: true,
       description: [
-        "Cette famille couvre les tirages symétriques sur un support fini, les pourcentages uniformes sur un intervalle continu et les choix uniformes conditionnés à un sous-ensemble admissible. Elle regroupe aussi plusieurs seeds intermédiaires, mathématiquement ordinaires mais importantes pour le gameplay parce qu'elles pilotent ensuite des champs procéduraux.",
-        "Dans le code, ces lois apparaissent surtout via `std::uniform_int_distribution`, des appels directs à `generator()` sur 32 bits, ou des tirages uniformes après filtrage et tri de candidats."
+        "Cette section regroupe trois variantes de la loi uniforme, qui n'ont pas le même statut probabiliste. **Treize processus** utilisent une loi uniforme **discrète** (support fini, seeds 32 bits, positions sur cases admissibles, orientations…). **Deux processus** — la couverture cible et l'allongement du brouillard — utilisent une loi uniforme **continue** sur un intervalle réel : ce sont les seules lois à densité par rapport à la mesure de Lebesgue de cette section, et c'est à elles que correspond la ligne « Uniforme continue ★ » du tableau de conformité.",
+        "Dans le code, ces lois apparaissent via `std::uniform_int_distribution` pour les versions discrètes, via des appels directs à `generator()` sur 32 bits pour les seeds, et via la même distribution discrète discrétisée sur un intervalle entier pour les deux cas continus."
       ],
       formulaCards: [
         {
@@ -1451,6 +1452,7 @@ export const randomnessReport = {
       id: "permutation-uniforme",
       title: "Permutation uniforme",
       badge: "1 processus",
+      randomnessKind: "discrete",
       description: [
         "Le placement public ne commence pas par choisir des positions, mais par mélanger l'ordre des objets à poser. La variable naturelle n'est donc pas un entier simple, mais une permutation uniforme sur un ensemble fini.",
         "Pour retrouver des moments scalaires, on peut regarder une variable dérivée comme le rang d'un objet fixe dans la permutation."
@@ -1475,6 +1477,7 @@ export const randomnessReport = {
       id: "categorielles",
       title: "Catégorielle pondérée",
       badge: "7 processus",
+      randomnessKind: "discrete",
       description: [
         "Dès qu'il faut choisir entre plusieurs catégories nominales avec des poids relatifs, la bonne famille est la catégorielle pondérée. C'est le cheval de bataille des coffres, de la météo et surtout de la logique des pièces du diable.",
         "Mathématiquement, l'espérance n'est pas définie tant qu'on n'a pas choisi une fonction de score `g` sur les catégories; on donne donc les moments de `g(X)` plutôt que ceux de `X` lui-même."
@@ -1499,6 +1502,7 @@ export const randomnessReport = {
       id: "bernoulli",
       title: "Bernoulli",
       badge: "2 processus",
+      randomnessKind: "discrete",
       description: [
         "La Bernoulli intervient pour les décisions binaires: choisir un royaume plutôt que l'autre, ou activer une branche de comportement aléatoire.",
         "Dans ce code, elle apparaît soit explicitement via `std::bernoulli_distribution`, soit implicitement via un tirage uniforme comparé à un seuil entier sur 1000."
@@ -1523,6 +1527,7 @@ export const randomnessReport = {
       id: "poisson",
       title: "Poisson et déclenchement d'arrivée",
       badge: "1 processus",
+      randomnessKind: "discrete",
       description: [
         "Les pièces du diable ne reposent pas sur une simple probabilité fixe d'apparition, mais sur un comptage d'arrivées potentielles modélisé par une Poisson. Le gameplay n'observe que l'événement `N >= 1`, mais la variable latente est bien un nombre entier de tentatives.",
         "Ce choix donne une interprétation propre de l'intensité comme dette de sang convertie en fréquence moyenne d'arrivées."
@@ -1551,6 +1556,7 @@ export const randomnessReport = {
       id: "normales-tronquees",
       title: "Normales tronquées et discrétisées",
       badge: "2 processus",
+      randomnessKind: "density",
       isDensity: true,
       description: [
         "L'XP et l'or des coffres réutilisent le même patron: une normale centrée sur une moyenne conception, tronquée à un multiple de son écart-type, arrondie à l'entier puis soumise à un plancher minimal.",
@@ -1584,6 +1590,7 @@ export const randomnessReport = {
       id: "weibull",
       title: "Weibull discrétisée",
       badge: "1 processus",
+      randomnessKind: "density",
       isDensity: true,
       description: [
         "La Weibull apparaît pour les délais de réapparition des coffres. C'est un choix pertinent dès qu'on veut un temps d'attente positif dont la probabilité de survenue change avec l'ancienneté du délai écoulé.",
@@ -1612,6 +1619,7 @@ export const randomnessReport = {
       id: "gamma",
       title: "Gamma discrétisée",
       badge: "2 processus",
+      randomnessKind: "density",
       isDensity: true,
       description: [
         "La Gamma pilote les inter-arrivées et certaines durées météo. Son support positif et sa grande souplesse de forme en font un bon compromis entre exponentialité pure et modèle trop rigide.",
@@ -1639,6 +1647,7 @@ export const randomnessReport = {
     {
       id: "lognormale",
       title: "Log-normale",
+      randomnessKind: "density",
       isDensity: true,
       badge: "1 processus",
       description: [
@@ -1664,6 +1673,7 @@ export const randomnessReport = {
       id: "beta",
       title: "Beta transformée",
       badge: "1 processus",
+      randomnessKind: "density",
       isDensity: true,
       description: [
         "La Beta est utilisée pour la luminosité de l'herbe. C'est une bonne famille pour modéliser une variable naturellement bornée dans `[0,1]` avant transformation visuelle.",
@@ -1692,6 +1702,7 @@ export const randomnessReport = {
       id: "piecewise-linear",
       title: "Linéaire par morceaux",
       badge: "1 processus",
+      randomnessKind: "density",
       isDensity: true,
       description: [
         "La position d'entrée d'un brouillard le long du bord n'est ni uniforme, ni gaussienne. Elle suit une densité dessinée à la main par morceaux linéaires afin de surpondérer les entrées centrales tout en gardant des coins possibles.",
