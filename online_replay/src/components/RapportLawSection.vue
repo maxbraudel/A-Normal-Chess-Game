@@ -34,6 +34,7 @@ defineProps({
       <h2>
         <span class="rapport-section__number">{{ sectionNumber }}</span>
         {{ section.title }}
+        <span v-if="section.isDensity" class="rapport-density-badge">loi à densité</span>
       </h2>
     </header>
 

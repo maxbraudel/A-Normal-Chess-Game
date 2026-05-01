@@ -132,6 +132,16 @@ defineProps({
       <InlineRichText :text="item.simulation" />
     </div>
 
+    <div v-if="item.codeSnippet" class="rapport-process-card__field">
+      <span class="rapport-process-card__label">Extrait de code (C++)</span>
+      <pre class="rapport-process-card__code"><code>{{ item.codeSnippet }}</code></pre>
+    </div>
+
+    <div v-if="item.simulationFromUniform" class="rapport-process-card__field">
+      <span class="rapport-process-card__label">Construction depuis U[0,1]</span>
+      <InlineRichText :text="item.simulationFromUniform" />
+    </div>
+
     <div class="rapport-process-card__field">
       <span class="rapport-process-card__label">Choix des paramètres</span>
       <InlineRichText :text="item.parameterChoice" />

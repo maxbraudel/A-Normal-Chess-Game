@@ -62,6 +62,12 @@ const uniformProcesses = [
       "Les quatre rotations sont géométriquement symétriques pour ces assets; aucune ne doit être favorisée. Une rotation discrète ne peut prendre que des valeurs dans un ensemble fini de symétries, ici les quatre quarts de tour, ce qui exclut d'emblée toute loi continue. L'uniforme discrète sur quatre valeurs est la seule famille sans biais sur un groupe cyclique d'ordre 4 : choisir une catégorielle pondérée introduirait artificiellement une orientation préférée sans justification visuelle ni stratégique.",
     simulation:
       "Le code utilise `std::uniform_int_distribution<int>(0, 3)` pendant la génération du plateau.",
+    codeSnippet:
+`// BoardGenerator.cpp
+std::uniform_int_distribution<int> rotationDist(0, 3);
+std::uniform_int_distribution<int> flipMaskDist(0, 3);
+placement.rotationQuarterTurns = rotationDist(random);
+placement.flipMask             = flipMaskDist(random);`,
     parameterChoice:
       "Quatre états correspondent exactement aux orientations de 90 degrés disponibles.",
     dependence:
@@ -153,6 +159,14 @@ const uniformProcesses = [
       "Aucune taille privilégiée n'est imposée entre les bornes retenues; l'uniforme donne un éventail large mais lisible. Une Beta aurait permis de concentrer la masse vers une taille typique, mais l'objectif de design est justement d'éviter un gabarit répétitif : chaque brouillard doit pouvoir couvrir entre 5 % et 20 % du plateau avec autant de chances pour toute taille dans cet intervalle. Les bornes elles-mêmes sont les vraies contraintes de gameplay : en dessous de 5 %, le brouillard ne joue aucun rôle tactique ; au-dessus de 20 %, il occulterait trop de pièces pour rester lisible.",
     simulation:
       "Le runtime tire un entier uniforme entre 5 et 20, puis convertit ce pourcentage en aire cible.",
+    codeSnippet:
+`// WeatherSystem.cpp
+std::uniform_int_distribution<int> coverageDist(
+    config.getWeatherCoverageMinPercent(),
+    config.getWeatherCoverageMaxPercent());
+int coveragePercent = coverageDist(generator); // ∈ [5, 20]`,
+    simulationFromUniform:
+      "La transformation affine `x = a + (b − a) · U` où `U ∈ [0, 1]` donne directement une uniforme continue sur `[a, b]`. Ici la STL tire un entier dans `[5, 20]` par la même idée discrétisée : `k = a + floor((b − a + 1) · U)`. Pas de méthode d'inversion complexe nécessaire, c'est la définition même de la loi uniforme.",
     parameterChoice:
       "La borne basse garde des brouillards non triviaux; la borne haute évite une occultation presque totale du plateau.",
     dependence:
@@ -275,6 +289,12 @@ const permutationProcesses = [
       "Une permutation uniforme supprime un biais systématique du type ‘les mines sont toujours placées avant les fermes’. Le placement est séquentiel et glouton : chaque objet occupe la meilleure position disponible au moment de son insertion, ce qui signifie que les premiers objets placés ont accès à un plus grand nombre de positions de qualité. Sans mélange, un ordre fixe avantagerait structurellement les mines à chaque génération. La permutation uniforme redistribue cet avantage de façon équitable sur l'ensemble des parties générées.",
     simulation:
       "Le générateur appelle `std::shuffle(placements.begin(), placements.end(), random)` avant la boucle de placement.",
+    codeSnippet:
+`// BoardGenerator.cpp
+addPlacements(BuildingType::Mine, config.getNumMines());
+addPlacements(BuildingType::Farm, config.getNumFarms());
+// Mélange uniforme de Fischer-Yates (O(n)) :
+std::shuffle(placements.begin(), placements.end(), random);`,
     parameterChoice:
       "La taille `n = 5` vient directement de `num_mines = 2` et `num_farms = 3`.",
     dependence:
@@ -321,6 +341,21 @@ const categoricalProcesses = [
       "Le système favorise **plus d'or très tôt**, puis **davantage de capacité d'action** ensuite; une catégorielle pondérée est la loi naturelle pour ce genre de choix nominal. Le type de récompense est une variable nominale : or, mouvement ou construction ne sont pas des valeurs numériques ordonnées mais des catégories aux effets radicalement différents sur le gameplay. Imposer une récompense fixe aurait rendu les coffres prévisibles et stratégiquement triviaux ; l'uniforme aurait ignoré la progression temporelle voulue par le design. Le changement de poids au tour 10 modélise explicitement la transition de phase : en début de partie, l'or est la ressource la plus flexible ; passé le milieu de partie, augmenter les budgets d'action est plus impactant.",
     simulation:
       "`sampleReward` construit le vecteur de poids selon le tour courant, puis appelle `std::discrete_distribution<int>`.",
+    codeSnippet:
+`// ChestLootProgression.cpp
+const std::array<int, 3> weights{
+    lateGame ? config.getChestLateGoldWeight()
+             : config.getChestEarlyGoldWeight(),       // [0] or
+    lateGame ? config.getChestLateMovementBonusWeight()
+             : config.getChestEarlyMovementBonusWeight(), // [1] mouvement
+    lateGame ? config.getChestLateBuildBonusWeight()
+             : config.getChestEarlyBuildBonusWeight()};  // [2] construction
+std::discrete_distribution<int> dist(weights.begin(), weights.end());
+switch (dist(generator)) {
+    case 1: return { MovementPointsMaxBonus, ... };
+    case 2: return { BuildPointsMaxBonus, ... };
+    default: return { Gold, sampleGoldRewardAmount(...) };
+}`,
     parameterChoice:
       "**À partir du tour 10**, les bonus d'action prennent plus de poids afin d'accélérer le milieu de partie.",
     dependence:
@@ -441,6 +476,14 @@ const bernoulliProcesses = [
       "Une Bernoulli suffit dès qu'il n'y a que deux royaumes éligibles; l'état du jeu déforme directement la probabilité. Avec deux issues possibles, la Bernoulli est la famille minimale et canonique : aucune loi plus complexe ne serait justifiable ici. Le paramètre `p_t` n'est pas fixe mais calculé à partir des dettes de sang normalisées, ce qui transforme ce tirage binaire en mécanisme actif de rééquilibrage : le royaume le plus fragilité attire davantage les pièces du diable, amplifiant la pression sur le perdant tout en préservant une chance de surprise pour le gagnant. Ce mécanisme est intentionnellement non stationnaire : `p_t` évolue avec les pertes.",
     simulation:
       "Le code calcule `whiteProbability`, la borne dans `[0,1]`, puis appelle `std::bernoulli_distribution`.",
+    codeSnippet:
+`// InfernalSystem.cpp
+const int totalDebt = state.whiteBloodDebt + state.blackBloodDebt;
+const double p = (totalDebt > 0)
+    ? (double)state.whiteBloodDebt / totalDebt
+    : 0.5;
+std::bernoulli_distribution dist(std::clamp(p, 0.0, 1.0));
+return dist(generator) ? KingdomId::White : KingdomId::Black;`,
     parameterChoice:
       "La probabilité proportionnelle à la dette de sang rend le système réactif aux pertes infligées à chaque camp.",
     dependence:
@@ -483,6 +526,14 @@ const poissonProcesses = [
       "La conception veut un compteur d'arrivées rares dont l'intensité croît avec la dette de sang; la Poisson est le modèle naturel de comptage d'événements. Une simple Bernoulli à paramètre fixe aurait suffi pour déclencher des apparitions, mais elle ne permettrait pas d'encoder que l'intensité doit croître avec les destructions accumulees : il faudrait recalculer `p` à chaque tour de façon ad hoc. La Poisson formalise directement ce mécanisme : son paramètre λ est interprétable comme une fréquence d'arrivée, et faire dépendre λ de la dette de sang donne un modèle cohérent où les apparitions restent rares en début de partie et s'accélèrent avec l'escalade du conflit. Une loi géométrique (sans mémoire, discrète) aurait été envisageable pour les inter-arrivées, mais elle n'aurait pas permis de borner aussi proprement la probabilité d'apparition par tour via le cap sur λ.",
     simulation:
       "Le runtime échantillonne `std::poisson_distribution<int>(lambda)` puis déclenche l'apparition si le résultat est au moins 1.",
+    codeSnippet:
+`// InfernalSystem.cpp
+const double lambda = std::clamp(
+    lambdaBase + lambdaPerDebt * (double)(whiteDebt + blackDebt),
+    0.0, lambdaCap);
+std::poisson_distribution<int> dist(lambda);
+if (dist(generator) < 1)
+    return std::nullopt;  // N = 0 : aucune apparition ce tour`,
     parameterChoice:
       "Le cap à 0.25 borne `P(N \\ge 1) = 1 - e^{-\\lambda}` en dessous de 0.221, donc les pièces du diable restent menaçantes sans saturer la partie.",
     dependence:
@@ -509,6 +560,16 @@ const truncatedNormalProcesses = [
       "Une variable gaussienne tronquée préserve une moyenne intuitive tout en autorisant une dispersion contrôlée autour de chaque source d'XP. La loi normale est choisie parce que son paramétrage en (μ, σ) traduit directement le langage du design : « cette action rapporte en moyenne μ points, avec une variabilité de σ ». Une loi exponentielle ou log-normale introduirait une asymétrie non voulue, des valeurs très hautes plus probables que très basses, inappropriée pour une récompense centrée sur une valeur cible précise. La **troncature** est indispensable pour deux raisons : éliminer les valeurs négatives ou nulles, incohérentes avec une récompense, et éviter les pics extrêmes qui déstabiliseraient l'économie d'XP. Le minimum final (plancher à 1) garantit qu'un kill rapporte toujours quelque chose même après arrondi.",
     simulation:
       "`RewardProfileSampling::sampleTruncatedNormal` tire une normale, la tronque sur `[mean - delta, mean + delta]`, puis arrondit et applique le minimum.",
+    codeSnippet:
+`// RewardProfileSampling.hpp
+const double sigma = std::max(1.0, mean * sigmaMultiplier);
+const double delta = sigma * clampMultiplier;
+// Normale centrée sur mean, tronquée dans [mean-delta, mean+delta] :
+std::normal_distribution<double> dist(mean, sigma);
+const double x = std::clamp(dist(gen), mean - delta, mean + delta);
+return std::max(minimum, static_cast<int>(std::lround(x)));`,
+    simulationFromUniform:
+      "La STL implémente la normale par l'algorithme de **Box-Muller** : à partir de deux uniformes `U1, U2 ∈ (0,1)`, on calcule `Z = sqrt(−2 ln U1) · cos(2π U2)`, puis `X = μ + σZ`. Si X sort de `[a, b]` (troncature), on recommence (`rejection sampling`). Cette méthode tire deux uniformes pour produire deux valeurs gaussiennes indépendantes simultanément.",
     parameterChoice:
       "Le sigma est proportionnel à la moyenne via `sigma_multiplier_times_100`, ce qui garde une volatilité relative comparable entre petites et grosses récompenses.",
     dependence:
@@ -556,6 +617,14 @@ const weibullProcesses = [
       "La Weibull est adaptée aux temps d'attente flexibles: avec `k > 1`, le taux de risque croissant rend les réapparitions plus plausibles après plusieurs tours sans coffre. Une loi géométrique, l'équivalent discret naturel d'un temps d'attente, est sans mémoire : elle traite chaque tour comme un essai indépendant, sans que l'absence prolongée de coffre augmente la probabilité de réapparition. Ce comportement sans mémoire est contraire à l'intention de design : le joueur doit pouvoir percevoir qu'un coffre est attendu après une longue absence. La Gamma offre le même taux de risque croissant, mais la Weibull est ici préférable car sa paramétrisation (k, λ) sépare plus naturellement la forme (via k) de l'échelle temporelle (via λ). Le **plancher discrétisé** à c = 4 tours garantit qu'un coffre ne peut pas réapparaître immédiatement après avoir été collecté.",
     simulation:
       "`sampleSpawnDelay` échantillonne `std::weibull_distribution<double>(shape, scale)`, arrondit, puis applique `max(respawnCooldown, randomDelay)`.",
+    codeSnippet:
+`// ChestSystem.cpp
+std::weibull_distribution<double> dist(shape, scale);
+// shape = k = 1.8,  scale = λ = 6 tours
+int delay = std::max(0, static_cast<int>(std::lround(dist(generator))));
+return std::max(config.getChestRespawnCooldownTurns(), delay);`,
+    simulationFromUniform:
+      "La Weibull admet une **CDF inversible** en forme close : `F(t) = 1 − e^{−(t/λ)^k}`. La méthode de la transformée inverse donne directement `T = λ · (−ln U)^{1/k}` à partir d'une seule uniforme `U ∈ (0,1)`. C'est l'une des lois les plus simples à simuler par inversion exacte.",
     parameterChoice:
       "`k = 1.8` garde des délais variables tout en évitant une concentration trop forte près de zéro.",
     dependence:
@@ -579,6 +648,17 @@ const gammaProcesses = [
       "Une Gamma contrôle naturellement des temps d'attente positifs et asymétriques, plus souples qu'une exponentielle simple. Une loi exponentielle (cas k = 1 de la Gamma) est sans mémoire, ce qui produit des inter-arrivées irrégulières et potentiellement très courtes : deux brouillards pourraient s'enchaîner en quelques tours. Avec k > 1, la Gamma concentre la masse autour de sa moyenne tout en maintenant une queue droite : les délais typiques sont regroupés, mais des pauses plus longues restent possibles. Le paramètre θ encode l'échelle temporelle absolue et peut être ajusté dans la config pour accélérer ou ralentir toute la cadence météo sans modifier la forme de la distribution.",
     simulation:
       "`scheduleNextSpawn` appelle `sampleGammaTurns`, qui échantillonne `std::gamma_distribution`, prend le plafond puis convertit en pas de temps.",
+    codeSnippet:
+`// WeatherSystem.cpp
+float sampleGammaTurns(std::mt19937& gen,
+                       int minTurns, int shapeTimes100, int scaleTimes100) {
+    const double k = shapeTimes100 / 100.0;  // k = 4.0
+    const double θ = scaleTimes100 / 100.0;  // θ = 10.0
+    std::gamma_distribution<double> dist(k, θ);
+    return minTurns + (int)std::ceil(dist(gen));
+}`,
+    simulationFromUniform:
+      "La STL utilise l'algorithme de **Marsaglia-Tsang** (2000) : pour `k ≥ 1`, on pose `d = k − 1/3`, `c = 1/√(9d)`, puis on tire `Z ~ N(0,1)` (via Box-Muller) et on forme `x = d(1 + cZ)³`. Le candidat est accepté avec probabilité `exp(x/d − 1 − ln(x/d)) · exp(−Z²/2)`. Ce test d'accept/reject donne un taux d'acceptation proche de 1 pour les paramètres courants.",
     parameterChoice:
       "Le passage par la config permet de rallonger ou compresser très simplement la cadence globale des brouillards sans toucher au code.",
     dependence:
@@ -624,6 +704,17 @@ const logNormalProcesses = [
       "La log-normale garantit des multiplicateurs strictement positifs, avec une queue à droite utile pour créer quelques poches très opaques sans valeurs négatives. L'opacité locale est conçue comme un multiplicateur appliqué à une base : elle doit donc être strictement positive. Une Beta, bornée dans [0, 1], aurait été envisageable si l'opacité devait toujours rester inférieure à la base, mais la conception autorise des zones légèrement plus opaques que la valeur nominale (multiplicateur > 1), ce qui exclut la Beta au profit de la log-normale. La **troncature finale** via clamp d'alpha n'est pas une correction d'urgence mais une décision de design explicite : elle définit les plages d'opacité visuellement acceptables indépendamment des valeurs extrêmes que la log-normale peut générer.",
     simulation:
       "`sampleLogNormalCell` redérive un générateur par cellule à partir de `densitySeed`, puis échantillonne `std::lognormal_distribution<double>(mu, sigma)`.",
+    codeSnippet:
+`// WeatherSystem.cpp
+std::mt19937 gen(mixSeed(seed,
+    (uint32_t)(cellX + 0x5000) * 2246822519u));
+gen.seed(mixSeed(gen(), (uint32_t)(cellY + 0x5000) * 3266489917u));
+std::lognormal_distribution<double> dist(mu, sigma);
+// mu = -0.12,  sigma = 0.35
+float multiplier = (float)dist(gen);
+// alpha = clamp(0.48 * multiplier, alphaMin, alphaMax)`,
+    simulationFromUniform:
+      "Si `Z ~ N(0,1)` est obtenu via Box-Muller à partir de deux uniformes, alors `X = e^{μ + σZ} ~ LogNormal(μ, σ²)`. La transformation `exp` garantit `X > 0` sans aucun accept/reject. La STL compose directement Box-Muller et l'exponentielle en une seule passe.",
     parameterChoice:
       "La moyenne géométrique légèrement sous 1 et un sigma modéré donnent surtout des variations fines, ensuite bornées par l'alpha min/max.",
     dependence:
@@ -649,6 +740,17 @@ const betaProcesses = [
       "Avec `alpha > beta`, la Beta concentre la masse près de 1, ce qui laisse la plupart des herbes proches de la luminosité nominale tout en autorisant quelques assombrissements visibles. La luminosité d'une cellule d'herbe est naturellement une proportion dans [0, 1] avant remappage, ce qui fait de la Beta la famille de référence : son support coïncide exactement avec l'espace des valeurs utiles, sans nécessiter de troncature. Une normale tronquée aurait fonctionné, mais les paramètres (μ, σ) sont moins intuitifs pour décrire une répartition majoritairement haute avec une queue d'assombrissements. La combinaison seuil/contraste en aval transforme la Beta brute en variation perceptible : les valeurs au-dessus du seuil 0,90 conservent la luminosité nominale, les valeurs en dessous sont ramenées dans un intervalle visible via la puissance de contraste.",
     simulation:
       "Le code échantillonne la Beta via deux Gammas, applique un seuil à 0.90, puis remappe la partie basse vers `[0.68, 1]` avec une puissance 1.8.",
+    codeSnippet:
+`// BoardGenerator.cpp
+float sampleBeta(std::mt19937& rng, float alpha, float beta) {
+    std::gamma_distribution<float> g1(alpha, 1.0f);  // α = 7
+    std::gamma_distribution<float> g2(beta,  1.0f);  // β = 2
+    float a = g1(rng), b = g2(rng);
+    return (a + b > 0.0f) ? a / (a + b) : 1.0f;
+}
+// Appel : sampleBeta(rng, 7.0f, 2.0f)`,
+    simulationFromUniform:
+      "La **représentation de normalisation** de la Beta : si `G1 ~ Γ(α, 1)` et `G2 ~ Γ(β, 1)` sont indépendantes (chacune simulée par Marsaglia-Tsang), alors `X = G1/(G1 + G2) ~ Beta(α, β)`. Le dénominateur `G1 + G2 ~ Γ(α+β, 1)` assure la normalisation. Le code implémente exactement cette construction avec deux `std::gamma_distribution`.",
     parameterChoice:
       "Le couple (7, 2) et le seuil 0.90 donnent un plateau majoritairement clair, avec juste assez d'irrégularité pour casser la répétition.",
     dependence:
@@ -673,6 +775,18 @@ const piecewiseLinearProcesses = [
       "Le jeu veut privilégier les entrées centrales tout en conservant une probabilité non nulle de départ par les coins; la linéaire par morceaux est idéale pour cette densité dessinée à la main. Une uniforme donnerait autant de chances aux coins qu'au centre, ne respectant pas l'intention visuelle d'un brouillard qui entre plutôt par le milieu. Une distribution triangulaire concentrerait la masse au centre mais sans permettre le réglage fin des poids aux différents points de contrôle. La linéaire par morceaux est la seule famille standard qui permet de spécifier la densité point par point, ici cinq nœuds répartis régulièrement, et de l'ajuster directement depuis la config sans changer de modèle. C'est une densité entièrement dessinée à la main, ce qui est la formulation honnête de décisions de design qui ne découlent pas d'un modèle mathématique préexistant.",
     simulation:
       "`sampleEdgePosition` construit les bornes et les hauteurs puis utilise `std::piecewise_linear_distribution<double>`.",
+    codeSnippet:
+`// WeatherSystem.cpp
+const std::array<double, 5> bounds{
+    0.0, M*0.25, M*0.5, M*0.75, M};
+const std::array<double, 5> weights{
+    cornerW, centerW, centerW*1.1, centerW, cornerW};
+// cornerW = 0.7,  centerW = 1.8
+std::piecewise_linear_distribution<double> dist(
+    bounds.begin(), bounds.end(), weights.begin());
+float position = (float)dist(generator);`,
+    simulationFromUniform:
+      "La STL implémente la **transformée inverse segmentée** : on calcule la CDF cumulative par tranche, on tire `U ~ U[0,1]`, on localise le segment `[x_i, x_{i+1}]` tel que `F(x_i) ≤ U < F(x_{i+1})`, puis on résout l'équation quadratique sur ce segment. Tout découle d'un unique tirage uniforme.",
     parameterChoice:
       "Le centre est volontairement surpondéré par rapport aux quarts et aux coins pour produire des brouillards plus lisibles visuellement.",
     dependence:
@@ -698,6 +812,15 @@ const proceduralProcesses = [
       "Une loi usuelle scalaire ne suffit pas ici: il faut un champ spatial corrélé pour faire émerger des zones organiques. Traiter chaque cellule comme un tirage de Bernoulli indépendant produirait un bruit pur sans structure : pas de continents, pas de couloirs, pas de bords lisibles. Le bruit de valeur (value noise) génère précisément cette cohérence spatiale : les cellules proches tendent à avoir des valeurs proches, ce qui fait émerger des régions. L'empilement fractal d'octaves affine les bords et ajoute du détail à petite échelle sans recourir à une modélisation physique ou à un algorithme de croissance cellulaire plus coûteux.",
     simulation:
       "Le générateur évalue `valueNoise` puis `fractalNoise`, applique des seuils, conserve les composantes cohérentes et ajoute des amas locaux de terre.",
+    codeSnippet:
+`// BoardGenerator.cpp, évaluation du champ procédural
+float dirtScore = fractalNoise(dirtNoiseSeed, localX, localY, octaves);
+// fractalNoise empile valueNoise à plusieurs octaves depuis worldSeed
+if (dirtScore > dirtThreshold)
+    cell.type = CellType::Dirt;
+// Le valueNoise est une interpolation bilinéaire de hashs de coins :
+//   float v = lerp(lerp(hash(x0,y0), hash(x1,y0), tx),
+//                  lerp(hash(x0,y1), hash(x1,y1), tx), ty)`,
     parameterChoice:
       "Les trois octaves donnent déjà un relief suffisant sans rendre le calcul coûteux sur tout le plateau.",
     dependence:
@@ -955,7 +1078,7 @@ const processTheoryByTitle = {
     note:
       "Cette Bernoulli décide si la pièce infernale abandonne sa trajectoire guidée pour un coup aléatoire au tour courant."
   }),
-  "éclenchement d'apparition d'une pièce du diable": createTheory({
+  "Déclenchement d'apparition d'une pièce du diable": createTheory({
     support: L`N_t\in\mathbb{N}`,
     law: L`N_t\sim\mathrm{Poisson}(\lambda_t)`,
     expectation: L`\mathbb{E}[N_t]=\lambda_t`,
@@ -1241,6 +1364,20 @@ export const randomnessReport = {
       "Les systèmes XP, Coffres, Météo et Pièces du diable possèdent chacun leur compteur RNG sérialisé; le déterminisme persiste donc après sauvegarde/rechargement.",
       "Les seeds auxiliaires de météo et de génération de carte sont elles-mêmes des variables aléatoires uniformes à grand support, mais elles servent ensuite à piloter des champs non i.i.d.",
       "Le rapport distingue toujours la loi théorique continue de la loi runtime réellement observée quand un arrondi, un `ceil` ou un `clamp` est appliqué."
+    ],
+    conformityRows: [
+      { law: "Uniforme continue", kind: "densité", isDensity: true, e: String.raw`\frac{a+b}{2}`, v: String.raw`\frac{(b-a)^2}{12}`, example: "Couverture et allongement du brouillard" },
+      { law: "Uniforme discrète", kind: "discrète", isDensity: false, e: String.raw`\frac{a+b}{2}`, v: String.raw`\frac{(b-a+1)^2-1}{12}`, example: "Rotation/retournement bâtiments, seeds" },
+      { law: "Permutation uniforme", kind: "discrète", isDensity: false, e: String.raw`\mathbb{E}[R_i]=\frac{n+1}{2}`, v: String.raw`\mathrm{Var}(R_i)=\frac{n^2-1}{12}`, example: "Ordre de placement mines/fermes" },
+      { law: "Catégorielle pondérée", kind: "discrète", isDensity: false, e: "\\text{dépend du score auxiliaire } g", v: "\\text{dépend du score auxiliaire } g", example: "Type récompense coffre, cible pièce du diable" },
+      { law: "Bernoulli", kind: "discrète", isDensity: false, e: "p", v: "p(1-p)", example: "Royaume cible pièce du diable" },
+      { law: "Poisson", kind: "discrète", isDensity: false, e: "\\lambda", v: "\\lambda", example: "Déclenchement apparition pièce du diable" },
+      { law: "Normale tronquée", kind: "densité", isDensity: true, e: String.raw`\mu+\sigma\frac{\varphi(\alpha)-\varphi(\beta)}{\Phi(\beta)-\Phi(\alpha)}`, v: String.raw`\sigma^2\!\left[1+\frac{\alpha\varphi(\alpha)-\beta\varphi(\beta)}{\Phi(\beta)-\Phi(\alpha)}-\left(\frac{\varphi(\alpha)-\varphi(\beta)}{\Phi(\beta)-\Phi(\alpha)}\right)^2\right]`, example: "Récompenses XP, or des coffres" },
+      { law: "Weibull", kind: "densité", isDensity: true, e: String.raw`\lambda\,\Gamma\!\left(1+\tfrac{1}{k}\right)`, v: String.raw`\lambda^2\!\left[\Gamma\!\left(1+\tfrac{2}{k}\right)-\Gamma\!\left(1+\tfrac{1}{k}\right)^2\right]`, example: "Délai réapparition coffre" },
+      { law: "Gamma", kind: "densité", isDensity: true, e: "k\\theta", v: "k\\theta^2", example: "Délai inter-brouillards, durée visible" },
+      { law: "Log-normale", kind: "densité", isDensity: true, e: "e^{\\mu+\\sigma^2/2}", v: "(e^{\\sigma^2}-1)e^{2\\mu+\\sigma^2}", example: "Densité locale brouillard" },
+      { law: "Beta", kind: "densité", isDensity: true, e: String.raw`\frac{\alpha}{\alpha+\beta}`, v: String.raw`\frac{\alpha\beta}{(\alpha+\beta)^2(\alpha+\beta+1)}`, example: "Luminosité cellules d'herbe" },
+      { law: "Linéaire par morceaux", kind: "densité", isDensity: true, e: "\\int_0^M x\\,f(x)\\,dx", v: "\\int_0^M x^2 f(x)\\,dx - \\mathbb{E}[X]^2", example: "Position d'entrée du brouillard sur le bord" }
     ]
   },
   outputStats: [
@@ -1279,8 +1416,9 @@ export const randomnessReport = {
   lawSections: [
     {
       id: "uniformes",
-      title: "Uniformes discrètes, continues et conditionnelles",
+      title: "Uniformes, continues et conditionnelles",
       badge: "15 processus",
+      isDensity: true,
       description: [
         "Cette famille couvre les tirages symétriques sur un support fini, les pourcentages uniformes sur un intervalle continu et les choix uniformes conditionnés à un sous-ensemble admissible. Elle regroupe aussi plusieurs seeds intermédiaires, mathématiquement ordinaires mais importantes pour le gameplay parce qu'elles pilotent ensuite des champs procéduraux.",
         "Dans le code, ces lois apparaissent surtout via `std::uniform_int_distribution`, des appels directs à `generator()` sur 32 bits, ou des tirages uniformes après filtrage et tri de candidats."
@@ -1359,7 +1497,7 @@ export const randomnessReport = {
     },
     {
       id: "bernoulli",
-      title: "⭐ Bernoulli",
+      title: "Bernoulli",
       badge: "2 processus",
       description: [
         "La Bernoulli intervient pour les décisions binaires: choisir un royaume plutôt que l'autre, ou activer une branche de comportement aléatoire.",
@@ -1413,6 +1551,7 @@ export const randomnessReport = {
       id: "normales-tronquees",
       title: "Normales tronquées et discrétisées",
       badge: "2 processus",
+      isDensity: true,
       description: [
         "L'XP et l'or des coffres réutilisent le même patron: une normale centrée sur une moyenne conception, tronquée à un multiple de son écart-type, arrondie à l'entier puis soumise à un plancher minimal.",
         "La loi effectivement jouée n'est donc pas une gaussienne pure: c'est une gaussienne transformée par clamp et quantification."
@@ -1445,6 +1584,7 @@ export const randomnessReport = {
       id: "weibull",
       title: "Weibull discrétisée",
       badge: "1 processus",
+      isDensity: true,
       description: [
         "La Weibull apparaît pour les délais de réapparition des coffres. C'est un choix pertinent dès qu'on veut un temps d'attente positif dont la probabilité de survenue change avec l'ancienneté du délai écoulé.",
         "Le runtime n'utilise pas la variable continue telle quelle: il l'arrondit et la borne inférieurement par un cooldown minimal."
@@ -1470,8 +1610,9 @@ export const randomnessReport = {
     },
     {
       id: "gamma",
-      title: "⭐ Gamma discrétisée",
+      title: "Gamma discrétisée",
       badge: "2 processus",
+      isDensity: true,
       description: [
         "La Gamma pilote les inter-arrivées et certaines durées météo. Son support positif et sa grande souplesse de forme en font un bon compromis entre exponentialité pure et modèle trop rigide.",
         "Le code applique `ceil`, puis convertit en tours ou pas de simulation. La loi observée est donc une version quantifiée de la Gamma continue."
@@ -1498,6 +1639,7 @@ export const randomnessReport = {
     {
       id: "lognormale",
       title: "Log-normale",
+      isDensity: true,
       badge: "1 processus",
       description: [
         "La log-normale apparaît dans la texture d'opacité des brouillards. Le choix est mathématiquement naturel dès qu'on veut des multiplicateurs strictement positifs, susceptibles d'être parfois un peu plus grands que 1 sans jamais devenir négatifs.",
@@ -1522,6 +1664,7 @@ export const randomnessReport = {
       id: "beta",
       title: "Beta transformée",
       badge: "1 processus",
+      isDensity: true,
       description: [
         "La Beta est utilisée pour la luminosité de l'herbe. C'est une bonne famille pour modéliser une variable naturellement bornée dans `[0,1]` avant transformation visuelle.",
         "Le code ne l'obtient pas par API directe, mais via le quotient de deux Gammas, ce qui est mathématiquement standard."
@@ -1549,6 +1692,7 @@ export const randomnessReport = {
       id: "piecewise-linear",
       title: "Linéaire par morceaux",
       badge: "1 processus",
+      isDensity: true,
       description: [
         "La position d'entrée d'un brouillard le long du bord n'est ni uniforme, ni gaussienne. Elle suit une densité dessinée à la main par morceaux linéaires afin de surpondérer les entrées centrales tout en gardant des coins possibles.",
         "C'est un bon exemple de loi standard de la bibliothèque C++ qui n'est pas toujours mobilisée dans les rapports probabilistes classiques, mais qui reste parfaitement légitime ici."
@@ -1570,10 +1714,11 @@ export const randomnessReport = {
     },
     {
       id: "procedural-fields",
-      title: "⭐ Variables personnalisées et champs procéduraux corrélés",
+      title: "Variables personnalisées et champs procéduraux corrélés",
       badge: "4 processus",
       description: [
         "Tous les processus aléatoires du jeu ne sont pas raisonnablement résumables par une unique variable scalaire. Les champs de terrain et les déformations de contour du brouillard sont des fonctions aléatoires de la cellule et d'une seed, avec forte corrélation spatiale.",
+        "**Du point de vue des contraintes (lois connues)**: ces processus reposent entièrement sur une **seed uniforme discrète sur 32 bits**, loi connue, pilotant ensuite un **post-traitement déterministe** (interpolation de hash, empilement d'octaves, seuillage). La VA de base est bien une uniforme connue; les structures spatiales émergent d'un calcul déterministe à partir de cette seed. Ils ne constituent donc pas des « lois inconnues » mais des transformations déterministes d'uniformes.",
         "Les traiter comme des Bernoulli i.i.d. (**indépendantes et identiquement distribuées**), serait mathématiquement faux et trompeur au niveau du gameplay: on perdrait exactement la structure de régions, de bords et de textures que le code cherche à produire."
       ],
       formulaCards: [
@@ -1602,7 +1747,8 @@ export const randomnessReport = {
     "Les lois conditionnelles dominent le gameplay réel: une uniforme ou une catégorielle n'est presque jamais tirée sur un support absolu, mais sur un support déjà filtré par la géométrie, la visibilité, l'occupation ou l'historique des choix précédents.",
     "Le mode de rattrapage des coffres (`current_loot_catch_up_enabled`) signifie que **les deux royaumes partagent temporairement une même récompense courante**; **le tirage suivant n'apparaît que lorsque les deux l'ont déjà collectée**. Les récompenses de coffre ne sont donc **pas indépendantes** entre royaumes quand ce mode est actif.",
     "Les brouillards portent deux graines internes, l'une pour la forme et l'autre pour la densité, qui induisent de fortes corrélations spatiales intra-brouillard, puis une dépendance temporelle via la durée Gamma et le prochain délai d'apparition.",
-    "Les pièces du diable ne reposent pas sur un système à paramètres fixes: leur Bernoulli de royaume cible et leur Poisson d'apparition dépendent directement d'un état dynamique, la dette de sang."
+    "Les pièces du diable ne reposent pas sur un système à paramètres fixes: leur Bernoulli de royaume cible et leur Poisson d'apparition dépendent directement d'un état dynamique, la dette de sang.",
+    "**Chaîne de Markov**: la dette de sang (`bloodDebt`) est un processus markovien naturel, elle dépend de l'état précédent (dettes accumulées) et évolue selon des transitions probabilistes (apparitions, destructions). Une modélisation explicite en chaîne de Markov à états discrets aurait pu formaliser la dynamique de la dette, mais le gain de précision ne justifiait pas la complexité supplémentaire face au modèle Poisson déjà en place. Ce point reste une piste d'approfondissement."
   ],
   difficulties: [
     {
@@ -1635,5 +1781,15 @@ export const randomnessReport = {
     "La première perspective est de **mieux ajuster les paramètres des mécanismes aléatoires** à partir d'un volume de parties plus important. Je n'ai pas encore assez de recul statistique pour équilibrer proprement ces variables: par exemple, les apparitions des pièces du diable produisent encore trop souvent des pions, alors que cette pièce est lente et peu impactante, et la loi normale des récompenses d'or des coffres reste trop resserrée autour de sa moyenne, ce qui rend les variations peu perceptibles pour le joueur.",
     "Une deuxième perspective est donc d'**accumuler beaucoup plus de données de partie** afin d'améliorer l'équilibrage général du jeu. L'objectif n'est pas seulement de décrire les lois utilisées, mais de disposer d'assez d'observations pour corriger les déséquilibres réels, ajuster les amplitudes utiles et vérifier que les événements aléatoires enrichissent effectivement la partie au lieu d'aplatir ses situations.",
     "Enfin, un chantier important sera de développer une **intelligence artificielle symbolique** capable d'agir à partir de règles déterministes tout en **anticipant des événements aléatoires probables**. Explorer cette articulation entre raisonnement symbolique et incertitude serait utile à la fois pour mieux jouer, pour mieux tester le jeu et pour mieux exploiter toutes les statistiques produites par ce travail."
+  ],
+  criticalReview: [
+    {
+      title: "La Weibull pour les coffres : bon choix, mais paramètres sous-optimaux",
+      text: "Le paramètre k = 1.8 produit un taux de risque croissant, cohérent avec l'idée qu'un coffre absent depuis longtemps est « attendu », mais la calibration reste empirique : je n'ai pas assez de données de parties pour vérifier que les joueurs ressentent réellement cet effet. Une Gamma aurait été mathématiquement équivalente avec une paramétrisation (k, θ) peut-être plus intuitive. Le choix de la Weibull est défendable mais pas exclusivement motivé par les données."
+    },
+    {
+      title: "Chaîne de Markov : envisagée mais non retenue",
+      text: "La dette de sang (`bloodDebt`) aurait pu être modélisée comme une chaîne à états discrets (dette faible / modérée / élevée / critique), mais le mécanisme réel est un compteur continu qui décroît progressivement. L'enchaînement des états n'est pas strictement markovien car la transition dépend de l'historique des combats, pas uniquement de l'état courant. Nous avons donc préféré un modèle Poisson à intensité variable qui capture mieux la non-stationnarité observée. Une vraie chaîne de Markov resterait une piste d'approfondissement."
+    }
   ]
 };

@@ -62,7 +62,8 @@ const tocItems = computed(() => [
   })),
   { id: "dependances", number: "3", label: "Dépendances" },
   { id: "difficultes", number: "4", label: "Difficultés" },
-  { id: "perspectives", number: "5", label: "Perspectives" }
+  { id: "critique", number: "5", label: "Regard critique" },
+  { id: "perspectives", number: "6", label: "Perspectives" }
 ]);
 
 const processStatsByTitle = randomnessStatsReport.processStatsByTitle;
@@ -346,6 +347,34 @@ onBeforeUnmount(() => {
               <InlineRichText :text="highlight" tag="span" />
             </li>
           </ul>
+
+          <div v-if="randomnessReport.methodology.conformityRows?.length" class="rapport-subsection">
+            <h3 class="rapport-subsection__title">Conformité aux contraintes du projet</h3>
+            <table class="rapport-conformity-table">
+              <thead>
+                <tr>
+                  <th>Famille de loi</th>
+                  <th>Type</th>
+                  <th>E[X]</th>
+                  <th>Var(X)</th>
+                  <th>Exemple projet</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in randomnessReport.methodology.conformityRows" :key="row.law">
+                  <td>
+                    {{ row.law }}
+                    <span v-if="row.isDensity" class="rapport-conformity-density"> ★</span>
+                  </td>
+                  <td>{{ row.kind }}</td>
+                  <td><MathFormula v-if="row.e" :formula="row.e" :display="false" /><span v-else>—</span></td>
+                  <td><MathFormula v-if="row.v" :formula="row.v" :display="false" /><span v-else>—</span></td>
+                  <td>{{ row.example }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <p style="font-size:12px; color: var(--ink-dim); margin-top:8px;">★ = loi à densité par rapport à la mesure de Lebesgue (contrainte 4.a.iii : au moins 4 requises, ici {{ randomnessReport.methodology.conformityRows.filter(r => r.isDensity).length }} fournies)</p>
+          </div>
         </section>
 
         <RapportLawSection
@@ -391,11 +420,28 @@ onBeforeUnmount(() => {
           </div>
         </section>
 
+        <section id="critique" class="rapport-panel">
+          <header class="rapport-section__header">
+            <p class="rapport-panel__eyebrow">Réflexivité</p>
+            <h2>
+              <span class="rapport-section__number">5.</span>
+              Regard critique sur la réalisation
+            </h2>
+          </header>
+
+          <div class="rapport-output-grid">
+            <article v-for="item in randomnessReport.criticalReview" :key="item.title" class="rapport-output-card">
+              <h3>{{ item.title }}</h3>
+              <InlineRichText :text="item.text" />
+            </article>
+          </div>
+        </section>
+
         <section id="perspectives" class="rapport-panel">
           <header class="rapport-section__header">
             <p class="rapport-panel__eyebrow">Suite</p>
             <h2>
-              <span class="rapport-section__number">5.</span>
+              <span class="rapport-section__number">6.</span>
               Perspectives de mesure et d'amélioration
             </h2>
           </header>
