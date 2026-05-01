@@ -537,11 +537,11 @@ const processStatsByTitle = {
       })
     }
   ],
-  "Delai entre deux fronts meteo": [
+  "Delai entre deux brouillards meteo": [
     {
       title: "Les inter-arrivees meteo restent compatibles avec la Gamma parametree",
       description:
-        "La comparaison la plus propre ici porte sur les temps d'attente entre fronts. L'ecart entre la moyenne empirique et la moyenne theorique reste faible dans le batch integre, ce qui valide bien le coeur du generateur temporel de meteo.",
+        "La comparaison la plus propre ici porte sur les temps d'attente entre brouillards. L'ecart entre la moyenne empirique et la moyenne theorique reste faible dans le batch integre, ce qui valide bien le coeur du generateur temporel de meteo.",
       metrics: [
         {
           label: "Moyenne theorique",
@@ -565,7 +565,7 @@ const processStatsByTitle = {
         "Les indicateurs comme les directions cardinales sont moins prioritaires ici: ils montrent surtout l'absence de biais, pas une structure gameplay profonde."
       ],
       chartHeight: 300,
-      chartLabel: "Histogramme des délais d'arrivée des fronts météo",
+      chartLabel: "Histogramme des délais d'arrivée des brouillards météo",
       chartOption: buildHistogramOption({
         categories: weatherArrivalEntries.map(([value]) => String(value)),
         values: weatherArrivalEntries.map(([, count]) => count),
@@ -575,14 +575,14 @@ const processStatsByTitle = {
       })
     }
   ],
-  "Duree visible d'un front": [
+  "Duree visible d'un brouillard": [
     {
-      title: "Les fronts se chevauchent parfois, mais l'etat dominant reste 0 ou 1 front actif",
+      title: "Les brouillards se chevauchent parfois, mais l'etat dominant reste 0 ou 1 brouillard actif",
       description:
         "Tu voulais explicitement voir le nombre de nuages simultanes. Cette distribution est une excellente figure de rapport parce qu'elle capture une consequence gameplay immediate de la dynamique temporelle, sans dependre des joueurs.",
       metrics: [
         {
-          label: "Moyenne de fronts actifs par pas",
+          label: "Moyenne de brouillards actifs par pas",
           value: formatNumber(weatherSystem.summary.active_front_count_per_step.mean, 2)
         },
         {
@@ -590,21 +590,21 @@ const processStatsByTitle = {
           value: formatNumber(weatherSystem.summary.max_active_fronts_per_world.max, 0)
         },
         {
-          label: "Moyenne de fronts spawnes",
+          label: "Moyenne de brouillards apparus",
           value: formatNumber(weatherSystem.summary.spawned_fronts_per_world.mean, 1)
         }
       ],
       insights: [
-        `Dans l'export integre, le chevauchement a deux fronts existe deja (${weatherSystem.histograms.active_front_count[2] || 0} pas observes), mais reste nettement minoritaire face aux etats 0 et 1.`,
+        `Dans l'export integre, le chevauchement a deux brouillards existe deja (${weatherSystem.histograms.active_front_count[2] || 0} pas observes), mais reste nettement minoritaire face aux etats 0 et 1.`,
         "C'est un bon exemple de statistique emergente qui reste pourtant **entierement independante des actions de joueurs**."
       ],
       chartHeight: 290,
-      chartLabel: "Distribution du nombre de fronts météo simultanément actifs",
+      chartLabel: "Distribution du nombre de brouillards météo simultanément actifs",
       chartOption: buildHistogramOption({
         categories: weatherActiveFrontEntries.map(([value]) => String(value)),
         values: weatherActiveFrontEntries.map(([, count]) => count),
         color: COLORS.moss,
-        xAxisName: "Fronts actifs",
+        xAxisName: "Brouillards actifs",
         yAxisName: "Pas simules"
       })
     }
@@ -644,11 +644,11 @@ const processStatsByTitle = {
       })
     }
   ],
-  "Champ spatial Dirt": [
+  "Champ spatial de la terre": [
     {
-      title: "La couverture finale de Dirt est inferieure a la cible nominale",
+      title: "La couverture finale de la terre est inferieure a la cible nominale",
       description:
-        "Le pourcentage configure de Dirt ne se retrouve pas tel quel sur la carte finale. La pipeline procedurale applique ensuite des contraintes de composantes et de connectivite qui deforment la couverture initialement visee.",
+        "Le pourcentage configure de la terre ne se retrouve pas tel quel sur la carte finale. La pipeline procedurale applique ensuite des contraintes de composantes et de connectivite qui deforment la couverture initialement visee.",
       metrics: [
         {
           label: "Couverture ciblee",
@@ -668,7 +668,7 @@ const processStatsByTitle = {
         "C'est un vrai resultat empirique utile, pas un simple rappel de parametre de config."
       ],
       chartHeight: 290,
-      chartLabel: "Comparaison entre la couverture Dirt ciblée et observée",
+      chartLabel: "Comparaison entre la couverture la terre ciblée et observée",
       chartOption: buildHistogramOption({
         categories: ["Cible", "Observee"],
         values: dirtCoverageComparison,
@@ -678,11 +678,11 @@ const processStatsByTitle = {
       })
     }
   ],
-  "Champ spatial Water": [
+  "Champ spatial de l'eau": [
     {
-      title: "La couverture finale de Water est inferieure a la cible nominale",
+      title: "La couverture finale d'eau est inferieure a la cible nominale",
       description:
-        "Comme pour Dirt, la couverture eau finale subit les post-traitements topologiques de la generation. La valeur nominale sert de point de depart, pas de valeur finale garantie.",
+        "Comme pour la terre, la couverture eau finale subit les post-traitements topologiques de la generation. La valeur nominale sert de point de depart, pas de valeur finale garantie.",
       metrics: [
         {
           label: "Couverture ciblee",
@@ -702,7 +702,7 @@ const processStatsByTitle = {
         "L'eau est un bon exemple de champ procedural pour lequel le resultat topologique compte plus que la simple densite brute."
       ],
       chartHeight: 290,
-      chartLabel: "Comparaison entre la couverture Water ciblée et observée",
+      chartLabel: "Comparaison entre la couverture d'eau ciblée et observée",
       chartOption: buildHistogramOption({
         categories: ["Cible", "Observee"],
         values: waterCoverageComparison,
@@ -744,11 +744,11 @@ const processStatsByTitle = {
       })
     }
   ],
-  "Bruit de contour du front meteo": [
+  "Bruit de contour du brouillard": [
     {
-      title: "La couverture visible finale des fronts depasse parfois la consigne nominale",
+      title: "La couverture visible finale des brouillards depasse parfois la consigne nominale",
       description:
-        "La couverture ciblee de la meteo est parametree entre 5 % et 20 %, mais la forme reelle du front apres deformation de contour peut pousser la couverture visible un peu au-dela de la borne haute nominale.",
+        "La couverture ciblee de la meteo est parametree entre 5 % et 20 %, mais la forme reelle du brouillard apres deformation de contour peut pousser la couverture visible un peu au-dela de la borne haute nominale.",
       metrics: [
         {
           label: "Couverture de pic moyenne",
@@ -765,10 +765,10 @@ const processStatsByTitle = {
       ],
       insights: [
         "Le bon commentaire a mettre dans le rapport est donc: la couverture uniforme config ne decrit que l'aire cible brute; la **forme procedurale finale** peut la deformer sensiblement.",
-        "Cela justifie de traiter le front meteo comme un champ spatial correle plutot que comme une simple variable d'aire."
+        "Cela justifie de traiter le brouillard comme un champ spatial correle plutot que comme une simple variable d'aire."
       ],
       chartHeight: 290,
-      chartLabel: "Histogramme des couvertures visibles maximales des fronts météo",
+      chartLabel: "Histogramme des couvertures visibles maximales des brouillards meteo",
       chartOption: buildHistogramOption({
         categories: weatherPeakCoverageEntries.map(([value]) => String(value)),
         values: weatherPeakCoverageEntries.map(([, count]) => count),
