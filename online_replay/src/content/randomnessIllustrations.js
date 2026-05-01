@@ -2094,22 +2094,22 @@ const terrainFlipReplayData = createReplayData({
 });
 
 export const processIllustrationsByTitle = {
-  "Seed Dirt global": buildIllustrationConfig(dirtFieldReplayData),
-  "Seed Water global": buildIllustrationConfig(waterFieldReplayData),
+  "Graine globale de la terre": buildIllustrationConfig(dirtFieldReplayData),
+  "Graine globale de l'eau": buildIllustrationConfig(waterFieldReplayData),
   "Rotation des mines et fermes neutres": buildIllustrationConfig(rotationReplayData),
   "Flip des mines et fermes neutres": buildIllustrationConfig(flipReplayData),
   "Spawn des royaumes": buildIllustrationConfig(combinedSpawnReplayData),
   "Spawn du royaume blanc": buildIllustrationConfig(whiteSpawnReplayData),
   "Spawn du royaume noir": buildIllustrationConfig(blackSpawnReplayData),
-  "Bord diagonal d'entree du front meteo": buildIllustrationConfig(diagonalEntryReplayData),
-  "Aspect ratio du front": buildIllustrationConfig(frontAspectRatioReplayData),
-  "shapeSeed du front": buildIllustrationConfig(frontShapeReplayData),
-  "densitySeed du front": buildIllustrationConfig(frontDensityReplayData),
+  "Bord diagonal d'entree du brouillard": buildIllustrationConfig(diagonalEntryReplayData),
+  "Allongement du brouillard": buildIllustrationConfig(frontAspectRatioReplayData),
+  "Graine de forme du brouillard": buildIllustrationConfig(frontShapeReplayData),
+  "Graine de densite du brouillard": buildIllustrationConfig(frontDensityReplayData),
   "Ordre de placement des mines et fermes neutres": buildIllustrationConfig(placementOrderReplayData),
-  "Direction du front meteo": buildIllustrationConfig(frontDirectionReplayData),
+  "Direction du brouillard": buildIllustrationConfig(frontDirectionReplayData),
   "Luminosite de l'herbe": buildIllustrationConfig(grassBrightnessReplayData, { initialZoom: 1.7 }),
-  "Champ spatial Dirt": buildIllustrationConfig(dirtFieldReplayData),
-  "Champ spatial Water": buildIllustrationConfig(waterFieldReplayData),
+  "Champ spatial de la terre": buildIllustrationConfig(dirtFieldReplayData),
+  "Champ spatial de l'eau": buildIllustrationConfig(waterFieldReplayData),
   "Masque de flip des textures de terrain": buildIllustrationConfig(terrainFlipReplayData, { initialZoom: 1.7 }),
-  "Bruit de contour du front meteo": buildIllustrationConfig(frontContourReplayData)
+  "Bruit de contour du brouillard": buildIllustrationConfig(frontContourReplayData)
 };

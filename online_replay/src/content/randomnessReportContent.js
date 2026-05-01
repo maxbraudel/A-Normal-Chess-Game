@@ -9,12 +9,12 @@ function withProcessIllustration(process) {
 
 const uniformProcesses = [
   {
-    title: "Seed Dirt global",
+    title: "Graine globale de la terre",
     system: "Carte",
     lawUse: "Uniforme discrete sur un espace de 32 bits",
-    variable: L`S_{dirt} \in \{0,\dots,2^{32}-1\}`,
+    variable: L`S_{terre} \in \{0,\dots,2^{32}-1\}`,
     phenomenon:
-      "Produit la graine intermediaire qui alimente ensuite le champ procedurale de dirt.",
+      "Produit la graine intermediaire qui alimente ensuite le champ procedural de la terre.",
     parameters: [
       "support de taille 2^32",
       "1 tirage au debut de la generation du plateau"
@@ -29,10 +29,10 @@ const uniformProcesses = [
       "Depend completement de `worldSeed`; aucun tirage en cours de partie."
   },
   {
-    title: "Seed Water global",
+    title: "Graine globale de l'eau",
     system: "Carte",
     lawUse: "Uniforme discrete sur un espace de 32 bits",
-    variable: L`S_{water} \in \{0,\dots,2^{32}-1\}`,
+    variable: L`S_{eau} \in \{0,\dots,2^{32}-1\}`,
     phenomenon:
       "Produit la graine auxiliaire du champ des lacs et poches d'eau.",
     parameters: [
@@ -40,13 +40,13 @@ const uniformProcesses = [
       "1 tirage au debut de la generation du plateau"
     ],
     why:
-      "Le systeme d'eau doit etre decorrele du dirt tout en restant reproductible a seed fixe.",
+      "Le systeme d'eau doit etre decorrele de la terre tout en restant reproductible a seed fixe.",
     simulation:
       "Une sortie brute du generateur initialise la branche d'eau avant evaluation des champs spatiaux.",
     parameterChoice:
       "Le grand support evite des repetitions perceptibles lorsque plusieurs graines auxiliaires sont derivees du meme monde.",
     dependence:
-      "Couple a `worldSeed`, mais distinct de `S_{dirt}` par l'ordre d'appel du generateur."
+      "Couple a `worldSeed`, mais distinct de `S_{terre}` par l'ordre d'appel du generateur."
   },
   {
     title: "Rotation des mines et fermes neutres",
@@ -123,7 +123,7 @@ const uniformProcesses = [
       "Depend du terrain deja genere, donc du couple `worldSeed` + champs proceduraux, et de la contrainte de separation entre royaumes."
   },
   {
-    title: "Bord diagonal d'entree du front meteo",
+    title: "Bord diagonal d'entree du brouillard",
     system: "Meteo",
     lawUse: "Uniforme discrete sur les deux bords compatibles avec la diagonale",
     variable: L`E \in \{e_1,e_2\}`,
@@ -137,83 +137,83 @@ const uniformProcesses = [
     parameterChoice:
       "Deux etats seulement car une diagonale entre toujours soit par un bord soit par l'autre cote compatible.",
     dependence:
-      "Depend de la direction du front, elle-meme tiree juste avant."
+      "Depend de la direction du brouillard, elle-meme tiree juste avant."
   },
   {
-    title: "Couverture cible du front",
+    title: "Couverture cible du brouillard",
     system: "Meteo",
     lawUse: "Uniforme continue sur un intervalle de pourcentage",
     variable: L`C \sim \mathcal{U}([0.05, 0.20])`,
     phenomenon:
-      "Fixe la proportion de cellules visibles que le nouveau front doit recouvrir a sa naissance.",
+      "Fixe la proportion de cellules visibles que le nouveau brouillard doit recouvrir a sa naissance.",
     parameters: ["`coverage_min_percent = 5`", "`coverage_max_percent = 20`"],
     why:
       "Aucune taille privilegiee n'est imposee entre les bornes retenues; l'uniforme donne un eventail large mais lisible.",
     simulation:
       "Le runtime tire un entier uniforme entre 5 et 20, puis convertit ce pourcentage en aire cible.",
     parameterChoice:
-      "La borne basse garde des fronts non triviaux; la borne haute evite une occultation presque totale du plateau.",
+      "La borne basse garde des brouillards non triviaux; la borne haute evite une occultation presque totale du plateau.",
     dependence:
       "Se combine ensuite avec l'aspect ratio et la direction pour construire la geometrie finale."
   },
   {
-    title: "Aspect ratio du front",
+    title: "Allongement du brouillard",
     system: "Meteo",
     lawUse: "Uniforme continue sur un intervalle borne",
     variable: L`A \sim \mathcal{U}([1.80, 2.60])`,
     phenomenon:
-      "Fixe l'allongement principal du front avant deformation par le bruit de contour.",
+      "Fixe l'allongement principal du brouillard avant deformation par le bruit de contour.",
     parameters: ["`aspect_ratio_min_times_100 = 180`", "`aspect_ratio_max_times_100 = 260`"],
     why:
-      "Le front doit rester anisotrope sans toujours avoir la meme excentricite; une plage uniforme controle cette variete.",
+      "Le brouillard doit rester anisotrope sans toujours avoir la meme excentricite; une plage uniforme controle cette variete.",
     simulation:
       "Le code tire un entier uniforme sur [180, 260], divise par 100, puis derive `radiusAlong` et `radiusAcross` a aire preservee.",
     parameterChoice:
       "Des ratios entre 1.8 et 2.6 donnent des bandes visibles sans tomber dans la ligne presque degenerate.",
     dependence:
-      "Partage la meme seed d'evenement que la couverture et les seeds de contour/densite du front courant."
+      "Partage la meme seed d'evenement que la couverture et les graines de contour/densite du brouillard courant."
   },
   {
-    title: "shapeSeed du front",
+    title: "Graine de forme du brouillard",
     system: "Meteo",
     lawUse: "Uniforme discrete sur 32 bits",
     variable: L`S_{shape} \in \{0,\dots,2^{32}-1\}`,
     phenomenon:
-      "Fournit la graine du bruit qui perturbe le bord du front.",
-    parameters: ["1 tirage `generator()` par front"],
+      "Fournit la graine du bruit qui perturbe le bord du brouillard.",
+    parameters: ["1 tirage `generator()` par brouillard"],
     why:
-      "Le front doit posseder une signature spatiale propre sans collision visuelle trop frequente.",
+      "Le brouillard doit posseder une signature spatiale propre sans collision visuelle trop frequente.",
     simulation:
-      "Une sortie brute du `mt19937` de l'evenement est recopiee dans le descripteur du front.",
+      "Une sortie brute du `mt19937` de l'evenement est recopiee dans le descripteur du brouillard.",
     parameterChoice:
-      "Le support de 32 bits est suffisant pour differencier des milliers de fronts sans repetition perceptible.",
+      "Le support de 32 bits est suffisant pour differencier des milliers de brouillards sans repetition perceptible.",
     dependence:
-      "Depend du meme generateur d'evenement que la direction, l'aire et l'aspect ratio du front."
+      "Depend du meme generateur d'evenement que la direction, l'aire et l'allongement du brouillard."
   },
   {
-    title: "densitySeed du front",
+    title: "Graine de densite du brouillard",
     system: "Meteo",
     lawUse: "Uniforme discrete sur 32 bits",
     variable: L`S_{dens} \in \{0,\dots,2^{32}-1\}`,
     phenomenon:
-      "Fournit la graine qui module localement l'opacite du front via une loi log-normale.",
-    parameters: ["1 tirage `generator()` par front"],
+      "Fournit la graine qui module localement l'opacite du brouillard via une loi log-normale.",
+    parameters: ["1 tirage `generator()` par brouillard"],
     why:
       "La texture d'opacite doit etre reproductible mais differente du contour; il faut donc une graine propre.",
     simulation:
-      "Le `mt19937` du front produit une seconde sortie brute stockee dans le descripteur.",
+      "Le `mt19937` du brouillard produit une seconde sortie brute stockee dans le descripteur.",
     parameterChoice:
       "La separation entre la graine de forme et la graine de densite evite de coupler rigidement contour et densite locale.",
     dependence:
       "Couplee au meme evenement de spawn que la graine de forme, elle reste exploitee dans une chaine de hachage distincte par cellule."
   },
   {
-    title: "Spawn fallback sur la frontiere pour l'infernal",
-    system: "Infernal",
+    title: "Apparition de secours sur la frontiere pour une piece du diable",
+    system: "Pieces du diable",
     lawUse: "Uniforme discrete sur les cases de bord encore admissibles",
     variable: L`B \sim \mathcal{U}_d(A_{bord})`,
     phenomenon:
-      "Quand aucun spawn cible n'est valide, choisit une case de frontiere parmi celles encore autorisees.",
+      "Quand aucune apparition ciblee n'est valide, choisit une case de frontiere parmi celles encore autorisees.",
     parameters: ["ensemble conditionne par le type de piece, le relief et l'occupation"],
     why:
       "En situation de repli, toutes les issues de bord restantes jouent le meme role logique.",
@@ -222,15 +222,15 @@ const uniformProcesses = [
     parameterChoice:
       "La fallback policy minimale reduit les heuristiques supplementaires quand la cible principale est impossible.",
     dependence:
-      "Depend fortement du plateau courant, des pieces visibles et du type manifeste de l'entite infernale."
+      "Depend fortement du plateau courant, des pieces visibles et du type manifeste de la piece du diable."
   },
   {
     title: "Choix d'un mouvement aleatoire en phase Searching",
-    system: "Infernal",
+    system: "Pieces du diable",
     lawUse: "Uniforme discrete sur les coups admissibles",
     variable: L`M \sim \mathcal{U}_d(A_{moves})`,
     phenomenon:
-      "Selectionne un coup quand l'entite infernale entre dans sa **phase de recherche** (`Searching`), c'est-a-dire le moment ou elle explore les coups encore possibles au lieu de poursuivre une cible deja fixee.",
+      "Selectionne un coup quand la piece du diable entre dans sa **phase de recherche** (`Searching`), c'est-a-dire le moment ou elle explore les coups encore possibles au lieu de poursuivre une cible deja fixee.",
     parameters: ["support = coups generes, puis filtres par la visibilite locale et les collisions interdites"],
     why:
       "Une fois le mode aleatoire active, aucun coup restant n'est prioritaire dans cette branche specifique du comportement.",
@@ -243,11 +243,11 @@ const uniformProcesses = [
   },
   {
     title: "Tie-break de retour vers le bord",
-    system: "Infernal",
+    system: "Pieces du diable",
     lawUse: "Uniforme discrete sur les sorties equivalentes",
     variable: L`R_{edge} \sim \mathcal{U}_d(A_{eq})`,
     phenomenon:
-      "Departage plusieurs trajectoires de repli equivalentes quand l'unite infernale veut revenir vers un bord.",
+      "Departage plusieurs trajectoires de repli equivalentes quand la piece du diable veut revenir vers un bord.",
     parameters: ["support = directions a meme cout de chemin"],
     why:
       "Les options de meme cout ne doivent pas etre ordonnees arbitrairement par l'ordre de parcours du code.",
@@ -325,12 +325,12 @@ const categoricalProcesses = [
       "Si le mode de rattrapage est actif, **le tirage suivant n'apparait que lorsque les deux royaumes ont deja pris la recompense courante**; l'etat `currentRewardGeneration` lie donc directement les ouvertures de coffres des deux camps."
   },
   {
-    title: "Direction du front meteo",
+    title: "Direction du brouillard",
     system: "Meteo",
     lawUse: "Categorielle ponderee sur huit directions",
     variable: L`D \in \{N,S,E,W,NE,NW,SE,SW\}`,
     phenomenon:
-      "Choisit la direction cardinale ou diagonale du prochain front.",
+      "Choisit la direction cardinale ou diagonale du prochain brouillard.",
     parameters: ["les huit poids valent actuellement 1.`"],
     why:
       "Le systeme est ecrit de facon generique pour pouvoir biaiser certaines directions plus tard, mais la configuration active realise une equiprobabilite via une categorielle a poids egaux.",
@@ -339,15 +339,15 @@ const categoricalProcesses = [
     parameterChoice:
       "Les huit poids unitaires font de cette categorielle une uniforme deguisement, tout en gardant un point d'extension clair.",
     dependence:
-      "La direction pilote ensuite le bord d'entree, la trajectoire et les rayons du front."
+      "La direction pilote ensuite le bord d'entree, la trajectoire et les rayons du brouillard."
   },
   {
-    title: "Type de cible primaire infernale",
-    system: "Infernal",
+    title: "Type de cible primaire d'une piece du diable",
+    system: "Pieces du diable",
     lawUse: "Categorielle ponderee sur les types de pieces visibles",
     variable: L`T \in \{\text{pawn},\text{knight},\text{bishop},\text{rook},\text{queen}\}`,
     phenomenon:
-      "Choisit quel type de piece ennemie l'entite infernale va chercher en priorite.",
+      "Choisit quel type de piece ennemie la piece du diable va chercher en priorite.",
     parameters: [
       "poids actifs: pawn 8, knight 14, bishop 14, rook 26, queen 38",
       "les types absents du champ visible recoivent le poids 0"
@@ -362,8 +362,8 @@ const categoricalProcesses = [
       "Depend de la visibilite courante et des types reellement presents chez le royaume cible."
   },
   {
-    title: "Option de spawn ciblee infernale",
-    system: "Infernal",
+    title: "Option d'apparition ciblee d'une piece du diable",
+    system: "Pieces du diable",
     lawUse: "Categorielle ponderee par proximite de chemin",
     variable: L`O \in \{o_1,\dots,o_m\}`,
     phenomenon:
@@ -382,8 +382,8 @@ const categoricalProcesses = [
       "Conditionne par le type de piece infernale manifestee et par le graphe de deplacements accessible."
   },
   {
-    title: "Type de remplacement infernal",
-    system: "Infernal",
+    title: "Type de remplacement d'une piece du diable",
+    system: "Pieces du diable",
     lawUse: "Categorielle ponderee avec bonus de persistance",
     variable: L`T' \in \{\text{pawn},\text{knight},\text{bishop},\text{rook},\text{queen}\}`,
     phenomenon:
@@ -402,8 +402,8 @@ const categoricalProcesses = [
       "Depend du type precedemment poursuivi et des types encore visibles."
   },
   {
-    title: "Cible de remplacement infernale",
-    system: "Infernal",
+    title: "Cible de remplacement d'une piece du diable",
+    system: "Pieces du diable",
     lawUse: "Categorielle ponderee parmi les cibles atteignables du type retenu",
     variable: L`Y \in \{y_1,\dots,y_r\}`,
     phenomenon:
@@ -417,7 +417,7 @@ const categoricalProcesses = [
     simulation:
       "Le code reconstruit `reachableTargets` et `reachableWeights`, puis echantillonne une cible par `std::discrete_distribution`.",
     parameterChoice:
-      "Le meme schema de poids que pour les options de spawn maintient une logique unique de proximite infernale.",
+      "Le meme schema de poids que pour les options d'apparition maintient une logique unique de proximite pour les pieces du diable.",
     dependence:
       "Fortement couple a l'etat du plateau, au type retenu juste avant et au masque de visibilite meteo."
   }
@@ -425,12 +425,12 @@ const categoricalProcesses = [
 
 const bernoulliProcesses = [
   {
-    title: "Royaume cible de l'infernal",
-    system: "Infernal",
+    title: "Royaume cible d'une piece du diable",
+    system: "Pieces du diable",
     lawUse: "Bernoulli a probabilite d'etat",
     variable: L`K \sim \mathrm{Bernoulli}(p_t)`,
     phenomenon:
-      "Choisit si l'entite infernale cible le royaume blanc ou noir quand les deux sont eligibles.",
+      "Choisit si la piece du diable cible le royaume blanc ou noir quand les deux sont eligibles.",
     parameters: [
       L`p_t = \frac{\mathrm{debt}_{white}}{\mathrm{debt}_{white}+\mathrm{debt}_{black}}`,
       L`p_t = 0.5 \text{ si la dette totale vaut } 0`
@@ -446,11 +446,11 @@ const bernoulliProcesses = [
   },
   {
     title: "Activation d'un mouvement aleatoire en phase Searching",
-    system: "Infernal",
+    system: "Pieces du diable",
     lawUse: "Bernoulli simple",
     variable: L`B \sim \mathrm{Bernoulli}(0.333)`,
     phenomenon:
-      "Decide si, lors d'un tour de **phase de recherche** (`Searching`), l'entite infernale tente effectivement un mouvement purement aleatoire plutot qu'un deplacement entierement pilote par ses heuristiques.",
+      "Decide si, lors d'un tour de **phase de recherche** (`Searching`), la piece du diable tente effectivement un mouvement purement aleatoire plutot qu'un deplacement entierement pilote par ses heuristiques.",
     parameters: ["probabilite de 33,3 % (`searching_random_move_chance_times_1000 = 333`)"],
     why:
       "Il s'agit d'un interrupteur oui/non sur une branche comportementale unique; la Bernoulli est la loi minimale adequate.",
@@ -465,12 +465,12 @@ const bernoulliProcesses = [
 
 const poissonProcesses = [
   {
-    title: "Gate de spawn infernal",
-    system: "Infernal",
+    title: "Declenchement d'apparition d'une piece du diable",
+    system: "Pieces du diable",
     lawUse: "Poisson observee via l'evenement {N >= 1}",
     variable: L`N \sim \mathrm{Poisson}(\lambda_t)`,
     phenomenon:
-      "Determine si un nouvel evenement infernal se declenche a ce tour.",
+      "Determine si une nouvelle apparition d'une piece du diable se declenche a ce tour.",
     parameters: [
       L`\lambda_t = \min(0.25, 0.02 + 0.012\,\mathrm{debt}_t)`,
       "`poisson_lambda_base_times_1000 = 20`",
@@ -482,7 +482,7 @@ const poissonProcesses = [
     simulation:
       "Le runtime echantillonne `std::poisson_distribution<int>(lambda)` puis declenche le spawn si le resultat est au moins 1.",
     parameterChoice:
-      "Le cap a 0.25 borne `P(N \\ge 1) = 1 - e^{-\\lambda}` en dessous de 0.221, donc l'infernal reste menaçant sans saturer la partie.",
+      "Le cap a 0.25 borne `P(N \\ge 1) = 1 - e^{-\\lambda}` en dessous de 0.221, donc les pieces du diable restent menaçantes sans saturer la partie.",
     dependence:
       "`\\lambda_t` depend de la dette aggregatee, elle-meme mise a jour a chaque perte ou degat structurel."
   }
@@ -563,12 +563,12 @@ const weibullProcesses = [
 
 const gammaProcesses = [
   {
-    title: "Delai entre deux fronts meteo",
+    title: "Delai entre deux brouillards",
     system: "Meteo",
     lawUse: "Gamma discretisee par plafond",
     variable: L`D = m + \lceil T \rceil,\quad T \sim \Gamma(k,\theta)`,
     phenomenon:
-      "Fixe le nombre de tours avant le prochain essai de spawn d'un front.",
+      "Fixe le nombre de tours avant le prochain essai d'apparition d'un brouillard.",
     parameters: [
       "config active: `k = 4.00`, `theta = 10.00`, minimum `m = 0`",
       "par heritage code, la version par defaut etait `k = 3.20`, `theta = 2.40`"
@@ -578,17 +578,17 @@ const gammaProcesses = [
     simulation:
       "`scheduleNextSpawn` appelle `sampleGammaTurns`, qui echantillonne `std::gamma_distribution`, prend le plafond puis convertit en pas de temps.",
     parameterChoice:
-      "Le passage par la config permet de rallonger ou compresser tres simplement la cadence globale des fronts sans toucher au code.",
+      "Le passage par la config permet de rallonger ou compresser tres simplement la cadence globale des brouillards sans toucher au code.",
     dependence:
-      "La tentative de spawn suivante reste aussi soumise au drapeau `block_spawn_while_front_active`."
+      "La tentative suivante reste aussi bloquee tant qu'un brouillard actif occupe deja la carte."
   },
   {
-    title: "Duree visible d'un front",
+    title: "Duree visible d'un brouillard",
     system: "Meteo",
     lawUse: "Gamma discretisee par plafond",
     variable: L`V = \max(1, \lceil T \rceil),\quad T \sim \Gamma(k,\theta)`,
     phenomenon:
-      "Fixe le nombre de tours pendant lesquels le front doit rester sensiblement visible avant de quitter la carte.",
+      "Fixe le nombre de tours pendant lesquels le brouillard doit rester sensiblement visible avant de quitter la carte.",
     parameters: [
       "`k = 2.60` via `duration_gamma_shape_times_100 = 260`",
       "`theta = 1.80` via `duration_gamma_scale_times_100 = 180`",
@@ -597,9 +597,9 @@ const gammaProcesses = [
     why:
       "Une duree positive et asymetrique est mieux modelee par une Gamma que par une loi symetrique, surtout pour eviter des vies negatives ou quasi nulles.",
     simulation:
-      "Le runtime tire `visibleTurnCount`, convertit en nombre de pas, puis adapte le trajet et l'elongation du front pour respecter cette cible temporelle.",
+      "Le runtime tire `visibleTurnCount`, convertit en nombre de pas, puis adapte le trajet et l'elongation du brouillard pour respecter cette cible temporelle.",
     parameterChoice:
-      "La moyenne continue `k\theta = 4.68` tours donne des fronts visibles mais pas permanents.",
+      "La moyenne continue `k\theta = 4.68` tours donne des brouillards visibles mais pas permanents.",
     dependence:
       "La duree interagit ensuite avec la vitesse, l'aire preservee et la geometre du plateau."
   }
@@ -607,12 +607,12 @@ const gammaProcesses = [
 
 const logNormalProcesses = [
   {
-    title: "Densite locale d'un front",
+    title: "Densite locale d'un brouillard",
     system: "Meteo",
     lawUse: "Log-normale cellule par cellule, puis clamp d'alpha",
     variable: L`X(c) \sim \mathrm{LogNormal}(\mu,\sigma^2)`,
     phenomenon:
-      "Multiplie l'opacite locale du front pour obtenir des zones plus ou moins opaques a l'interieur d'une meme masse nuageuse.",
+      "Multiplie l'opacite locale du brouillard pour obtenir des zones plus ou moins opaques a l'interieur d'une meme masse nuageuse.",
     parameters: [
       "`mu = -0.12` via `density_mu_times_100 = -12`",
       "`sigma = 0.35` via `density_sigma_times_100 = 35`",
@@ -625,7 +625,7 @@ const logNormalProcesses = [
     parameterChoice:
       "La moyenne geometrique legerement sous 1 et un sigma modere donnent surtout des variations fines, ensuite bornees par l'alpha min/max.",
     dependence:
-      "Toutes les cellules d'un meme front partagent la meme graine de densite; le champ n'est donc pas i.i.d. (**independant et identiquement distribué**) a l'echelle du front."
+      "Toutes les cellules d'un meme brouillard partagent la meme graine de densite; le champ n'est donc pas i.i.d. (**independant et identiquement distribué**) a l'echelle du brouillard."
   }
 ];
 
@@ -656,12 +656,12 @@ const betaProcesses = [
 
 const piecewiseLinearProcesses = [
   {
-    title: "Position d'entree le long du bord d'un front",
+    title: "Position d'entree le long du bord d'un brouillard",
     system: "Meteo",
     lawUse: "Piecewise linear sur la coordonnee de bord",
     variable: L`X \in [0,M]`,
     phenomenon:
-      "Choisit la position continue du centre du front le long du bord d'entree.",
+      "Choisit la position continue du centre du brouillard le long du bord d'entree.",
     parameters: [
       L`\text{noeuds } (0, \tfrac14 M, \tfrac12 M, \tfrac34 M, M)`,
       "poids `(0.7, 1.8, 1.98, 1.8, 0.7)` dans la config active",
@@ -672,55 +672,55 @@ const piecewiseLinearProcesses = [
     simulation:
       "`sampleEdgePosition` construit les bornes et les hauteurs puis utilise `std::piecewise_linear_distribution<double>`.",
     parameterChoice:
-      "Le centre est volontairement surpondere par rapport aux quarts et aux coins pour produire des fronts plus lisibles visuellement.",
+      "Le centre est volontairement surpondere par rapport aux quarts et aux coins pour produire des brouillards plus lisibles visuellement.",
     dependence:
-      "Depend ensuite du bord retenu et de la direction du front pour se convertir en coordonnees 2D."
+      "Depend ensuite du bord retenu et de la direction du brouillard pour se convertir en coordonnees 2D."
   }
 ];
 
 const proceduralProcesses = [
   {
-    title: "Champ spatial Dirt",
+    title: "Champ spatial de la terre",
     system: "Carte",
-    lawUse: "Champ procedurale correle derive de bruit value/fBm",
-    variable: L`X_{dirt}(c) = g_{S_{dirt}}(c)`,
+    lawUse: "Champ procedural correle derive de bruit value/fBm",
+    variable: L`X_{terre}(c) = g_{S_{terre}}(c)`,
     phenomenon:
-      "Produit des regions de dirt connexes plutot que des cellules i.i.d. independantes.",
+      "Produit des zones de terre connexes plutot que des cellules i.i.d. independantes.",
     parameters: [
       "`terrain_noise_scale = 14`",
       "`terrain_octaves = 3`",
-      "couverture cible dirt = 14 %",
-      "post-traitement par composantes et blobs: 6 blobs, rayon 2 a 5"
+      "couverture cible terre = 14 %",
+      "post-traitement par composantes et amas: 6 amas, rayon 2 a 5"
     ],
     why:
       "Une loi usuelle scalaire ne suffit pas ici: il faut un champ spatial correle pour faire emerger des taches organiques.",
     simulation:
-      "Le generateur evalue `valueNoise` puis `fractalNoise`, applique des seuils, conserve les composantes coherentes et ajoute des blobs locaux de dirt.",
+      "Le generateur evalue `valueNoise` puis `fractalNoise`, applique des seuils, conserve les composantes coherentes et ajoute des amas locaux de terre.",
     parameterChoice:
       "Les trois octaves donnent deja un relief suffisant sans rendre le calcul couteux sur tout le plateau.",
     dependence:
       "Forte correlation spatiale: des cellules voisines partagent la meme graine et des frequences proches."
   },
   {
-    title: "Champ spatial Water",
+    title: "Champ spatial de l'eau",
     system: "Carte",
-    lawUse: "Champ procedurale correle derive de bruit value/fBm",
-    variable: L`X_{water}(c) = h_{S_{water}}(c)`,
+    lawUse: "Champ procedural correle derive de bruit value/fBm",
+    variable: L`X_{eau}(c) = h_{S_{eau}}(c)`,
     phenomenon:
       "Construit les poches d'eau et les petits lacs sans casser la jouabilite du plateau.",
     parameters: [
-      "couverture cible water = 4 %",
+      "couverture cible eau = 4 %",
       "post-traitement par 3 lacs de rayon 2 a 3",
-      "meme echelle et meme nombre d'octaves que le dirt"
+      "meme echelle et meme nombre d'octaves que la terre"
     ],
     why:
-      "Comme pour le dirt, on veut des zones spatialement coherentes, pas une Bernoulli par cellule qui gribouillerait le plateau.",
+      "Comme pour la terre, on veut des zones spatialement coherentes, pas une Bernoulli par cellule qui gribouillerait le plateau.",
     simulation:
       "Le pipeline rederive un score de bruit, applique un seuil propre a l'eau, filtre par composantes puis injecte quelques lacs complementaires.",
     parameterChoice:
       "La faible couverture 4 % evite de couper brutalement les couloirs de circulation du jeu.",
     dependence:
-      "Correlation spatiale importante et dependance indirecte au champ dirt via les contraintes d'assemblage du plateau final."
+      "Correlation spatiale importante et dependance indirecte au champ de la terre via les contraintes d'assemblage du plateau final."
   },
   {
     title: "Masque de flip des textures de terrain",
@@ -740,25 +740,25 @@ const proceduralProcesses = [
       "Determinisme strict par cellule; dependence quasi nulle a longue distance mais pas modelisee comme une loi scalaire autonome."
   },
   {
-    title: "Bruit de contour du front meteo",
+    title: "Bruit de contour du brouillard",
     system: "Meteo",
     lawUse: "Champ procedurale de bord via value noise",
     variable: L`B(c) = 1 + (U(c)-0.5)\,a`,
     phenomenon:
-      "Deforme la frontiere theorique ellipse du front pour obtenir un contour nuageux irregulier.",
+      "Deforme la frontiere theorique du brouillard pour obtenir un contour nuageux irregulier.",
     parameters: [
       "`shape_noise_cell_span = 6`",
       "`shape_noise_amplitude_percent = 100`, donc `a = 1`",
       "`edge_softness_percent = 18`"
     ],
     why:
-      "Un front sans bruit aurait une silhouette trop analytique. Ici encore, il faut une fonction spatiale correlee plutot qu'une suite i.i.d. de variables.",
+      "Un brouillard sans bruit aurait une silhouette trop analytique. Ici encore, il faut une fonction spatiale correlee plutot qu'une suite i.i.d. de variables.",
     simulation:
-      "Le code evalue `valueNoise(shapeSeed, x, y, span)`, deforme la limite effective du front, puis applique un fondu par `edgeSoftness`.",
+      "Le code evalue `valueNoise(shapeSeed, x, y, span)`, deforme la limite effective du brouillard, puis applique un fondu par `edgeSoftness`.",
     parameterChoice:
       "Une amplitude de 100 % autorise des bosses visibles, ensuite lisses par la grande echelle `span = 6` et le fondu de bord.",
     dependence:
-      "Toutes les cellules du meme front partagent la meme graine de forme, donc la correlation spatiale est intentionnellement forte."
+      "Toutes les cellules du meme brouillard partagent la meme graine de forme, donc la correlation spatiale est intentionnellement forte."
   }
 ];
 
@@ -814,7 +814,7 @@ export const randomnessReport = {
         vignetteId: "production",
         paragraphs: [
           "Les **points de construction** servent notamment a poser ou reparer des structures. Les casernes permettent ensuite de produire de nouvelles pieces au lieu de se contenter de l'armee de depart.",
-          "La partie devient donc un jeu de developpement en plus d'un jeu tactique. Vous pouvez consolider votre base, ouvrir un nouveau front ou preparer une piece supplementaire pour les tours suivants."
+          "La partie devient donc un jeu de developpement en plus d'un jeu tactique. Vous pouvez consolider votre base, ouvrir un nouvel axe d'attaque ou preparer une piece supplementaire pour les tours suivants."
         ]
       },
       {
@@ -842,11 +842,11 @@ export const randomnessReport = {
         ]
       },
       {
-        title: "9. L'infernal ajoute une menace autonome en plus des deux royaumes",
+        title: "9. Les pieces du diable ajoutent une menace autonome en plus des deux royaumes",
         vignetteId: "infernal",
         paragraphs: [
           "Le jeu suit une **dette de sang** pour chaque royaume, c'est-a-dire un **compteur de menace** qui monte quand les captures et les degats s'accumulent, puis redescend progressivement avec le temps.",
-          "**Dans l'exemple, une tour infernale apparait sur le bord droit, capture d'abord le fou blanc le plus proche, puis le pion blanc.** Plus la dette totale monte, plus une unite infernale a de chances d'apparaitre au bord de la carte. Cette piece autonome cible un royaume, se deplace seule et ajoute une pression supplementaire qu'aucun des deux joueurs ne controle directement."
+          "**Dans l'exemple, une piece du diable de type tour apparait sur le bord droit, capture d'abord le fou blanc le plus proche, puis le pion blanc.** Plus la dette totale monte, plus une piece du diable a de chances d'apparaitre au bord de la carte. Cette piece autonome cible un royaume, se deplace seule et ajoute une pression supplementaire qu'aucun des deux joueurs ne controle directement."
         ]
       }
     ]
@@ -896,7 +896,7 @@ export const randomnessReport = {
     {
       value: "5",
       label: "sous-systemes jouables",
-      detail: "carte, XP, coffres, meteo, infernal"
+      detail: "carte, XP, coffres, meteo, pieces du diable"
     },
     {
       value: "worldSeed",
@@ -925,7 +925,7 @@ export const randomnessReport = {
       }
     ],
     highlights: [
-      "Les systemes XP, Coffres, Meteo et Infernal possedent chacun leur compteur RNG serialize; le determinisme persiste donc apres sauvegarde/rechargement.",
+      "Les systemes XP, Coffres, Meteo et Pieces du diable possedent chacun leur compteur RNG serialize; le determinisme persiste donc apres sauvegarde/rechargement.",
       "Les seeds auxiliaires de meteo et de generation de carte sont elles-memes des variables aleatoires uniformes a grand support, mais elles servent ensuite a piloter des champs non i.i.d.",
       "Le rapport distingue toujours la loi theorique continue de la loi runtime reellement observee quand un arrondi, un `ceil` ou un `clamp` est applique."
     ]
@@ -937,8 +937,8 @@ export const randomnessReport = {
         "La sauvegarde ne memorise pas seulement le resultat final; elle memorise aussi l'etat probabiliste necessaire pour rejouer la suite de la partie sans derive de seed.",
       bullets: [
         "`worldSeed` fixe le monde de reference.",
-        "`rngCounter` de XP, Coffres, Meteo et Infernal est serialize par systeme.",
-        "Les etats derivees comme `rewardRngCounter`, `currentRewardGeneration` et les descriptors de front conservent la continuite des lois conditionnelles."
+        "`rngCounter` de XP, Coffres, Meteo et Pieces du diable est serialize par systeme.",
+        "Les etats derives comme `rewardRngCounter`, `currentRewardGeneration` et les descripteurs de brouillard conservent la continuite des lois conditionnelles."
       ]
     },
     {
@@ -949,7 +949,7 @@ export const randomnessReport = {
         "Histogrammes d'XP par source et comparaison a la normale tronquee annoncee.",
         "Retards de reapparition des coffres et repartition des recompenses par regime early/late.",
         "Inter-arrivees meteo, durees visibles, couverture, aspect ratio et opacites locales.",
-        "Dette infernale, intensite de spawn induite et types de cibles effectivement selectionnes."
+        "Dette de sang, intensite d'apparition induite et types de cibles effectivement selectionnes."
       ]
     },
     {
@@ -1025,7 +1025,7 @@ export const randomnessReport = {
       title: "Categorielle ponderee",
       badge: "7 processus",
       description: [
-        "Des qu'il faut choisir entre plusieurs categories nominales avec des poids relatifs, la bonne famille est la categorielle ponderee. C'est le cheval de bataille des coffres, de la meteo et surtout de la logique infernale.",
+        "Des qu'il faut choisir entre plusieurs categories nominales avec des poids relatifs, la bonne famille est la categorielle ponderee. C'est le cheval de bataille des coffres, de la meteo et surtout de la logique des pieces du diable.",
         "Mathematiquement, l'esperance n'est pas definie tant qu'on n'a pas choisi une fonction de score `g` sur les categories; on donne donc les moments de `g(X)` plutot que ceux de `X` lui-meme."
       ],
       formulaCards: [
@@ -1063,7 +1063,7 @@ export const randomnessReport = {
         }
       ],
       notes: [
-        "La probabilite `p` peut etre statique, comme 0.333, ou dependre dynamiquement de l'etat du jeu comme la dette infernale.",
+        "La probabilite `p` peut etre statique, comme 0.333, ou dependre dynamiquement de l'etat du jeu comme la dette de sang.",
         "Une Bernoulli sur un support binaire reste la loi la plus lisible pour decrire ces branchements meme quand l'implementation passe par un entier uniforme."
       ],
       processes: bernoulliProcesses
@@ -1073,7 +1073,7 @@ export const randomnessReport = {
       title: "Poisson et gate d'arrivee",
       badge: "1 processus",
       description: [
-        "L'infernal ne repose pas sur une simple probabilite fixe de spawn, mais sur un comptage d'arrivees potentielles modele par une Poisson. Le gameplay observe seulement l'evenement `N >= 1`, mais la variable latente est bien un nombre entier de tentatives.",
+        "Les pieces du diable ne reposent pas sur une simple probabilite fixe d'apparition, mais sur un comptage d'arrivees potentielles modele par une Poisson. Le gameplay observe seulement l'evenement `N >= 1`, mais la variable latente est bien un nombre entier de tentatives.",
         "Ce choix donne une interpretation propre de l'intensite comme dette de sang convertie en frequence moyenne d'arrivees."
       ],
       formulaCards: [
@@ -1092,7 +1092,7 @@ export const randomnessReport = {
       ],
       notes: [
         "Dans le gameplay courant, seule la classe d'evenement `0` contre `>= 1` est exploitée, mais raisonner sur `N` reste plus juste que d'ecrire directement une Bernoulli arbitraire.",
-        "La dette infernale agit ici comme un parametre d'intensite, pas comme un poids categoriel."
+        "La dette de sang agit ici comme un parametre d'intensite, pas comme un poids categoriel."
       ],
       processes: poissonProcesses
     },
@@ -1187,7 +1187,7 @@ export const randomnessReport = {
       title: "Log-normale",
       badge: "1 processus",
       description: [
-        "La log-normale apparait dans la texture d'opacite des fronts meteo. Le choix est mathematiquement naturel des qu'on veut des multiplicateurs strictement positifs, susceptibles d'etre parfois un peu plus grands que 1 sans jamais devenir negatifs.",
+        "La log-normale apparait dans la texture d'opacite des brouillards. Le choix est mathematiquement naturel des qu'on veut des multiplicateurs strictement positifs, susceptibles d'etre parfois un peu plus grands que 1 sans jamais devenir negatifs.",
         "Le runtime rederive la graine par cellule a partir de `densitySeed`, puis re-borne le resultat via des `alphaMin` et `alphaMax`."
       ],
       formulaCards: [
@@ -1237,7 +1237,7 @@ export const randomnessReport = {
       title: "Piecewise linear",
       badge: "1 processus",
       description: [
-        "La position d'entree d'un front le long du bord n'est ni uniforme, ni gaussienne. Elle suit une densite dessinee a la main par morceaux lineaires afin de surponderer les entrees centrales tout en gardant des coins possibles.",
+        "La position d'entree d'un brouillard le long du bord n'est ni uniforme, ni gaussienne. Elle suit une densite dessinee a la main par morceaux lineaires afin de surponderer les entrees centrales tout en gardant des coins possibles.",
         "C'est un bon exemple de loi standard de la bibliotheque C++ qui n'est pas toujours mobilisee dans les rapports probabilistes classiques, mais qui reste parfaitement legitime ici."
       ],
       formulaCards: [
@@ -1260,7 +1260,7 @@ export const randomnessReport = {
       title: "Variables personnalisees et champs proceduraux correles",
       badge: "4 processus",
       description: [
-        "Tous les processus aleatoires du jeu ne sont pas raisonnablement resumables par une unique variable scalaire. Les champs de terrain et les deformations de contour meteo sont des fonctions aleatoires de la cellule et d'une seed, avec forte correlation spatiale.",
+        "Tous les processus aleatoires du jeu ne sont pas raisonnablement resumables par une unique variable scalaire. Les champs de terrain et les deformations de contour du brouillard sont des fonctions aleatoires de la cellule et d'une seed, avec forte correlation spatiale.",
         "Les traiter comme des Bernoulli i.i.d. (**independantes et identiquement distribuees**), serait mathematiquement faux et gameplay-ment trompeur: on perdrait exactement la structure de regions, de bords et de textures que le code cherche a produire."
       ],
       formulaCards: [
@@ -1288,8 +1288,8 @@ export const randomnessReport = {
     "Le coeur du determinisme est `worldSeed + rngCounter`; cela cree une dependance structurelle commune a tous les tirages d'un meme systeme, tout en rendant la suite parfaitement replayable apres sauvegarde.",
     "Les lois conditionnelles dominent le gameplay reel: une uniforme ou une categorielle n'est presque jamais tiree sur un support absolu, mais sur un support deja filtre par la geometrie, la visibilite, l'occupation ou l'historique des choix precedents.",
     "Le mode de rattrapage des coffres (`current_loot_catch_up_enabled`) signifie que **les deux royaumes partagent temporairement une meme recompense courante**; **le tirage suivant n'apparait que lorsque les deux l'ont deja collectee**. Les recompenses de coffre ne sont donc **pas independantes** entre royaumes quand ce mode est actif.",
-    "Les fronts meteo portent deux graines internes, l'une pour la forme et l'autre pour la densite, qui induisent de fortes correlations spatiales intra-front, puis une dependance temporelle via la duree gamma et le prochain delai d'apparition.",
-    "L'infernal n'est pas un systeme a parametres fixes: sa Bernoulli de royaume cible et sa Poisson de spawn dependent directement d'un etat dynamique, la dette de sang."
+    "Les brouillards portent deux graines internes, l'une pour la forme et l'autre pour la densite, qui induisent de fortes correlations spatiales intra-brouillard, puis une dependance temporelle via la duree gamma et le prochain delai d'apparition.",
+    "Les pieces du diable ne reposent pas sur un systeme a parametres fixes: leur Bernoulli de royaume cible et leur Poisson d'apparition dependent directement d'un etat dynamique, la dette de sang."
   ],
   difficulties: [
     {
@@ -1305,16 +1305,16 @@ export const randomnessReport = {
     {
       title: "Champs spatiaux non i.i.d.",
       text:
-        "`i.i.d.` (**independantes et identiquement distribuees**) : chaque cellule serait tiree separement, avec la meme loi partout, sans influencer ses voisines. Ce n'est pas ce que fait le jeu pour le dirt, l'eau ou les contours meteo: des cellules proches se ressemblent justement parce qu'elles sont produites par une meme structure de bruit et un meme post-traitement spatial. **Exemple concret:** un lac doit former une masse continue qui bloque un couloir; si chaque cellule etait tiree i.i.d., on obtiendrait surtout une poussiere de cases isolees, pas un obstacle coherent."
+        "`i.i.d.` (**independantes et identiquement distribuees**) : chaque cellule serait tiree separement, avec la meme loi partout, sans influencer ses voisines. Ce n'est pas ce que fait le jeu pour la terre, l'eau ou les contours du brouillard: des cellules proches se ressemblent justement parce qu'elles sont produites par une meme structure de bruit et un meme post-traitement spatial. **Exemple concret:** un lac doit former une masse continue qui bloque un couloir; si chaque cellule etait tiree i.i.d., on obtiendrait surtout une poussiere de cases isolees, pas un obstacle coherent."
     },
     {
       title: "Non-stationnarite de gameplay",
       text:
-        "Plusieurs parametres changent avec l'etat: regime early/late des coffres, dette infernale, visibilite des cibles, ensemble des coups admissibles. La loi d'un meme processus n'est donc pas stationnaire sur toute la partie."
+        "Plusieurs parametres changent avec l'etat: regime early/late des coffres, dette de sang, visibilite des cibles, ensemble des coups admissibles. La loi d'un meme processus n'est donc pas stationnaire sur toute la partie."
     }
   ],
   perspectives: [
-    "La premiere perspective est de **mieux ajuster les parametres des mecanismes aleatoires** a partir d'un volume de parties plus important. Je n'ai pas encore assez de recul statistique pour equilibrer proprement ces variables: par exemple, les apparitions infernales produisent encore trop souvent des pions, alors que cette piece est lente et peu impactante, et la loi normale des recompenses d'or des coffres reste trop resserree autour de sa moyenne, ce qui rend les variations peu perceptibles pour le joueur.",
+    "La premiere perspective est de **mieux ajuster les parametres des mecanismes aleatoires** a partir d'un volume de parties plus important. Je n'ai pas encore assez de recul statistique pour equilibrer proprement ces variables: par exemple, les apparitions des pieces du diable produisent encore trop souvent des pions, alors que cette piece est lente et peu impactante, et la loi normale des recompenses d'or des coffres reste trop resserree autour de sa moyenne, ce qui rend les variations peu perceptibles pour le joueur.",
     "Une deuxieme perspective est donc d'**accumuler beaucoup plus de donnees de partie** afin d'ameliorer l'equilibrage general du jeu. L'objectif n'est pas seulement de decrire les lois utilisees, mais de disposer d'assez d'observations pour corriger les desequilibres reels, ajuster les amplitudes utiles et verifier que les evenements aleatoires enrichissent effectivement la partie au lieu d'aplatir ses situations.",
     "Enfin, un chantier important sera de developper une **intelligence artificielle symbolique** capable d'agir a partir de regles deterministes tout en **anticipant des evenements aleatoires probables**. Explorer cette articulation entre raisonnement symbolique et incertitude serait utile a la fois pour mieux jouer, pour mieux tester le jeu et pour mieux exploiter toutes les statistiques produites par ce travail."
   ]

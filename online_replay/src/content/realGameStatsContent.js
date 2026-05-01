@@ -71,13 +71,13 @@ async function buildRealGameStatsReport() {
   return {
     observedDataLabel: `Donnees observees sur la partie reelle (${saveName})`,
     processStatsByTitle: {
-      "Royaume cible de l'infernal": infernal.points.length
+      "Royaume cible d'une piece du diable": infernal.points.length
         ? [buildInfernalBlock(infernal)]
         : [],
-      "Duree visible d'un front": weather.points.length
+      "Duree visible d'un brouillard": weather.points.length
         ? [buildWeatherBlock(weather)]
         : [],
-      "Champ spatial Water": waterDenied.points.length
+      "Champ spatial de l'eau": waterDenied.points.length
         ? [buildWaterDeniedByKingdomBlock(waterDenied)]
         : []
     }
@@ -146,9 +146,9 @@ function buildInfernalBlock(infernal) {
 
   return {
     eyebrow: "Partie reelle",
-    title: "Dette, spawns et duree de vie",
+    title: "Dette, apparitions et duree de vie",
     description:
-      "Reprise du graphe gameplay du generateur historique: dettes de sang, marqueurs de spawn/suppression et bandes de duree de vie des pieces infernales sur la partie chargee.",
+      "Reprise du graphe gameplay du generateur historique: dettes de sang, marqueurs d'apparition/suppression et bandes de duree de vie des pieces du diable sur la partie chargee.",
     metrics: [
       { label: "Dette blanche moy.", value: formatStatNumber(infernal.averageWhiteDebt) },
       { label: "Dette noire moy.", value: formatStatNumber(infernal.averageBlackDebt) },
@@ -159,19 +159,19 @@ function buildInfernalBlock(infernal) {
       }
     ],
     insights: [
-      `${formatInteger(infernal.spawnEvents.length)} spawns et ${formatInteger(infernal.unitRows.filter((row) => row.removedTurn !== null).length)} suppressions observees sur la partie reelle.`,
+      `${formatInteger(infernal.spawnEvents.length)} apparitions et ${formatInteger(infernal.unitRows.filter((row) => row.removedTurn !== null).length)} suppressions observees sur la partie reelle.`,
       targetCounts.white || targetCounts.black
         ? `Ciblages observes: ${formatInteger(targetCounts.white)} vers le blanc, ${formatInteger(targetCounts.black)} vers le noir${targetCounts.unknown ? `, ${formatInteger(targetCounts.unknown)} non qualifies` : ""}.`
-        : "Le companion ne qualifie pas toujours le royaume cible sur chaque spawn infernal; les dettes restent en revanche exactes."
+        : "Le companion ne qualifie pas toujours le royaume cible sur chaque apparition d'une piece du diable; les dettes restent en revanche exactes."
     ],
     chartHeight: 360,
-    chartLabel: "Dette infernale, spawns et duree de vie sur la partie reelle",
+    chartLabel: "Dette de sang, apparitions et duree de vie sur la partie reelle",
     exampleReplay: {
       sourceTag: "Partie reelle avec joueur",
       sourceKind: "real",
       label: "Exemple tire d'une partie reelle",
       description:
-        "Du tour 74 au tour 136, la camera suit l'unite infernale active. Quand elle disparait, le cadre reste en place jusqu'a l'arrivee de la prochaine unite infernale, puis se recentre immediatement sur la nouvelle menace.",
+        "Du tour 74 au tour 136, la camera suit la piece du diable active. Quand elle disparait, le cadre reste en place jusqu'a l'arrivee de la piece du diable suivante, puis se recentre immediatement sur la nouvelle menace.",
       viewer: {
         replayUrl: REPLAY_CONFIG.replayUrl,
         minTurn: 74,
@@ -225,24 +225,24 @@ function buildInfernalBlock(infernal) {
 function buildWeatherBlock(weather) {
   return {
     eyebrow: "Partie reelle",
-    title: "Visibilite et fronts",
+    title: "Visibilite et brouillards",
     description:
-      "Courbes de visibilite pendant la partie reelle: pieces ennemies masquees par royaume et cellules de brouillard vraiment occultantes, avec marqueurs d'entree et de fin des fronts meteo.",
+      "Courbes de visibilite pendant la partie reelle: pieces ennemies masquees par royaume et cellules de brouillard vraiment occultantes, avec marqueurs d'entree et de fin des brouillards.",
     metrics: [
       { label: "Couverture moyenne", value: formatStatNumber(weather.averageCloudCoverage) },
       {
         label: "Intervalle moyen",
         value: weather.averageSpawnInterval ? `${formatStatNumber(weather.averageSpawnInterval)} tours` : "n/a"
       },
-      { label: "Fronts observes", value: formatInteger(weather.spawnEvents.length) },
+      { label: "Brouillards observes", value: formatInteger(weather.spawnEvents.length) },
       { label: "Pic de pieces masquees", value: formatInteger(weather.peakHiddenPieces) }
     ],
     insights: [
-      `${formatInteger(weather.spawnEvents.length)} spawns et ${formatInteger(weather.endEvents.length)} fins de fronts observes sur la partie reelle.`,
+      `${formatInteger(weather.spawnEvents.length)} apparitions et ${formatInteger(weather.endEvents.length)} fins de brouillards observees sur la partie reelle.`,
       "La courbe `Total pièces ennemies masquées` a ete retiree pour ne garder que les trois signaux utiles: blanc cache, noir cache et cellules de brouillard occultantes."
     ],
     chartHeight: 360,
-    chartLabel: "Visibilite et fronts meteo sur la partie reelle",
+    chartLabel: "Visibilite et brouillards sur la partie reelle",
     exampleReplay: {
       sourceTag: "Partie reelle avec joueur",
       sourceKind: "real",
@@ -1365,7 +1365,7 @@ function buildInfernalTimelineOption(configuration) {
 
     if (whiteTargetSpans.length) {
       option.series.push(buildInfernalSpanOverlaySeries({
-        name: "Pièces infernales ciblant le royaume blanc",
+        name: "Pièces du diable ciblant le royaume blanc",
         legendColor: LEGACY_COLORS.infernalSpanWhite,
         spans: whiteTargetSpans
       }));
@@ -1373,7 +1373,7 @@ function buildInfernalTimelineOption(configuration) {
 
     if (blackTargetSpans.length) {
       option.series.push(buildInfernalSpanOverlaySeries({
-        name: "Pièces infernales ciblant le royaume noir",
+        name: "Pièces du diable ciblant le royaume noir",
         legendColor: LEGACY_COLORS.infernalSpanBlack,
         spans: blackTargetSpans
       }));
@@ -1514,7 +1514,7 @@ function buildInfernalSpanOverlaySeries({ name, legendColor, spans }) {
       span.xEndIndex,
       span.fillColor || LEGACY_COLORS.infernalSpan,
       span.pieceImageUrl || "",
-      span.pieceLabelFr || "Infernal",
+      span.pieceLabelFr || "Piece du diable",
       span.pieceBadgeText || "INF"
     ])),
     renderItem(params, api) {
@@ -1810,7 +1810,7 @@ function lengthOf(value) {
 }
 
 function shortDirectionLabel(front) {
-  const label = keyOrFallback(front && front.directionKey, "front");
+  const label = keyOrFallback(front && front.directionKey, "brouillard");
   return label.slice(0, 3).toUpperCase();
 }
 
@@ -1832,7 +1832,7 @@ function infernalPieceLabelFr(pieceKey) {
     case "queen":
       return "Reine";
     default:
-      return "Infernal";
+      return "Piece du diable";
   }
 }
 
