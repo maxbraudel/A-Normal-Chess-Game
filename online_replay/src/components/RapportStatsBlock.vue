@@ -61,6 +61,12 @@ defineProps({
       :aria-label="reportText(block.chartLabel || block.title)"
     />
 
+    <InlineRichText
+      v-if="block.postChartInterpretation"
+      class="rapport-stats-block__post-chart-interpretation"
+      :text="block.postChartInterpretation"
+    />
+
     <section v-if="block.exampleReplay" class="rapport-stats-example">
       <div
         v-if="block.exampleReplay.label || block.exampleReplay.sourceTag"

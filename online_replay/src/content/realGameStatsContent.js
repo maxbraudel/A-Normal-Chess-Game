@@ -166,10 +166,12 @@ function buildInfernalBlock(infernal) {
     ],
     chartHeight: 360,
     chartLabel: "Dette de sang, apparitions et duree de vie sur la partie reelle",
+    postChartInterpretation:
+      "**Interprétation : on remarque en effet que, de manière générale, la dette de sang pendant la partie a été beaucoup plus élevée côté noir, de manière continue et soutenue. Cela fait qu'au total, même si le processus reste aléatoire, beaucoup plus de pièces du diable ont ciblé le joueur noir plutôt que le joueur blanc. On peut le voir dans l'exemple qui suit.**",
     exampleReplay: {
       sourceTag: "Partie reelle avec joueur",
       sourceKind: "real",
-      label: "Exemple tire d'une partie reelle",
+      label: "Exemple tire de la partie reelle",
       description:
         "Du tour 74 au tour 136, la camera suit la piece du diable active. Quand elle disparait, le cadre reste en place jusqu'a l'arrivee de la piece du diable suivante, puis se recentre immediatement sur la nouvelle menace.",
       viewer: {
@@ -227,7 +229,7 @@ function buildWeatherBlock(weather) {
     eyebrow: "Partie reelle",
     title: "Visibilite et brouillards",
     description:
-      "Courbes de visibilite pendant la partie reelle: pieces ennemies masquees par royaume et cellules de brouillard vraiment occultantes, avec marqueurs d'entree et de fin des brouillards.",
+      "Courbes de visibilite pendant la partie reelle: pieces ennemies masquees par royaume, avec marqueurs d'entree et de fin des brouillards.",
     metrics: [
       { label: "Couverture moyenne", value: formatStatNumber(weather.averageCloudCoverage) },
       {
@@ -238,15 +240,16 @@ function buildWeatherBlock(weather) {
       { label: "Pic de pieces masquees", value: formatInteger(weather.peakHiddenPieces) }
     ],
     insights: [
-      `${formatInteger(weather.spawnEvents.length)} apparitions et ${formatInteger(weather.endEvents.length)} fins de brouillards observees sur la partie reelle.`,
-      "La courbe `Total pièces ennemies masquées` a ete retiree pour ne garder que les trois signaux utiles: blanc cache, noir cache et cellules de brouillard occultantes."
+      `${formatInteger(weather.spawnEvents.length)} apparitions et ${formatInteger(weather.endEvents.length)} fins de brouillards observees sur la partie reelle.`
     ],
     chartHeight: 360,
     chartLabel: "Visibilite et brouillards sur la partie reelle",
+    postChartInterpretation:
+      "**Interprétation : on remarque que vers la fin de la partie, avant l'échec et mat, une grande partie des pièces ennemies, en pratique des pièces noires du point de vue blanc, sont masquées. Cela traduit une embuscade du joueur noir, qui va finalement lui permettre de gagner la partie, comme on peut le voir dans l'exemple qui suit.**",
     exampleReplay: {
       sourceTag: "Partie reelle avec joueur",
       sourceKind: "real",
-      label: "Exemple tire d'une partie reelle",
+      label: "Exemple tire de la partie reelle",
       description:
         "Entre les tours 120 et 133, un nuage imprevisible ouvre un renversement total au centre de la carte: les Noirs prennent les Blancs en embuscade et les deux reines sont eliminees.",
       viewer: {
@@ -265,13 +268,11 @@ function buildWeatherBlock(weather) {
     chartOption: buildTimelineOption({
       xAxisName: "Tour",
       yAxes: [
-        { name: "Pieces masquees" },
-        { name: "Cellules de brouillard", position: "right" }
+        { name: "Pieces masquees" }
       ],
       series: [
         buildTimelineSeriesSpec("Pieces ennemies masquees cote blanc", weather.points, "whiteHiddenPieces", LEGACY_COLORS.whiteKingdom, 0),
-        buildTimelineSeriesSpec("Pieces ennemies masquees cote noir", weather.points, "blackHiddenPieces", LEGACY_COLORS.water, 0),
-        buildTimelineSeriesSpec("Cellules de brouillard occultantes", weather.points, "concealingFogCellCount", LEGACY_COLORS.fog, 1)
+        buildTimelineSeriesSpec("Pieces ennemies masquees cote noir", weather.points, "blackHiddenPieces", LEGACY_COLORS.water, 0)
       ]
     })
   };
@@ -289,15 +290,16 @@ function buildWaterDeniedByKingdomBlock(waterDenied) {
       { label: "Pic total eau", value: formatInteger(waterDenied.peakWaterDeniedCells) }
     ],
     insights: [
-      `Le calcul repart des mouvements pseudo-legaux, comme dans le site \`statistiques-generator\`, au lieu d'utiliser une simple approximation geometrique des lacs. L'ecart moyen blanc/noir est ici de ${formatStatNumber(waterDenied.averageKingdomGap)} cellules refusees par enregistrement.`,
-      "**Sur la premiere partie de cette partie reelle, la courbe noire depasse nettement la courbe blanche: l'eau a beaucoup plus empeche les premiers deplacements du royaume noir que ceux du royaume blanc. Cette contrainte initiale a freine le developpement noir et a contribue a l'avance prise par les Blancs au debut de la partie.**"
+      `Le calcul repart des mouvements pseudo-legaux, comme dans le site \`statistiques-generator\`, au lieu d'utiliser une simple approximation geometrique des lacs. L'ecart moyen blanc/noir est ici de ${formatStatNumber(waterDenied.averageKingdomGap)} cellules refusees par enregistrement.`
     ],
     chartHeight: 330,
     chartLabel: "Cellules refusees par l'eau par royaume sur la partie reelle",
+    postChartInterpretation:
+      "**Interprétation : sur la premiere partie de cette partie reelle, la courbe noire depasse nettement la courbe blanche. L'eau a donc beaucoup plus empeche les premiers deplacements du royaume noir que ceux du royaume blanc. Cette contrainte initiale a freine le developpement noir et a contribue a l'avance prise par les Blancs au debut de la partie.**",
     exampleReplay: {
       sourceTag: "Partie reelle avec joueur",
       sourceKind: "real",
-      label: "Exemple tire d'une partie reelle",
+      label: "Exemple tire de la partie reelle",
       description:
         "Du tour 40 au tour 90, on voit les Noirs devoir contourner plus tot et plus souvent l'eau centrale, pendant que les Blancs prennent plus vite contrôle de l'église : une zone qui permet la promotion de reines.",
       viewer: {
