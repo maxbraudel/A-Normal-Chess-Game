@@ -62,9 +62,21 @@ defineProps({
     />
 
     <section v-if="block.exampleReplay" class="rapport-stats-example">
-      <p v-if="block.exampleReplay.label" class="rapport-stats-example__label">
-        {{ reportText(block.exampleReplay.label) }}
-      </p>
+      <div
+        v-if="block.exampleReplay.label || block.exampleReplay.sourceTag"
+        class="rapport-stats-example__header"
+      >
+        <span
+          v-if="block.exampleReplay.sourceTag"
+          class="rapport-source-tag"
+          :class="block.exampleReplay.sourceKind ? `rapport-source-tag--${block.exampleReplay.sourceKind}` : ''"
+        >
+          {{ reportText(block.exampleReplay.sourceTag) }}
+        </span>
+        <p v-if="block.exampleReplay.label" class="rapport-stats-example__label">
+          {{ reportText(block.exampleReplay.label) }}
+        </p>
+      </div>
       <InlineRichText
         v-if="block.exampleReplay.description"
         class="rapport-stats-example__description"

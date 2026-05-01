@@ -488,12 +488,11 @@ a {
 }
 
 .rapport-intro-vignette .static-board-vignette__viewer {
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .rapport-intro-vignette .status-overlay-group,
 .rapport-intro-vignette .replay-toast-stack,
-.rapport-intro-vignette .zoom-controls,
 .rapport-intro-vignette .timeline-overlay {
   display: none !important;
 }
@@ -765,9 +764,13 @@ a {
 .illustration-map .status-overlay-group,
 .illustration-map .status-overlay,
 .illustration-map .replay-toast-stack,
-.illustration-map .zoom-controls,
 .illustration-map .timeline-overlay {
   display: none !important;
+}
+
+.rapport-intro-vignette .zoom-controls,
+.illustration-map .zoom-controls {
+  pointer-events: auto;
 }
 
 .rapport-process-card__observed {
@@ -912,6 +915,13 @@ a {
   gap: 12px;
 }
 
+.rapport-stats-example__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+}
+
 .rapport-stats-example__label {
   margin: 0;
   color: var(--accent);
@@ -1029,8 +1039,7 @@ a {
 .site-shell--rapport .rapport-page,
 .site-shell--rapport .rapport-page p,
 .site-shell--rapport .rapport-page li,
-.site-shell--rapport .rapport-page a,
-.site-shell--rapport .rapport-page span {
+.site-shell--rapport .rapport-page a {
   font-family: Georgia, "Times New Roman", serif;
 }
 

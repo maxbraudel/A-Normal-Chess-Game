@@ -195,7 +195,7 @@ watch(watchedProps, async () => {
         </div>
       </div>
 
-      <div class="zoom-controls" hidden>
+      <div class="zoom-controls" aria-label="Controles de zoom">
         <button
           type="button"
           class="action-button zoom-action-button"

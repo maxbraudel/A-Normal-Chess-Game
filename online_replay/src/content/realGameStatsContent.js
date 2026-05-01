@@ -166,6 +166,27 @@ function buildInfernalBlock(infernal) {
     ],
     chartHeight: 360,
     chartLabel: "Dette infernale, spawns et duree de vie sur la partie reelle",
+    exampleReplay: {
+      sourceTag: "Partie reelle avec joueur",
+      sourceKind: "real",
+      label: "Exemple tire d'une partie reelle",
+      description:
+        "Du tour 74 au tour 136, la camera suit l'unite infernale active. Quand elle disparait, le cadre reste en place jusqu'a l'arrivee de la prochaine unite infernale, puis se recentre immediatement sur la nouvelle menace.",
+      viewer: {
+        replayUrl: REPLAY_CONFIG.replayUrl,
+        minTurn: 74,
+        maxTurn: 136,
+        initialTurn: 74,
+        autoplayOnMount: true,
+        autoplayIntervalMs: 220,
+        loopPlayback: true,
+        initialZoom: 2.15,
+        trackedTarget: {
+          kind: "active-infernal-unit"
+        },
+        showStatusOverlay: false
+      }
+    },
     chartOption: buildInfernalTimelineOption({
       xAxisName: "Tour",
       yAxes: [
@@ -223,6 +244,8 @@ function buildWeatherBlock(weather) {
     chartHeight: 360,
     chartLabel: "Visibilite et fronts meteo sur la partie reelle",
     exampleReplay: {
+      sourceTag: "Partie reelle avec joueur",
+      sourceKind: "real",
       label: "Exemple tire d'une partie reelle",
       description:
         "Entre les tours 120 et 133, un nuage imprevisible ouvre un renversement total au centre de la carte: les Noirs prennent les Blancs en embuscade et les deux reines sont eliminees.",

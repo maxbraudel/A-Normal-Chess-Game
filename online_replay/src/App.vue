@@ -19,7 +19,7 @@ const navigationItems = [
 
 <template>
   <div class="site-shell" :class="{ 'site-shell--rapport': isReportRoute }">
-    <header class="site-header">
+    <header v-if="!isReportRoute" class="site-header">
       <div class="site-header__inner">
         <RouterLink class="site-brand" to="/">
           <span class="site-brand__eyebrow">ANCG</span>

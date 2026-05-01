@@ -2584,11 +2584,46 @@ function resolveTrackedTargetGridPoint(frame, trackedTarget) {
     return unitPosition ? resolveCellCenterPoint(unitPosition.x, unitPosition.y) : null;
   }
 
+  if (trackedTarget.kind === "active-infernal-unit" || trackedTarget.kind === "infernal-active-unit") {
+    const unit = resolveActiveInfernalTrackedUnit(frame);
+    const unitPosition = unit ? resolvePosition(unit) : null;
+    return unitPosition ? resolveCellCenterPoint(unitPosition.x, unitPosition.y) : null;
+  }
+
   if (trackedTarget.kind === "cloud" || trackedTarget.kind === "front" || trackedTarget.kind === "weather-front") {
     return resolveTrackedWeatherFrontPoint(frame, trackedTarget);
   }
 
   return null;
+}
+
+function resolveActiveInfernalTrackedUnit(frame) {
+  const infernalAnalytics = frame && frame.analytics && frame.analytics.infernal && typeof frame.analytics.infernal === "object"
+    ? frame.analytics.infernal
+    : null;
+  const activeInfernalUnitId = Number(infernalAnalytics && infernalAnalytics.activeInfernalUnitId);
+
+  if (Number.isFinite(activeInfernalUnitId) && activeInfernalUnitId >= 0) {
+    const activeUnit = findById(toArray(frame.autonomousUnits), Math.trunc(activeInfernalUnitId));
+    if (activeUnit) {
+      return activeUnit;
+    }
+  }
+
+  return toArray(frame.autonomousUnits).find(isInfernalAutonomousUnit) || null;
+}
+
+function isInfernalAutonomousUnit(unit) {
+  return Boolean(
+    unit
+    && (
+      (unit.infernal && typeof unit.infernal === "object")
+      || typeof unit.targetKingdomKey === "string"
+      || Number.isFinite(unit.targetKingdom)
+      || Number.isFinite(unit.targetPieceType)
+      || Number.isFinite(unit.pieceType)
+    )
+  );
 }
 
 function resolveTrackedWeatherFrontPoint(frame, trackedTarget) {
