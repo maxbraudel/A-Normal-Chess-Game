@@ -537,7 +537,7 @@ const processStatsByTitle = {
       })
     }
   ],
-  "Délai entre deux brouillards météo": [
+  "Délai entre deux brouillards": [
     {
       title: "Les inter-arrivées météo restent compatibles avec la Gamma paramétrée",
       description:

@@ -75,6 +75,9 @@ async function buildRealGameStatsReport() {
       "Royaume cible d'une pièce du diable": infernal.points.length
         ? [buildInfernalBlock(infernal)]
         : [],
+      "Délai entre deux brouillards": weather.spawnEvents.length
+        ? [buildWeatherArrivalDelayBlock(weather)]
+        : [],
       "Durée visible d'un brouillard": weather.points.length
         ? [buildWeatherBlock(weather)]
         : [],
@@ -306,6 +309,53 @@ function buildWeatherBlock(weather) {
         buildTimelineSeriesSpec("Pièces ennemies masquées côté noir", weather.points, "blackHiddenPieces", LEGACY_COLORS.water, 0)
       ]
     })
+  };
+}
+
+function buildWeatherArrivalDelayBlock(weather) {
+  const peakFrontCount = maxOf(weather.points.map((point) => point.frontCount), 0);
+
+  return {
+    eyebrow: "Partie réelle",
+    title: "La partie réelle confirme une cadence météo fluide",
+    description:
+      "Ce replay complet montre la cadence d'apparition des nuages sur toute la partie réelle, avec une caméra verrouillée qui reste centrée sur le nuage actif et se met à jour à chaque tick.",
+    metrics: [
+      {
+        label: "Intervalle moyen",
+        value: weather.averageSpawnInterval ? `${formatStatNumber(weather.averageSpawnInterval)} tours` : "n/d"
+      },
+      { label: "Apparitions observées", value: formatInteger(weather.spawnEvents.length) },
+      { label: "Pic de nuages actifs", value: formatInteger(peakFrontCount) }
+    ],
+    insights: [
+      peakFrontCount > 1
+        ? `La partie réelle alterne bien des phases sans nuage et des chevauchements ponctuels, avec jusqu'à ${formatInteger(peakFrontCount)} nuages simultanés.`
+        : "La partie réelle alterne des phases avec et sans nuage, sans accumulation excessive de nuages à l'écran."
+    ],
+    exampleReplay: {
+      sourceTag: "Partie réelle avec joueur",
+      sourceKind: "real",
+      label: "Apparition des nuages dans le replay de la partie réelle",
+      description:
+        "On voit sur ce replay que l'apparition des nuages est très naturelle et très fluide. De temps en temps, plusieurs nuages peuvent être présents sur la carte. À d'autres moments, il n'y en a pas, mais on n'observe jamais une saturation de nuages ni une très grande attente entre deux apparitions.",
+      viewer: {
+        replayUrl: REPLAY_CONFIG.replayUrl,
+        minTurn: 0,
+        initialTurn: 0,
+        minTurn: 40,
+        autoplayOnMount: true,
+        autoplayIntervalMs: 100,
+        loopPlayback: true,
+        initialZoom: 1.85,
+        trackedTarget: {
+          kind: "cloud"
+        },
+        updateCameraOnEveryTick: true,
+        lockCamera: true,
+        showStatusOverlay: false
+      }
+    }
   };
 }
 

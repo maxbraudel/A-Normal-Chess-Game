@@ -1036,6 +1036,11 @@ function syncConfiguredCamera(frame) {
     return;
   }
 
+  if (isWeatherTrackedTarget(trackedTargetConfig)) {
+    syncTrackedWeatherCamera(frame, trackedTargetConfig);
+    return;
+  }
+
   const trackedPoint = resolveTrackedTargetGridPoint(frame, trackedTargetConfig);
 
   if (!trackedPoint) {
@@ -1043,6 +1048,206 @@ function syncConfiguredCamera(frame) {
   }
 
   centerCameraOnGridPoint(frame, trackedPoint.x, trackedPoint.y);
+}
+
+function isWeatherTrackedTarget(trackedTarget) {
+  return Boolean(
+    trackedTarget
+    && (
+      trackedTarget.kind === "cloud"
+      || trackedTarget.kind === "front"
+      || trackedTarget.kind === "weather-front"
+    )
+  );
+}
+
+function syncTrackedWeatherCamera(frame, trackedTarget) {
+  const trackingState = resolveTrackedWeatherCameraState(frame, trackedTarget);
+
+  if (!trackingState || !trackingState.center) {
+    resetCameraToFit(frame);
+    return;
+  }
+
+  centerCameraOnGridPoint(frame, trackingState.center.x, trackingState.center.y);
+  state.camera.zoom = trackingState.zoom;
+}
+
+function resolveTrackedWeatherCameraState(frame, trackedTarget) {
+  const fronts = getTrackedWeatherFronts(frame, trackedTarget);
+  const boardCenter = resolveBoardCenterGridPoint(frame);
+
+  if (!fronts.length) {
+    return boardCenter
+      ? {
+          center: boardCenter,
+          zoom: 1
+        }
+      : null;
+  }
+
+  const centers = fronts
+    .map(function (front) {
+      return resolveWeatherFrontCenter(front);
+    })
+    .filter(Boolean);
+
+  if (!centers.length) {
+    return boardCenter
+      ? {
+          center: boardCenter,
+          zoom: 1
+        }
+      : null;
+  }
+
+  const total = centers.reduce(function (accumulator, center) {
+    return {
+      x: accumulator.x + center.x,
+      y: accumulator.y + center.y
+    };
+  }, { x: 0, y: 0 });
+  const focusCenter = {
+    x: total.x / centers.length,
+    y: total.y / centers.length
+  };
+
+  return {
+    center: focusCenter,
+    zoom: resolveTrackedWeatherZoom(frame, fronts, focusCenter)
+  };
+}
+
+function getTrackedWeatherFronts(frame, trackedTarget) {
+  const fronts = getActiveWeatherFronts(frame);
+  if (!fronts.length) {
+    return [];
+  }
+
+  const requestedIndex = typeof trackedTarget.index === "number"
+    ? trackedTarget.index
+    : typeof trackedTarget.id === "number"
+      ? trackedTarget.id
+      : null;
+
+  if (requestedIndex === null) {
+    return fronts;
+  }
+
+  const front = fronts[requestedIndex];
+  return front ? [front] : [];
+}
+
+function resolveTrackedWeatherZoom(frame, fronts, focusCenter) {
+  const canvasInfo = prepareCanvas(refs.replayCanvas);
+  const metrics = getBoardMetrics(frame);
+  const baseScale = Math.min(
+    canvasInfo.width / Math.max(metrics.boardWidth, 1),
+    canvasInfo.height / Math.max(metrics.boardHeight, 1)
+  );
+  const preferredZoom = resolvePreferredTrackedWeatherZoom();
+
+  if (!Number.isFinite(baseScale) || baseScale <= 0 || canvasInfo.width <= 1 || canvasInfo.height <= 1) {
+    return preferredZoom;
+  }
+
+  const bounds = fronts.reduce(function (accumulator, front) {
+    const nextBounds = resolveWeatherFrontBounds(front);
+    if (!nextBounds) {
+      return accumulator;
+    }
+
+    return accumulator
+      ? {
+          minX: Math.min(accumulator.minX, nextBounds.minX),
+          maxX: Math.max(accumulator.maxX, nextBounds.maxX),
+          minY: Math.min(accumulator.minY, nextBounds.minY),
+          maxY: Math.max(accumulator.maxY, nextBounds.maxY)
+        }
+      : nextBounds;
+  }, null);
+
+  if (!bounds) {
+    return preferredZoom;
+  }
+
+  const paddingCells = 2;
+  const halfWidth = Math.max(focusCenter.x - bounds.minX, bounds.maxX - focusCenter.x) + paddingCells;
+  const halfHeight = Math.max(focusCenter.y - bounds.minY, bounds.maxY - focusCenter.y) + paddingCells;
+  const requiredWorldWidth = Math.max(1, halfWidth * 2 * metrics.cellSize);
+  const requiredWorldHeight = Math.max(1, halfHeight * 2 * metrics.cellSize);
+  const fitZoom = Math.min(
+    canvasInfo.width / Math.max(requiredWorldWidth * baseScale, 1),
+    canvasInfo.height / Math.max(requiredWorldHeight * baseScale, 1)
+  );
+
+  return clamp(Math.min(preferredZoom, fitZoom), MIN_CAMERA_ZOOM, MAX_CAMERA_ZOOM);
+}
+
+function resolvePreferredTrackedWeatherZoom() {
+  const configuredInitialZoom = Number(replayConfig.initialZoom);
+  if (!Number.isFinite(configuredInitialZoom)) {
+    return 1;
+  }
+
+  return clamp(configuredInitialZoom, MIN_CAMERA_ZOOM, MAX_CAMERA_ZOOM);
+}
+
+function resolveWeatherFrontBounds(front) {
+  const center = resolveWeatherFrontCenter(front);
+  if (!center) {
+    return null;
+  }
+
+  const radii = resolveWeatherFrontAxisAlignedHalfExtents(front);
+  return {
+    minX: center.x - radii.halfWidth,
+    maxX: center.x + radii.halfWidth,
+    minY: center.y - radii.halfHeight,
+    maxY: center.y + radii.halfHeight
+  };
+}
+
+function resolveWeatherFrontAxisAlignedHalfExtents(front) {
+  const radiusAlong = Math.max(0, (Number(front && front.radiusAlongTimes1000) || 0) / 1000);
+  const radiusAcross = Math.max(0, (Number(front && front.radiusAcrossTimes1000) || 0) / 1000);
+  const angle = resolveWeatherFrontAxisAngleRadians(front);
+
+  if (angle === null) {
+    const radius = Math.max(radiusAlong, radiusAcross);
+    return {
+      halfWidth: radius,
+      halfHeight: radius
+    };
+  }
+
+  const cosAngle = Math.cos(angle);
+  const sinAngle = Math.sin(angle);
+
+  return {
+    halfWidth: Math.sqrt((radiusAlong * radiusAlong * cosAngle * cosAngle) + (radiusAcross * radiusAcross * sinAngle * sinAngle)),
+    halfHeight: Math.sqrt((radiusAlong * radiusAlong * sinAngle * sinAngle) + (radiusAcross * radiusAcross * cosAngle * cosAngle))
+  };
+}
+
+function resolveWeatherFrontAxisAngleRadians(front) {
+  const directionKey = resolveWeatherFrontDirectionKey(front);
+  switch (directionKey) {
+    case "east":
+    case "west":
+      return 0;
+    case "north":
+    case "south":
+      return Math.PI / 2;
+    case "north_east":
+    case "south_west":
+      return Math.PI / 4;
+    case "north_west":
+    case "south_east":
+      return (3 * Math.PI) / 4;
+    default:
+      return null;
+  }
 }
 
 function syncOverlays(frame) {
@@ -2698,22 +2903,46 @@ function isInfernalAutonomousUnit(unit) {
 }
 
 function resolveTrackedWeatherFrontPoint(frame, trackedTarget) {
-  const fronts = getActiveWeatherFronts(frame);
-  if (!fronts.length) {
+  const fronts = getTrackedWeatherFronts(frame, trackedTarget);
+  const centers = fronts
+    .map(function (front) {
+      return resolveWeatherFrontCenter(front);
+    })
+    .filter(Boolean);
+
+  if (!centers.length) {
+    return resolveBoardCenterGridPoint(frame);
+  }
+
+  const total = centers.reduce(function (accumulator, center) {
+    return {
+      x: accumulator.x + center.x,
+      y: accumulator.y + center.y
+    };
+  }, { x: 0, y: 0 });
+
+  return {
+    x: total.x / centers.length,
+    y: total.y / centers.length
+  };
+}
+
+function resolveBoardCenterGridPoint(frame) {
+  if (!frame || !Array.isArray(frame.grid) || !frame.grid.length) {
     return null;
   }
 
-  const requestedIndex = typeof trackedTarget.index === "number"
-    ? trackedTarget.index
-    : typeof trackedTarget.id === "number"
-      ? trackedTarget.id
-      : 0;
-  const front = fronts[requestedIndex];
-  if (!front) {
+  const gridHeight = frame.grid.length;
+  const gridWidth = Array.isArray(frame.grid[0]) ? frame.grid[0].length : 0;
+
+  if (!gridWidth) {
     return null;
   }
 
-  return resolveWeatherFrontCenter(front);
+  return {
+    x: gridWidth / 2,
+    y: gridHeight / 2
+  };
 }
 
 function resolvePerspectivePresentation(frame) {
