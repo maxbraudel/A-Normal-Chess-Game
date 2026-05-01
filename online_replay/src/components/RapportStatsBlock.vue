@@ -39,7 +39,7 @@ defineProps({
     <StatChart
       v-if="block.chartOption"
       :option="block.chartOption"
-      :height="block.chartHeight || 320"
+      :height="400"
       :aria-label="reportText(block.chartLabel || block.title)"
     />
   </article>

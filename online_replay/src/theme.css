@@ -641,6 +641,11 @@ a {
   min-height: 220px;
 }
 
+.rapport-stat-chart svg image {
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+}
+
 .rapport-code {
   overflow-x: auto;
   margin: 0;

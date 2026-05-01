@@ -17,7 +17,9 @@ const LEGACY_COLORS = {
   fog: "rgba(215, 164, 83, 0.85)",
   infernalTargetWhite: "rgba(233, 233, 223, 0.82)",
   infernalTargetBlack: "rgba(62, 87, 125, 0.86)",
-  infernalSpan: "rgba(0, 0, 0, 0.22)"
+  infernalSpan: "rgba(0, 0, 0, 0.22)",
+  infernalSpanWhite: "rgba(150, 139, 122, 0.26)",
+  infernalSpanBlack: "rgba(96, 108, 123, 0.28)"
 };
 
 const DEFAULT_GLOBAL_MAX_RANGE = 8;
@@ -185,8 +187,11 @@ function buildInfernalBlock(infernal) {
       spans: infernal.unitRows.map((row) => ({
         xStartIndex: row.spawnXIndex,
         xEndIndex: row.removedTurn !== null ? row.removedXIndex : row.endXIndex,
-        fillColor: LEGACY_COLORS.infernalSpan,
-        labelText: buildInfernalSpawnLabel(row, row.unitId)
+        targetKingdomKey: row.targetKingdomKey,
+        fillColor: infernalSpanFillColor(row.targetKingdomKey),
+        pieceImageUrl: infernalPieceTextureUrl(row.manifestedPieceKey),
+        pieceBadgeText: pieceBadgeLabel(row.manifestedPieceKey),
+        pieceLabelFr: infernalPieceLabelFr(row.manifestedPieceKey)
       })),
       series: [
         buildTimelineSeriesSpec("Dette de sang blanche", infernal.points, "whiteDebt", LEGACY_COLORS.whiteKingdom, 0),
@@ -460,6 +465,16 @@ function infernalMarkerColor(targetKingdomKey) {
     return LEGACY_COLORS.infernalTargetBlack;
   }
   return REPORT_COLORS.brick;
+}
+
+function infernalSpanFillColor(targetKingdomKey) {
+  if (targetKingdomKey === "white") {
+    return LEGACY_COLORS.infernalSpanWhite;
+  }
+  if (targetKingdomKey === "black") {
+    return LEGACY_COLORS.infernalSpanBlack;
+  }
+  return LEGACY_COLORS.infernalSpan;
 }
 
 function buildInfernalSpawnLabel(descriptor, unitId) {
@@ -1270,11 +1285,52 @@ function buildTimelineOption({ series, xAxisName, yAxes, markers = [], spans = [
 }
 
 function buildInfernalTimelineOption(configuration) {
-  const option = buildTimelineOption(configuration);
+  const infernalSpans = Array.isArray(configuration.spans) ? configuration.spans : [];
+  const option = buildTimelineOption({
+    ...configuration,
+    spans: []
+  });
   option.grid = {
     ...option.grid,
-    bottom: 126
+    bottom: 72
   };
+  if (infernalSpans.length) {
+    const whiteTargetSpans = infernalSpans.filter((span) => span.targetKingdomKey === "white");
+    const blackTargetSpans = infernalSpans.filter((span) => span.targetKingdomKey === "black");
+    const otherSpans = infernalSpans.filter((span) => span.targetKingdomKey !== "white" && span.targetKingdomKey !== "black");
+
+    if (whiteTargetSpans.length) {
+      option.series.push(buildInfernalSpanOverlaySeries({
+        name: "Pièces infernales ciblant le royaume blanc",
+        legendColor: LEGACY_COLORS.infernalSpanWhite,
+        spans: whiteTargetSpans
+      }));
+    }
+
+    if (blackTargetSpans.length) {
+      option.series.push(buildInfernalSpanOverlaySeries({
+        name: "Pièces infernales ciblant le royaume noir",
+        legendColor: LEGACY_COLORS.infernalSpanBlack,
+        spans: blackTargetSpans
+      }));
+    }
+
+    if (otherSpans.length) {
+      option.series.push(buildInfernalSpanOverlaySeries({
+        name: "__infernal_span_overlay_unknown",
+        legendColor: LEGACY_COLORS.infernalSpan,
+        spans: otherSpans
+      }));
+    }
+  }
+
+  option.legend = {
+    ...option.legend,
+    data: option.series
+      .map((series) => series && series.name)
+      .filter((name) => typeof name === "string" && !name.startsWith("__"))
+  };
+
   return option;
 }
 
@@ -1365,6 +1421,134 @@ function buildTimelineSeries(spec, markers, spans) {
   }
 
   return series;
+}
+
+function buildInfernalSpanOverlaySeries({ name, legendColor, spans }) {
+  return {
+    name,
+    type: "custom",
+    coordinateSystem: "cartesian2d",
+    silent: true,
+    animation: false,
+      z: 20,
+    zlevel: 0,
+    yAxisIndex: 0,
+    itemStyle: {
+      color: legendColor
+    },
+    encode: {
+      x: [1, 2],
+      y: 0,
+      tooltip: []
+    },
+    tooltip: {
+      show: false
+    },
+    data: spans.map((span) => ([
+      0,
+      span.xStartIndex,
+      span.xEndIndex,
+      span.fillColor || LEGACY_COLORS.infernalSpan,
+      span.pieceImageUrl || "",
+      span.pieceLabelFr || "Infernal",
+      span.pieceBadgeText || "INF"
+    ])),
+    renderItem(params, api) {
+      const coordSys = params.coordSys;
+      const startX = api.coord([api.value(1), 0])[0];
+      const endX = api.coord([api.value(2), 0])[0];
+      const left = Math.min(startX, endX);
+      const right = Math.max(startX, endX);
+      const width = Math.max(3, right - left);
+      const top = coordSys.y;
+      const height = coordSys.height;
+      const centerX = left + width / 2;
+      const centerY = top + height / 2;
+      const iconSize = Math.max(18, Math.min(width * 0.32, height * 0.26, 42));
+      const textOffsetY = iconSize * 0.6 + 14;
+      const textFontSize = Math.max(11, Math.min(width * 0.09, 16));
+      const snappedIconSize = Math.round(iconSize);
+      const snappedIconX = Math.round(centerX - snappedIconSize / 2);
+      const snappedIconY = Math.round(centerY - snappedIconSize / 2 - 10);
+      const snappedTextY = Math.round(centerY + textOffsetY);
+      const pieceImageUrl = api.value(4);
+      const pieceLabelFr = api.value(5);
+      const pieceBadgeText = api.value(6);
+
+      const children = [
+        {
+          type: "rect",
+          z2: 0,
+          shape: {
+            x: left,
+            y: top,
+            width,
+            height
+          },
+          style: {
+            fill: api.value(3)
+          }
+        }
+      ];
+
+      if (pieceImageUrl) {
+        children.push({
+          type: "image",
+          z2: 10,
+          style: {
+            image: pieceImageUrl,
+            x: snappedIconX,
+            y: snappedIconY,
+            width: snappedIconSize,
+            height: snappedIconSize,
+            opacity: 0.94
+          }
+        });
+      } else {
+        children.push({
+          type: "text",
+          z2: 10,
+          style: {
+            x: Math.round(centerX),
+            y: Math.round(centerY - 10),
+            text: pieceBadgeText,
+            textAlign: "center",
+            textVerticalAlign: "middle",
+            font: `700 ${Math.max(12, iconSize * 0.42)}px Georgia, \"Times New Roman\", serif`,
+            fill: REPORT_COLORS.ink
+          }
+        });
+      }
+
+      children.push({
+        type: "text",
+        z2: 10,
+        style: {
+          x: Math.round(centerX),
+          y: snappedTextY,
+          text: pieceLabelFr,
+          textAlign: "center",
+          textVerticalAlign: "middle",
+          font: `600 ${textFontSize}px Georgia, \"Times New Roman\", serif`,
+          fill: "#111111"
+        }
+      });
+
+      return {
+        type: "group",
+        clipPath: {
+          type: "rect",
+          shape: {
+            x: left,
+            y: top,
+            width,
+            height
+          }
+        },
+        children
+      };
+    }
+  };
 }
 
 function baseGridOption() {
@@ -1491,7 +1675,10 @@ function formatTimelineTooltip(params, xRows) {
       }
       return map;
     }, new Map()).values()
-  );
+  ).filter((param) => !(param && typeof param.seriesName === "string" && param.seriesName.startsWith("__")));
+  if (!deduplicatedParams.length) {
+    return "";
+  }
   const dataIndex = toNumber(deduplicatedParams[0] && deduplicatedParams[0].dataIndex, -1);
   const row = dataIndex >= 0 ? xRows[dataIndex] : null;
   const header = buildTimelineTooltipHeader(row, deduplicatedParams[0]);
@@ -1566,6 +1753,32 @@ function shortDirectionLabel(front) {
 function pieceBadgeLabel(pieceKey) {
   const normalized = keyOrFallback(pieceKey, "?").toUpperCase();
   return normalized.length <= 3 ? normalized : normalized.slice(0, 3);
+}
+
+function infernalPieceLabelFr(pieceKey) {
+  switch (keyOrFallback(pieceKey, "infernal")) {
+    case "pawn":
+      return "Pion";
+    case "knight":
+      return "Cavalier";
+    case "bishop":
+      return "Fou";
+    case "rook":
+      return "Tour";
+    case "queen":
+      return "Reine";
+    default:
+      return "Infernal";
+  }
+}
+
+function infernalPieceTextureUrl(pieceKey) {
+  const normalized = keyOrFallback(pieceKey, "");
+  if (!["pawn", "knight", "bishop", "rook", "queen"].includes(normalized)) {
+    return "";
+  }
+
+  return new URL(`${REPLAY_CONFIG.assetRoot}/textures/pieces/evil/${normalized}.png`, window.location.href).toString();
 }
 
 function kingdomBadgeShort(kingdomKey) {
