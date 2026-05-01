@@ -11,7 +11,6 @@ import { reportIntroVignettes } from "../content/reportIntroVignettes.js";
 import { randomnessReport } from "../content/randomnessReportContent.js";
 import { loadRealGameStatsReport } from "../content/realGameStatsContent.js";
 import { randomnessStatsReport } from "../content/randomnessStatsContent.js";
-import { reportText } from "../utils/reportText.js";
 
 const REPORT_INTRO_REPLAY = Object.freeze({
   autoplayOnMount: true,
@@ -24,7 +23,7 @@ const REPORT_INTRO_REPLAY = Object.freeze({
 
 const activeTocId = ref("cadre");
 const realGameStatsReport = ref({
-  observedDataLabel: "Donnees observees sur la partie reelle",
+  observedDataLabel: "Données observées sur la partie réelle",
   processStatsByTitle: {}
 });
 
@@ -58,7 +57,7 @@ const tocItems = computed(() => [
   ...numberedLawSections.value.map((section) => ({
     id: section.id,
     number: section.number,
-    label: reportText(section.title)
+    label: section.title
   })),
   { id: "dependances", number: "3", label: "Dépendances" },
   { id: "difficultes", number: "4", label: "Difficultés" },
@@ -121,7 +120,7 @@ onMounted(async () => {
   try {
     realGameStatsReport.value = await loadRealGameStatsReport();
   } catch (error) {
-    console.error("Impossible de charger les stats de la partie reelle pour le rapport.", error);
+    console.error("Impossible de charger les stats de la partie réelle pour le rapport.", error);
   }
 });
 
@@ -135,8 +134,8 @@ onBeforeUnmount(() => {
     <section class="rapport-hero">
         <p class="rapport-hero__intro-note">Bonjour Monsieur Martinez, laissez-moi vous présenter...</p>
       <div class="rapport-hero__copy rapport-hero__copy--full">
-        <p v-if="randomnessReport.hero.kicker" class="landing-kicker">{{ reportText(randomnessReport.hero.kicker) }}</p>
-        <h1>{{ reportText(randomnessReport.hero.title) }}</h1>
+        <p v-if="randomnessReport.hero.kicker" class="landing-kicker">{{ randomnessReport.hero.kicker }}</p>
+        <h1>{{ randomnessReport.hero.title }}</h1>
         <InlineRichText v-if="randomnessReport.hero.lead" class="landing-lead" :text="randomnessReport.hero.lead" />
         <InlineRichText v-if="randomnessReport.hero.source" class="rapport-hero__source" :text="randomnessReport.hero.source" />
       </div>
@@ -151,7 +150,7 @@ onBeforeUnmount(() => {
       <div class="rapport-intro-flow">
         <article v-for="block in gameIntroductionBlocks" :key="block.title" class="rapport-intro-block">
           <div class="rapport-intro-block__copy">
-            <h3>{{ reportText(block.title) }}</h3>
+            <h3>{{ block.title }}</h3>
             <div class="rapport-richtext rapport-richtext--compact">
               <InlineRichText
                 v-for="paragraph in block.paragraphs"
@@ -175,7 +174,7 @@ onBeforeUnmount(() => {
     <section class="rapport-panel rapport-panel--intro">
       <header class="rapport-section__header">
         <p class="rapport-panel__eyebrow">Lecture stratégique</p>
-        <h2>{{ reportText(randomnessReport.randomnessLink.title || "Lien avec les processus aleatoires") }}</h2>
+        <h2>{{ randomnessReport.randomnessLink.title || "Lien avec les processus aléatoires" }}</h2>
       </header>
 
       <div class="rapport-richtext">
@@ -188,7 +187,7 @@ onBeforeUnmount(() => {
 
       <div v-if="randomnessReport.randomnessLink.sections?.length" class="rapport-output-grid">
         <article v-for="section in randomnessReport.randomnessLink.sections" :key="section.title" class="rapport-output-card">
-          <h3>{{ reportText(section.title) }}</h3>
+          <h3>{{ section.title }}</h3>
           <InlineRichText :text="section.text" />
         </article>
       </div>
@@ -196,7 +195,7 @@ onBeforeUnmount(() => {
       <div class="rapport-subsection">
         <article v-if="firstReportDimension" class="rapport-output-card rapport-output-card--primary">
           <h3>
-            <span :class="reportDimensionHighlightClasses(firstReportDimension)">{{ reportText(firstReportDimension.title) }}</span>
+            <span :class="reportDimensionHighlightClasses(firstReportDimension)">{{ firstReportDimension.title }}</span>
           </h3>
           <InlineRichText :text="firstReportDimension.text" />
         </article>
@@ -204,8 +203,8 @@ onBeforeUnmount(() => {
         <div v-if="firstReportDimension?.showSummaryStats" class="rapport-summary-row" aria-label="Résumé des processus aléatoires">
           <article v-for="stat in randomnessReport.summaryStats" :key="stat.label" class="rapport-summary-card rapport-summary-card--inline">
             <p class="rapport-summary-card__value">{{ stat.value }}</p>
-            <p class="rapport-summary-card__label">{{ reportText(stat.label) }}</p>
-            <p class="rapport-summary-card__detail">{{ reportText(stat.detail) }}</p>
+            <p class="rapport-summary-card__label">{{ stat.label }}</p>
+            <p class="rapport-summary-card__detail">{{ stat.detail }}</p>
           </article>
         </div>
 
@@ -216,7 +215,7 @@ onBeforeUnmount(() => {
             class="rapport-output-card"
           >
             <h3>
-              <span :class="reportDimensionHighlightClasses(dimension)">{{ reportText(dimension.title) }}</span>
+              <span :class="reportDimensionHighlightClasses(dimension)">{{ dimension.title }}</span>
             </h3>
             <InlineRichText :text="dimension.text" />
           </article>
@@ -224,7 +223,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="rapport-subsection rapport-subsection--replay">
-        <h3 class="rapport-subsection__title">{{ reportText(randomnessReport.randomnessLink.replayTitle) }}</h3>
+        <h3 class="rapport-subsection__title">{{ randomnessReport.randomnessLink.replayTitle }}</h3>
         <InlineRichText class="rapport-subsection__lead" :text="randomnessReport.randomnessLink.replayText" />
 
         <div class="rapport-replay-frame">
@@ -277,7 +276,7 @@ onBeforeUnmount(() => {
 
           <div class="rapport-formula-grid">
             <article v-for="formula in randomnessReport.methodology.formulas" :key="formula.label" class="rapport-formula-card">
-              <p class="rapport-formula-card__label">{{ reportText(formula.label) }}</p>
+              <p class="rapport-formula-card__label">{{ formula.label }}</p>
               <MathFormula :formula="formula.latex" :display="true" />
             </article>
           </div>
@@ -326,7 +325,7 @@ onBeforeUnmount(() => {
 
           <div class="rapport-output-grid">
             <article v-for="difficulty in randomnessReport.difficulties" :key="difficulty.title" class="rapport-output-card">
-              <h3>{{ reportText(difficulty.title) }}</h3>
+              <h3>{{ difficulty.title }}</h3>
               <InlineRichText :text="difficulty.text" />
             </article>
           </div>

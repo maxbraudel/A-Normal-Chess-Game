@@ -2,7 +2,6 @@
 import InlineRichText from "./InlineRichText.vue";
 import MathFormula from "./MathFormula.vue";
 import RapportProcessCard from "./RapportProcessCard.vue";
-import { reportText } from "../utils/reportText.js";
 
 defineProps({
   section: {
@@ -23,7 +22,7 @@ defineProps({
   },
   observedDataLabel: {
     type: String,
-    default: "Donnees observees"
+    default: "Données observées"
   }
 });
 </script>
@@ -31,10 +30,10 @@ defineProps({
 <template>
   <section :id="section.id" class="rapport-section rapport-panel">
     <header class="rapport-section__header">
-      <p class="rapport-panel__eyebrow">{{ reportText(section.badge) }}</p>
+      <p class="rapport-panel__eyebrow">{{ section.badge }}</p>
       <h2>
         <span class="rapport-section__number">{{ sectionNumber }}</span>
-        {{ reportText(section.title) }}
+        {{ section.title }}
       </h2>
     </header>
 
@@ -44,9 +43,9 @@ defineProps({
 
     <div class="rapport-formula-grid">
       <article v-for="formula in section.formulaCards" :key="formula.label" class="rapport-formula-card">
-        <p class="rapport-formula-card__label">{{ reportText(formula.label) }}</p>
+        <p class="rapport-formula-card__label">{{ formula.label }}</p>
         <MathFormula :formula="formula.latex" :display="true" />
-        <p v-if="formula.note" class="rapport-formula-card__note">{{ reportText(formula.note) }}</p>
+        <p v-if="formula.note" class="rapport-formula-card__note">{{ formula.note }}</p>
       </article>
     </div>
 

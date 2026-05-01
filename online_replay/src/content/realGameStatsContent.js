@@ -36,7 +36,7 @@ const BUILDING_TYPE_WOOD_WALL = 4;
 const BUILDING_TYPE_STONE_WALL = 5;
 
 const EMPTY_REAL_GAME_STATS_REPORT = Object.freeze({
-  observedDataLabel: "Donnees observees sur la partie reelle",
+  observedDataLabel: "Données observées sur la partie réelle",
   processStatsByTitle: {}
 });
 
@@ -61,7 +61,7 @@ async function buildRealGameStatsReport() {
   if (!timeline.length) {
     return {
       ...EMPTY_REAL_GAME_STATS_REPORT,
-      observedDataLabel: `Donnees observees sur la partie reelle (${saveName})`
+      observedDataLabel: `Données observées sur la partie réelle (${saveName})`
     };
   }
 
@@ -70,12 +70,12 @@ async function buildRealGameStatsReport() {
   const waterDenied = normalizeWaterDenied(timeline, replayData);
 
   return {
-    observedDataLabel: `Donnees observees sur la partie reelle (${saveName})`,
+    observedDataLabel: `Données observées sur la partie réelle (${saveName})`,
     processStatsByTitle: {
-      "Royaume cible d'une piece du diable": infernal.points.length
+      "Royaume cible d'une pièce du diable": infernal.points.length
         ? [buildInfernalBlock(infernal)]
         : [],
-      "Duree visible d'un brouillard": weather.points.length
+      "Durée visible d'un brouillard": weather.points.length
         ? [buildWeatherBlock(weather)]
         : [],
       "Champ spatial de l'eau": waterDenied.points.length
@@ -160,35 +160,35 @@ function buildInfernalBlock(infernal) {
   );
 
   return {
-    eyebrow: "Partie reelle",
-    title: "Dette, apparitions et duree de vie",
+    eyebrow: "Partie réelle",
+    title: "Dette, apparitions et durée de vie",
     description:
-      "Reprise du graphe gameplay du generateur historique: dettes de sang, marqueurs d'apparition/suppression et bandes de duree de vie des pieces du diable sur la partie chargee.",
+      "Reprise du graphe gameplay du générateur historique: dettes de sang, marqueurs d'apparition/suppression et bandes de durée de vie des pièces du diable sur la partie chargée.",
     metrics: [
       { label: "Dette blanche moy.", value: formatStatNumber(infernal.averageWhiteDebt) },
       { label: "Dette noire moy.", value: formatStatNumber(infernal.averageBlackDebt) },
-      { label: "Apparitions observees", value: formatInteger(infernal.spawnEvents.length) },
+      { label: "Apparitions observées", value: formatInteger(infernal.spawnEvents.length) },
       {
-        label: "Duree de vie moyenne",
+        label: "Durée de vie moyenne",
         value: infernal.averageLifetime ? `${formatStatNumber(infernal.averageLifetime)} tours` : "n/d"
       }
     ],
     insights: [
-      `${formatInteger(infernal.spawnEvents.length)} apparitions et ${formatInteger(infernal.unitRows.filter((row) => row.removedTurn !== null).length)} suppressions observees sur la partie reelle.`,
+      `${formatInteger(infernal.spawnEvents.length)} apparitions et ${formatInteger(infernal.unitRows.filter((row) => row.removedTurn !== null).length)} suppressions observées sur la partie réelle.`,
       targetCounts.white || targetCounts.black
-        ? `Ciblages observes: ${formatInteger(targetCounts.white)} vers le blanc, ${formatInteger(targetCounts.black)} vers le noir${targetCounts.unknown ? `, ${formatInteger(targetCounts.unknown)} non qualifies` : ""}.`
-        : "Le companion ne qualifie pas toujours le royaume cible sur chaque apparition d'une piece du diable; les dettes restent en revanche exactes."
+        ? `Ciblages observés: ${formatInteger(targetCounts.white)} vers le blanc, ${formatInteger(targetCounts.black)} vers le noir${targetCounts.unknown ? `, ${formatInteger(targetCounts.unknown)} non qualifiés` : ""}.`
+        : "Le companion ne qualifie pas toujours le royaume cible sur chaque apparition d'une pièce du diable; les dettes restent en revanche exactes."
     ],
     chartHeight: 360,
-    chartLabel: "Dette de sang, apparitions et duree de vie sur la partie reelle",
+    chartLabel: "Dette de sang, apparitions et durée de vie sur la partie réelle",
     postChartInterpretation:
       "**Interprétation : on remarque en effet que, de manière générale, la dette de sang pendant la partie a été beaucoup plus élevée côté noir, de manière continue et soutenue. Cela fait qu'au total, même si le processus reste aléatoire, beaucoup plus de pièces du diable ont ciblé le joueur noir plutôt que le joueur blanc. On peut le voir dans l'exemple qui suit.**",
     exampleReplay: {
-      sourceTag: "Partie reelle avec joueur",
+      sourceTag: "Partie réelle avec joueur",
       sourceKind: "real",
       label: "Exemple tiré de la partie réelle",
       description:
-        "Du tour 74 au tour 136, la camera suit la piece du diable active. Quand elle disparait, le cadre reste en place jusqu'a l'arrivee de la piece du diable suivante, puis se recentre immediatement sur la nouvelle menace.",
+        "Du tour 74 au tour 136, la caméra suit la pièce du diable active. Quand elle disparait, le cadre reste en place jusqu'à l'arrivée de la pièce du diable suivante, puis se recentre immédiatement sur la nouvelle menace.",
       viewer: {
         replayUrl: REPLAY_CONFIG.replayUrl,
         minTurn: 74,
@@ -241,32 +241,32 @@ function buildInfernalBlock(infernal) {
 
 function buildWeatherBlock(weather) {
   return {
-    eyebrow: "Partie reelle",
-    title: "Visibilite et brouillards",
+    eyebrow: "Partie réelle",
+    title: "Visibilité et brouillards",
     description:
-      "Courbes de visibilite pendant la partie reelle: pieces ennemies masquees par royaume, avec marqueurs d'entree et de fin des brouillards.",
+      "Courbes de visibilité pendant la partie réelle: pièces ennemies masquées par royaume, avec marqueurs d'entrée et de fin des brouillards.",
     metrics: [
       { label: "Couverture moyenne", value: formatStatNumber(weather.averageCloudCoverage) },
       {
         label: "Intervalle moyen",
         value: weather.averageSpawnInterval ? `${formatStatNumber(weather.averageSpawnInterval)} tours` : "n/a"
       },
-      { label: "Brouillards observes", value: formatInteger(weather.spawnEvents.length) },
-      { label: "Pic de pieces masquees", value: formatInteger(weather.peakHiddenPieces) }
+      { label: "Brouillards observés", value: formatInteger(weather.spawnEvents.length) },
+      { label: "Pic de pièces masquées", value: formatInteger(weather.peakHiddenPieces) }
     ],
     insights: [
-      `${formatInteger(weather.spawnEvents.length)} apparitions et ${formatInteger(weather.endEvents.length)} fins de brouillards observees sur la partie reelle.`
+      `${formatInteger(weather.spawnEvents.length)} apparitions et ${formatInteger(weather.endEvents.length)} fins de brouillards observées sur la partie réelle.`
     ],
     chartHeight: 360,
-    chartLabel: "Visibilite et brouillards sur la partie reelle",
+    chartLabel: "Visibilité et brouillards sur la partie réelle",
     postChartInterpretation:
       "**Interprétation : on remarque que vers la fin de la partie, avant l'échec et mat, une partie des pièces ennemies, en pratique des pièces noires du point de vue blanc, sont masquées. Cela traduit une embuscade du joueur noir, qui va finalement lui permettre de gagner la partie, comme on peut le voir dans l'exemple qui suit.**",
     exampleReplay: {
-      sourceTag: "Partie reelle avec joueur",
+      sourceTag: "Partie réelle avec joueur",
       sourceKind: "real",
       label: "Exemple tiré de la partie réelle",
       description:
-        "Entre les tours 120 et 133, un nuage imprevisible ouvre un renversement total au centre de la carte: les Noirs prennent les Blancs en embuscade et les deux reines sont eliminees.",
+        "Entre les tours 120 et 133, un nuage imprévisible ouvre un renversement total au centre de la carte: les Noirs prennent les Blancs en embuscade et les deux reines sont éliminées.",
       viewer: {
         replayUrl: REPLAY_CONFIG.replayUrl,
         minTurn: 120,
@@ -283,11 +283,11 @@ function buildWeatherBlock(weather) {
     chartOption: buildTimelineOption({
       xAxisName: "Tour",
       yAxes: [
-        { name: "Pieces masquees" }
+        { name: "Pièces masquées" }
       ],
       series: [
-        buildTimelineSeriesSpec("Pieces ennemies masquees cote blanc", weather.points, "whiteHiddenPieces", LEGACY_COLORS.whiteKingdom, 0),
-        buildTimelineSeriesSpec("Pieces ennemies masquees cote noir", weather.points, "blackHiddenPieces", LEGACY_COLORS.water, 0)
+        buildTimelineSeriesSpec("Pièces ennemies masquées côté blanc", weather.points, "whiteHiddenPieces", LEGACY_COLORS.whiteKingdom, 0),
+        buildTimelineSeriesSpec("Pièces ennemies masquées côté noir", weather.points, "blackHiddenPieces", LEGACY_COLORS.water, 0)
       ]
     })
   };
@@ -295,28 +295,28 @@ function buildWeatherBlock(weather) {
 
 function buildWaterDeniedByKingdomBlock(waterDenied) {
   return {
-    eyebrow: "Partie reelle",
+    eyebrow: "Partie réelle",
     title: "Cellules refusées par l'eau par royaume",
     description:
-      "Cette metrique recompte, a chaque enregistrement de la partie, **les cases de destination qui seraient atteignables si l'eau etait retiree**, puis soustrait les pseudo-coups reellement autorises sur le plateau courant. Le resultat est ensuite **somme sur toutes les pieces d'un royaume**: une courbe haute signifie donc que l'eau supprime beaucoup d'options de deplacement a cet instant, pas qu'un royaume est bloque partout sur la carte. Les murs et les autres obstacles restent inchanges pendant ce recalcul; **on isole uniquement l'effet de l'eau**.",
+      "Cette métrique recompte, à chaque enregistrement de la partie, **les cases de destination qui seraient atteignables si l'eau était retirée**, puis soustrait les pseudo-coups réellement autorisés sur le plateau courant. Le résultat est ensuite **sommé sur toutes les pièces d'un royaume**: une courbe haute signifie donc que l'eau supprime beaucoup d'options de déplacement à cet instant, pas qu'un royaume est bloqué partout sur la carte. Les murs et les autres obstacles restent inchangés pendant ce recalcul; **on isole uniquement l'effet de l'eau**.",
     metrics: [
       { label: "Eau blanche moy.", value: formatStatNumber(waterDenied.averageWhiteWaterDeniedCells) },
       { label: "Eau noire moy.", value: formatStatNumber(waterDenied.averageBlackWaterDeniedCells) },
       { label: "Pic total eau", value: formatInteger(waterDenied.peakWaterDeniedCells) }
     ],
     insights: [
-      `Le calcul repart des mouvements pseudo-legaux, comme dans le site \`statistiques-generator\`, au lieu d'utiliser une simple approximation geometrique des lacs. L'ecart moyen blanc/noir est ici de ${formatStatNumber(waterDenied.averageKingdomGap)} cellules refusees par enregistrement.`
+      `Le calcul repart des mouvements pseudo-légaux, comme dans le site \`statistiques-generator\`, au lieu d'utiliser une simple approximation géométrique des lacs. L'écart moyen blanc/noir est ici de ${formatStatNumber(waterDenied.averageKingdomGap)} cellules refusées par enregistrement.`
     ],
     chartHeight: 330,
-    chartLabel: "Cellules refusées par l'eau par royaume sur la partie reelle",
+    chartLabel: "Cellules refusées par l'eau par royaume sur la partie réelle",
     postChartInterpretation:
-      "**Interprétation : sur la premiere partie de cette partie reelle, la courbe noire depasse nettement la courbe blanche. L'eau a donc beaucoup plus empeche les premiers deplacements du royaume noir que ceux du royaume blanc. Cette contrainte initiale a freine le developpement noir et a contribue a l'avance prise par les Blancs au debut de la partie.**",
+      "**Interprétation : sur la première partie de cette partie réelle, la courbe noire dépasse nettement la courbe blanche. L'eau a donc beaucoup plus empêché les premiers déplacements du royaume noir que ceux du royaume blanc. Cette contrainte initiale a freiné le développement noir et a contribué à l'avance prise par les Blancs au début de la partie.**",
     exampleReplay: {
-      sourceTag: "Partie reelle avec joueur",
+      sourceTag: "Partie réelle avec joueur",
       sourceKind: "real",
       label: "Exemple tiré de la partie réelle",
       description:
-        "Du tour 40 au tour 90, on voit les Noirs devoir contourner plus tot et plus souvent l'eau centrale, pendant que les Blancs prennent plus vite contrôle de l'église : une zone qui permet la promotion de reines.",
+        "Du tour 40 au tour 90, on voit les Noirs devoir contourner plus tôt et plus souvent l'eau centrale, pendant que les Blancs prennent plus vite le contrôle de l'église: une zone qui permet la promotion de reines.",
       viewer: {
         replayUrl: REPLAY_CONFIG.replayUrl,
         minTurn: 40,
@@ -1792,7 +1792,7 @@ function buildInfernalSpanOverlaySeries({ name, legendColor, spans }) {
       span.xEndIndex,
       span.fillColor || LEGACY_COLORS.infernalSpan,
       span.pieceImageUrl || "",
-      span.pieceLabelFr || "Piece du diable",
+      span.pieceLabelFr || "Pièce du diable",
       span.pieceBadgeText || "INF"
     ])),
     renderItem(params, api) {
@@ -2110,7 +2110,7 @@ function infernalPieceLabelFr(pieceKey) {
     case "queen":
       return "Reine";
     default:
-      return "Piece du diable";
+      return "Pièce du diable";
   }
 }
 

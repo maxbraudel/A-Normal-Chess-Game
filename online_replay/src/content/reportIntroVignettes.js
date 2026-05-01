@@ -646,7 +646,7 @@ function createVignette({
 export const reportIntroVignettes = Object.freeze({
   kingdoms: createVignette({
     saveName: "intro-kingdoms",
-    ariaLabel: "Deux royaumes et leurs pieces principales",
+    ariaLabel: "Deux royaumes et leurs pièces principales",
     grid: [
       "ggggggggg",
       "gggdggggg",
@@ -671,7 +671,7 @@ export const reportIntroVignettes = Object.freeze({
   }),
   turnBudget: createVignette({
     saveName: "intro-turn-budget",
-    ariaLabel: "Un meme tour combine des deplacements et des actions de construction",
+    ariaLabel: "Un même tour combine des déplacements et des actions de construction",
     autoplayIntervalMs: 1200,
     autoplayOnMount: true,
     loopPlayback: true,
@@ -765,7 +765,7 @@ export const reportIntroVignettes = Object.freeze({
   }),
   production: createVignette({
     saveName: "intro-production",
-    ariaLabel: "Une caserne, des pieces deployees et un front local",
+    ariaLabel: "Une caserne, des pièces deployees et un front local",
     grid: [
       "ggggggggg",
       "gdggggggg",
@@ -791,7 +791,7 @@ export const reportIntroVignettes = Object.freeze({
   }),
   chest: createVignette({
     saveName: "intro-chest",
-    ariaLabel: "Un pion ouvre un coffre et la recompense change sur chaque boucle",
+    ariaLabel: "Un pion ouvre un coffre et la récompense change sur chaque boucle",
     autoplayIntervalMs: 1000,
     autoplayOnMount: true,
     loopPlayback: true,
@@ -822,7 +822,7 @@ export const reportIntroVignettes = Object.freeze({
   }),
   progression: createVignette({
     saveName: "intro-progression",
-    ariaLabel: "Dans une eglise, un roi, un fou et une tour deviennent une reine",
+    ariaLabel: "Dans une église, un roi, un fou et une tour deviennent une reine",
     autoplayIntervalMs: 1400,
     autoplayOnMount: true,
     loopPlayback: true,
@@ -849,7 +849,7 @@ export const reportIntroVignettes = Object.freeze({
   }),
   weather: createVignette({
     saveName: "intro-weather",
-    ariaLabel: "Le point de vue alterne entre les Blancs et les Noirs pour montrer que le brouillard ne cache pas les memes pieces",
+    ariaLabel: "Le point de vue alterne entre les Blancs et les Noirs pour montrer que le brouillard ne cache pas les mêmes pièces",
     enablePerspective: true,
     perspectiveKingdom: "white",
     perspectiveSequence: ["white", "black"],

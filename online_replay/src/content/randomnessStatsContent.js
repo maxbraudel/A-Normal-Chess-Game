@@ -295,14 +295,14 @@ const aiSpawnValues = spawnColumns.map((index) => aiSpawnColumnMap.get(index) ||
 const dirtCoverageComparison = [run.config.dirtCoveragePercent, mapGeneration.summary.dirt_coverage_percent.mean];
 const waterCoverageComparison = [run.config.waterCoveragePercent, mapGeneration.summary.water_coverage_percent.mean];
 
-const observedDataLabel = `Donnees observees sur ${run.sampleCount} parties simulees`;
+const observedDataLabel = `Données observées sur ${run.sampleCount} parties simulées`;
 
 const processStatsByTitle = {
-  "Choix de position des batiments publics": [
+  "Choix de position des bâtiments publics": [
     {
-      title: "Distances observees entre batiments publics et lacs",
+      title: "Distances observées entre bâtiments publics et lacs",
       description:
-        "Les placements publics ne sont pas seulement des tirages admissibles: le batch montre aussi la distance effective a l'eau apres generation complete du terrain, ce qui renseigne mieux la jouabilite que la seule loi uniforme conditionnelle.",
+        "Les placements publics ne sont pas seulement des tirages admissibles: le batch montre aussi la distance effective à l'eau après génération complete du terrain, ce qui renseigne mieux la jouabilite que la seule loi uniforme conditionnelle.",
       metrics: [
         {
           label: "Mine -> lac le plus proche",
@@ -318,16 +318,16 @@ const processStatsByTitle = {
         }
       ],
       insights: [
-        "Ces valeurs donnent un resume concret du placement final des structures, au lieu de laisser croire qu'un support admissible uniforme suffit a decrire toute la carte.",
-        "La distance moyenne initiale entre royaumes est deja visible ici car le placement des structures et celui des spawns restent geometriquement lies au plateau genere."
+        "Ces valeurs donnent un résumé concret du placement final des structures, au lieu de laisser croire qu'un support admissible uniforme suffit a decrire toute la carte.",
+        "La distance moyenne initiale entre royaumes est déjà visible ici car le placement des structures et celui des apparitions restent géométriquement liés au plateau généré."
       ]
     }
   ],
-  "Spawn des royaumes": [
+  "Apparition des royaumes": [
     {
-      title: "Support observe des zones d'apparition blanche et noire",
+      title: "Support observé des zones d'apparition blanche et noire",
       description:
-        "Les deux royaumes restent confines a des bandes laterales opposees. Le batch montre leurs supports effectifs sur le meme graphe, ce qui rend la symetrie et la separation initiale beaucoup plus lisibles qu'une lecture par fiches separees.",
+        "Les deux royaumes restent confinés à des bandes latérales opposées. Le batch montre leurs supports effectifs sur le même graphe, ce qui rend la symétrie et la séparation initiale beaucoup plus lisibles qu'une lecture par fiches séparées.",
       metrics: [
         {
           label: "Support blanc",
@@ -343,8 +343,8 @@ const processStatsByTitle = {
         }
       ],
       insights: [
-        "La bonne lecture mathematique est celle d'une **uniforme conditionnelle sur un support geometrique deja contraint**, appliquee symetriquement aux deux royaumes.",
-        "Les colonnes centrales restent hors support ou quasi hors support, ce qui rend la separation d'ouverture visible des le premier coup d'oeil."
+        "La bonne lecture mathématique est celle d'une **uniforme conditionnelle sur un support géométrique déjà contraint**, appliquee symetriquement aux deux royaumes.",
+        "Les colonnes centrales restent hors support ou quasi hors support, ce qui rend la séparation d'ouverture visible dès le premier coup d'œil."
       ],
       chartHeight: 310,
       chartLabel: "Répartition des colonnes d'apparition des royaumes blanc et noir",
@@ -368,28 +368,28 @@ const processStatsByTitle = {
       })
     }
   ],
-  "Recompenses d'XP": [
+  "Récompenses d'XP": [
     {
-      title: "Les moyennes XP empiriques retombent bien sur les moyennes de design",
+      title: "Les moyennes XP empiriques retombent bien sur les moyennes de conception",
       description:
-        "Le batch confirme bien le comportement attendu de la famille normale tronquee discretisee: sur toutes les sources XP principales, les moyennes observees restent tres proches des moyennes de configuration, malgre clamp et arrondi.",
+        "Le batch confirme bien le comportement attendu de la famille normale tronquée discrétisée: sur toutes les sources XP principales, les moyennes observées restent très proches des moyennes de configuration, malgré clamp et arrondi.",
       metrics: [
         {
-          label: "Pion observe / attendu",
+          label: "Pion observé / attendu",
           value: `${formatNumber(xpRewards.sources.KillPawn.summary.amount.mean, 1)} / ${xpRewards.sources.KillPawn.expected.inputMean}`
         },
         {
-          label: "Tour observe / attendu",
+          label: "Tour observé / attendu",
           value: `${formatNumber(xpRewards.sources.KillRook.summary.amount.mean, 1)} / ${xpRewards.sources.KillRook.expected.inputMean}`
         },
         {
-          label: "Reine observe / attendu",
+          label: "Reine observée / attendu",
           value: `${formatNumber(xpRewards.sources.KillQueen.summary.amount.mean, 1)} / ${xpRewards.sources.KillQueen.expected.inputMean}`
         }
       ],
       insights: [
-        "C'est une statistique pertinente parce qu'elle valide directement la **coherence entre parametres de rapport et runtime effectif**.",
-        "Les sorties moins parlantes comme les rotations de batiments ou les flips pseudo-uniformes sont volontairement laissees hors du rapport principal: elles n'apportent pas de lecture de gameplay utile."
+        "C'est une statistique pertinente parce qu'elle valide directement la **cohérence entre paramètres théoriques et runtime effectif**.",
+        "Les rotations de bâtiments ou les flips pseudo-uniformes apportent beaucoup moins d'information sur la partie que ces moyennes XP."
       ],
       chartHeight: 320,
       chartLabel: "Comparaison des moyennes XP attendues et observées",
@@ -404,7 +404,7 @@ const processStatsByTitle = {
             data: xpExpectedMeans
           },
           {
-            name: "Moyenne observee",
+            name: "Moyenne observée",
             color: COLORS.ink,
             data: xpObservedMeans
           }
@@ -415,28 +415,28 @@ const processStatsByTitle = {
   ],
   "Montant d'or d'un coffre": [
     {
-      title: "L'or des coffres partage le meme patron gaussien tronqué",
+      title: "L'or des coffres partage le même patron gaussien tronqué",
       description:
-        "Le meme schema statistique reapparait pour l'or des coffres. Le batch ne le montre pas comme une loi abstraite, mais comme une distribution entiere effectivement tombee apres clamp et arrondi.",
+        "Le même schéma statistique réapparaît pour l'or des coffres. Le batch ne le montre pas comme une loi abstraite, mais comme une distribution entière effectivement tombée après clamp et arrondi.",
       metrics: [
         {
-          label: "Moyenne d'entree du profil or",
+          label: "Moyenne d'entrée du profil or",
           value: chestSystem.expected.goldInputMean.toString()
         },
         {
-          label: "Moyenne observee early",
+          label: "Moyenne observée early",
           value: formatNumber(chestSystem.rewardPhases.early_phase.goldAmountSummary.gold_amount.mean, 1)
         },
         {
-          label: "Moyenne observee late",
+          label: "Moyenne observée late",
           value: formatNumber(chestSystem.rewardPhases.late_phase.goldAmountSummary.gold_amount.mean, 1)
         }
       ],
       insights: [
-        "Dans le rapport, cette figure sert surtout a montrer que l'XP et l'or ne sont pas deux mecanismes differents: c'est **la meme famille probabiliste** avec des parametres differents.",
+        "Cette figure montre surtout que l'XP et l'or ne sont pas deux mécanismes différents: c'est **la même famille probabiliste** avec des paramètres différents.",
         run.sampleCount < 100
-          ? `Le fichier integre correspond actuellement a ${run.sampleCount} simulations: la structure est bonne, mais la version finale gagnera a etre regeneree en 500 pour stabiliser l'histogramme.`
-          : `Le batch actuellement integre est deja suffisamment large pour que la forme de l'histogramme soit interpretable dans le rapport.`
+          ? `Le fichier intégré correspond actuellement à ${run.sampleCount} simulations: la structure est bonne, mais la version finale gagnera à être régénérée en 500 pour stabiliser l'histogramme.`
+          : `Le batch actuellement intégré est déjà suffisamment large pour que la forme de l'histogramme soit interprétable.`
       ],
       chartHeight: 280,
       chartLabel: "Histogramme des montants d'or de coffre observés",
@@ -449,48 +449,48 @@ const processStatsByTitle = {
       })
     }
   ],
-  "Type de recompense du coffre": [
+  "Type de récompense du coffre": [
     {
       title: "Le basculement early/late des coffres est lisible",
       description:
-        "Le signal le plus utile ici n'est pas une moyenne, mais le deplacement des probabilites nominales entre debut et fin de partie. Le batch montre bien que l'or perd du poids relatif quand la phase tardive s'installe.",
+        "Le signal le plus utile ici n'est pas une moyenne, mais le déplacement des probabilités nominales entre début et fin de partie. Le batch montre bien que l'or perd du poids relatif quand la phase tardive s'installe.",
       metrics: [
         {
-          label: "Or observe en debut de partie",
+          label: "Or observé en début de partie",
           value: formatPercent(earlyObserved.Gold * 100, 0)
         },
         {
-          label: "Or observe en fin de partie",
+          label: "Or observé en fin de partie",
           value: formatPercent(lateObserved.Gold * 100, 0)
         },
         {
-          label: "Scenario 100 tours",
+          label: "Scénario 100 tours",
           value: `${formatNumber(chestSystem.summary.timeline_collected_chests.mean, 1)} coffres`
         }
       ],
       insights: [
-        "L'illustration la plus pertinente n'est donc pas seulement le type de reward brut, mais **l'ecart entre les probabilites early et late** face aux poids configures.",
-        `Dans le scenario synthetique de collecte immediate sur ${run.turnBudget} tours, le batch observe en moyenne ${formatNumber(chestSystem.summary.timeline_total_gold.mean, 1)} d'or, ${formatNumber(chestSystem.summary.timeline_total_movement_bonus.mean, 1)} points de mouvement max et ${formatNumber(chestSystem.summary.timeline_total_build_bonus.mean, 1)} points de construction max.`
+        "L'illustration la plus pertinente n'est donc pas seulement le type de reward brut, mais **l'écart entre les probabilités early et late** face aux poids configures.",
+        `Dans le scénario synthétique de collecte immédiate sur ${run.turnBudget} tours, le batch observe en moyenne ${formatNumber(chestSystem.summary.timeline_total_gold.mean, 1)} d'or, ${formatNumber(chestSystem.summary.timeline_total_movement_bonus.mean, 1)} points de mouvement max et ${formatNumber(chestSystem.summary.timeline_total_build_bonus.mean, 1)} points de construction max.`
       ],
       chartHeight: 300,
       chartLabel: "Comparaison des probabilités de récompense de coffre entre phase early et late",
       chartOption: buildGroupedBarOption({
         categories: chestRewardCategories,
-        xAxisName: "Type de recompense",
-        yAxisName: "Probabilite observee",
+        xAxisName: "Type de récompense",
+        yAxisName: "Probabilité observée",
         series: [
           {
-            name: "Debut observe",
+            name: "Début observé",
             color: COLORS.ink,
             data: [earlyObserved.Gold, earlyObserved["Movement Points"], earlyObserved["Build Points"]]
           },
           {
-            name: "Debut attendu",
+            name: "Début attendu",
             color: COLORS.mist,
             data: [earlyExpected.Gold, earlyExpected["Movement Points"], earlyExpected["Build Points"]]
           },
           {
-            name: "Fin observee",
+            name: "Fin observée",
             color: COLORS.moss,
             data: [lateObserved.Gold, lateObserved["Movement Points"], lateObserved["Build Points"]]
           },
@@ -503,18 +503,18 @@ const processStatsByTitle = {
       })
     }
   ],
-  "Delai de reapparition d'un coffre": [
+  "Délai de réapparition d'un coffre": [
     {
-      title: "Le cooldown minimal de 4 tours se voit immediatement dans la Weibull des coffres",
+      title: "Le cooldown minimal de 4 tours se voit immédiatement dans la Weibull des coffres",
       description:
-        "C'est une des statistiques les plus parlantes du batch: la loi continue seule ne raconte pas le gameplay. La masse au seuil de `4` tours prouve que le cooldown plancher modifie fortement la forme observee.",
+        "C'est une des statistiques les plus parlantes du batch: la loi continue seule ne raconte pas le gameplay. La masse au seuil de `4` tours prouve que le cooldown plancher modifie fortement la forme observée.",
       metrics: [
         {
-          label: "Moyenne continue de reference",
+          label: "Moyenne continue de référence",
           value: formatNumber(chestSystem.expected.spawnDelayContinuousReferenceMean, 2)
         },
         {
-          label: "Moyenne observee",
+          label: "Moyenne observée",
           value: formatNumber(chestSystem.summary.spawn_delay_turns.mean, 2)
         },
         {
@@ -523,8 +523,8 @@ const processStatsByTitle = {
         }
       ],
       insights: [
-        "Le bon message pour le rapport est donc: **la Weibull parente existe, mais la runtime est celle d'une Weibull discretisee puis bornee inferieurement**.",
-        "C'est exactement le type d'ecart theorie/runtime que les consignes demandent d'illustrer par histogramme et ecart a la moyenne."
+        "**La Weibull parente existe, mais la runtime est celle d'une Weibull discrétisée puis bornée inférieurement**.",
+        "L'histogramme et l'écart à la moyenne rendent cet écart théorie/runtime directement visible."
       ],
       chartHeight: 290,
       chartLabel: "Histogramme des délais de réapparition des coffres",
@@ -532,27 +532,27 @@ const processStatsByTitle = {
         categories: sortNumericEntries(chestSystem.spawnDelayHistogram).map(([value]) => String(value)),
         values: sortNumericEntries(chestSystem.spawnDelayHistogram).map(([, count]) => count),
         color: COLORS.brick,
-        xAxisName: "Delai (tours)",
+        xAxisName: "Délai (tours)",
         yAxisName: "Occurrences"
       })
     }
   ],
-  "Delai entre deux brouillards meteo": [
+  "Délai entre deux brouillards météo": [
     {
-      title: "Les inter-arrivees meteo restent compatibles avec la Gamma parametree",
+      title: "Les inter-arrivées météo restent compatibles avec la Gamma paramétrée",
       description:
-        "La comparaison la plus propre ici porte sur les temps d'attente entre brouillards. L'ecart entre la moyenne empirique et la moyenne theorique reste faible dans le batch integre, ce qui valide bien le coeur du generateur temporel de meteo.",
+        "La comparaison la plus propre ici porte sur les temps d'attente entre brouillards. L'écart entre la moyenne empirique et la moyenne théorique reste faible dans le batch intégré, ce qui valide bien le cœur du générateur temporel de météo.",
       metrics: [
         {
-          label: "Moyenne theorique",
+          label: "Moyenne théorique",
           value: formatNumber(weatherSystem.expected.arrivalContinuousReferenceMean, 1)
         },
         {
-          label: "Moyenne observee",
+          label: "Moyenne observée",
           value: formatNumber(weatherSystem.summary.arrival_delay_turns.mean, 1)
         },
         {
-          label: "Amplitude observee",
+          label: "Amplitude observée",
           value: formatRange(
             weatherSystem.summary.arrival_delay_turns.min,
             weatherSystem.summary.arrival_delay_turns.max,
@@ -561,7 +561,7 @@ const processStatsByTitle = {
         }
       ],
       insights: [
-        "C'est une statistique vraiment utile pour le rapport car elle relie directement `E[T]=kθ+m` a un histogramme de runtime lisible.",
+        "Cette statistique relie directement `E[T]=kθ+m` à un histogramme de runtime lisible.",
         "Les indicateurs comme les directions cardinales sont moins prioritaires ici: ils montrent surtout l'absence de biais, pas une structure gameplay profonde."
       ],
       chartHeight: 300,
@@ -570,23 +570,23 @@ const processStatsByTitle = {
         categories: weatherArrivalEntries.map(([value]) => String(value)),
         values: weatherArrivalEntries.map(([, count]) => count),
         color: COLORS.slate,
-        xAxisName: "Delai d'arrivee (tours)",
+        xAxisName: "Délai d'arrivée (tours)",
         yAxisName: "Occurrences"
       })
     }
   ],
-  "Duree visible d'un brouillard": [
+  "Durée visible d'un brouillard": [
     {
-      title: "Les brouillards se chevauchent parfois, mais l'etat dominant reste 0 ou 1 brouillard actif",
+      title: "Les brouillards se chevauchent parfois, mais l'état dominant reste 0 ou 1 brouillard actif",
       description:
-        "Tu voulais explicitement voir le nombre de nuages simultanes. Cette distribution est une excellente figure de rapport parce qu'elle capture une consequence gameplay immediate de la dynamique temporelle, sans dependre des joueurs.",
+        "La distribution du nombre de nuages simultanés capture une conséquence gameplay immédiate de la dynamique temporelle, sans dépendre des joueurs.",
       metrics: [
         {
           label: "Moyenne de brouillards actifs par pas",
           value: formatNumber(weatherSystem.summary.active_front_count_per_step.mean, 2)
         },
         {
-          label: "Maximum observe par monde",
+          label: "Maximum observé par monde",
           value: formatNumber(weatherSystem.summary.max_active_fronts_per_world.max, 0)
         },
         {
@@ -595,8 +595,8 @@ const processStatsByTitle = {
         }
       ],
       insights: [
-        `Dans l'export integre, le chevauchement a deux brouillards existe deja (${weatherSystem.histograms.active_front_count[2] || 0} pas observes), mais reste nettement minoritaire face aux etats 0 et 1.`,
-        "C'est un bon exemple de statistique emergente qui reste pourtant **entierement independante des actions de joueurs**."
+        `Dans l'export intégré, le chevauchement à deux brouillards existe déjà (${weatherSystem.histograms.active_front_count[2] || 0} pas observés), mais reste nettement minoritaire face aux états 0 et 1.`,
+        "C'est un bon exemple de statistique émergente qui reste pourtant **entièrement indépendante des actions des joueurs**."
       ],
       chartHeight: 290,
       chartLabel: "Distribution du nombre de brouillards météo simultanément actifs",
@@ -605,32 +605,32 @@ const processStatsByTitle = {
         values: weatherActiveFrontEntries.map(([, count]) => count),
         color: COLORS.moss,
         xAxisName: "Brouillards actifs",
-        yAxisName: "Pas simules"
+        yAxisName: "Pas simulés"
       })
     }
   ],
-  "Luminosite de l'herbe": [
+  "Luminosité de l'herbe": [
     {
-      title: "La Beta de luminosite pousse presque toute l'herbe vers les bins clairs",
+      title: "La Beta de luminosité pousse presque toute l'herbe vers les classes claires",
       description:
-        "La loi `Beta(7,2)` n'est pas seulement une formule du rapport: le batch montre qu'elle concentre effectivement la masse dans les classes de luminosite les plus elevees apres remappage runtime.",
+        "Le batch montre qu'elle concentre effectivement la masse dans les classes de luminosité les plus élevées après remappage runtime.",
       metrics: [
         {
-          label: "Part des deux bins les plus clairs",
+          label: "Part des deux classes les plus clairs",
           value: formatPercent((grassBrightTopTwo / grassBrightnessTotal) * 100, 1)
         },
         {
-          label: "Masse totale observee",
+          label: "Masse totale observée",
           value: new Intl.NumberFormat("fr-FR").format(grassBrightnessTotal)
         },
         {
-          label: "Bins sombres utilises",
+          label: "Classes sombres utilises",
           value: "Quasi nuls"
         }
       ],
       insights: [
-        "Cette figure est pertinente parce qu'elle montre la consequence visuelle concrete d'une variable mathematiquement bornee dans `[0,1]` avant remappage en luminance.",
-        "Le rapport peut donc illustrer la Beta par un histogramme vraiment interpretable, pas seulement par la densite theorique."
+        "Cette figure est pertinente parce qu'elle montre la conséquence visuelle concrète d'une variable mathématiquement bornée dans `[0,1]` avant remappage en luminance.",
+        "La Beta se lit ici sur un histogramme vraiment interprétable, pas seulement sur la densité théorique."
       ],
       chartHeight: 300,
       chartLabel: "Histogramme des niveaux de luminosité de l'herbe",
@@ -639,38 +639,38 @@ const processStatsByTitle = {
         values: grassBrightnessValues,
         color: COLORS.moss,
         rotateLabels: true,
-        xAxisName: "Bin de luminosite",
+        xAxisName: "Classe de luminosité",
         yAxisName: "Cellules"
       })
     }
   ],
   "Champ spatial de la terre": [
     {
-      title: "La couverture finale de la terre est inferieure a la cible nominale",
+      title: "La couverture finale de la terre est inférieure à la cible nominale",
       description:
-        "Le pourcentage configure de la terre ne se retrouve pas tel quel sur la carte finale. La pipeline procedurale applique ensuite des contraintes de composantes et de connectivite qui deforment la couverture initialement visee.",
+        "Le pourcentage configuré de la terre ne se retrouve pas tel quel sur la carte finale. La pipeline procédurale applique ensuite des contraintes de composantes et de connectivité qui déforment la couverture initialement visée.",
       metrics: [
         {
-          label: "Couverture ciblee",
+          label: "Couverture ciblée",
           value: formatPercent(run.config.dirtCoveragePercent, 0)
         },
         {
-          label: "Couverture observee",
+          label: "Couverture observée",
           value: formatPercent(mapGeneration.summary.dirt_coverage_percent.mean, 1)
         },
         {
-          label: "Ecart absolu",
+          label: "Écart absolu",
           value: formatPercent(run.config.dirtCoveragePercent - mapGeneration.summary.dirt_coverage_percent.mean, 1)
         }
       ],
       insights: [
-        "Autrement dit: **la variable de configuration est une intention de generation, pas une promesse de couverture finale**.",
-        "C'est un vrai resultat empirique utile, pas un simple rappel de parametre de config."
+        "Autrement dit: **la variable de configuration est une intention de génération, pas une promesse de couverture finale**.",
+        "C'est un vrai résultat empirique utile, pas un simple rappel de paramètre de config."
       ],
       chartHeight: 290,
       chartLabel: "Comparaison entre la couverture la terre ciblée et observée",
       chartOption: buildHistogramOption({
-        categories: ["Cible", "Observee"],
+        categories: ["Cible", "Observée"],
         values: dirtCoverageComparison,
         color: COLORS.brick,
         xAxisName: "Mesure",
@@ -680,16 +680,16 @@ const processStatsByTitle = {
   ],
   "Champ spatial de l'eau": [
     {
-      title: "La couverture finale d'eau est inferieure a la cible nominale",
+      title: "La couverture finale d'eau est inférieure à la cible nominale",
       description:
-        "Comme pour la terre, la couverture eau finale subit les post-traitements topologiques de la generation. La valeur nominale sert de point de depart, pas de valeur finale garantie.",
+        "Comme pour la terre, la couverture eau finale subit les post-traitements topologiques de la génération. La valeur nominale sert de point de départ, pas de valeur finale garantie.",
       metrics: [
         {
-          label: "Couverture ciblee",
+          label: "Couverture ciblée",
           value: formatPercent(run.config.waterCoveragePercent, 0)
         },
         {
-          label: "Couverture observee",
+          label: "Couverture observée",
           value: formatPercent(mapGeneration.summary.water_coverage_percent.mean, 1)
         },
         {
@@ -698,13 +698,13 @@ const processStatsByTitle = {
         }
       ],
       insights: [
-        "Le rapport doit donc distinguer la variable de commande et la morphologie finale effectivement jouee.",
-        "L'eau est un bon exemple de champ procedural pour lequel le resultat topologique compte plus que la simple densite brute."
+        "La variable de commande ne se confond donc pas avec la morphologie finale effectivement jouée.",
+        "L'eau est un bon exemple de champ procédural pour lequel le résultat topologique compte plus que la simple densité brute."
       ],
       chartHeight: 290,
       chartLabel: "Comparaison entre la couverture d'eau ciblée et observée",
       chartOption: buildHistogramOption({
-        categories: ["Cible", "Observee"],
+        categories: ["Cible", "Observée"],
         values: waterCoverageComparison,
         color: COLORS.slate,
         xAxisName: "Mesure",
@@ -721,7 +721,7 @@ const processStatsByTitle = {
           value: `${formatNumber(mapGeneration.summary.largest_water_component.mean, 1)} cellules`
         },
         {
-          label: "Maximum observe",
+          label: "Maximum observé",
           value: `${formatNumber(mapGeneration.summary.largest_water_component.max, 0)} cellules`
         },
         {
@@ -730,8 +730,8 @@ const processStatsByTitle = {
         }
       ],
       insights: [
-        "Cette statistique est bien plus pertinente qu'un flip mask uniforme, parce qu'elle decrit directement la morphologie jouable du terrain.",
-        "Elle illustre bien la phrase du rapport selon laquelle un champ procedural doit etre resume par des composantes, de la rugosite et de la topologie, pas par une loi scalaire i.i.d. fictive."
+        "Cette statistique est bien plus pertinente qu'un retournement mask uniforme, parce qu'elle décrit directement la morphologie jouable du terrain.",
+        "Elle illustre bien la phrase selon laquelle un champ procédural doit être résumé par des composantes, de la rugosité et de la topologie, pas par une loi scalaire i.i.d. fictive."
       ],
       chartHeight: 290,
       chartLabel: "Histogramme des tailles de composantes d'eau",
@@ -746,29 +746,29 @@ const processStatsByTitle = {
   ],
   "Bruit de contour du brouillard": [
     {
-      title: "La couverture visible finale des brouillards depasse parfois la consigne nominale",
+      title: "La couverture visible finale des brouillards dépasse parfois la consigne nominale",
       description:
-        "La couverture ciblee de la meteo est parametree entre 5 % et 20 %, mais la forme reelle du brouillard apres deformation de contour peut pousser la couverture visible un peu au-dela de la borne haute nominale.",
+        "La couverture ciblée de la météo est paramétrée entre 5 % et 20 %, mais la forme réelle du brouillard après déformation de contour peut pousser la couverture visible un peu au-dela de la borné haute nominale.",
       metrics: [
         {
           label: "Couverture de pic moyenne",
           value: formatPercent(weatherSystem.summary.isolated_peak_visible_coverage_percent.mean, 1)
         },
         {
-          label: "q90 observe",
+          label: "q90 observé",
           value: formatPercent(weatherSystem.summary.isolated_peak_visible_coverage_percent.q90, 1)
         },
         {
-          label: "Maximum observe",
+          label: "Maximum observé",
           value: formatPercent(weatherSystem.summary.isolated_peak_visible_coverage_percent.max, 1)
         }
       ],
       insights: [
-        "Le bon commentaire a mettre dans le rapport est donc: la couverture uniforme config ne decrit que l'aire cible brute; la **forme procedurale finale** peut la deformer sensiblement.",
-        "Cela justifie de traiter le brouillard comme un champ spatial correle plutot que comme une simple variable d'aire."
+        "La couverture uniforme de config ne décrit que l'aire cible brute; la **forme procédurale finale** peut la déformer sensiblement.",
+        "Cela justifie de traiter le brouillard comme un champ spatial corrélé plutôt que comme une simple variable d'aire."
       ],
       chartHeight: 290,
-      chartLabel: "Histogramme des couvertures visibles maximales des brouillards meteo",
+      chartLabel: "Histogramme des couvertures visibles maximales des brouillards météo",
       chartOption: buildHistogramOption({
         categories: weatherPeakCoverageEntries.map(([value]) => String(value)),
         values: weatherPeakCoverageEntries.map(([, count]) => count),
@@ -785,12 +785,12 @@ export const randomnessStatsReport = {
   overviewBlocks: [
     {
       eyebrow: "Batch statistique",
-      title: "Jeu de donnees integre au rapport",
+      title: "Jeu de données statistique intégré",
       description:
-        "Le rapport n'integre pas toutes les sorties du batch: il ne garde que les statistiques qui apportent une information mathematique ou gameplay claire. Les signaux triviaux, constants ou purement cosmetiques sont laisses de cote.",
+        "Parmi toutes les sorties du batch, seules certaines apportent une information mathématique ou gameplay claire. Les signaux triviaux, constants ou purement cosmétiques sont laissés de côté.",
       metrics: [
         {
-          label: "Seeds integrees",
+          label: "Seeds intégrées",
           value: String(run.sampleCount)
         },
         {
@@ -803,11 +803,11 @@ export const randomnessStatsReport = {
         }
       ],
       insights: [
-        "Les figures retenues sont celles qui montrent soit un **ecart theorie/runtime** (couverture reelle, cooldown, discretisation), soit une **verification empirique utile** (moyennes XP, Gamma meteo).",
-        "Les sorties ecartes du rapport principal sont celles qui n'ajoutent presque rien a l'analyse: nombre de cellules valides constant, flips de terrain quasi-uniformes, rotations de batiments publics et categories sans signal lisible.",
+        "Les figures retenues sont celles qui montrent soit un **écart théorie/runtime** (couverture réelle, cooldown, discrétisation), soit une **vérification empirique utile** (moyennes XP, Gamma météo).",
+        "Les sorties les moins informatives sont celles qui n'ajoutent presque rien à l'analyse: nombre de cellules valides constant, flips de terrain quasi-uniformes, rotations de bâtiments publics et catégories sans signal lisible.",
         run.sampleCount < 100
-          ? `Le dernier export disponible integre actuellement ${run.sampleCount} simulations. La page est deja structuree correctement, mais la version finale devra etre rafraichie avec un batch 500 pour stabiliser les conclusions.`
-          : `Le volume d'echantillons integre est deja suffisant pour donner des figures stables et directement reutilisables dans le rapport.`
+          ? `Le dernier export disponible intégré actuellement ${run.sampleCount} simulations. La page est déjà structurée correctement, mais la version finale devra être rafraîchie avec un batch 500 pour stabiliser les conclusions.`
+          : `Le volume d'échantillons intégré est déjà suffisant pour donner des figures stables et directement exploitables.`
       ]
     }
   ],

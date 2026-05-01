@@ -2,7 +2,6 @@
 import InlineRichText from "./InlineRichText.vue";
 import ReplayViewer from "./ReplayViewer.vue";
 import StatChart from "./StatChart.vue";
-import { reportText } from "../utils/reportText.js";
 
 defineProps({
   block: {
@@ -27,24 +26,24 @@ defineProps({
 <template>
   <article class="rapport-stats-block" :class="{ 'rapport-stats-block--embedded': embedded }">
     <header class="rapport-stats-block__header">
-      <p v-if="block.eyebrow" class="rapport-stats-block__eyebrow">{{ reportText(block.eyebrow) }}</p>
+      <p v-if="block.eyebrow" class="rapport-stats-block__eyebrow">{{ block.eyebrow }}</p>
       <div class="rapport-stats-block__title-row">
         <span
           v-if="sourceTag"
           class="rapport-source-tag"
           :class="sourceKind ? `rapport-source-tag--${sourceKind}` : ''"
         >
-          {{ reportText(sourceTag) }}
+          {{ sourceTag }}
         </span>
-        <h3>{{ reportText(block.title) }}</h3>
+        <h3>{{ block.title }}</h3>
       </div>
       <InlineRichText v-if="block.description" class="rapport-stats-block__description" :text="block.description" />
     </header>
 
     <div v-if="block.metrics?.length" class="rapport-stats-block__metrics">
       <article v-for="metric in block.metrics" :key="metric.label" class="rapport-stats-metric">
-        <p class="rapport-stats-metric__value">{{ reportText(metric.value) }}</p>
-        <p class="rapport-stats-metric__label">{{ reportText(metric.label) }}</p>
+        <p class="rapport-stats-metric__value">{{ metric.value }}</p>
+        <p class="rapport-stats-metric__label">{{ metric.label }}</p>
       </article>
     </div>
 
@@ -58,7 +57,7 @@ defineProps({
       v-if="block.chartOption"
       :option="block.chartOption"
       :height="400"
-      :aria-label="reportText(block.chartLabel || block.title)"
+      :aria-label="block.chartLabel || block.title"
     />
 
     <InlineRichText
@@ -77,10 +76,10 @@ defineProps({
           class="rapport-source-tag"
           :class="block.exampleReplay.sourceKind ? `rapport-source-tag--${block.exampleReplay.sourceKind}` : ''"
         >
-          {{ reportText(block.exampleReplay.sourceTag) }}
+          {{ block.exampleReplay.sourceTag }}
         </span>
         <p v-if="block.exampleReplay.label" class="rapport-stats-example__label">
-          {{ reportText(block.exampleReplay.label) }}
+          {{ block.exampleReplay.label }}
         </p>
       </div>
       <InlineRichText

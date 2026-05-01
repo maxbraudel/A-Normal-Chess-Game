@@ -331,7 +331,7 @@ watch(
         />
       </TransitionGroup>
 
-      <div class="zoom-controls" aria-label="Controles de zoom">
+      <div class="zoom-controls" aria-label="Contrôles de zoom">
         <button
           type="button"
           class="action-button zoom-action-button"

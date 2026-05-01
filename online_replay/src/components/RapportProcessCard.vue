@@ -3,10 +3,9 @@ import IllustrationMap from "./IllustrationMap.vue";
 import InlineRichText from "./InlineRichText.vue";
 import MathFormula from "./MathFormula.vue";
 import RapportStatsBlock from "./RapportStatsBlock.vue";
-import { reportText } from "../utils/reportText.js";
 
 function getObservedSourceMeta(label) {
-  const normalizedLabel = reportText(label || "");
+  const normalizedLabel = label || "";
   const loweredLabel = normalizedLabel.toLowerCase();
   const simulatedMatch = loweredLabel.match(/(\d+)\s+parties?\s+simul/);
 
@@ -40,7 +39,7 @@ const FULL_WIDTH_THEORY_LAYOUTS = Object.freeze({
 });
 
 function normalizeProcessTitle(title) {
-  return reportText(title || "")
+  return (title || "")
     .normalize("NFD")
     .replace(/\p{Diacritic}/gu, "")
     .trim()
@@ -71,7 +70,7 @@ defineProps({
   },
   observedDataLabel: {
     type: String,
-    default: "Donnees observees"
+    default: "Données observées"
   }
 });
 </script>
@@ -80,10 +79,10 @@ defineProps({
   <article class="rapport-process-card">
     <header class="rapport-process-card__header">
       <div>
-        <p class="rapport-process-card__system">{{ reportText(item.system) }}</p>
-        <h3>{{ reportText(item.title) }}</h3>
+        <p class="rapport-process-card__system">{{ item.system }}</p>
+        <h3>{{ item.title }}</h3>
       </div>
-      <p class="rapport-process-card__law">{{ reportText(item.lawUse) }}</p>
+      <p class="rapport-process-card__law">{{ item.lawUse }}</p>
     </header>
 
     <div v-if="item.variable" class="rapport-process-card__field rapport-process-card__field--math">
@@ -97,10 +96,10 @@ defineProps({
     </div>
 
     <div v-if="item.theory" class="rapport-process-card__field rapport-process-card__field--theory">
-      <span class="rapport-process-card__label">Cadre theorique explicite</span>
+      <span class="rapport-process-card__label">Cadre théorique explicite</span>
       <div class="rapport-process-card__theory-grid">
         <article :class="getTheoryItemClasses(item.title, 'support')">
-          <p class="rapport-process-card__theory-label">Support / espace d'etat</p>
+          <p class="rapport-process-card__theory-label">Support / espace d'état</p>
           <MathFormula :formula="item.theory.support" :display="true" />
         </article>
         <article :class="getTheoryItemClasses(item.title, 'law')">
@@ -108,7 +107,7 @@ defineProps({
           <MathFormula :formula="item.theory.law" :display="true" />
         </article>
         <article :class="getTheoryItemClasses(item.title, 'expectation')">
-          <p class="rapport-process-card__theory-label">Esperance</p>
+          <p class="rapport-process-card__theory-label">Espérance</p>
           <MathFormula :formula="item.theory.expectation" :display="true" />
         </article>
         <article :class="getTheoryItemClasses(item.title, 'variance')">

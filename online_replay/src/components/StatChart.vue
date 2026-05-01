@@ -2,8 +2,6 @@
 import * as echarts from "echarts";
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
-import { reportText } from "../utils/reportText.js";
-
 const props = defineProps({
   option: {
     type: Object,
@@ -93,45 +91,7 @@ function normalizeChartAxes(option) {
   };
 }
 
-function isRawAssetLikeString(value, key = "") {
-  if (typeof value !== "string") {
-    return false;
-  }
-
-  if (key === "image" || key === "src" || key === "href") {
-    return true;
-  }
-
-  return /^(?:https?:|data:|blob:|image:\/\/|\.\.?\/|\/)/i.test(value)
-    || /\.(?:png|jpe?g|gif|webp|svg)(?:[?#].*)?$/i.test(value)
-    || /\/assets\//i.test(value)
-    || /\/textures\//i.test(value);
-}
-
-function normalizeOptionText(value, key = "") {
-  if (typeof value === "string") {
-    if (isRawAssetLikeString(value, key)) {
-      return value;
-    }
-
-    return reportText(value);
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((entry) => normalizeOptionText(entry));
-  }
-
-  if (value && typeof value === "object") {
-    return Object.entries(value).reduce((result, [key, nestedValue]) => {
-      result[key] = normalizeOptionText(nestedValue, key);
-      return result;
-    }, {});
-  }
-
-  return value;
-}
-
-const normalizedOption = computed(() => normalizeChartAxes(normalizeOptionText(props.option)));
+const normalizedOption = computed(() => normalizeChartAxes(props.option));
 
 let chartInstance;
 let resizeObserver;

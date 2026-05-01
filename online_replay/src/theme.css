@@ -30,10 +30,6 @@ html {
 body {
   overflow-x: hidden;
   overflow-y: auto;
-  background:
-    radial-gradient(circle at top left, rgba(240, 213, 143, 0.12), transparent 24%),
-    radial-gradient(circle at 85% 18%, rgba(96, 122, 66, 0.18), transparent 28%),
-    linear-gradient(180deg, #090d0a 0%, #101811 55%, #0a0d0b 100%);
   color: var(--ink-strong);
 }
 
@@ -89,7 +85,6 @@ a {
   top: 0;
   z-index: 20;
   border-bottom: 1px solid rgba(240, 213, 143, 0.08);
-  background: rgba(9, 13, 10, 0.72);
   backdrop-filter: blur(18px);
 }
 

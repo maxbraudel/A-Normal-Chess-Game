@@ -2,8 +2,6 @@
 import { computed } from "vue";
 import katex from "katex";
 
-import { reportText } from "../utils/reportText.js";
-
 const props = defineProps({
   text: {
     type: String,
@@ -139,7 +137,7 @@ function renderPlainChunk(value) {
     return renderMath(value.trim(), true);
   }
 
-  return escapeHtml(reportText(value)).replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>");
+  return escapeHtml(value).replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>");
 }
 
 const rendered = computed(() => {
