@@ -1159,99 +1159,99 @@ export const randomnessReport = {
     ]
   },
   randomnessLink: {
-    title: "Pourquoi les processus aleatoires sont essentiels au jeu",
+    title: "Pourquoi les processus aléatoires sont essentiels au jeu",
     paragraphs: [
-      "Ce rapport montre pourquoi les processus aleatoires sont essentiels au jeu: ils renouvellent les parties, enrichissent les choix strategiques et apportent une vraie plus-value par rapport aux echecs classiques, tout en restant assez lisibles pour etre analyses, modelises et observes."
+      "Ce rapport montre pourquoi les processus aléatoires sont essentiels au jeu: ils renouvellent les parties, enrichissent les choix stratégiques et apportent une vraie plus-value par rapport aux échecs classiques, tout en restant assez lisibles pour être analysés, modélisés et observés."
     ],
     sections: [],
     reportDimensionsTitle: "Les trois dimensions du rapport",
     reportDimensions: [
       {
-        title: "1. Inventaire des processus aleatoires",
+        title: "1. Inventaire des processus aléatoires",
         text:
-          "La premiere couche du site recense les variables aleatoires actives de la codebase, leur famille de loi, leurs parametres, leur support, leur methode de simulation et leur ancrage deterministe dans `worldSeed` et les compteurs RNG serialises.",
+          "La première couche du site recense les variables aléatoires actives de la codebase, leur famille de loi, leurs paramètres, leur support, leur méthode de simulation et leur ancrage déterministe dans `worldSeed` et les compteurs RNG sérialisés.",
         showSummaryStats: true
       },
       {
-        title: "2. 500 parties simulees",
+        title: "2. 500 parties simulées",
         sourceKind: "simulated",
         text:
-          "La seconde couche repose sur 500 simulations theoriques. Il ne s'agit pas de matchs entre IA ni de parties humaines accelerees: on simule directement les mecanismes concernes, par exemple la generation du terrain, les coffres, la meteo ou les spawns infernaux, afin d'estimer leur comportement attendu."
+          "La seconde couche repose sur 500 simulations théoriques. Il ne s'agit pas de matchs entre IA ni de parties humaines accélérées: on simule directement les mécanismes concernés, par exemple la génération du terrain, les coffres, la météo ou les apparitions infernales, afin d'estimer leur comportement attendu."
       },
       {
-        title: "3. Une partie reelle instrumentee",
+        title: "3. Une partie réelle instrumentée",
         sourceKind: "real",
         text:
-          "La troisieme couche exploite les donnees d'une partie complete jouee pendant plusieurs heures avec un ami. Les actions, les tours et les etats utiles ont ete enregistres pour confronter la theorie a un runtime reel et montrer des resultats lisibles en situation de jeu."
+          "La troisième couche exploite les données d'une partie complète jouée pendant plusieurs heures avec un ami. Les actions, les tours et les états utiles ont été enregistrés pour confronter la théorie à un runtime réel et montrer des résultats lisibles en situation de jeu."
       }
     ],
-    replayTitle: "Replay de la partie reelle",
+    replayTitle: "Replay de la partie réelle",
     replayText:
-      "Le viewer ci-dessous donne un apercu direct de la partie observee, en lecture automatique rapide, avec boucle et point de vue blanc. Il sert d'entree visuelle avant le detail statistique du rapport."
+      "Le viewer ci-dessous donne un aperçu direct de la partie observée, en lecture automatique rapide, avec boucle et point de vue blanc. Il sert d'entrée visuelle avant le détail statistique du rapport."
   },
   summaryStats: [
     {
       value: "38",
       label: "processus actifs",
-      detail: "inventories dans l'audit runtime et reclasses ici par lois"
+      detail: "inventoriés dans l'audit runtime et reclassés ici par lois"
     },
     {
       value: "12",
-      label: "familles modelisantes",
-      detail: "lois usuelles + champs proceduraux correles"
+      label: "familles modélisantes",
+      detail: "lois usuelles + champs procéduraux corrélés"
     },
     {
       value: "5",
-      label: "sous-systemes jouables",
-      detail: "carte, XP, coffres, meteo, pieces du diable"
+      label: "sous-systèmes jouables",
+      detail: "carte, XP, coffres, météo, pièces du diable"
     },
     {
       value: "worldSeed",
-      label: "racine deterministe",
-      detail: "completee par des compteurs RNG serialises par systeme"
+      label: "racine déterministe",
+      detail: "complétée par des compteurs RNG sérialisés par système"
     }
   ],
   methodology: {
     paragraphs: [
-      "Le jeu n'utilise pas l'aleatoire comme une boite noire. Chaque systeme stochastic passe par un schema recurrent: une seed de monde `worldSeed`, un compteur d'evenements `rngCounter`, puis une transformation specifique au systeme. L'analyse probabiliste correcte doit donc raisonner a deux niveaux: la loi brute tiree par la bibliotheque standard, puis la loi effectivement observee apres conditionnement, troncature, arrondi ou filtrage de gameplay.",
-      "La classification choisie ici suit les lois plutot que les fichiers. Cela permet de voir immediatement que l'XP et l'or des coffres sont deux usages du meme schema de normale tronquee; que la meteo combine uniforme, Gamma, log-normale et piecewise linear; et que certains processus de carte ou de contour ne sont pas bien decrits par une variable scalaire classique mais par des champs spatiaux correles.",
-      "Quand une variable est nominale, par exemple un type de recompense ou une direction, on insiste sur le fait qu'il n'existe pas d'esperance canonique sans choisir au prealable un score numerique auxiliaire. Ce point est essentiel pour ne pas ecrire de formules fausses juste parce qu'une API de tirage renvoie un entier d'indice."
+      "Le jeu n'utilise pas l'aléatoire comme une boîte noire. Chaque système stochastique passe par un schéma récurrent: une seed de monde `worldSeed`, un compteur d'événements `rngCounter`, puis une transformation spécifique au système. L'analyse probabiliste correcte doit donc raisonner à deux niveaux: la loi brute tirée par la bibliothèque standard, puis la loi effectivement observée après conditionnement, troncature, arrondi ou filtrage de gameplay.",
+      "La classification choisie ici suit les lois plutôt que les fichiers. Cela permet de voir immédiatement que l'XP et l'or des coffres sont deux usages du même schéma de normale tronquée; que la météo combine uniforme, Gamma, log-normale et piecewise linear; et que certains processus de carte ou de contour ne sont pas bien décrits par une variable scalaire classique mais par des champs spatiaux corrélés.",
+      "Quand une variable est nominale, par exemple un type de récompense ou une direction, on insiste sur le fait qu'il n'existe pas d'espérance canonique sans choisir au préalable un score numérique auxiliaire. Ce point est essentiel pour ne pas écrire de formules fausses juste parce qu'une API de tirage renvoie un entier d'indice."
     ],
     formulas: [
       {
-        label: "Schema deterministe transverse",
+        label: "Schéma déterministe transverse",
         latex: L`U_t = G\bigl(worldSeed, rngCounter_t\bigr), \qquad X_t = \Phi\bigl(U_t, S_t\bigr)`
       },
       {
         label: "Evolution du compteur",
-        latex: L`rngCounter_{t+1} = rngCounter_t + 1 \quad \text{a chaque evenement consommatif}`
+        latex: L`rngCounter_{t+1} = rngCounter_t + 1 \quad \text{à chaque événement consommatif}`
       },
       {
         label: "Principe de lecture du rapport",
-        latex: L`\text{loi observee} = \text{transformation gameplay} \circ \text{loi standard}`
+        latex: L`\text{loi observée} = \text{transformation gameplay} \circ \text{loi standard}`
       }
     ],
     highlights: [
-      "Les systemes XP, Coffres, Meteo et Pieces du diable possedent chacun leur compteur RNG serialize; le determinisme persiste donc apres sauvegarde/rechargement.",
-      "Les seeds auxiliaires de meteo et de generation de carte sont elles-memes des variables aleatoires uniformes a grand support, mais elles servent ensuite a piloter des champs non i.i.d.",
-      "Le rapport distingue toujours la loi theorique continue de la loi runtime reellement observee quand un arrondi, un `ceil` ou un `clamp` est applique."
+      "Les systèmes XP, Coffres, Météo et Pièces du diable possèdent chacun leur compteur RNG sérialisé; le déterminisme persiste donc après sauvegarde/rechargement.",
+      "Les seeds auxiliaires de météo et de génération de carte sont elles-mêmes des variables aléatoires uniformes à grand support, mais elles servent ensuite à piloter des champs non i.i.d.",
+      "Le rapport distingue toujours la loi théorique continue de la loi runtime réellement observée quand un arrondi, un `ceil` ou un `clamp` est appliqué."
     ]
   },
   outputStats: [
     {
-      title: "Variables etats serialisees",
+      title: "Variables états sérialisées",
       text:
-        "La sauvegarde ne memorise pas seulement le resultat final; elle memorise aussi l'etat probabiliste necessaire pour rejouer la suite de la partie sans derive de seed.",
+        "La sauvegarde ne mémorise pas seulement le résultat final; elle mémorise aussi l'état probabiliste nécessaire pour rejouer la suite de la partie sans dérive de seed.",
       bullets: [
-        "`worldSeed` fixe le monde de reference.",
-        "`rngCounter` de XP, Coffres, Meteo et Pieces du diable est serialize par systeme.",
-        "Les etats derives comme `rewardRngCounter`, `currentRewardGeneration` et les descripteurs de brouillard conservent la continuite des lois conditionnelles."
+        "`worldSeed` fixe le monde de référence.",
+        "`rngCounter` de XP, Coffres, Météo et Pièces du diable est sérialisé par système.",
+        "Les états dérivés comme `rewardRngCounter`, `currentRewardGeneration` et les descripteurs de brouillard conservent la continuité des lois conditionnelles."
       ]
     },
     {
-      title: "Series statistiques directement extractibles",
+      title: "Séries statistiques directement extractibles",
       text:
-        "Le code et les exports JSON permettent deja de reconstruire plusieurs series quantitatives utiles pour la validation empirique du modele.",
+        "Le code et les exports JSON permettent déjà de reconstruire plusieurs séries quantitatives utiles pour la validation empirique du modèle.",
       bullets: [
         "Histogrammes d'XP par source et comparaison a la normale tronquee annoncee.",
         "Retards de reapparition des coffres et repartition des recompenses par regime early/late.",
@@ -1605,29 +1605,29 @@ export const randomnessReport = {
         "Dans ce projet, presque aucune loi standard n'arrive brute a l'ecran. Les recompenses d'XP et d'or sont tronquees, arrondies et bornees par un minimum; les delais Weibull et Gamma passent par `round` ou `ceil`; l'opacite du brouillard est encore `clamp`ee apres la log-normale. La difficulte reelle a donc ete de documenter a la fois la loi parente et la variable effectivement utilisee par le runtime, sans faire croire qu'un histogramme discret final est exactement une Gaussienne, une Gamma ou une Weibull continues."
     },
     {
-      title: "Donner une lecture statistique correcte a des variables non numeriques",
+      title: "Donner une lecture statistique correcte à des variables non numériques",
       text:
-        "Une direction de brouillard, un type de recompense de coffre ou un type de piece du diable ne portent pas naturellement une moyenne ou une variance. La difficulte n'etait pas de calculer un nombre coute que coute, mais d'eviter une erreur de modelisation. Pour ces variables, j'ai donc choisi d'expliciter le support, la loi categorielle et les poids, puis de reserver les moments aux cas ou une variable numerique ou un score auxiliaire avaient un sens."
+        "Une direction de brouillard, un type de récompense de coffre ou un type de pièce du diable ne portent pas naturellement une moyenne ou une variance. La difficulté n'était pas de calculer un nombre coûte que coûte, mais d'éviter une erreur de modélisation. Pour ces variables, j'ai donc choisi d'expliciter le support, la loi catégorielle et les poids, puis de réserver les moments aux cas où une variable numérique ou un score auxiliaire avaient un sens."
     },
     {
-      title: "Mesurer des champs spatiaux correles sans les reduire a du i.i.d.",
+      title: "Mesurer des champs spatiaux corrélés sans les réduire à du i.i.d.",
       text:
-        "La terre, l'eau et les contours de brouillard sont produits par du bruit procedural partageant une meme seed et un meme post-traitement spatial. Une statistique cellule par cellule aurait masque le vrai phenomene, qui est l'apparition de regions coherentes, de lacs, de couloirs et de silhouettes. La difficulte a donc ete de choisir comme variables observees des resumes adaptes a un champ: couverture totale, cellules refusees, rugosite de bord, duree visible ou nombre de pieces masquees, plutot qu'une fausse Bernoulli independante par cellule."
+        "La terre, l'eau et les contours de brouillard sont produits par du bruit procédural partageant une même seed et un même post-traitement spatial. Une statistique cellule par cellule aurait masqué le vrai phénomène, qui est l'apparition de régions cohérentes, de lacs, de couloirs et de silhouettes. La difficulté a donc été de choisir comme variables observées des résumés adaptés à un champ: couverture totale, cellules refusées, rugosité de bord, durée visible ou nombre de pièces masquées, plutôt qu'une fausse Bernoulli indépendante par cellule."
     },
     {
-      title: "Instrumenter le runtime reel sans perdre le determinisme des parties",
+      title: "Instrumenter le runtime réel sans perdre le déterminisme des parties",
       text:
-        "Le rapport ne repose pas seulement sur des simulations hors ligne: il fallait aussi extraire une partie reelle instrumentee, rejouable, et comparer ses trajectoires a des lois theoriques. Cela oblige a serialiser correctement `worldSeed`, les compteurs RNG, les etats de brouillard, la dette de sang et les evenements de spawn pour qu'une sauvegarde et un replay racontent exactement la meme histoire statistique. Sans cette instrumentation, les jolies formules du rapport seraient restees decouplees du jeu execute."
+        "Le rapport ne repose pas seulement sur des simulations hors ligne: il fallait aussi extraire une partie réelle instrumentée, rejouable, et comparer ses trajectoires à des lois théoriques. Cela oblige à sérialiser correctement `worldSeed`, les compteurs RNG, les états de brouillard, la dette de sang et les événements de spawn pour qu'une sauvegarde et un replay racontent exactement la même histoire statistique. Sans cette instrumentation, les jolies formules du rapport seraient restées découplées du jeu exécuté."
     },
     {
-      title: "Relier batch simule et partie reelle sans surinterpreter",
+      title: "Relier batch simulé et partie réelle sans surinterpréter",
       text:
-        "Les 500 parties simulees donnent des tendances robustes sur les familles de lois, mais une partie reelle unique reste fortement dependante de son histoire tactique. La difficulte finale a donc ete d'assumer cette asymetrie: utiliser le batch pour verifier les supports, les ordres de grandeur et les histogrammes globaux, puis utiliser la partie instrumentee pour montrer comment les dependances d'etat, la visibilite et la dette de sang deformaient concrètement ces lois pendant une vraie partie."
+        "Les 500 parties simulées donnent des tendances robustes sur les familles de lois, mais une partie réelle unique reste fortement dépendante de son histoire tactique. La difficulté finale a donc été d'assumer cette asymétrie: utiliser le batch pour vérifier les supports, les ordres de grandeur et les histogrammes globaux, puis utiliser la partie instrumentée pour montrer comment les dépendances d'état, la visibilité et la dette de sang déformaient concrètement ces lois pendant une vraie partie."
     }
   ],
   perspectives: [
-    "La premiere perspective est de **mieux ajuster les parametres des mecanismes aleatoires** a partir d'un volume de parties plus important. Je n'ai pas encore assez de recul statistique pour equilibrer proprement ces variables: par exemple, les apparitions des pieces du diable produisent encore trop souvent des pions, alors que cette piece est lente et peu impactante, et la loi normale des recompenses d'or des coffres reste trop resserree autour de sa moyenne, ce qui rend les variations peu perceptibles pour le joueur.",
-    "Une deuxieme perspective est donc d'**accumuler beaucoup plus de donnees de partie** afin d'ameliorer l'equilibrage general du jeu. L'objectif n'est pas seulement de decrire les lois utilisees, mais de disposer d'assez d'observations pour corriger les desequilibres reels, ajuster les amplitudes utiles et verifier que les evenements aleatoires enrichissent effectivement la partie au lieu d'aplatir ses situations.",
-    "Enfin, un chantier important sera de developper une **intelligence artificielle symbolique** capable d'agir a partir de regles deterministes tout en **anticipant des evenements aleatoires probables**. Explorer cette articulation entre raisonnement symbolique et incertitude serait utile a la fois pour mieux jouer, pour mieux tester le jeu et pour mieux exploiter toutes les statistiques produites par ce travail."
+    "La première perspective est de **mieux ajuster les paramètres des mécanismes aléatoires** à partir d'un volume de parties plus important. Je n'ai pas encore assez de recul statistique pour équilibrer proprement ces variables: par exemple, les apparitions des pièces du diable produisent encore trop souvent des pions, alors que cette pièce est lente et peu impactante, et la loi normale des récompenses d'or des coffres reste trop resserrée autour de sa moyenne, ce qui rend les variations peu perceptibles pour le joueur.",
+    "Une deuxième perspective est donc d'**accumuler beaucoup plus de données de partie** afin d'améliorer l'équilibrage général du jeu. L'objectif n'est pas seulement de décrire les lois utilisées, mais de disposer d'assez d'observations pour corriger les déséquilibres réels, ajuster les amplitudes utiles et vérifier que les événements aléatoires enrichissent effectivement la partie au lieu d'aplatir ses situations.",
+    "Enfin, un chantier important sera de développer une **intelligence artificielle symbolique** capable d'agir à partir de règles déterministes tout en **anticipant des événements aléatoires probables**. Explorer cette articulation entre raisonnement symbolique et incertitude serait utile à la fois pour mieux jouer, pour mieux tester le jeu et pour mieux exploiter toutes les statistiques produites par ce travail."
   ]
 };

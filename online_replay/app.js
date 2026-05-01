@@ -554,7 +554,7 @@ function buildReplayModel(data, masterConfig) {
       activeKingdom: data.initialSnapshot.activeKingdom,
       activeValidation: data.initialActiveValidation || null,
       nextTurnValidation: data.initialNextTurnValidation || null,
-      label: "Etat initial",
+      label: "État initial",
       rawEvents: Array.isArray(data.initialSnapshot.events) ? data.initialSnapshot.events : [],
       notifications: []
     }, data.referenceData, masterConfig));
@@ -836,7 +836,7 @@ function toArray(value) {
 
 function buildEventSummary(events) {
   if (!Array.isArray(events) || !events.length) {
-    return "Aucun evenement marquant sur cette frame.";
+    return "Aucun événement marquant sur cette frame.";
   }
 
   return events
@@ -845,7 +845,7 @@ function buildEventSummary(events) {
       if (typeof entry === "string") {
         return entry;
       }
-      return entry.message || entry.msg || entry.kindLabel || entry.kindKey || "Evenement";
+      return entry.message || entry.msg || entry.kindLabel || entry.kindKey || "Événement";
     })
     .join(" · ");
 }
@@ -1097,7 +1097,7 @@ function resolveChestRewardToast(frame) {
     slotKey: "chest",
     kingdomKey,
     kingdomLabel,
-    message: `A gagne ${formatChestRewardToastText(notification)}.`,
+    message: `A gagné ${formatChestRewardToastText(notification)}.`,
     tone: "success",
     priority: 20
   });
