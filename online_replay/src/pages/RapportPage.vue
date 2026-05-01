@@ -20,6 +20,7 @@ const REPORT_INTRO_REPLAY = Object.freeze({
   enablePerspective: true,
   perspectiveKingdom: "white"
 });
+const TOC_ACTIVE_OFFSET_PX = 112;
 
 const activeTocId = ref("cadre");
 const realGameStatsReport = ref({
@@ -89,43 +90,84 @@ const observedSectionsByTitle = computed(() =>
   )
 );
 
-let sectionObserver;
+let cleanupTocListeners = null;
+let tocSyncAnimationFrame = null;
+
+function syncActiveTocId() {
+  const threshold = TOC_ACTIVE_OFFSET_PX;
+  const sections = tocItems.value
+    .map((item) => ({
+      id: item.id,
+      element: document.getElementById(item.id)
+    }))
+    .filter((entry) => entry.element instanceof HTMLElement);
+
+  if (!sections.length) {
+    return;
+  }
+
+  const lastReachedSection = sections.reduce((currentId, entry) => {
+    if (entry.element.getBoundingClientRect().top <= threshold) {
+      return entry.id;
+    }
+
+    return currentId;
+  }, sections[0].id);
+
+  activeTocId.value = lastReachedSection;
+}
+
+function scheduleTocSync() {
+  if (tocSyncAnimationFrame !== null) {
+    return;
+  }
+
+  tocSyncAnimationFrame = window.requestAnimationFrame(() => {
+    tocSyncAnimationFrame = null;
+    syncActiveTocId();
+  });
+}
 
 onMounted(async () => {
   await nextTick();
 
-  sectionObserver = new IntersectionObserver(
-    (entries) => {
-      const visibleEntries = entries
-        .filter((entry) => entry.isIntersecting)
-        .sort((left, right) => left.boundingClientRect.top - right.boundingClientRect.top);
+  const handleViewportChange = () => {
+    scheduleTocSync();
+  };
 
-      if (visibleEntries.length > 0) {
-        activeTocId.value = visibleEntries[0].target.id;
-      }
-    },
-    {
-      rootMargin: "-18% 0px -64% 0px",
-      threshold: [0, 0.15, 0.4, 0.7]
-    }
-  );
+  const scrollTargets = [window, document, document.documentElement, document.body].filter(Boolean);
 
-  for (const item of tocItems.value) {
-    const element = document.getElementById(item.id);
-    if (element) {
-      sectionObserver.observe(element);
-    }
+  for (const target of scrollTargets) {
+    target.addEventListener("scroll", handleViewportChange, { passive: true });
   }
+
+  window.addEventListener("resize", handleViewportChange);
+  cleanupTocListeners = () => {
+    for (const target of scrollTargets) {
+      target.removeEventListener("scroll", handleViewportChange);
+    }
+
+    window.removeEventListener("resize", handleViewportChange);
+  };
+
+  syncActiveTocId();
 
   try {
     realGameStatsReport.value = await loadRealGameStatsReport();
+    await nextTick();
+    syncActiveTocId();
   } catch (error) {
     console.error("Impossible de charger les stats de la partie réelle pour le rapport.", error);
   }
 });
 
 onBeforeUnmount(() => {
-  sectionObserver?.disconnect();
+  cleanupTocListeners?.();
+
+  if (tocSyncAnimationFrame !== null) {
+    window.cancelAnimationFrame(tocSyncAnimationFrame);
+    tocSyncAnimationFrame = null;
+  }
 });
 </script>
 

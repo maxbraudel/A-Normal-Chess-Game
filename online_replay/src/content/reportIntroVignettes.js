@@ -193,6 +193,13 @@ function createBuilding({ id, type, owner = 0, isNeutral = false, ox, oy, w, h, 
   };
 }
 
+function createProducingBuilding({ turnsRemaining = 0, ...buildingConfig }) {
+  const building = createBuilding(buildingConfig);
+  building.isProducing = turnsRemaining > 0;
+  building.turnsRemaining = turnsRemaining;
+  return building;
+}
+
 function createChest({ id, x, y }) {
   return {
     id,
@@ -416,9 +423,6 @@ function createMovementPointsCycleFrames({ saveName, grid, weatherState }) {
     blackPieces: [
       createPiece({ id: 211, type: PIECE_KING, kingdom: 1, x: 7, y: 1 }),
       createPiece({ id: 212, type: PIECE_PAWN, kingdom: 1, x: 7, y: 5 })
-    ],
-    whiteBuildings: [
-      createBuilding({ id: 221, type: BUILDING_BARRACKS, owner: 0, ox: 0, oy: 1, w: 4, h: 3, producingType: PIECE_PAWN })
     ]
   });
 
@@ -477,14 +481,14 @@ function createEconomyGoldCycleFrames({ saveName, grid, weatherState }) {
     weatherState,
     whiteGold: gold,
     whitePieces: [
-      createPiece({ id: 41, type: PIECE_KING, kingdom: 0, x: 1, y: 7 }),
+      createPiece({ id: 41, type: PIECE_KING, kingdom: 0, x: 1, y: 8 }),
       createPiece({ id: 42, type: PIECE_PAWN, kingdom: 0, x: pawnX, y: pawnY })
     ],
     blackPieces: [
       createPiece({ id: 51, type: PIECE_PAWN, kingdom: 1, x: 7, y: 5 })
     ],
     publicBuildings: [
-      createBuilding({ id: 61, type: BUILDING_MINE, owner: 0, isNeutral: true, ox: 1, oy: 1, w: 6, h: 6 })
+      createBuilding({ id: 61, type: BUILDING_MINE, owner: 0, isNeutral: true, ox: 1, oy: 2, w: 6, h: 6 })
     ]
   });
 
@@ -503,6 +507,54 @@ function createEconomyGoldCycleFrames({ saveName, grid, weatherState }) {
       committedTurnNumber: 3,
       committedActiveKingdom: 0,
       snapshot: buildSnapshot({ turnNumber: 3, gold: 30, pawnX: 1, pawnY: 3 })
+    })
+  ];
+}
+
+function createProductionCycleFrames({ saveName, grid, weatherState }) {
+  const buildSnapshot = ({ turnNumber, turnsRemaining, bishopReady = false }) => createSnapshot({
+    saveName,
+    turnNumber,
+    activeKingdom: 0,
+    grid,
+    weatherState,
+    whitePieces: [
+      createPiece({ id: 71, type: PIECE_KING, kingdom: 0, x: 1, y: 4 }),
+      ...(bishopReady ? [createPiece({ id: 74, type: PIECE_BISHOP, kingdom: 0, x: 4, y: 4 })] : [])
+    ],
+    blackPieces: [
+      createPiece({ id: 81, type: PIECE_PAWN, kingdom: 1, x: 7, y: 1 })
+    ],
+    whiteBuildings: [
+      createProducingBuilding({
+        id: 91,
+        type: BUILDING_BARRACKS,
+        owner: 0,
+        ox: 3,
+        oy: 3,
+        w: 4,
+        h: 3,
+        producingType: PIECE_BISHOP,
+        turnsRemaining
+      })
+    ]
+  });
+
+  return [
+    createReplayFrame({
+      committedTurnNumber: 1,
+      committedActiveKingdom: 0,
+      snapshot: buildSnapshot({ turnNumber: 1, turnsRemaining: 2 })
+    }),
+    createReplayFrame({
+      committedTurnNumber: 2,
+      committedActiveKingdom: 0,
+      snapshot: buildSnapshot({ turnNumber: 2, turnsRemaining: 1 })
+    }),
+    createReplayFrame({
+      committedTurnNumber: 3,
+      committedActiveKingdom: 0,
+      snapshot: buildSnapshot({ turnNumber: 3, turnsRemaining: 0, bishopReady: true })
     })
   ];
 }
@@ -603,11 +655,17 @@ function createVignette({
   perspectiveSwapIntervalMs = 2000,
   showPerspectiveOverlay = false,
   showToasts = false,
+  allowZoom = false,
+  showBuildingLabels = undefined,
+  hiddenBuildingLabelKeys = undefined,
+  productionOverlay = undefined,
   statusOverlay = undefined,
   ...entities
 }) {
   const replayGrid = createGrid(grid);
   const replayWeatherState = createWeatherState(weatherMask);
+  const hasBuildings = [entities.whiteBuildings, entities.blackBuildings, entities.publicBuildings]
+    .some((buildingCollection) => Array.isArray(buildingCollection) && buildingCollection.length > 0);
   const turnHistory = typeof buildTurnHistory === "function"
     ? buildTurnHistory({ saveName, grid: replayGrid, weatherState: replayWeatherState })
     : [];
@@ -629,6 +687,9 @@ function createVignette({
     perspectiveSwapIntervalMs,
     showPerspectiveOverlay,
     showToasts,
+    allowZoom,
+    showBuildingLabels: typeof showBuildingLabels === "boolean" ? showBuildingLabels : hasBuildings,
+    hiddenBuildingLabelKeys: Array.isArray(hiddenBuildingLabelKeys) ? hiddenBuildingLabelKeys : [],
     statusOverlay
   };
 
@@ -638,6 +699,10 @@ function createVignette({
 
   if (Array.isArray(perspectiveSequence) && perspectiveSequence.length) {
     vignette.perspectiveSequence = perspectiveSequence;
+  }
+
+  if (productionOverlay && typeof productionOverlay === "object") {
+    vignette.productionOverlay = productionOverlay;
   }
 
   return Object.freeze(vignette);
@@ -700,9 +765,6 @@ export const reportIntroVignettes = Object.freeze({
     blackPieces: [
       createPiece({ id: 211, type: PIECE_KING, kingdom: 1, x: 7, y: 1 }),
       createPiece({ id: 212, type: PIECE_PAWN, kingdom: 1, x: 7, y: 5 })
-    ],
-    whiteBuildings: [
-      createBuilding({ id: 221, type: BUILDING_BARRACKS, owner: 0, ox: 0, oy: 1, w: 4, h: 3, producingType: PIECE_PAWN })
     ]
   }),
   terrain: createVignette({
@@ -753,19 +815,38 @@ export const reportIntroVignettes = Object.freeze({
     ],
     whiteGold: 0,
     whitePieces: [
-      createPiece({ id: 41, type: PIECE_KING, kingdom: 0, x: 1, y: 7 }),
+      createPiece({ id: 41, type: PIECE_KING, kingdom: 0, x: 1, y: 8 }),
       createPiece({ id: 42, type: PIECE_PAWN, kingdom: 0, x: 0, y: 3 })
     ],
     blackPieces: [
       createPiece({ id: 51, type: PIECE_PAWN, kingdom: 1, x: 7, y: 5 })
     ],
     publicBuildings: [
-      createBuilding({ id: 61, type: BUILDING_MINE, owner: 0, isNeutral: true, ox: 1, oy: 1, w: 6, h: 6 })
+      createBuilding({ id: 61, type: BUILDING_MINE, owner: 0, isNeutral: true, ox: 1, oy: 2, w: 6, h: 6 })
     ]
   }),
   production: createVignette({
     saveName: "intro-production",
-    ariaLabel: "Une caserne, des pièces deployees et un front local",
+    ariaLabel: "Une caserne prépare un fou avant de le déployer sur le front local",
+    autoplayIntervalMs: 1200,
+    autoplayOnMount: true,
+    loopPlayback: true,
+    buildTurnHistory: createProductionCycleFrames,
+    statusOverlay: {
+      label: "Point de vue",
+      values: ["Blancs"],
+      showShield: false
+    },
+    productionOverlay: {
+      buildingId: 91,
+      label: "Tours restants",
+      values: ["3", "2", "1", "0"],
+      progressValues: [0, 1 / 3, 2 / 3, 1],
+      pieceType: "bishop",
+      kingdom: "white",
+      anchorPlacement: "below",
+      anchorYOffsetCells: 0.05
+    },
     grid: [
       "ggggggggg",
       "gdggggggg",
@@ -778,15 +859,23 @@ export const reportIntroVignettes = Object.freeze({
       "ggggggggg"
     ],
     whitePieces: [
-      createPiece({ id: 71, type: PIECE_KING, kingdom: 0, x: 0, y: 4 }),
-      createPiece({ id: 72, type: PIECE_PAWN, kingdom: 0, x: 1, y: 1 }),
-      createPiece({ id: 73, type: PIECE_ROOK, kingdom: 0, x: 2, y: 7 })
+      createPiece({ id: 71, type: PIECE_KING, kingdom: 0, x: 1, y: 4 })
     ],
     blackPieces: [
-      createPiece({ id: 81, type: PIECE_PAWN, kingdom: 1, x: 7, y: 4 })
+      createPiece({ id: 81, type: PIECE_PAWN, kingdom: 1, x: 7, y: 1 })
     ],
     whiteBuildings: [
-      createBuilding({ id: 91, type: BUILDING_BARRACKS, owner: 0, ox: 1, oy: 3, w: 4, h: 3, producingType: PIECE_PAWN })
+      createProducingBuilding({
+        id: 91,
+        type: BUILDING_BARRACKS,
+        owner: 0,
+        ox: 3,
+        oy: 3,
+        w: 4,
+        h: 3,
+        producingType: PIECE_BISHOP,
+        turnsRemaining: 3
+      })
     ]
   }),
   chest: createVignette({
@@ -855,6 +944,7 @@ export const reportIntroVignettes = Object.freeze({
     perspectiveSequence: ["white", "black"],
     perspectiveSwapIntervalMs: 2000,
     showPerspectiveOverlay: true,
+    hiddenBuildingLabelKeys: ["barracks"],
     grid: [
       "ggggggggg",
       "ggggdgggg",

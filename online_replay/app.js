@@ -19,9 +19,8 @@ const CONCEALING_FOG_ALPHA_THRESHOLD = 40;
 const CLICK_DRAG_THRESHOLD_PX = 6;
 const MIN_CAMERA_ZOOM = 0.08;
 const MAX_CAMERA_ZOOM = 32;
-const TRACKPAD_PINCH_ZOOM_SENSITIVITY = 0.01;
-const TRACKPAD_PINCH_ZOOM_EXPONENT_LIMIT = 0.7;
-const WHEEL_ZOOM_FACTOR = 1.12;
+const CAMERA_ZOOM_STEP_FACTOR = 1.18;
+const CTRL_WHEEL_ZOOM_DELTA_STEP = 100;
 const toastDismissDelayMs = normalizeToastCooldownMs(replayConfig.toastCooldownMs);
 
 const DEFAULT_MASTER_CONFIG = {
@@ -340,11 +339,7 @@ function bindEvents() {
     rootElement.removeAttribute("tabindex");
   }
 
-  refs.replayCanvas.title = isInteractionEnabled
-    ? (isCellDebugEnabled
-      ? "Molette: zoom. Glisser: camera. Double-clic: recadrer. Clic: debug cellule dans la console."
-      : "Molette: zoom. Glisser: camera. Double-clic: recadrer.")
-    : "Illustration statique du plateau.";
+  refs.replayCanvas.removeAttribute("title");
 
   addManagedListener(refs.firstTurnButton, "click", function () {
     stopAutoplay();
@@ -378,11 +373,11 @@ function bindEvents() {
   });
 
   addManagedListener(refs.zoomInButton, "click", function () {
-    zoomCameraFromKeyboard(WHEEL_ZOOM_FACTOR);
+    zoomCameraFromKeyboard(CAMERA_ZOOM_STEP_FACTOR);
   });
 
   addManagedListener(refs.zoomOutButton, "click", function () {
-    zoomCameraFromKeyboard(1 / WHEEL_ZOOM_FACTOR);
+    zoomCameraFromKeyboard(1 / CAMERA_ZOOM_STEP_FACTOR);
   });
 
   addManagedListener(refs.turnSlider, "input", function (event) {
@@ -444,12 +439,12 @@ function bindEvents() {
 
       if (event.key === "+" || event.key === "=") {
         event.preventDefault();
-        zoomCameraFromKeyboard(WHEEL_ZOOM_FACTOR);
+        zoomCameraFromKeyboard(CAMERA_ZOOM_STEP_FACTOR);
       }
 
       if (event.key === "-" || event.key === "_") {
         event.preventDefault();
-        zoomCameraFromKeyboard(1 / WHEEL_ZOOM_FACTOR);
+        zoomCameraFromKeyboard(1 / CAMERA_ZOOM_STEP_FACTOR);
       }
 
       if (event.key === "0") {
@@ -1761,18 +1756,22 @@ function resolveWheelZoomMultiplier(event) {
   }
 
   if (isTrackpadPinchWheelEvent(event)) {
-    return Math.exp(clamp(
-      -event.deltaY * TRACKPAD_PINCH_ZOOM_SENSITIVITY,
-      -TRACKPAD_PINCH_ZOOM_EXPONENT_LIMIT,
-      TRACKPAD_PINCH_ZOOM_EXPONENT_LIMIT
-    ));
+    return resolveRelativeZoomMultiplier(-event.deltaY / CTRL_WHEEL_ZOOM_DELTA_STEP);
   }
 
   if (isTrackpadScrollWheelEvent(event)) {
     return null;
   }
 
-  return event.deltaY < 0 ? WHEEL_ZOOM_FACTOR : 1 / WHEEL_ZOOM_FACTOR;
+  return event.deltaY < 0 ? CAMERA_ZOOM_STEP_FACTOR : 1 / CAMERA_ZOOM_STEP_FACTOR;
+}
+
+function resolveRelativeZoomMultiplier(relativeZoomSteps) {
+  if (!Number.isFinite(relativeZoomSteps) || relativeZoomSteps === 0) {
+    return null;
+  }
+
+  return Math.pow(CAMERA_ZOOM_STEP_FACTOR, clamp(relativeZoomSteps, -1, 1));
 }
 
 function isTrackpadPinchWheelEvent(event) {

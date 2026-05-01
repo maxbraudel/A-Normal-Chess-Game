@@ -469,7 +469,7 @@ const processStatsByTitle = {
         }
       ],
       insights: [
-        "L'illustration la plus pertinente n'est donc pas seulement le type de reward brut, mais **l'écart entre les probabilités early et late** face aux poids configures.",
+        "L'illustration la plus pertinente n'est donc pas seulement le type de reward brut, mais **l'écart entre les probabilités early et late** face aux poids configurés.",
         `Dans le scénario synthétique de collecte immédiate sur ${run.turnBudget} tours, le batch observe en moyenne ${formatNumber(chestSystem.summary.timeline_total_gold.mean, 1)} d'or, ${formatNumber(chestSystem.summary.timeline_total_movement_bonus.mean, 1)} points de mouvement max et ${formatNumber(chestSystem.summary.timeline_total_build_bonus.mean, 1)} points de construction max.`
       ],
       chartHeight: 300,

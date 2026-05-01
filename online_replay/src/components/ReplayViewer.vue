@@ -84,12 +84,35 @@ const props = defineProps({
 
 const viewerRoot = ref(null);
 const toastItems = ref([]);
+const showInteractionTooltip = ref(false);
 let viewerInstance = null;
 
 const rootClasses = computed(() => ({
   "replay-root--hide-timeline": !props.showTimeline,
   "replay-root--hide-turn-overlay": !props.showTurnOverlay
 }));
+
+const interactionTooltipItems = computed(() => {
+  const items = [
+    { key: "Ctrl + molette", value: "Zoom" },
+    { key: "Glisser", value: "Caméra" },
+    { key: "Double-clic", value: "Recadrer" }
+  ];
+
+  if (props.enableCellDebug) {
+    items.push({ key: "Clic", value: "Debug cellule" });
+  }
+
+  return items;
+});
+
+function showReplayTooltip() {
+  showInteractionTooltip.value = true;
+}
+
+function hideReplayTooltip() {
+  showInteractionTooltip.value = false;
+}
 
 function handleToastStateChange(nextToasts) {
   toastItems.value = Array.isArray(nextToasts) ? nextToasts : [];
@@ -149,6 +172,7 @@ function destroyViewer() {
   viewerInstance.destroy();
   viewerInstance = null;
   toastItems.value = [];
+  showInteractionTooltip.value = false;
 }
 
 function mountViewer() {
@@ -196,7 +220,32 @@ watch(
 
 <template>
   <div ref="viewerRoot" :class="['replay-root', rootClasses]">
-    <canvas class="replay-canvas" data-replay-ref="replayCanvas" aria-label="Carte du replay"></canvas>
+    <canvas
+      class="replay-canvas"
+      data-replay-ref="replayCanvas"
+      aria-label="Carte du replay"
+      @pointerenter="showReplayTooltip"
+      @pointerleave="hideReplayTooltip"
+    ></canvas>
+
+    <div
+      :class="[
+        'replay-help-tooltip',
+        {
+          'replay-help-tooltip--visible': showInteractionTooltip
+        }
+      ]"
+      aria-hidden="true"
+    >
+      <div
+        v-for="item in interactionTooltipItems"
+        :key="item.key"
+        class="replay-help-tooltip__row"
+      >
+        <span class="replay-help-tooltip__key">{{ item.key }}</span>
+        <span class="replay-help-tooltip__value">{{ item.value }}</span>
+      </div>
+    </div>
 
     <div class="status-overlay-group status-overlay-group-left">
       <div class="status-overlay" data-replay-ref="perspectiveOverlay" hidden>

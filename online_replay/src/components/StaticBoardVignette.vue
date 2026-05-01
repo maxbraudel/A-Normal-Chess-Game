@@ -6,6 +6,20 @@ import ReplayToast from "./ReplayToast.vue";
 import { registerViewerVisibility, unregisterViewerVisibility } from "../utils/viewerVisibilityController.js";
 
 const PERSPECTIVE_KINGDOM_KEYS = Object.freeze(["white", "black"]);
+const BUILDING_LABELS = Object.freeze({
+  barracks: "Caserne",
+  church: "Église",
+  farm: "Ferme",
+  mine: "Mine"
+});
+const PIECE_LABELS = Object.freeze({
+  bishop: "Fou",
+  king: "Roi",
+  knight: "Cavalier",
+  pawn: "Pion",
+  queen: "Reine",
+  rook: "Tour"
+});
 
 const props = defineProps({
   replayData: {
@@ -67,6 +81,22 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
+  allowZoom: {
+    type: Boolean,
+    default: true
+  },
+  showBuildingLabels: {
+    type: Boolean,
+    default: false
+  },
+  hiddenBuildingLabelKeys: {
+    type: Array,
+    default: () => []
+  },
+  productionOverlay: {
+    type: Object,
+    default: undefined
+  },
   statusOverlay: {
     type: Object,
     default: undefined
@@ -102,12 +132,6 @@ const rootClasses = computed(() => ({
   "replay-root--hide-turn-overlay": true
 }));
 
-const vignetteClasses = computed(() => ({
-  "static-board-vignette--show-perspective": props.showPerspectiveOverlay,
-  "static-board-vignette--show-toasts": props.showToasts,
-  "static-board-vignette--show-status-overlay": Boolean(props.statusOverlay)
-}));
-
 const customStatusOverlay = computed(() => {
   if (!props.statusOverlay || typeof props.statusOverlay !== "object") {
     return null;
@@ -131,6 +155,170 @@ const customStatusOverlay = computed(() => {
       : null
   };
 });
+
+const replayGridSize = computed(() => {
+  const grid = props.replayData && props.replayData.initialSnapshot && props.replayData.initialSnapshot.grid;
+  return Array.isArray(grid) && grid.length ? grid.length : 9;
+});
+
+const buildingTypeKeyById = computed(() => {
+  const entries = props.replayData && props.replayData.referenceData && Array.isArray(props.replayData.referenceData.buildingTypes)
+    ? props.replayData.referenceData.buildingTypes
+    : [];
+  const byId = new Map();
+
+  for (const entry of entries) {
+    if (typeof entry?.id === "number" && typeof entry?.key === "string") {
+      byId.set(entry.id, entry.key);
+    }
+  }
+
+  return byId;
+});
+
+const initialSnapshotBuildings = computed(() => {
+  const snapshot = props.replayData && props.replayData.initialSnapshot;
+  if (!snapshot) {
+    return [];
+  }
+
+  return [
+    ...(Array.isArray(snapshot.whiteKingdom?.buildings) ? snapshot.whiteKingdom.buildings : []),
+    ...(Array.isArray(snapshot.blackKingdom?.buildings) ? snapshot.blackKingdom.buildings : []),
+    ...(Array.isArray(snapshot.publicBuildings) ? snapshot.publicBuildings : [])
+  ];
+});
+
+const buildingLabels = computed(() => {
+  if (!props.showBuildingLabels) {
+    return [];
+  }
+
+  const hiddenLabelKeys = new Set(
+    Array.isArray(props.hiddenBuildingLabelKeys)
+      ? props.hiddenBuildingLabelKeys.map((value) => String(value).toLowerCase())
+      : []
+  );
+
+  return initialSnapshotBuildings.value
+    .map((building, index) => {
+      const buildingKey = buildingTypeKeyById.value.get(building.type);
+      const label = BUILDING_LABELS[buildingKey] || null;
+      if (!label || hiddenLabelKeys.has(buildingKey)) {
+        return null;
+      }
+
+      return {
+        key: `building-label-${building.id ?? index}`,
+        label,
+        style: resolveBuildingLabelStyle(building, replayGridSize.value)
+      };
+    })
+    .filter(Boolean);
+});
+
+const activeProductionOverlay = computed(() => {
+  if (!props.productionOverlay || typeof props.productionOverlay !== "object") {
+    return null;
+  }
+
+  const building = initialSnapshotBuildings.value.find((entry) => entry.id === props.productionOverlay.buildingId);
+  if (!building) {
+    return null;
+  }
+
+  const kingdomKey = props.productionOverlay.kingdom === "black" ? "black" : "white";
+  const pieceType = typeof props.productionOverlay.pieceType === "string" ? props.productionOverlay.pieceType : null;
+  const assetRoot = props.assetRoot || "/assets";
+  const pieceLabel = pieceType ? (PIECE_LABELS[pieceType] || pieceType) : null;
+  const progressValue = resolveFrameOverlayValue(
+    props.productionOverlay.progressValues,
+    currentFrameIndex.value,
+    props.productionOverlay.initialProgress ?? 0
+  );
+  const turnsRemainingValue = resolveFrameOverlayValue(
+    props.productionOverlay.values,
+    currentFrameIndex.value,
+    props.productionOverlay.initialValue ?? "0"
+  );
+  const turnsRemainingNumber = Number(turnsRemainingValue);
+
+  if (Number.isFinite(turnsRemainingNumber) && turnsRemainingNumber <= 0) {
+    return null;
+  }
+
+  return {
+    label: typeof props.productionOverlay.label === "string" ? props.productionOverlay.label : "Tours restants",
+    value: turnsRemainingValue,
+    iconAlt: pieceLabel ? `${pieceLabel} ${kingdomKey === "black" ? "noir" : "blanc"}` : "",
+    iconSrc: pieceType ? `${assetRoot}/textures/pieces/${kingdomKey}/${pieceType}.png` : null,
+    progressStyle: {
+      transform: `scaleX(${clampOverlayRatio(progressValue)})`
+    },
+    placement: props.productionOverlay.anchorPlacement === "below" ? "below" : "above",
+    style: resolveBuildingOverlayStyle(building, replayGridSize.value, {
+      anchorYOffsetCells: props.productionOverlay.anchorYOffsetCells,
+      anchorPlacement: props.productionOverlay.anchorPlacement
+    })
+  };
+});
+
+const vignetteClasses = computed(() => ({
+  "static-board-vignette--show-perspective": props.showPerspectiveOverlay,
+  "static-board-vignette--show-toasts": props.showToasts,
+  "static-board-vignette--show-status-overlay": Boolean(props.statusOverlay || props.showBuildingLabels)
+}));
+
+function clampOverlayRatio(value) {
+  return Math.min(1, Math.max(0, Number.isFinite(Number(value)) ? Number(value) : 0));
+}
+
+function resolveBuildingOverlayStyle(building, gridSize, options = {}) {
+  const safeGridSize = Math.max(1, Number(gridSize) || 9);
+  const buildingWidth = Number.isFinite(building?.w) ? building.w : 1;
+  const buildingHeight = Number.isFinite(building?.h) ? building.h : 1;
+  const offsetX = Number.isFinite(building?.ox) ? building.ox : 0;
+  const offsetY = Number.isFinite(building?.oy) ? building.oy : 0;
+  const verticalOffset = Number.isFinite(Number(options.anchorYOffsetCells)) ? Number(options.anchorYOffsetCells) : 0.4;
+  const placement = options.anchorPlacement === "below" ? "below" : "above";
+  const left = clampPercentage(((offsetX + (buildingWidth / 2)) / safeGridSize) * 100, 14, 86);
+  const anchorY = placement === "below"
+    ? offsetY + buildingHeight + verticalOffset
+    : offsetY + verticalOffset;
+  const top = clampPercentage((anchorY / safeGridSize) * 100, placement === "below" ? 12 : 16, placement === "below" ? 90 : 82);
+
+  return {
+    left: `${left}%`,
+    top: `${top}%`
+  };
+}
+
+function resolveBuildingLabelStyle(building, gridSize) {
+  const safeGridSize = Math.max(1, Number(gridSize) || 9);
+  const buildingWidth = Number.isFinite(building?.w) ? building.w : 1;
+  const offsetX = Number.isFinite(building?.ox) ? building.ox : 0;
+  const offsetY = Number.isFinite(building?.oy) ? building.oy : 0;
+  const left = clampPercentage(((offsetX + (buildingWidth / 2)) / safeGridSize) * 100, 10, 90);
+  const top = clampPercentage(((offsetY - 0.14) / safeGridSize) * 100, 8, 82);
+
+  return {
+    left: `${left}%`,
+    top: `${top}%`
+  };
+}
+
+function clampPercentage(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function resolveFrameOverlayValue(values, frameIndex, fallbackValue) {
+  if (!Array.isArray(values) || !values.length) {
+    return fallbackValue;
+  }
+
+  const safeIndex = Math.min(Math.max(0, frameIndex), values.length - 1);
+  return values[safeIndex];
+}
 
 function handleToastStateChange(nextToasts) {
   toastItems.value = props.showToasts && Array.isArray(nextToasts) ? nextToasts : [];
@@ -313,6 +501,47 @@ watch(
         </div>
       </div>
 
+      <div v-if="buildingLabels.length" class="static-board-vignette__board-overlay-layer" aria-hidden="true">
+        <div
+          v-for="buildingLabel in buildingLabels"
+          :key="buildingLabel.key"
+          class="status-overlay static-board-vignette__board-overlay static-board-vignette__board-overlay--building-label"
+          :style="buildingLabel.style"
+        >
+          <div class="overlay-meta">
+            <span class="overlay-label">{{ buildingLabel.label }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="activeProductionOverlay" class="static-board-vignette__board-overlay-layer" aria-hidden="true">
+        <div
+          :class="[
+            'status-overlay',
+            'static-board-vignette__board-overlay',
+            'static-board-vignette__board-overlay--production',
+            {
+              'static-board-vignette__board-overlay--production-below': activeProductionOverlay.placement === 'below'
+            }
+          ]"
+          :style="activeProductionOverlay.style"
+        >
+          <img
+            v-if="activeProductionOverlay.iconSrc"
+            class="turn-indicator-icon static-board-vignette__board-overlay-icon"
+            :src="activeProductionOverlay.iconSrc"
+            :alt="activeProductionOverlay.iconAlt"
+          >
+          <div class="overlay-meta static-board-vignette__board-overlay-meta">
+            <span class="overlay-label">{{ activeProductionOverlay.label }}</span>
+            <div class="static-board-vignette__progress-bar">
+              <span class="static-board-vignette__progress-fill" :style="activeProductionOverlay.progressStyle"></span>
+              <span class="static-board-vignette__progress-value">{{ activeProductionOverlay.value }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <TransitionGroup
         v-if="props.showToasts"
         name="replay-toast-list"
@@ -331,7 +560,7 @@ watch(
         />
       </TransitionGroup>
 
-      <div class="zoom-controls" aria-label="Contrôles de zoom">
+      <div v-show="props.allowZoom" class="zoom-controls" aria-label="Contrôles de zoom">
         <button
           type="button"
           class="action-button zoom-action-button"

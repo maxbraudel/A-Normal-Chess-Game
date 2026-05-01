@@ -226,6 +226,61 @@ input {
   cursor: grabbing;
 }
 
+.replay-help-tooltip {
+  position: absolute;
+  top: 50%;
+  left: 16px;
+  bottom: auto;
+  z-index: 3;
+  display: grid;
+  gap: 6px;
+  max-width: min(320px, calc(100% - 32px));
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, rgba(240, 213, 143, 0.08), rgba(240, 213, 143, 0.02)),
+    linear-gradient(180deg, rgba(22, 28, 23, 0.9), var(--overlay-strong));
+  box-shadow: 0 24px 54px var(--shadow);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-50%) translateX(-14px);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease,
+    visibility 0s linear 160ms;
+}
+
+.replay-help-tooltip--visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(-50%) translateX(0);
+  transition:
+    opacity 160ms ease,
+    transform 160ms ease,
+    visibility 0s linear 0s;
+}
+
+.replay-help-tooltip__row {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 10px;
+  align-items: baseline;
+}
+
+.replay-help-tooltip__key {
+  color: rgba(239, 229, 199, 0.58);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.replay-help-tooltip__value {
+  color: var(--text);
+  font-size: 14px;
+  line-height: 1.25;
+}
+
 .timeline-overlay {
   position: absolute;
   left: 50%;
@@ -337,7 +392,15 @@ input {
   flex: 1 1 240px;
   min-width: 0;
   margin: 0;
+  padding: 10px 0;
+  margin: -10px 0;
+  background: transparent;
   accent-color: var(--gold-bright);
+  cursor: pointer;
+}
+
+.timeline-slider:focus {
+  outline: none;
 }
 
 .replay-root--hide-timeline .timeline-overlay {

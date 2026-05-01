@@ -240,6 +240,8 @@ function buildInfernalBlock(infernal) {
 }
 
 function buildWeatherBlock(weather) {
+  const ambushPoint = weather.points.find((point) => point.turn === 113) || null;
+
   return {
     eyebrow: "Partie réelle",
     title: "Visibilité et brouillards",
@@ -264,7 +266,7 @@ function buildWeatherBlock(weather) {
     exampleReplay: {
       sourceTag: "Partie réelle avec joueur",
       sourceKind: "real",
-      label: "Exemple tiré de la partie réelle",
+      label: "Replay de l'embuscade de la partie réelle",
       description:
         "Entre les tours 120 et 133, un nuage imprévisible ouvre un renversement total au centre de la carte: les Noirs prennent les Blancs en embuscade et les deux reines sont éliminées.",
       viewer: {
@@ -285,6 +287,18 @@ function buildWeatherBlock(weather) {
       yAxes: [
         { name: "Pièces masquées" }
       ],
+      markers: ambushPoint
+        ? [
+            {
+              xIndex: ambushPoint.xIndex,
+              color: REPORT_COLORS.ink,
+              dashed: true,
+              label: "Embuscade du royaume noir",
+              labelPosition: "insideEndBottom",
+              labelOffset: [0, 10]
+            }
+          ]
+        : [],
       series: [
         buildTimelineSeriesSpec("Pièces ennemies masquées côté blanc", weather.points, "whiteHiddenPieces", LEGACY_COLORS.whiteKingdom, 0),
         buildTimelineSeriesSpec("Pièces ennemies masquées côté noir", weather.points, "blackHiddenPieces", LEGACY_COLORS.water, 0)
@@ -1725,7 +1739,8 @@ function buildTimelineSeries(spec, markers, spans) {
           ? {
               show: true,
               formatter: marker.label,
-              position: "insideEndTop",
+              position: marker.labelPosition || "insideEndTop",
+              offset: Array.isArray(marker.labelOffset) ? marker.labelOffset : [0, 0],
               color: marker.color || REPORT_COLORS.ink,
               fontFamily: 'Georgia, "Times New Roman", serif',
               fontSize: 11,

@@ -463,10 +463,18 @@ a {
   top: 10px;
 }
 
+.rapport-intro-vignette.static-board-vignette--show-perspective.static-board-vignette--show-status-overlay .static-board-vignette__custom-overlay-group {
+  top: 56px;
+}
+
 .rapport-intro-vignette.static-board-vignette--show-status-overlay .static-board-vignette__custom-overlay {
   gap: 8px;
   padding: 8px 10px;
   border-radius: 14px;
+}
+
+.rapport-intro-vignette.static-board-vignette--show-status-overlay .static-board-vignette__custom-overlay--building-label .overlay-meta {
+  gap: 0;
 }
 
 .rapport-intro-vignette.static-board-vignette--show-status-overlay .static-board-vignette__custom-overlay .turn-indicator-icon {
@@ -479,6 +487,85 @@ a {
 }
 
 .rapport-intro-vignette.static-board-vignette--show-status-overlay .static-board-vignette__custom-overlay .overlay-value {
+  font-size: 13px;
+}
+
+.static-board-vignette__board-overlay-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.static-board-vignette__board-overlay {
+  position: absolute;
+  max-width: min(180px, calc(100% - 24px));
+  transform: translate(-50%, -100%);
+  border-radius: 14px;
+}
+
+.static-board-vignette__board-overlay-meta {
+  min-width: 0;
+}
+
+.static-board-vignette__board-overlay--production {
+  min-width: 132px;
+}
+
+.static-board-vignette__board-overlay--production-below {
+  transform: translate(-50%, 4px);
+}
+
+.rapport-intro-vignette .static-board-vignette__board-overlay--building-label {
+  gap: 0;
+  padding: 6px 10px;
+  border-radius: 12px;
+  transform: translate(-50%, calc(-100% + 10px));
+}
+
+.rapport-intro-vignette .static-board-vignette__board-overlay--building-label .overlay-meta {
+  gap: 0;
+}
+
+.static-board-vignette__progress-bar {
+  position: relative;
+  width: 100%;
+  display: grid;
+  place-items: center;
+  min-height: 18px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(236, 236, 236, 0.98);
+}
+
+.static-board-vignette__progress-fill {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: 0;
+  transform-origin: left center;
+  background: linear-gradient(90deg, rgba(240, 213, 143, 0.85), rgba(111, 188, 120, 0.92));
+}
+
+.static-board-vignette__progress-value {
+  position: relative;
+  z-index: 1;
+  color: rgba(12, 16, 13, 0.94);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.rapport-intro-vignette .static-board-vignette__board-overlay .turn-indicator-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.rapport-intro-vignette .static-board-vignette__board-overlay .overlay-label {
+  font-size: 10px;
+}
+
+.rapport-intro-vignette .static-board-vignette__board-overlay .overlay-value {
   font-size: 13px;
 }
 
