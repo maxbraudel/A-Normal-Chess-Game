@@ -1,4 +1,5 @@
 import { REPLAY_CONFIG } from "../../config.js";
+import { loadReplayData } from "../stores/replayDataStore.js";
 
 const REPORT_COLORS = {
   ink: "#1f1f1f",
@@ -85,20 +86,14 @@ async function buildRealGameStatsReport() {
 }
 
 async function fetchReplayData() {
-  const replayUrl = new URL(REPLAY_CONFIG.replayUrl, window.location.href).toString();
-  const response = await fetch(replayUrl, { cache: "force-cache" });
-
-  if (!response.ok) {
-    throw new Error(`Impossible de charger le companion reel (${response.status}).`);
-  }
-
-  return response.json();
+  return loadReplayData(REPLAY_CONFIG.replayUrl);
 }
 
 function buildTimeline(replayData) {
   const turnHistory = Array.isArray(replayData && replayData.turnHistory)
     ? replayData.turnHistory
     : [];
+  const sharedGrid = resolveSharedReplayGrid(replayData);
 
   return turnHistory
     .filter((record) => record && record.snapshot)
@@ -108,12 +103,32 @@ function buildTimeline(replayData) {
       turn: toNumber(record.committedTurnNumber, sequenceIndex + 1),
       committedActiveKingdom: toNumber(record.committedActiveKingdom, -1),
       committedActiveKingdomKey: resolveCommittedKingdomKey(record),
+      sharedGrid,
       snapshot: record.snapshot,
       snapshotMetrics: record.snapshotMetrics || null,
       analytics: record.analytics || null,
       turnDelta: record.turnDelta || null,
       structuredEvents: Array.isArray(record.structuredEvents) ? record.structuredEvents : []
     }));
+}
+
+function resolveSharedReplayGrid(replayData) {
+  if (Array.isArray(replayData && replayData.sharedGrid) && replayData.sharedGrid.length) {
+    return replayData.sharedGrid;
+  }
+  if (Array.isArray(replayData && replayData.initialSnapshot && replayData.initialSnapshot.grid) && replayData.initialSnapshot.grid.length) {
+    return replayData.initialSnapshot.grid;
+  }
+  if (Array.isArray(replayData && replayData.currentStateSummary && replayData.currentStateSummary.grid) && replayData.currentStateSummary.grid.length) {
+    return replayData.currentStateSummary.grid;
+  }
+
+  const turnHistory = Array.isArray(replayData && replayData.turnHistory) ? replayData.turnHistory : [];
+  const firstRecordWithGrid = turnHistory.find((record) => (
+    record && record.snapshot && Array.isArray(record.snapshot.grid) && record.snapshot.grid.length
+  ));
+
+  return firstRecordWithGrid ? firstRecordWithGrid.snapshot.grid : [];
 }
 
 function resolveCommittedKingdomKey(record) {
@@ -405,7 +420,7 @@ function normalizeInfernal(timeline) {
 
   timeline.forEach((record) => {
     const infernal = (record.analytics && record.analytics.infernal) || {};
-    const autonomousUnits = ((record.analytics && record.analytics.entities) || {}).autonomousUnitIndex || [];
+    const autonomousUnits = resolveInfernalAutonomousUnits(record);
     const autonomousById = buildIndexById(autonomousUnits);
 
     points.push({
@@ -514,13 +529,93 @@ function extractInfernalDescriptor(record, unit) {
   return {
     targetKingdomKey: keyOrFallback(
       infernal && infernal.targetKingdomKey,
+      keyOrFallback(unit && unit.targetKingdomKey,
       keyOrFallback(activeInfernal && activeInfernal.targetKingdomKey, "unknown")
+      )
     ),
     manifestedPieceKey: keyOrFallback(
       infernal && (infernal.manifestedPieceTypeKey || infernal.manifestedPieceKey),
-      keyOrFallback(activeInfernal && (activeInfernal.manifestedPieceTypeKey || activeInfernal.manifestedPieceKey), "infernal")
+      keyOrFallback(
+        unit && (unit.manifestedPieceTypeKey || unit.manifestedPieceKey),
+        keyOrFallback(activeInfernal && (activeInfernal.manifestedPieceTypeKey || activeInfernal.manifestedPieceKey), "infernal")
+      )
     )
   };
+}
+
+function resolveInfernalAutonomousUnits(record) {
+  const analyticsEntities = record && record.analytics && record.analytics.entities && typeof record.analytics.entities === "object"
+    ? record.analytics.entities
+    : {};
+  const analyticsUnits = Array.isArray(analyticsEntities.autonomousUnitIndex)
+    ? analyticsEntities.autonomousUnitIndex
+    : [];
+  if (analyticsUnits.length) {
+    return analyticsUnits;
+  }
+
+  const snapshotUnits = record && record.snapshot && Array.isArray(record.snapshot.autonomousUnits)
+    ? record.snapshot.autonomousUnits
+    : [];
+
+  return snapshotUnits
+    .map((unit) => normalizeSnapshotAutonomousUnit(unit))
+    .filter(Boolean);
+}
+
+function normalizeSnapshotAutonomousUnit(unit) {
+  const id = toNumber(unit && unit.id, null);
+  if (id === null) {
+    return null;
+  }
+
+  const infernal = unit && unit.infernal && typeof unit.infernal === "object"
+    ? unit.infernal
+    : null;
+
+  return {
+    id,
+    x: toNumber(unit && unit.x, 0),
+    y: toNumber(unit && unit.y, 0),
+    infernal,
+    targetKingdomKey: keyOrFallback(
+      unit && unit.targetKingdomKey,
+      keyOrFallback(
+        infernal && infernal.targetKingdomKey,
+        kingdomKeyFromId(unit && unit.targetKingdom)
+      )
+    ),
+    manifestedPieceTypeKey: keyOrFallback(
+      unit && unit.manifestedPieceTypeKey,
+      keyOrFallback(
+        unit && unit.manifestedPieceKey,
+        keyOrFallback(
+          infernal && (infernal.manifestedPieceTypeKey || infernal.manifestedPieceKey),
+          pieceTypeKeyFromId(unit && unit.manifestedPieceType)
+        )
+      )
+    )
+  };
+}
+
+function pieceTypeKeyFromId(value) {
+  const numericValue = toNumber(value, null);
+  switch (numericValue) {
+    case PIECE_TYPE_PAWN:
+      return "pawn";
+    case PIECE_TYPE_KNIGHT:
+      return "knight";
+    case PIECE_TYPE_BISHOP:
+      return "bishop";
+    case PIECE_TYPE_ROOK:
+      return "rook";
+    case PIECE_TYPE_QUEEN:
+      return "queen";
+    case PIECE_TYPE_KING:
+      return "king";
+    default:
+      return "infernal";
+  }
 }
 
 function infernalMarkerColor(targetKingdomKey) {
@@ -662,7 +757,11 @@ function normalizeWaterDenied(timeline, replayData) {
 
 function createMovementContext(record) {
   const snapshot = record && record.snapshot;
-  const grid = snapshot && Array.isArray(snapshot.grid) ? snapshot.grid : [];
+  const grid = snapshot && Array.isArray(snapshot.grid)
+    ? snapshot.grid
+    : record && Array.isArray(record.sharedGrid)
+      ? record.sharedGrid
+      : [];
   const height = grid.length;
   const width = height && Array.isArray(grid[0]) ? grid[0].length : 0;
   if (!width || !height) {
@@ -754,6 +853,15 @@ function normalizeMovementPiece(piece, kingdomKey) {
 }
 
 function buildMovementBuildingIndex(record) {
+  const analyticsIndex = buildMovementBuildingIndexFromAnalytics(record);
+  if (Object.keys(analyticsIndex).length) {
+    return analyticsIndex;
+  }
+
+  return buildMovementBuildingIndexFromSnapshot(record && record.snapshot);
+}
+
+function buildMovementBuildingIndexFromAnalytics(record) {
   const entities = record && record.analytics && record.analytics.entities && typeof record.analytics.entities === "object"
     ? record.analytics.entities
     : {};
@@ -792,6 +900,174 @@ function buildMovementBuildingIndex(record) {
 
     return index;
   }, Object.create(null));
+}
+
+function buildMovementBuildingIndexFromSnapshot(snapshot) {
+  return collectMovementBuildings(snapshot).reduce((index, building) => {
+    expandMovementBuildingCells(building).forEach((cell) => {
+      index[positionKey(cell.x, cell.y)] = cell;
+    });
+
+    return index;
+  }, Object.create(null));
+}
+
+function collectMovementBuildings(snapshot) {
+  return collectMovementKingdomBuildings(snapshot, "white", "whiteKingdom")
+    .concat(collectMovementKingdomBuildings(snapshot, "black", "blackKingdom"))
+    .concat(collectMovementPublicBuildings(snapshot));
+}
+
+function collectMovementKingdomBuildings(snapshot, defaultKingdomKey, containerKey) {
+  const kingdom = snapshot && snapshot[containerKey] && typeof snapshot[containerKey] === "object"
+    ? snapshot[containerKey]
+    : {};
+  const buildings = Array.isArray(kingdom.buildings) ? kingdom.buildings : [];
+
+  return buildings
+    .map((building) => normalizeMovementBuilding(building, defaultKingdomKey, false))
+    .filter(Boolean);
+}
+
+function collectMovementPublicBuildings(snapshot) {
+  const buildings = snapshot && Array.isArray(snapshot.publicBuildings)
+    ? snapshot.publicBuildings
+    : [];
+
+  return buildings
+    .map((building) => normalizeMovementBuilding(building, "white", true))
+    .filter(Boolean);
+}
+
+function normalizeMovementBuilding(building, defaultKingdomKey, forcePublic) {
+  const originX = toNumber(building && building.ox, null);
+  const originY = toNumber(building && building.oy, null);
+  const baseWidth = toNumber(building && building.w, null);
+  const baseHeight = toNumber(building && building.h, null);
+  if (originX === null || originY === null || baseWidth === null || baseHeight === null) {
+    return null;
+  }
+
+  return {
+    id: toNumber(building && building.id, 0),
+    buildingTypeId: toNumber(building && building.type, -1),
+    buildingTypeKey: "unknown",
+    ownerKingdomKey: keyOrFallback(kingdomKeyFromId(building && building.owner), defaultKingdomKey),
+    isPublic: Boolean(forcePublic || (building && building.isNeutral)),
+    isNeutral: Boolean(building && building.isNeutral),
+    originX,
+    originY,
+    baseWidth,
+    baseHeight,
+    rotationQuarterTurns: toNumber(building && building.rot, 0),
+    flipMask: toNumber(building && building.fm, 0),
+    hpByCell: Array.isArray(building && building.hp) ? building.hp : [],
+    breachByCell: Array.isArray(building && building.breach) ? building.breach : []
+  };
+}
+
+function expandMovementBuildingCells(building) {
+  const normalizedRotation = normalizeRotationQuarterTurnsForMetrics(building.rotationQuarterTurns);
+  const footprintWidth = getBuildingFootprintWidthForMetrics(building.baseWidth, building.baseHeight, normalizedRotation);
+  const footprintHeight = getBuildingFootprintHeightForMetrics(building.baseWidth, building.baseHeight, normalizedRotation);
+  const cells = [];
+
+  for (let localY = 0; localY < footprintHeight; localY += 1) {
+    for (let localX = 0; localX < footprintWidth; localX += 1) {
+      const sourceLocal = mapFootprintToSourceLocalForMetrics(
+        localX,
+        localY,
+        building.baseWidth,
+        building.baseHeight,
+        normalizedRotation,
+        building.flipMask
+      );
+      const sourceIndex = (sourceLocal.y * building.baseWidth) + sourceLocal.x;
+      const hp = toNumber(building.hpByCell[sourceIndex], 0);
+
+      cells.push({
+        id: building.id,
+        buildingTypeId: building.buildingTypeId,
+        buildingTypeKey: building.buildingTypeKey,
+        isPublic: building.isPublic,
+        isNeutral: building.isNeutral,
+        ownerKingdomKey: building.ownerKingdomKey,
+        destroyed: hp <= 0,
+        breached: Boolean(toNumber(building.breachByCell[sourceIndex], 0)),
+        hp,
+        x: building.originX + localX,
+        y: building.originY + localY
+      });
+    }
+  }
+
+  return cells;
+}
+
+function getBuildingFootprintWidthForMetrics(baseWidth, baseHeight, rotationQuarterTurns) {
+  return rotationQuarterTurns % 2 === 0 ? baseWidth : baseHeight;
+}
+
+function getBuildingFootprintHeightForMetrics(baseWidth, baseHeight, rotationQuarterTurns) {
+  return rotationQuarterTurns % 2 === 0 ? baseHeight : baseWidth;
+}
+
+function normalizeRotationQuarterTurnsForMetrics(rotationQuarterTurns) {
+  if (!Number.isFinite(rotationQuarterTurns) || rotationQuarterTurns < 0) {
+    return 0;
+  }
+
+  return Math.trunc(rotationQuarterTurns) % 4;
+}
+
+function normalizeFlipMaskForMetrics(flipMask) {
+  if (!Number.isFinite(flipMask) || flipMask < 0) {
+    return 0;
+  }
+
+  return Math.trunc(flipMask) & 3;
+}
+
+function mapFootprintToSourceLocalForMetrics(localX, localY, baseWidth, baseHeight, rotationQuarterTurns, flipMask) {
+  const normalizedRotation = normalizeRotationQuarterTurnsForMetrics(rotationQuarterTurns);
+  const footprintWidth = getBuildingFootprintWidthForMetrics(baseWidth, baseHeight, normalizedRotation);
+  const footprintHeight = getBuildingFootprintHeightForMetrics(baseWidth, baseHeight, normalizedRotation);
+  if (localX < 0 || localY < 0 || localX >= footprintWidth || localY >= footprintHeight) {
+    return { x: -1, y: -1 };
+  }
+
+  let sourceX = 0;
+  let sourceY = 0;
+  switch (normalizedRotation) {
+    case 0:
+      sourceX = localX;
+      sourceY = localY;
+      break;
+    case 1:
+      sourceX = localY;
+      sourceY = baseHeight - 1 - localX;
+      break;
+    case 2:
+      sourceX = baseWidth - 1 - localX;
+      sourceY = baseHeight - 1 - localY;
+      break;
+    case 3:
+      sourceX = baseWidth - 1 - localY;
+      sourceY = localX;
+      break;
+    default:
+      break;
+  }
+
+  const normalizedFlipMask = normalizeFlipMaskForMetrics(flipMask);
+  if ((normalizedFlipMask & 1) !== 0) {
+    sourceX = baseWidth - 1 - sourceX;
+  }
+  if ((normalizedFlipMask & 2) !== 0) {
+    sourceY = baseHeight - 1 - sourceY;
+  }
+
+  return { x: sourceX, y: sourceY };
 }
 
 function createMovementRulesState(context, options) {

@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prune:replay": "node ./scripts/prune-replay.mjs --input \"./data/KAZIMIRIUM 1.json\" --output \"./data/KAZIMIRIUM 1.light.json\""
   },
   "dependencies": {
     "echarts": "^6.0.0",

@@ -1,4 +1,5 @@
 import { REPLAY_CONFIG as DEFAULT_REPLAY_CONFIG } from "./config.js";
+import { loadMasterConfigData, loadReplayData } from "./src/stores/replayDataStore.js";
 
 export function mountReplayViewer(rootElement, configOverrides = {}) {
 if (!(rootElement instanceof HTMLElement)) {
@@ -489,32 +490,11 @@ function setError(message) {
 }
 
 async function loadMasterConfig(url) {
-  try {
-    const response = await fetch(resolveUrl(url), {
-      cache: "no-store",
-      signal: abortController.signal
-    });
-    if (!response.ok) {
-      throw new Error();
-    }
-    return await response.json();
-  } catch (_error) {
-    return DEFAULT_MASTER_CONFIG;
-  }
+  return loadMasterConfigData(url);
 }
 
 async function loadReplay(url) {
-  const response = await fetch(resolveUrl(url), {
-    cache: "no-store",
-    signal: abortController.signal
-  });
-  if (!response.ok) {
-    throw new Error(`Impossible de charger le replay: HTTP ${response.status} ${response.statusText}`);
-  }
-
-  const data = await response.json();
-  validateReplay(data);
-  return data;
+  return loadReplayData(url);
 }
 
 async function loadReplaySource(config) {
@@ -561,10 +541,11 @@ function validateReplay(data) {
 function buildReplayModel(data, masterConfig) {
   const frames = [];
   const turnHistory = Array.isArray(data.turnHistory) ? data.turnHistory : [];
+  const sharedGrid = resolveSharedReplayGrid(data);
 
   if (data.initialSnapshot) {
     frames.push(normalizeFrame({
-      snapshot: data.initialSnapshot,
+      snapshot: resolveReplaySnapshot(data.initialSnapshot, sharedGrid),
       analytics: data.initialAnalytics || null,
       committedTurnNumber: 0,
       capturedAtUnix: data.createdAtUnix || null,
@@ -585,7 +566,7 @@ function buildReplayModel(data, masterConfig) {
     }
 
     frames.push(normalizeFrame({
-      snapshot: record.snapshot,
+      snapshot: resolveReplaySnapshot(record.snapshot, sharedGrid),
       analytics: record.analytics || null,
       committedTurnNumber: record.committedTurnNumber,
       capturedAtUnix: record.capturedAtUnix || null,
@@ -602,7 +583,7 @@ function buildReplayModel(data, masterConfig) {
 
   if (!frames.length && data.currentStateSummary) {
     frames.push(normalizeFrame({
-      snapshot: data.currentStateSummary,
+      snapshot: resolveReplaySnapshot(data.currentStateSummary, sharedGrid),
       analytics: data.currentAnalytics || null,
       committedTurnNumber: data.currentStateSummary.turnNumber || 0,
       capturedAtUnix: data.lastUpdatedAtUnix || null,
@@ -633,6 +614,44 @@ function buildReplayModel(data, masterConfig) {
         : null,
       cellSize: getCellSize(masterConfig)
     }
+  };
+}
+
+function resolveSharedReplayGrid(data) {
+  if (Array.isArray(data && data.sharedGrid) && data.sharedGrid.length) {
+    return data.sharedGrid;
+  }
+  if (Array.isArray(data && data.initialSnapshot && data.initialSnapshot.grid) && data.initialSnapshot.grid.length) {
+    return data.initialSnapshot.grid;
+  }
+  if (Array.isArray(data && data.currentStateSummary && data.currentStateSummary.grid) && data.currentStateSummary.grid.length) {
+    return data.currentStateSummary.grid;
+  }
+
+  const turnHistory = Array.isArray(data && data.turnHistory) ? data.turnHistory : [];
+  const firstRecordWithGrid = turnHistory.find(function (record) {
+    return Boolean(record && record.snapshot && Array.isArray(record.snapshot.grid) && record.snapshot.grid.length);
+  });
+
+  return firstRecordWithGrid ? firstRecordWithGrid.snapshot.grid : [];
+}
+
+function resolveReplaySnapshot(snapshot, sharedGrid) {
+  if (!snapshot || typeof snapshot !== "object") {
+    return snapshot;
+  }
+
+  if (Array.isArray(snapshot.grid)) {
+    return snapshot;
+  }
+
+  if (!Array.isArray(sharedGrid) || !sharedGrid.length) {
+    return snapshot;
+  }
+
+  return {
+    ...snapshot,
+    grid: sharedGrid
   };
 }
 
@@ -823,6 +842,9 @@ function buildEventSummary(events) {
   return events
     .slice(-3)
     .map(function (entry) {
+      if (typeof entry === "string") {
+        return entry;
+      }
       return entry.message || entry.msg || entry.kindLabel || entry.kindKey || "Evenement";
     })
     .join(" · ");
