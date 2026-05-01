@@ -8,11 +8,7 @@ const router = createRouter({
     {
       path: "/",
       name: "rapport",
-      component: RapportPage,
-      alias: ["/rapport"],
-      meta: {
-        layout: "rapport"
-      }
+      component: RapportPage
     }
   ],
   scrollBehavior(to, from, savedPosition) {

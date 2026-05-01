@@ -134,9 +134,9 @@ onBeforeUnmount(() => {
     <section class="rapport-hero">
         <p class="rapport-hero__intro-note">Bonjour Monsieur Martinez, laissez-moi vous présenter...</p>
       <div class="rapport-hero__copy rapport-hero__copy--full">
-        <p v-if="randomnessReport.hero.kicker" class="landing-kicker">{{ randomnessReport.hero.kicker }}</p>
+        <p v-if="randomnessReport.hero.kicker" class="rapport-hero__kicker">{{ randomnessReport.hero.kicker }}</p>
         <h1>{{ randomnessReport.hero.title }}</h1>
-        <InlineRichText v-if="randomnessReport.hero.lead" class="landing-lead" :text="randomnessReport.hero.lead" />
+        <InlineRichText v-if="randomnessReport.hero.lead" class="rapport-hero__lead" :text="randomnessReport.hero.lead" />
         <InlineRichText v-if="randomnessReport.hero.source" class="rapport-hero__source" :text="randomnessReport.hero.source" />
       </div>
     </section>
