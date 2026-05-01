@@ -308,12 +308,12 @@ function buildWaterDeniedByKingdomBlock(waterDenied) {
         autoplayOnMount: true,
         autoplayIntervalMs: 240,
         loopPlayback: true,
-        initialZoom: 2.6,
+        initialZoom: 2,
         enablePerspective: false,
         trackedTarget: {
           kind: "terrain-cell",
           x: 24,
-          y: 20
+          y: 17
         },
         showStatusOverlay: false
       }

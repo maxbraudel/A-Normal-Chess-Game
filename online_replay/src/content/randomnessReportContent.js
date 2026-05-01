@@ -1314,9 +1314,8 @@ export const randomnessReport = {
     }
   ],
   perspectives: [
-    "Exposer dans `master_config.json` les derniers parametres encore codes en dur, notamment certains timings de coffres et poids auxiliaires de placement, pour fermer l'ecart entre modele theorique et calibration runtime.",
-    "Ajouter dans `statistiques-generator/` des tests de conformite simples: QQ-plots pour les normales tronquees, comparaison de queues pour la Weibull/Gamma, frequencies categorielles par regime et heatmaps spatiales pour les champs de terrain.",
-    "Mesurer empiriquement la correlation spatiale des fronts meteo et des terrains afin de documenter non seulement la loi marginale par cellule, mais aussi la longueur de correlation et la taille des composantes visibles.",
-    "Ajouter des tests de non-regression bases sur seed fixe + save/load pour garantir que tout changement de code preserve exactement les trajectoires probabilistes attendues."
+    "La premiere perspective est de **mieux ajuster les parametres des mecanismes aleatoires** a partir d'un volume de parties plus important. Je n'ai pas encore assez de recul statistique pour equilibrer proprement ces variables: par exemple, les apparitions infernales produisent encore trop souvent des pions, alors que cette piece est lente et peu impactante, et la loi normale des recompenses d'or des coffres reste trop resserree autour de sa moyenne, ce qui rend les variations peu perceptibles pour le joueur.",
+    "Une deuxieme perspective est donc d'**accumuler beaucoup plus de donnees de partie** afin d'ameliorer l'equilibrage general du jeu. L'objectif n'est pas seulement de decrire les lois utilisees, mais de disposer d'assez d'observations pour corriger les desequilibres reels, ajuster les amplitudes utiles et verifier que les evenements aleatoires enrichissent effectivement la partie au lieu d'aplatir ses situations.",
+    "Enfin, un chantier important sera de developper une **intelligence artificielle symbolique** capable d'agir a partir de regles deterministes tout en **anticipant des evenements aleatoires probables**. Explorer cette articulation entre raisonnement symbolique et incertitude serait utile a la fois pour mieux jouer, pour mieux tester le jeu et pour mieux exploiter toutes les statistiques produites par ce travail."
   ]
 };
