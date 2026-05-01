@@ -188,7 +188,7 @@ function buildInfernalBlock(infernal) {
       sourceKind: "real",
       label: "Exemple tiré de la partie réelle",
       description:
-        "Du tour 74 au tour 136, la caméra suit la pièce du diable active. Quand elle disparaît, le cadre reste en place jusqu'à l'arrivée de la pièce du diable suivante, puis se recentre immédiatement sur la nouvelle menace.",
+        "Du tour 74 au tour 136, le cadrage initial met en évidence la zone où évolue la pièce du diable active. Vous pouvez ensuite conserver ce cadrage ou déplacer librement la caméra: le passage d'un tour à l'autre ne la réinitialise plus.",
       viewer: {
         replayUrl: REPLAY_CONFIG.replayUrl,
         minTurn: 74,

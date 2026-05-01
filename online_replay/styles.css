@@ -378,9 +378,18 @@ input {
 }
 
 .zoom-controls .zoom-action-button {
-  border-color: rgba(240, 213, 143, 0.46);
-  background: linear-gradient(180deg, rgba(23, 29, 24, 0.94), rgba(10, 13, 11, 0.98));
+  border-color: var(--line-strong);
+  background:
+    linear-gradient(180deg, rgba(240, 213, 143, 0.08), rgba(240, 213, 143, 0.08)),
+    linear-gradient(180deg, rgba(10, 13, 11, 0.98), rgba(10, 13, 11, 0.98));
   box-shadow: 0 16px 34px rgba(0, 0, 0, 0.3);
+}
+
+.zoom-controls .zoom-action-button:hover {
+  background:
+    linear-gradient(180deg, rgba(240, 213, 143, 0.16), rgba(240, 213, 143, 0.16)),
+    linear-gradient(180deg, rgba(10, 13, 11, 0.98), rgba(10, 13, 11, 0.98));
+  border-color: rgba(240, 213, 143, 0.52);
 }
 
 .primary-action {

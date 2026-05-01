@@ -70,7 +70,22 @@ const props = defineProps({
 });
 
 const viewerRoot = ref(null);
+const showInteractionTooltip = ref(false);
 let viewerInstance = null;
+
+const interactionTooltipItems = computed(() => {
+  const items = [
+    { key: "Ctrl + molette", value: "Zoom" },
+    { key: "Glisser", value: "Caméra" },
+    { key: "Double-clic", value: "Recadrer" }
+  ];
+
+  if (props.enableCellDebug) {
+    items.push({ key: "Clic", value: "Debug cellule" });
+  }
+
+  return items;
+});
 
 const watchedProps = computed(() => [
   props.replayData,
@@ -132,17 +147,27 @@ function buildMountOptions() {
   return options;
 }
 
+function showReplayTooltip() {
+  showInteractionTooltip.value = true;
+}
+
+function hideReplayTooltip() {
+  showInteractionTooltip.value = false;
+}
+
 function destroyViewer() {
   if (viewerRoot.value) {
     unregisterViewerVisibility(viewerRoot.value);
   }
 
   if (!viewerInstance) {
+    showInteractionTooltip.value = false;
     return;
   }
 
   viewerInstance.destroy();
   viewerInstance = null;
+  showInteractionTooltip.value = false;
 }
 
 function mountViewer() {
@@ -175,7 +200,32 @@ watch(watchedProps, async () => {
       ref="viewerRoot"
       class="replay-root replay-root--hide-timeline replay-root--hide-turn-overlay illustration-map__viewer"
     >
-      <canvas class="replay-canvas" data-replay-ref="replayCanvas" aria-label="Carte d'illustration"></canvas>
+      <canvas
+        class="replay-canvas"
+        data-replay-ref="replayCanvas"
+        aria-label="Carte d'illustration"
+        @pointerenter="showReplayTooltip"
+        @pointerleave="hideReplayTooltip"
+      ></canvas>
+
+      <div
+        :class="[
+          'replay-help-tooltip',
+          {
+            'replay-help-tooltip--visible': showInteractionTooltip
+          }
+        ]"
+        aria-hidden="true"
+      >
+        <div
+          v-for="item in interactionTooltipItems"
+          :key="item.key"
+          class="replay-help-tooltip__row"
+        >
+          <span class="replay-help-tooltip__key">{{ item.key }}</span>
+          <span class="replay-help-tooltip__value">{{ item.value }}</span>
+        </div>
+      </div>
 
       <div class="status-overlay-group status-overlay-group-left" hidden>
         <div class="status-overlay" data-replay-ref="perspectiveOverlay" hidden>
@@ -200,6 +250,7 @@ watch(watchedProps, async () => {
           type="button"
           class="action-button zoom-action-button"
           data-replay-ref="zoomInButton"
+          title="Zoom avant"
           aria-label="Zoom avant"
         >
           +
@@ -208,7 +259,8 @@ watch(watchedProps, async () => {
           type="button"
           class="action-button zoom-action-button"
           data-replay-ref="zoomOutButton"
-          aria-label="Zoom arriere"
+          title="Zoom arrière"
+          aria-label="Zoom arrière"
         >
           -
         </button>

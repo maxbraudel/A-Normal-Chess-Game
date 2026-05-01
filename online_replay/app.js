@@ -89,7 +89,7 @@ const BUILDING_FLIP_VERTICAL_MASK = 2;
 
 let configuredPerspectiveKingdomKey = resolveConfiguredPerspectiveKingdomKey(replayConfig);
 const trackedTargetConfig = normalizeTrackedTargetConfig(replayConfig.trackedTarget);
-const shouldRecenterTrackedTargetOnFrameChange = replayConfig.recenterTrackedTargetOnFrameChange !== false;
+const shouldRecenterTrackedTargetOnFrameChange = replayConfig.recenterTrackedTargetOnFrameChange === true;
 const isInteractionEnabled = replayConfig.interactionEnabled !== false;
 const isCellDebugEnabled = Boolean(replayConfig.enableCellDebug);
 const onToastStateChange = typeof replayConfig.onToastStateChange === "function"

@@ -242,14 +242,13 @@ const activeProductionOverlay = computed(() => {
     props.productionOverlay.initialValue ?? "0"
   );
   const turnsRemainingNumber = Number(turnsRemainingValue);
-
-  if (Number.isFinite(turnsRemainingNumber) && turnsRemainingNumber <= 0) {
-    return null;
-  }
+  const isCompleted = Number.isFinite(turnsRemainingNumber) && turnsRemainingNumber <= 0;
 
   return {
     label: typeof props.productionOverlay.label === "string" ? props.productionOverlay.label : "Tours restants",
-    value: turnsRemainingValue,
+    value: isCompleted
+      ? (typeof props.productionOverlay.completedValue === "string" ? props.productionOverlay.completedValue : "Terminée")
+      : turnsRemainingValue,
     iconAlt: pieceLabel ? `${pieceLabel} ${kingdomKey === "black" ? "noir" : "blanc"}` : "",
     iconSrc: pieceType ? `${assetRoot}/textures/pieces/${kingdomKey}/${pieceType}.png` : null,
     progressStyle: {
