@@ -839,7 +839,7 @@ export const reportIntroVignettes = Object.freeze({
     },
     productionOverlay: {
       buildingId: 91,
-      label: "Tours restants",
+      label: "Fabrication",
       values: ["3", "2", "1", "0"],
       progressValues: [0, 1 / 3, 2 / 3, 1],
       pieceType: "bishop",

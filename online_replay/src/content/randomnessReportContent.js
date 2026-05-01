@@ -22,7 +22,7 @@ const uniformProcesses = [
       "1 tirage au début de la génération du plateau"
     ],
     why:
-      "Une graine intermédiaire n'a aucune direction stratégique a privilégier; on cherche seulement une répartition uniforme des mondes possibles.",
+      "Une graine intermédiaire n'a aucune direction stratégique à privilégier; on cherche seulement une répartition uniforme des mondes possibles. Le choix de l'uniforme sur 32 bits s'impose par défaut : tout support plus petit créerait des collisions perceptibles entre mondes, tandis qu'un support plus grand n'apporterait aucun bénéfice gameplay. L'objectif est uniquement d'indexer de façon neutre et reproductible l'espace des cartes possibles, sans introduire de biais vers des configurations particulières.",
     simulation:
       "Le générateur `std::mt19937(worldSeed)` est interrogé une fois, puis la valeur tirée nourrit `valueNoise` et `fractalNoise`.",
     parameterChoice:
@@ -42,7 +42,7 @@ const uniformProcesses = [
       "1 tirage au début de la génération du plateau"
     ],
     why:
-      "Le système d'eau doit être décorrélé de la terre tout en restant reproductible à seed fixe.",
+      "Le système d'eau doit être décorrélé de la terre tout en restant reproductible à seed fixe. Obtenir cette décorrélation est simple : il suffit de consommer une sortie supplémentaire du générateur après la graine de la terre, ce qui garantit que les deux champs naissent d'états distincts du même `mt19937`. La loi uniforme sur 32 bits est ici aussi la seule famille pertinente : aucune forme de distribution n'a de sens pour une graine intermédiaire dont le rôle est de nourrir un champ procédural, pas d'être interprétée directement.",
     simulation:
       "Une sortie brute du générateur initialise la branche d'eau avant évaluation des champs spatiaux.",
     parameterChoice:
@@ -59,7 +59,7 @@ const uniformProcesses = [
       "Choisit l'orientation sprite des bâtiments publics déjà placés afin d'éviter un rendu trop mécanique.",
     parameters: ["support = {0, 1, 2, 3}"],
     why:
-      "Les quatre rotations sont géométriquement symétriques pour ces assets; aucune ne doit être favorisée.",
+      "Les quatre rotations sont géométriquement symétriques pour ces assets; aucune ne doit être favorisée. Une rotation discrète ne peut prendre que des valeurs dans un ensemble fini de symétries — ici les quatre quarts de tour — ce qui exclut d'emblée toute loi continue. L'uniforme discrète sur quatre valeurs est la seule famille sans biais sur un groupe cyclique d'ordre 4 : choisir une catégorielle pondérée introduirait artificiellement une orientation préférée sans justification visuelle ni stratégique.",
     simulation:
       "Le code utilise `std::uniform_int_distribution<int>(0, 3)` pendant la génération du plateau.",
     parameterChoice:
@@ -76,7 +76,7 @@ const uniformProcesses = [
       "Active ou non le retournement horizontal et vertical des bâtiments publics.",
     parameters: ["0 = aucun retournement", "1 = horizontal", "2 = vertical", "3 = double retournement"],
     why:
-      "Les masques de symétrie disponibles sont équiprobables dès lors qu'on ne veut pas marquer de biais visuel.",
+      "Les masques de symétrie disponibles sont équiprobables dès lors qu'on ne veut pas marquer de biais visuel. Les quatre états forment un groupe d'isométries planaires — identité, réflexion horizontale, réflexion verticale, double réflexion — qui sont structurellement équivalents sur un plateau de jeu. Tout biais de pondération créerait une asymétrie visuelle injustifiée entre les exemplaires du même bâtiment public sur la carte.",
     simulation:
       "Le code utilise `std::uniform_int_distribution<int>(0, 3)` et transmet le masque à la footprint du bâtiment.",
     parameterChoice:
@@ -96,7 +96,7 @@ const uniformProcesses = [
       "les candidats sont notés puis triés par score de distance"
     ],
     why:
-      "Un pur optimum rendrait la carte trop déterministe; un tirage uniforme dans le top conserve la qualité géométrique sans figer la même configuration.",
+      "Un pur optimum rendrait la carte trop déterministe; un tirage uniforme dans le top conserve la qualité géométrique sans figer la même configuration. Choisir systématiquement la meilleure position selon le score de dispersion produirait exactement la même carte pour tout monde donné, ce qui est contraire à l'objectif de renouvellement des parties. La stratégie top-K avec tirage uniforme est un compromis : elle maintient la qualité en n'acceptant que des positions bien dispersées, tout en laissant de la variété à l'intérieur de cet ensemble de qualité.",
     simulation:
       "`selectDispersedCandidate` trie les candidats, calcule `topCount`, puis tire uniformément un index dans ce sous-ensemble.",
     parameterChoice:
@@ -116,7 +116,7 @@ const uniformProcesses = [
       "admissibilité géométrique, terrain non bloqué et séparation stratégique initiale"
     ],
     why:
-      "Les deux royaumes obéissent à la même logique de tirage conditionnel; la bonne lecture est donc une uniforme discrète sur deux supports latéraux symétriques, pas deux mécanismes différents.",
+      "Les deux royaumes obéissent à la même logique de tirage conditionnel; la bonne lecture est donc une uniforme discrète sur deux supports latéraux symétriques, pas deux mécanismes différents. Les bandes latérales garantissent une distance initiale minimale entre les deux rois, ce qui est une contrainte de jouabilité, pas une préférence esthétique. À l'intérieur de chaque bande, l'uniforme est le seul choix qui n'avantage structurellement ni les coins ni le centre, préservant ainsi l'équité entre parties.",
     simulation:
       "Le générateur collecte les cellules valides de chaque bande latérale, puis tire un index uniforme dans le vecteur de candidats du royaume concerné.",
     parameterChoice:
@@ -133,7 +133,7 @@ const uniformProcesses = [
       "Pour les directions diagonales, choisit lequel des deux bords du plateau sert de bord d'entrée effectif.",
     parameters: ["2 bords admissibles par direction diagonale"],
     why:
-      "Les deux constructions géométriques possibles sont symétriques; une loi uniforme conserve cette symetrie.",
+      "Les deux constructions géométriques possibles sont symétriques; une loi uniforme conserve cette symétrie. Pour une direction diagonale donnée, les deux bords d'entrée compatibles produisent des brouillards géométriquement équivalents par réflexion : favoriser l'un plutôt que l'autre introduirait un biais directionnel injustifiable. La loi choisie est ici une Bernoulli uniforme (p = 0,5), qui est le cas minimal d'une catégorielle à deux poids égaux.",
     simulation:
       "La fonction `randomElement` appelle `std::uniform_int_distribution<int>(0, 1)`.",
     parameterChoice:
@@ -150,7 +150,7 @@ const uniformProcesses = [
       "Fixe la proportion de cellules visibles que le nouveau brouillard doit recouvrir a sa naissance.",
     parameters: ["`coverage_min_percent = 5`", "`coverage_max_percent = 20`"],
     why:
-      "Aucune taille privilégiée n'est imposée entre les bornes retenues; l'uniforme donne un éventail large mais lisible.",
+      "Aucune taille privilégiée n'est imposée entre les bornes retenues; l'uniforme donne un éventail large mais lisible. Une Beta aurait permis de concentrer la masse vers une taille typique, mais l'objectif de design est justement d'éviter un gabarit répétitif : chaque brouillard doit pouvoir couvrir entre 5 % et 20 % du plateau avec autant de chances pour toute taille dans cet intervalle. Les bornes elles-mêmes sont les vraies contraintes de gameplay : en dessous de 5 %, le brouillard ne joue aucun rôle tactique ; au-dessus de 20 %, il occulterait trop de pièces pour rester lisible.",
     simulation:
       "Le runtime tire un entier uniforme entre 5 et 20, puis convertit ce pourcentage en aire cible.",
     parameterChoice:
@@ -167,7 +167,7 @@ const uniformProcesses = [
       "Fixe l'allongement principal du brouillard avant déformation par le bruit de contour.",
     parameters: ["`aspect_ratio_min_times_100 = 180`", "`aspect_ratio_max_times_100 = 260`"],
     why:
-      "Le brouillard doit rester anisotrope sans toujours avoir la même excentricité; une plage uniforme contrôle cette variété.",
+      "Le brouillard doit rester anisotrope sans toujours avoir la même excentricité; une plage uniforme contrôle cette variété. Une normale tronquée aurait concentré la masse vers un rapport d'aspect central, produisant un profil de bande standard trop reconnaissable. L'uniforme est ici plus appropriée car elle ne favorise aucun gabarit particulier à l'intérieur des bornes retenues, ce qui est cohérent avec l'absence de forme préférée dans le design météo.",
     simulation:
       "Le code tire un entier uniforme sur [180, 260], divise par 100, puis dérive `radiusAlong` et `radiusAcross` à aire préservée.",
     parameterChoice:
@@ -184,7 +184,7 @@ const uniformProcesses = [
       "Fournit la graine du bruit qui perturbe le bord du brouillard.",
     parameters: ["1 tirage `generator()` par brouillard"],
     why:
-      "Le brouillard doit posséder une signature spatiale propre sans collision visuelle trop fréquente.",
+      "Le brouillard doit posséder une signature spatiale propre sans collision visuelle trop fréquente. Réutiliser la même graine que la couverture ou la direction produirait des brouillards corrélés : un même bord d'entrée donnerait toujours la même silhouette, ce qui rendrait l'événement météo prévisible visuellement. Une graine dédiée tirée uniformément sur 32 bits garantit que deux brouillards identiques par direction et couverture peuvent avoir des contours totalement différents.",
     simulation:
       "Une sortie brute du `mt19937` de l'événement est recopiée dans le descripteur du brouillard.",
     parameterChoice:
@@ -201,7 +201,7 @@ const uniformProcesses = [
       "Fournit la graine qui module localement l'opacité du brouillard via une loi log-normale.",
     parameters: ["1 tirage `generator()` par brouillard"],
     why:
-      "La texture d'opacité doit être reproductible mais différente du contour; il faut donc une graine propre.",
+      "La texture d'opacité doit être reproductible mais différente du contour; il faut donc une graine propre. Si la densité d'opacité utilisait la même graine que le bruit de contour, les zones les plus opaques coïncideraient systématiquement avec les bosses de bord, créant un artefact visuel involontaire. Deux couches indépendantes — forme et densité — permettent au pipeline de séparer complètement les décisions géométriques (bord de l'ellipse) des décisions d'opacité (texture interne).",
     simulation:
       "Le `mt19937` du brouillard produit une seconde sortie brute stockée dans le descripteur.",
     parameterChoice:
@@ -218,7 +218,7 @@ const uniformProcesses = [
       "Quand aucune apparition ciblée n'est valide, choisit une case de frontière parmi celles encore autorisées.",
     parameters: ["ensemble conditionne par le type de pièce, le relief et l'occupation"],
     why:
-      "En situation de repli, toutes les issues de bord restantes jouent le même rôle logique.",
+      "En situation de repli, toutes les issues de bord restantes jouent le même rôle logique. La politique de secours intervient uniquement lorsque l'algorithme de placement ciblé a échoué; à ce stade, on ne dispose plus de critère discriminant entre les candidats restants. Introduire une pondération secondaire ajouterait de la complexité sans garantie de meilleur résultat tactique, et pourrait masquer une défaillance de la logique primaire. Un tirage uniforme est donc la politique de repli la plus transparente et la plus facile à déboguer.",
     simulation:
       "Le système construit la liste `candidates`, puis appelle `std::uniform_int_distribution<std::size_t>` sur sa taille.",
     parameterChoice:
@@ -235,7 +235,7 @@ const uniformProcesses = [
       "Sélectionne un coup quand la pièce du diable entre dans sa **phase de recherche** (`Searching`), c'est-à-dire le moment où elle explore les coups encore possibles au lieu de poursuivre une cible déjà fixée.",
     parameters: ["support = coups générés, puis filtres par la visibilité locale et les collisions interdites"],
     why:
-      "Une fois le mode aléatoire activé, aucun coup restant n'est prioritaire dans cette branche spécifique du comportement.",
+      "Une fois le mode aléatoire activé, aucun coup restant n'est prioritaire dans cette branche spécifique du comportement. La phase Searching est précisément la phase d'exploration non guidée : y introduire une pondération (par exemple vers les coups qui approchent la cible) contredit l'intention de la branche et rend le comportement moins lisible. Une catégorielle uniforme est la formulation la plus rigoureuse de l'absence de préférence, et elle est testable : si une case ressort trop souvent dans un replay, cela indique une anomalie dans le filtrage des coups plutôt qu'un biais voulu.",
     simulation:
       "Le code génère tous les coups, filtre ceux qui violent la logique de visibilité, puis tire un index uniforme.",
     parameterChoice:
@@ -252,7 +252,7 @@ const uniformProcesses = [
       "Départage plusieurs trajectoires de repli équivalentes quand la pièce du diable veut revenir vers un bord.",
     parameters: ["support = directions a même cout de chemin"],
     why:
-      "Les options de même coût ne doivent pas être ordonnées arbitrairement par l'ordre de parcours du code.",
+      "Les options de même coût ne doivent pas être ordonnées arbitrairement par l'ordre de parcours du code. Sans tie-break probabiliste, la pièce du diable choisirait toujours la première direction admissible dans l'ordre d'itération du conteneur, produisant un biais systématique vers certaines directions selon le parcours. Le tirage uniforme rétablit l'équité entre options strictement équivalentes du point de vue du coût de chemin.",
     simulation:
       "Le tie-break se fait par tirage uniforme sur le sous-ensemble des directions ex aequo.",
     parameterChoice:
@@ -272,7 +272,7 @@ const permutationProcesses = [
       "Mélange l'ordre dans lequel les fermes et les mines sont insérées sur la carte avant choix de position.",
     parameters: ["`n = num_mines + num_farms = 5` dans la config actuelle"],
     why:
-      "Une permutation uniforme supprime un biais systématique du type 'les mines sont toujours placées avant les fermes'.",
+      "Une permutation uniforme supprime un biais systématique du type ‘les mines sont toujours placées avant les fermes’. Le placement est séquentiel et glouton : chaque objet occupe la meilleure position disponible au moment de son insertion, ce qui signifie que les premiers objets placés ont accès à un plus grand nombre de positions de qualité. Sans mélange, un ordre fixe avantagerait structurellement les mines à chaque génération. La permutation uniforme redistribue cet avantage de façon équitable sur l'ensemble des parties générées.",
     simulation:
       "Le générateur appelle `std::shuffle(placements.begin(), placements.end(), random)` avant la boucle de placement.",
     parameterChoice:
@@ -296,7 +296,7 @@ const categoricalProcesses = [
       "centralité mesurée par la distance au centre, contestation par l'équilibre des distances aux deux rois"
     ],
     why:
-      "Le système veut privilégier les zones contestables et centrales, pas seulement tirer une case uniforme.",
+      "Le système veut privilégier les zones contestables et centrales, pas seulement tirer une case uniforme. Une uniforme sur les cases admissibles placerait les coffres avec autant de probabilité dans les coins isolés que sur les cases stratégiquement disputées, ce qui réduirait leur impact sur la dynamique de jeu. La catégorielle pondérée permet d'encoder explicitement la valeur tactique d'une position sans rendre le résultat déterministe : même les cases faibles ont une probabilité non nulle d'être sélectionnées, ce qui conserve une part de surprise.",
     simulation:
       "Le runtime calcule un poids entier pour chaque candidat puis utilise `std::discrete_distribution<std::size_t>`.",
     parameterChoice:
@@ -318,7 +318,7 @@ const categoricalProcesses = [
       "Mode de rattrapage actif (`current_loot_catch_up_enabled = true`) : **les deux royaumes partagent la même récompense courante** tant qu'ils ne l'ont pas tous les deux recueillie"
     ],
     why:
-      "Le système favorise **plus d'or très tôt**, puis **davantage de capacité d'action** ensuite; une catégorielle pondérée est la loi naturelle pour ce genre de choix nominal.",
+      "Le système favorise **plus d'or très tôt**, puis **davantage de capacité d'action** ensuite; une catégorielle pondérée est la loi naturelle pour ce genre de choix nominal. Le type de récompense est une variable nominale : or, mouvement ou construction ne sont pas des valeurs numériques ordonnées mais des catégories aux effets radicalement différents sur le gameplay. Imposer une récompense fixe aurait rendu les coffres prévisibles et stratégiquement triviaux ; l'uniforme aurait ignoré la progression temporelle voulue par le design. Le changement de poids au tour 10 modélise explicitement la transition de phase : en début de partie, l'or est la ressource la plus flexible ; passé le milieu de partie, augmenter les budgets d'action est plus impactant.",
     simulation:
       "`sampleReward` construit le vecteur de poids selon le tour courant, puis appelle `std::discrete_distribution<int>`.",
     parameterChoice:
@@ -335,7 +335,7 @@ const categoricalProcesses = [
       "Choisit la direction cardinale ou diagonale du prochain brouillard.",
     parameters: ["les huit poids valent actuellement 1."],
     why:
-      "Le système est écrit de façon générique pour pouvoir biaiser certaines directions plus tard, mais la configuration active réalise une équiprobabilité via une catégorielle à poids égaux.",
+      "Le système est écrit de façon générique pour pouvoir biaiser certaines directions plus tard, mais la configuration active réalise une équiprobabilité via une catégorielle à poids égaux. Utiliser `std::discrete_distribution` avec des poids unitaires plutôt qu'une simple uniforme discrète est un choix d'extensibilité : il suffit de modifier les valeurs dans la config pour favoriser certains axes sans toucher au code. Dans l'état actuel, toutes les directions sont équiprobables parce qu'aucun déséquilibre cardinal n'a été identifié comme désirable dans le gameplay.",
     simulation:
       "Le runtime lit `direction_weights`, puis passe le tableau d'entiers a `std::discrete_distribution<int>`.",
     parameterChoice:
@@ -355,7 +355,7 @@ const categoricalProcesses = [
       "les types absents du champ visible recoivent le poids 0"
     ],
     why:
-      "Le comportement cherche une priorisation stratégique explicite: les pièces majeures doivent être attirées plus souvent que les pions.",
+      "Le comportement cherche une priorisation stratégique explicite: les pièces majeures doivent être attirées plus souvent que les pions. Un choix déterministe (toujours cibler la pièce de plus haute valeur visible) rendrait la pièce du diable triviale à contrer : il suffirait de masquer ou de déplacer la reine. La catégorielle pondérée introduit une variabilité contrôlée : la pièce du diable cible le plus souvent les pièces majeures, mais peut aussi s'en prendre à un cavalier ou un pion, ce qui complique l'anticipation du joueur. Les poids sont calibrés pour que la hiérarchie tactique soit respectée en espérance sans être garantie à chaque tour.",
     simulation:
       "Le système construit `typeWeights`, met à zéro les types indisponibles, puis tire via `std::discrete_distribution<std::size_t>`.",
     parameterChoice:
@@ -375,7 +375,7 @@ const categoricalProcesses = [
       "`D = board.getDiameter()`"
     ],
     why:
-      "On veut favoriser les options qui approchent vite la cible sans pour autant annuler complètement les autres entrées valides.",
+      "On veut favoriser les options qui approchent vite la cible sans pour autant annuler complètement les autres entrées valides. Une apparition déterministe sur la case de bord la plus proche de la cible rendrait la trajectoire de la pièce du diable entièrement prévisible après identification de la cible. À l'inverse, une uniforme sur toutes les entrées produirait des apparitions incohérentes avec la cible annoncée. La catégorielle par proximité de chemin est le compromis : l'entrée optimale est la plus probable, mais une entrée sous-optimale peut être sélectionnée, ce qui introduit une variabilité tactique sans dénaturer l'intention du comportement.",
     simulation:
       "Le runtime calcule un poids entier inversement lié à la distance de plus court chemin, puis tire avec `std::discrete_distribution`.",
     parameterChoice:
@@ -395,7 +395,7 @@ const categoricalProcesses = [
       "si le type correspond à `preferredTargetType`, son poids est doublé"
     ],
     why:
-      "Le remplacement doit rester cohérent avec la priorité précédente tout en laissant une vraie possibilité de redirection.",
+      "Le remplacement doit rester cohérent avec la priorité précédente tout en laissant une vraie possibilité de redirection. Réinitialiser complètement la distribution rendrait le changement de cible trop imprévisible et difficile à lire pour les joueurs. Conserver les mêmes poids de base avec un bonus sur le type précédemment poursuivi modélise une inertie comportementale réaliste : la pièce du diable tend à persister dans sa stratégie, mais peut l'abandonner. Ce bonus est suffisamment simple pour être compris dans un rapport de debug et ajustable sans changer la logique du code.",
     simulation:
       "La boucle de remplacement reconstruit les poids restants puis applique `std::discrete_distribution<std::size_t>`.",
     parameterChoice:
@@ -415,7 +415,7 @@ const categoricalProcesses = [
       "seules les cibles atteignables sont conservées"
     ],
     why:
-      "La priorité reste donnée aux cibles rapides d'accès, mais le tirage conserve de la diversité tactique.",
+      "La priorité reste donnée aux cibles rapides d'accès, mais le tirage conserve de la diversité tactique. Utiliser le même schéma de pondération par proximité que pour la sélection d'option d'apparition maintient une logique cohérente à travers tout le système des pièces du diable : la distance de chemin est le critère unique de pondération, qu'il s'agisse du choix d'entrée ou de la sélection de cible. Appliquer un schéma différent à ce stade aurait introduit une incohérence comportementale difficile à expliquer et à régler.",
     simulation:
       "Le code reconstruit `reachableTargets` et `reachableWeights`, puis échantillonne une cible par `std::discrete_distribution`.",
     parameterChoice:
@@ -438,7 +438,7 @@ const bernoulliProcesses = [
       L`p_t = 0.5 \text{ si la dette totale vaut } 0`
     ],
     why:
-      "Une Bernoulli suffit dès qu'il n'y a que deux royaumes éligibles; l'état du jeu déforme directement la probabilité.",
+      "Une Bernoulli suffit dès qu'il n'y a que deux royaumes éligibles; l'état du jeu déforme directement la probabilité. Avec deux issues possibles, la Bernoulli est la famille minimale et canonique : aucune loi plus complexe ne serait justifiable ici. Le paramètre `p_t` n'est pas fixe mais calculé à partir des dettes de sang normalisées, ce qui transforme ce tirage binaire en mécanisme actif de rééquilibrage : le royaume le plus fragilité attire davantage les pièces du diable, amplifiant la pression sur le perdant tout en préservant une chance de surprise pour le gagnant. Ce mécanisme est intentionnellement non stationnaire : `p_t` évolue avec les pertes.",
     simulation:
       "Le code calcule `whiteProbability`, la borne dans `[0,1]`, puis appelle `std::bernoulli_distribution`.",
     parameterChoice:
@@ -455,7 +455,7 @@ const bernoulliProcesses = [
       "Décide si, lors d'un tour de **phase de recherche** (`Searching`), la pièce du diable tente effectivement un mouvement purement aléatoire plutôt qu'un déplacement entièrement piloté par ses heuristiques.",
     parameters: ["probabilité de 33,3 % (`searching_random_move_chance_times_1000 = 333`)"],
     why:
-      "Il s'agit d'un interrupteur oui/non sur une branche comportementale unique; la Bernoulli est la loi minimale adéquate.",
+      "Il s'agit d'un interrupteur oui/non sur une branche comportementale unique; la Bernoulli est la loi minimale adéquate. La décision est binaire par construction : soit la pièce du diable joue un coup aléatoire ce tour-ci, soit elle continue son comportement guidé. Une probabilité d'environ 1/3 a été retenue pour calibrer l'erraticité perçue : trop haute, la pièce devient imprévisible et frustrante ; trop basse, la phase Searching n'a aucun effet visible. L'implémentation via un entier uniforme sur [0, 999] comparé à un seuil de 333 est mathématiquement équivalente à `std::bernoulli_distribution(0.333)` mais plus pratique à régler depuis la config.",
     simulation:
       "Le système tire un entier uniforme sur `[0, 999]` et compare au seuil 333, ce qui réalise une Bernoulli discrétisée.",
     parameterChoice:
@@ -480,7 +480,7 @@ const poissonProcesses = [
       "`poisson_lambda_cap_times_1000 = 250`"
     ],
     why:
-      "La conception veut un compteur d'arrivées rares dont l'intensité croît avec la dette de sang; la Poisson est le modèle naturel de comptage d'événements.",
+      "La conception veut un compteur d'arrivées rares dont l'intensité croît avec la dette de sang; la Poisson est le modèle naturel de comptage d'événements. Une simple Bernoulli à paramètre fixe aurait suffi pour déclencher des apparitions, mais elle ne permettrait pas d'encoder que l'intensité doit croître avec les destructions accumulees : il faudrait recalculer `p` à chaque tour de façon ad hoc. La Poisson formalise directement ce mécanisme : son paramètre λ est interprétable comme une fréquence d'arrivée, et faire dépendre λ de la dette de sang donne un modèle cohérent où les apparitions restent rares en début de partie et s'accélèrent avec l'escalade du conflit. Une loi géométrique (sans mémoire, discrète) aurait été envisageable pour les inter-arrivées, mais elle n'aurait pas permis de borner aussi proprement la probabilité d'apparition par tour via le cap sur λ.",
     simulation:
       "Le runtime échantillonne `std::poisson_distribution<int>(lambda)` puis déclenche l'apparition si le résultat est au moins 1.",
     parameterChoice:
@@ -506,7 +506,7 @@ const truncatedNormalProcesses = [
       "destroy_block / arena_per_turn: mean 10, sigma = 1.5, clamp = +/- 3, minimum = 1"
     ],
     why:
-      "Une variable gaussienne tronquée préserve une moyenne intuitive tout en autorisant une dispersion contrôlée autour de chaque source d'XP.",
+      "Une variable gaussienne tronquée préserve une moyenne intuitive tout en autorisant une dispersion contrôlée autour de chaque source d'XP. La loi normale est choisie parce que son paramétrage en (μ, σ) traduit directement le langage du design : « cette action rapporte en moyenne μ points, avec une variabilité de σ ». Une loi exponentielle ou log-normale introduirait une asymétrie non voulue — des valeurs très hautes plus probables que très basses — inappropriée pour une récompense centrée sur une valeur cible précise. La **troncature** est indispensable pour deux raisons : éliminer les valeurs négatives ou nulles, incohérentes avec une récompense, et éviter les pics extrêmes qui déstabiliseraient l'économie d'XP. Le minimum final (plancher à 1) garantit qu'un kill rapporte toujours quelque chose même après arrondi.",
     simulation:
       "`RewardProfileSampling::sampleTruncatedNormal` tire une normale, la tronque sur `[mean - delta, mean + delta]`, puis arrondit et applique le minimum.",
     parameterChoice:
@@ -528,7 +528,7 @@ const truncatedNormalProcesses = [
       "`minimum = 1`"
     ],
     why:
-      "La même famille que pour l'XP permet d'obtenir une valeur centrale stable, avec un peu de volatilité sans valeurs aberrantes gigantesques.",
+      "La même famille que pour l'XP permet d'obtenir une valeur centrale stable, avec un peu de volatilité sans valeurs aberrantes gigantesques. Réutiliser le même moteur de normale tronquée assure la cohérence du système économique : les récompenses d'or et d'XP obéissent à la même philosophie de design, une valeur centrale de référence avec une dispersion contrôlée. La **troncature** est ici aussi nécessaire pour éviter des montants d'or négatifs ou des gains excessifs qui rompraient l'équilibre économique : un coffre donnant 0 ou 200 d'or produirait des effets de bord trop importants sur la stratégie du tour.",
     simulation:
       "Le chemin `sampleGoldRewardAmount -> sampleTruncatedNormal` réutilisé exactement le moteur commun de profils de récompense.",
     parameterChoice:
@@ -553,7 +553,7 @@ const weibullProcesses = [
       "tour minimal de tout premier apparition = 4"
     ],
     why:
-      "La Weibull est adaptée aux temps d'attente flexibles: avec `k > 1`, le taux de risque croissant rend les réapparitions plus plausibles après plusieurs tours sans coffre.",
+      "La Weibull est adaptée aux temps d'attente flexibles: avec `k > 1`, le taux de risque croissant rend les réapparitions plus plausibles après plusieurs tours sans coffre. Une loi géométrique, l'équivalent discret naturel d'un temps d'attente, est sans mémoire : elle traite chaque tour comme un essai indépendant, sans que l'absence prolongée de coffre augmente la probabilité de réapparition. Ce comportement sans mémoire est contraire à l'intention de design : le joueur doit pouvoir percevoir qu'un coffre est attendu après une longue absence. La Gamma offre le même taux de risque croissant, mais la Weibull est ici préférable car sa paramétrisation (k, λ) sépare plus naturellement la forme (via k) de l'échelle temporelle (via λ). Le **plancher discrétisé** à c = 4 tours garantit qu'un coffre ne peut pas réapparaître immédiatement après avoir été collecté.",
     simulation:
       "`sampleSpawnDelay` échantillonne `std::weibull_distribution<double>(shape, scale)`, arrondit, puis applique `max(respawnCooldown, randomDelay)`.",
     parameterChoice:
@@ -576,7 +576,7 @@ const gammaProcesses = [
       "par héritage code, la version par défaut était `k = 3.20`, `theta = 2.40`"
     ],
     why:
-      "Une Gamma contrôle naturellement des temps d'attente positifs et asymétriques, plus souples qu'une exponentielle simple.",
+      "Une Gamma contrôle naturellement des temps d'attente positifs et asymétriques, plus souples qu'une exponentielle simple. Une loi exponentielle (cas k = 1 de la Gamma) est sans mémoire, ce qui produit des inter-arrivées irrégulières et potentiellement très courtes : deux brouillards pourraient s'enchaîner en quelques tours. Avec k > 1, la Gamma concentre la masse autour de sa moyenne tout en maintenant une queue droite : les délais typiques sont regroupés, mais des pauses plus longues restent possibles. Le paramètre θ encode l'échelle temporelle absolue et peut être ajusté dans la config pour accélérer ou ralentir toute la cadence météo sans modifier la forme de la distribution.",
     simulation:
       "`scheduleNextSpawn` appelle `sampleGammaTurns`, qui échantillonne `std::gamma_distribution`, prend le plafond puis convertit en pas de temps.",
     parameterChoice:
@@ -597,7 +597,7 @@ const gammaProcesses = [
       "minimum logique appliqué ensuite: au moins 1 tour visible"
     ],
     why:
-      "Une durée positive et asymétrique est mieux modélisée par une Gamma que par une loi symétrique, surtout pour éviter des vies négatives ou quasi nulles.",
+      "Une durée positive et asymétrique est mieux modélisée par une Gamma que par une loi symétrique, surtout pour éviter des vies négatives ou quasi nulles. Une uniforme discrète produirait toutes les durées avec la même probabilité, sans distinguer les durées courtes des longues : un brouillard de 1 tour serait aussi probable qu'un brouillard de 10 tours. Une normale tronquée aurait concentré la masse de façon symétrique, alors que la durée d'un événement météo est intrinsèquement asymétrique : les brouillards très courts sont possibles mais rares, et quelques brouillards exceptionnellement longs enrichissent le gameplay. La Gamma capture cette asymétrie via sa queue droite, avec un minimum logique à 1 tour pour garantir qu'un brouillard est toujours au moins brièvement visible.",
     simulation:
       "Le runtime tire `visibleTurnCount`, convertit en nombre de pas, puis adapte le trajet et l'élongation du brouillard pour respecter cette cible temporelle.",
     parameterChoice:
@@ -621,7 +621,7 @@ const logNormalProcesses = [
       "alpha local = clamp(0.48 * X(c), 0.22, 0.82)"
     ],
     why:
-      "La log-normale garantit des multiplicateurs strictement positifs, avec une queue à droite utile pour créer quelques poches très opaques sans valeurs négatives.",
+      "La log-normale garantit des multiplicateurs strictement positifs, avec une queue à droite utile pour créer quelques poches très opaques sans valeurs négatives. L'opacité locale est conçue comme un multiplicateur appliqué à une base : elle doit donc être strictement positive. Une Beta, bornée dans [0, 1], aurait été envisageable si l'opacité devait toujours rester inférieure à la base, mais la conception autorise des zones légèrement plus opaques que la valeur nominale (multiplicateur > 1), ce qui exclut la Beta au profit de la log-normale. La **troncature finale** via clamp d'alpha n'est pas une correction d'urgence mais une décision de design explicite : elle définit les plages d'opacité visuellement acceptables indépendamment des valeurs extrêmes que la log-normale peut générer.",
     simulation:
       "`sampleLogNormalCell` redérive un générateur par cellule à partir de `densitySeed`, puis échantillonne `std::lognormal_distribution<double>(mu, sigma)`.",
     parameterChoice:
@@ -646,7 +646,7 @@ const betaProcesses = [
       "`contrast_exponent = 1.8`"
     ],
     why:
-      "Avec `alpha > beta`, la Beta concentre la masse près de 1, ce qui laisse la plupart des herbes proches de la luminosité nominale tout en autorisant quelques assombrissements visibles.",
+      "Avec `alpha > beta`, la Beta concentre la masse près de 1, ce qui laisse la plupart des herbes proches de la luminosité nominale tout en autorisant quelques assombrissements visibles. La luminosité d'une cellule d'herbe est naturellement une proportion dans [0, 1] avant remappage, ce qui fait de la Beta la famille de référence : son support coïncide exactement avec l'espace des valeurs utiles, sans nécessiter de troncature. Une normale tronquée aurait fonctionné, mais les paramètres (μ, σ) sont moins intuitifs pour décrire une répartition majoritairement haute avec une queue d'assombrissements. La combinaison seuil/contraste en aval transforme la Beta brute en variation perceptible : les valeurs au-dessus du seuil 0,90 conservent la luminosité nominale, les valeurs en dessous sont ramenées dans un intervalle visible via la puissance de contraste.",
     simulation:
       "Le code échantillonne la Beta via deux Gammas, applique un seuil à 0.90, puis remappe la partie basse vers `[0.68, 1]` avec une puissance 1.8.",
     parameterChoice:
@@ -670,7 +670,7 @@ const piecewiseLinearProcesses = [
       "avec `1.98 = 1.1 * 1.8` pour le point median"
     ],
     why:
-      "Le jeu veut privilégier les entrées centrales tout en conservant une probabilité non nulle de départ par les coins; la linéaire par morceaux est idéale pour cette densité dessinée à la main.",
+      "Le jeu veut privilégier les entrées centrales tout en conservant une probabilité non nulle de départ par les coins; la linéaire par morceaux est idéale pour cette densité dessinée à la main. Une uniforme donnerait autant de chances aux coins qu'au centre, ne respectant pas l'intention visuelle d'un brouillard qui entre plutôt par le milieu. Une distribution triangulaire concentrerait la masse au centre mais sans permettre le réglage fin des poids aux différents points de contrôle. La linéaire par morceaux est la seule famille standard qui permet de spécifier la densité point par point — ici cinq nœuds répartis régulièrement — et de l'ajuster directement depuis la config sans changer de modèle. C'est une densité entièrement dessinée à la main, ce qui est la formulation honnête de décisions de design qui ne découlent pas d'un modèle mathématique préexistant.",
     simulation:
       "`sampleEdgePosition` construit les bornes et les hauteurs puis utilise `std::piecewise_linear_distribution<double>`.",
     parameterChoice:
@@ -695,7 +695,7 @@ const proceduralProcesses = [
       "post-traitement par composantes et amas: 6 amas, rayon 2 à 5"
     ],
     why:
-      "Une loi usuelle scalaire ne suffit pas ici: il faut un champ spatial corrélé pour faire émerger des tâches organiques.",
+      "Une loi usuelle scalaire ne suffit pas ici: il faut un champ spatial corrélé pour faire émerger des zones organiques. Traiter chaque cellule comme un tirage de Bernoulli indépendant produirait un bruit pur sans structure : pas de continents, pas de couloirs, pas de bords lisibles. Le bruit de valeur (value noise) génère précisément cette cohérence spatiale : les cellules proches tendent à avoir des valeurs proches, ce qui fait émerger des régions. L'empilement fractal d'octaves affine les bords et ajoute du détail à petite échelle sans recourir à une modélisation physique ou à un algorithme de croissance cellulaire plus coûteux.",
     simulation:
       "Le générateur évalue `valueNoise` puis `fractalNoise`, applique des seuils, conserve les composantes cohérentes et ajoute des amas locaux de terre.",
     parameterChoice:
@@ -716,7 +716,7 @@ const proceduralProcesses = [
       "même échelle et même nombre d'octaves que la terre"
     ],
     why:
-      "Comme pour la terre, on veut des zones spatialement cohérentes, pas une Bernoulli par cellule qui gribouillerait le plateau.",
+      "Comme pour la terre, on veut des zones spatialement cohérentes, pas une Bernoulli par cellule qui gribouillerait le plateau. L'eau doit former des poches et des lacs reconnaissables, pas une distribution aléatoire de cellules isolées qui ne bloquerait aucun couloir de façon stratégique. En réutilisant la même architecture de bruit procédural que la terre mais avec une graine différente, on garantit que les deux champs sont décorrélés : une poche d'eau n'apparaît pas systématiquement là où se trouve de la terre, ce qui donnerait une carte illisible.",
     simulation:
       "Le pipeline redérive un score de bruit, applique un seuil propre à l'eau, filtre par composantes puis injecte quelques lacs complémentaires.",
     parameterChoice:
@@ -733,7 +733,7 @@ const proceduralProcesses = [
       "Retourne horizontalement et/ou verticalement les textures de terrain pour casser les répétitions visibles.",
     parameters: ["4 états de retournement", "hachage positionnel avec `worldSeed` et `CellType`"],
     why:
-      "Le besoin principal est la reproductibilité locale, pas un échantillonnage i.i.d. complet à chaque frame.",
+      "Le besoin principal est la reproductibilité locale, pas un échantillonnage i.i.d. complet à chaque frame. Utiliser un générateur d'état comme `mt19937` pour assigner un masque à chaque cellule obligerait soit à regénérer toute la séquence depuis le début à chaque accès, soit à stocker le masque de chaque cellule en mémoire. Un hachage positionnel évite ces deux écueils : il calcule le masque de n'importe quelle cellule en O(1) à partir de sa position et de `worldSeed`, sans état intermédiaire. Ce n'est pas un tirage aléatoire au sens strict mais une fonction déterministe pseudo-aléatoire dont la distribution empirique est suffisamment uniforme sur les quatre états pour que l'approximation soit correcte visuellement.",
     simulation:
       "`terrainFlipMaskFor` redérive un seed mélange, hache la position puis conserve les deux bits de retournement utiles.",
     parameterChoice:
@@ -754,7 +754,7 @@ const proceduralProcesses = [
       "`edge_softness_percent = 18`"
     ],
     why:
-      "Un brouillard sans bruit aurait une silhouette trop analytique. Ici encore, il faut une fonction spatiale corrélée plutôt qu'une suite i.i.d. de variables.",
+      "Un brouillard sans bruit aurait une silhouette parfaitement elliptique, trop analytique et immédiatement reconnaissable comme artificielle. Perturber le bord point par point avec des variables indépendantes (i.i.d.) produirait un contour en dents de scie haute fréquence, sans forme nuageuse naturelle. Le value noise avec un grand span (6 cellules) génère une déformation de bord à basse fréquence : les bosses sont larges et douces, ce qui imite la texture d'un vrai nuage. Le paramètre d'amplitude à 100 % autorise des déformations significatives, ensuite atténuées par le fondu de bord (edgeSoftness) pour éviter les transitions brutales.",
     simulation:
       "Le code évalue `valueNoise(shapeSeed, x, y, span)`, déforme la limite effective du brouillard, puis applique un fondu par `edgeSoftness`.",
     parameterChoice:

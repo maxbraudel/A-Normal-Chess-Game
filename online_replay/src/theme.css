@@ -545,6 +545,7 @@ a {
   border-radius: 0;
   transform-origin: left center;
   background: linear-gradient(90deg, rgba(240, 213, 143, 0.85), rgba(111, 188, 120, 0.92));
+  transition: all 1s;
 }
 
 .static-board-vignette__progress-value {
