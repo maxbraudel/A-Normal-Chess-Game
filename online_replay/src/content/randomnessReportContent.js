@@ -769,12 +769,89 @@ const illustratedProceduralProcesses = proceduralProcesses.map(withProcessIllust
 
 export const randomnessReport = {
   hero: {
-    kicker: "Rapport mathematique",
-    title: "Rapport des processus aleatoires du jeu",
+    kicker: "",
+    title: "Unnormal Chess Game",
     lead:
-      "Cette page reprend le rapport d'audit runtime comme inventaire de reference, mais le recompose en langage probabiliste. L'objectif n'est pas de relire le code systeme par systeme: on veut identifier, pour chaque variable aleatoire active, la famille de loi utilisee, ses parametres, sa methode de simulation, ses dependances et les limites mathematiques du modele.",
-    source:
-      "Source pivot: documentation/RAPPORT_AUDIT_PROCESSUS_ALEATOIRES_RUNTIME.md. Les valeurs numeriques proviennent en priorite de la configuration runtime active (`assets/config/master_config.json`) et, quand elles ne sont pas exposees, des constantes par defaut encore presentes dans le code."
+      "Un jeu d'echecs de conquete ou le territoire, l'economie, la meteo et le brouillard recomposent chaque partie.",
+    source: ""
+  },
+  gameIntroduction: {
+    paragraphs: [
+      "Unnormal Chess Game conserve le coeur d'un duel d'echecs, mais le deplace dans un cadre plus large ou la carte, les ressources et les evenements de partie comptent autant que la seule geometrie des pieces.",
+      "La partie reste lisible pour un joueur d'echecs, mais elle se joue dans un espace beaucoup plus vivant: il faut proteger son roi, ouvrir des lignes d'attaque, conserver du controle territorial et exploiter des opportunites qui n'existent pas sur un echiquier fixe."
+    ],
+    sections: [
+      {
+        title: "Objectif et boucle de jeu",
+        paragraphs: [
+          "L'objectif reste de faire basculer la partie a son avantage en preservant son royaume et en trouvant des sequences decisives contre l'adversaire. Chaque tour oblige a arbitrer entre tactique immediate, defense du roi, occupation de l'espace et preparation d'un avantage futur."
+        ]
+      },
+      {
+        title: "Carte, territoire et economie",
+        paragraphs: [
+          "La partie ne se joue pas sur un plateau standardise. Le terrain, l'eau, les zones praticables, les fermes et les mines structurent les ouvertures possibles, la circulation et la valeur strategique des zones de carte. Controler l'espace utile devient une composante centrale du jeu."
+        ]
+      },
+      {
+        title: "Pieces, progression et opportunites",
+        paragraphs: [
+          "Les pieces gardent une lecture echec, mais elles interagissent aussi avec des systemes de progression et de recompense. L'experience, les coffres et les timings de deplacement creent des ecarts de valeur qui se construisent dans la duree, pas seulement sur un echange tactique isole."
+        ]
+      },
+      {
+        title: "Systemes de pression dynamiques",
+        paragraphs: [
+          "La meteo, le brouillard, les recompenses aleatoires et les apparitions infernales injectent des contraintes supplementaires dans la partie. Le terrain reste strategique, mais il n'est jamais totalement fige: des phenomenes externes peuvent fermer des lignes, ouvrir des fenetres d'attaque ou modifier le rythme de la partie."
+        ]
+      }
+    ]
+  },
+  randomnessLink: {
+    paragraphs: [
+      "L'aleatoire n'est pas un decor. Il sert a diversifier les cartes, a rendre les economies moins mecaniques, a creer des fenetres d'opportunite et a produire une incertitude que les joueurs doivent apprendre a lire plutot qu'a subir.",
+      "Par rapport a un jeu d'echecs classique, cette couche aleatoire apporte de la rejouabilite, renouvelle la valeur strategique des positions et deplace une partie de la maitrise vers l'anticipation des regimes possibles, la gestion du risque et l'adaptation aux evenements."
+    ],
+    sections: [
+      {
+        title: "Une incertitude qui reste strategique",
+        text:
+          "Les tirages ne sont pas la pour casser arbitrairement une position. Ils sont bornes par des regles explicites, relies a `worldSeed`, consumes par des compteurs RNG serialises et reinterpretes par des contraintes de gameplay. Le hasard varie les situations sans effacer la competence des joueurs."
+      },
+      {
+        title: "Une vraie plus-value par rapport aux echecs classiques",
+        text:
+          "Le jeu ne se contente pas d'ajouter du bruit. Il cree des cartes differentes, des rythmes de partie plus riches, des economies plus vivantes et des lectures tactiques qui doivent integrer l'incertitude future. La profondeur vient justement du fait que ces processus aleatoires restent modelisables et observables."
+      }
+    ],
+    reportDimensionsTitle: "Les trois dimensions du rapport",
+    reportDimensions: [
+      {
+        title: "1. Inventaire des processus aleatoires",
+        text:
+          "La premiere couche du site recense les variables aleatoires actives de la codebase, leur famille de loi, leurs parametres, leur support, leur methode de simulation et leur ancrage deterministe dans `worldSeed` et les compteurs RNG serialises.",
+        showSummaryStats: true
+      },
+      {
+        title: "2. 500 parties simulees",
+        text:
+          "La seconde couche repose sur 500 simulations theoriques. Il ne s'agit pas de matchs entre IA ni de parties humaines accelerees: on simule directement les mecanismes concernes, par exemple la generation du terrain, les coffres, la meteo ou les spawns infernaux, afin d'estimer leur comportement attendu."
+      },
+      {
+        title: "3. Une partie reelle instrumentee",
+        text:
+          "La troisieme couche exploite les donnees d'une partie complete jouee pendant plusieurs heures avec un ami. Les actions, les tours et les etats utiles ont ete enregistres pour confronter la theorie a un runtime reel et montrer des resultats lisibles en situation de jeu."
+      }
+    ],
+    replayTitle: "Replay instrumente de la partie reelle",
+    replayText:
+      "Le viewer ci-dessous donne un apercu direct de la partie observee, en lecture automatique rapide, avec boucle et point de vue blanc. Il sert d'entree visuelle avant le detail statistique du rapport."
+  },
+  reportPrelude: {
+    paragraphs: [
+      "La suite entre dans le detail du rapport: table des matieres, familles de lois, statistiques simulees, observations issues de la partie reelle et limites du modele.",
+      "Le document pivot reste `documentation/RAPPORT_AUDIT_PROCESSUS_ALEATOIRES_RUNTIME.md`, complete ici par les donnees issues de la configuration runtime active, des simulations et de la partie instrumentee."
+    ]
   },
   summaryStats: [
     {

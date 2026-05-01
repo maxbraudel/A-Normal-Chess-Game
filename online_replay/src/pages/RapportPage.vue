@@ -5,10 +5,20 @@ import InlineRichText from "../components/InlineRichText.vue";
 import MathFormula from "../components/MathFormula.vue";
 import RapportLawSection from "../components/RapportLawSection.vue";
 import RapportStatsBlock from "../components/RapportStatsBlock.vue";
+import ReplayViewer from "../components/ReplayViewer.vue";
 import { randomnessReport } from "../content/randomnessReportContent.js";
 import { loadRealGameStatsReport } from "../content/realGameStatsContent.js";
 import { randomnessStatsReport } from "../content/randomnessStatsContent.js";
 import { reportText } from "../utils/reportText.js";
+
+const REPORT_INTRO_REPLAY = Object.freeze({
+  autoplayOnMount: true,
+  autoplayIntervalMs: 220,
+  loopPlayback: true,
+  toastCooldownMs: 2400,
+  enablePerspective: true,
+  perspectiveKingdom: "white"
+});
 
 const activeTocId = ref("cadre");
 const realGameStatsReport = ref({
@@ -105,19 +115,108 @@ onBeforeUnmount(() => {
 <template>
   <main class="rapport-page">
     <section class="rapport-hero">
-      <div class="rapport-hero__copy">
-        <p class="landing-kicker">{{ reportText(randomnessReport.hero.kicker) }}</p>
+      <div class="rapport-hero__copy rapport-hero__copy--full">
+        <p v-if="randomnessReport.hero.kicker" class="landing-kicker">{{ reportText(randomnessReport.hero.kicker) }}</p>
         <h1>{{ reportText(randomnessReport.hero.title) }}</h1>
-        <InlineRichText class="landing-lead" :text="randomnessReport.hero.lead" />
-        <InlineRichText class="rapport-hero__source" :text="randomnessReport.hero.source" />
+        <InlineRichText v-if="randomnessReport.hero.lead" class="landing-lead" :text="randomnessReport.hero.lead" />
+        <InlineRichText v-if="randomnessReport.hero.source" class="rapport-hero__source" :text="randomnessReport.hero.source" />
+      </div>
+    </section>
+
+    <section class="rapport-panel rapport-panel--intro">
+      <header class="rapport-section__header">
+        <p class="rapport-panel__eyebrow">Présentation</p>
+        <h2>Introduction au jeu</h2>
+      </header>
+
+      <div class="rapport-richtext">
+        <InlineRichText
+          v-for="paragraph in randomnessReport.gameIntroduction.paragraphs"
+          :key="paragraph"
+          :text="paragraph"
+        />
       </div>
 
-      <div class="rapport-summary-grid">
-        <article v-for="stat in randomnessReport.summaryStats" :key="stat.label" class="rapport-summary-card">
-          <p class="rapport-summary-card__value">{{ stat.value }}</p>
-          <p class="rapport-summary-card__label">{{ reportText(stat.label) }}</p>
-          <p class="rapport-summary-card__detail">{{ reportText(stat.detail) }}</p>
+      <div class="rapport-output-grid">
+        <article v-for="section in randomnessReport.gameIntroduction.sections" :key="section.title" class="rapport-output-card">
+          <h3>{{ reportText(section.title) }}</h3>
+          <div class="rapport-richtext rapport-richtext--compact">
+            <InlineRichText
+              v-for="paragraph in section.paragraphs"
+              :key="`${section.title}-${paragraph}`"
+              :text="paragraph"
+            />
+          </div>
         </article>
+      </div>
+    </section>
+
+    <section class="rapport-panel rapport-panel--intro">
+      <header class="rapport-section__header">
+        <p class="rapport-panel__eyebrow">Lecture stratégique</p>
+        <h2>Lien avec les processus aléatoires</h2>
+      </header>
+
+      <div class="rapport-richtext">
+        <InlineRichText
+          v-for="paragraph in randomnessReport.randomnessLink.paragraphs"
+          :key="paragraph"
+          :text="paragraph"
+        />
+      </div>
+
+      <div class="rapport-output-grid">
+        <article v-for="section in randomnessReport.randomnessLink.sections" :key="section.title" class="rapport-output-card">
+          <h3>{{ reportText(section.title) }}</h3>
+          <InlineRichText :text="section.text" />
+        </article>
+      </div>
+
+      <div class="rapport-subsection">
+        <h3 class="rapport-subsection__title">{{ reportText(randomnessReport.randomnessLink.reportDimensionsTitle) }}</h3>
+
+        <div class="rapport-output-grid">
+          <article
+            v-for="dimension in randomnessReport.randomnessLink.reportDimensions"
+            :key="dimension.title"
+            class="rapport-output-card"
+          >
+            <h3>{{ reportText(dimension.title) }}</h3>
+            <InlineRichText :text="dimension.text" />
+          </article>
+        </div>
+
+        <div class="rapport-summary-row" aria-label="Résumé des processus aléatoires">
+          <article v-for="stat in randomnessReport.summaryStats" :key="stat.label" class="rapport-summary-card rapport-summary-card--inline">
+            <p class="rapport-summary-card__value">{{ stat.value }}</p>
+            <p class="rapport-summary-card__label">{{ reportText(stat.label) }}</p>
+            <p class="rapport-summary-card__detail">{{ reportText(stat.detail) }}</p>
+          </article>
+        </div>
+      </div>
+
+      <div class="rapport-subsection rapport-subsection--replay">
+        <h3 class="rapport-subsection__title">{{ reportText(randomnessReport.randomnessLink.replayTitle) }}</h3>
+        <InlineRichText class="rapport-subsection__lead" :text="randomnessReport.randomnessLink.replayText" />
+
+        <div class="rapport-replay-frame">
+          <ReplayViewer class="rapport-replay" v-bind="REPORT_INTRO_REPLAY" />
+        </div>
+      </div>
+    </section>
+
+    <section class="rapport-panel rapport-panel--intro">
+      <header class="rapport-section__header">
+        <p class="rapport-panel__eyebrow">Rapport</p>
+        <h2>Rapport des processus aléatoires</h2>
+      </header>
+
+      <div class="rapport-richtext">
+        <InlineRichText
+          v-for="paragraph in randomnessReport.reportPrelude.paragraphs"
+          :key="paragraph"
+          :text="paragraph"
+        />
       </div>
     </section>
 
