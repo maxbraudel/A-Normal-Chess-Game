@@ -625,7 +625,7 @@ const logNormalProcesses = [
     parameterChoice:
       "La moyenne geometrique legerement sous 1 et un sigma modere donnent surtout des variations fines, ensuite bornees par l'alpha min/max.",
     dependence:
-      "Toutes les cellules d'un meme front partagent la meme graine de densite; le champ n'est donc pas i.i.d. a l'echelle du front."
+      "Toutes les cellules d'un meme front partagent la meme graine de densite; le champ n'est donc pas i.i.d. (**independant et identiquement distribué**) a l'echelle du front."
   }
 ];
 
@@ -1261,7 +1261,7 @@ export const randomnessReport = {
       badge: "4 processus",
       description: [
         "Tous les processus aleatoires du jeu ne sont pas raisonnablement resumables par une unique variable scalaire. Les champs de terrain et les deformations de contour meteo sont des fonctions aleatoires de la cellule et d'une seed, avec forte correlation spatiale.",
-        "Les traiter comme des Bernoulli i.i.d. serait mathematiquement faux et gameplay-ment trompeur: on perdrait exactement la structure de regions, de bords et de textures que le code cherche a produire."
+        "Les traiter comme des Bernoulli i.i.d. (**independantes et identiquement distribuees**), serait mathematiquement faux et gameplay-ment trompeur: on perdrait exactement la structure de regions, de bords et de textures que le code cherche a produire."
       ],
       formulaCards: [
         {
@@ -1305,7 +1305,7 @@ export const randomnessReport = {
     {
       title: "Champs spatiaux non i.i.d.",
       text:
-        "Le dirt, l'eau ou les contours meteo sont des processus sur grille correlee. Leur analyse demande des statistiques de geometrie spatiale, pas seulement des pmf/pdfs cellule par cellule."
+        "`i.i.d.` (**independantes et identiquement distribuees**) : chaque cellule serait tiree separement, avec la meme loi partout, sans influencer ses voisines. Ce n'est pas ce que fait le jeu pour le dirt, l'eau ou les contours meteo: des cellules proches se ressemblent justement parce qu'elles sont produites par une meme structure de bruit et un meme post-traitement spatial. **Exemple concret:** un lac doit former une masse continue qui bloque un couloir; si chaque cellule etait tiree i.i.d., on obtiendrait surtout une poussiere de cases isolees, pas un obstacle coherent."
     },
     {
       title: "Non-stationnarite de gameplay",

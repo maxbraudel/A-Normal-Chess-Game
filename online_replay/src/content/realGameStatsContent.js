@@ -282,18 +282,42 @@ function buildWaterDeniedByKingdomBlock(waterDenied) {
     eyebrow: "Partie reelle",
     title: "Cellules refusees par l'eau par royaume",
     description:
-      "Reprise de la metrique gameplay du generateur historique: nombre de cellules de mouvement refusees par l'eau, calcule a partir des pseudo-coups legaux du plateau reel et ventile par royaume.",
+      "Cette metrique recompte, a chaque enregistrement de la partie, **les cases de destination qui seraient atteignables si l'eau etait retiree**, puis soustrait les pseudo-coups reellement autorises sur le plateau courant. Le resultat est ensuite **somme sur toutes les pieces d'un royaume**: une courbe haute signifie donc que l'eau supprime beaucoup d'options de deplacement a cet instant, pas qu'un royaume est bloque partout sur la carte. Les murs et les autres obstacles restent inchanges pendant ce recalcul; **on isole uniquement l'effet de l'eau**.",
     metrics: [
       { label: "Eau blanche moy.", value: formatStatNumber(waterDenied.averageWhiteWaterDeniedCells) },
       { label: "Eau noire moy.", value: formatStatNumber(waterDenied.averageBlackWaterDeniedCells) },
       { label: "Pic total eau", value: formatInteger(waterDenied.peakWaterDeniedCells) }
     ],
     insights: [
-      "Seules les cellules refusees par l'eau sont conservees ici: les murs sont volontairement exclus de cette tranche du rapport.",
-      `Le calcul repart des mouvements pseudo-legaux, comme dans le site \`statistiques-generator\`, au lieu d'utiliser une simple approximation geometrique des lacs. L'ecart moyen blanc/noir est de ${formatStatNumber(waterDenied.averageKingdomGap)} cellules refusees par enregistrement.`
+      `Le calcul repart des mouvements pseudo-legaux, comme dans le site \`statistiques-generator\`, au lieu d'utiliser une simple approximation geometrique des lacs. L'ecart moyen blanc/noir est ici de ${formatStatNumber(waterDenied.averageKingdomGap)} cellules refusees par enregistrement.`,
+      "**Sur la premiere partie de cette partie reelle, la courbe noire depasse nettement la courbe blanche: l'eau a beaucoup plus empeche les premiers deplacements du royaume noir que ceux du royaume blanc. Cette contrainte initiale a freine le developpement noir et a contribue a l'avance prise par les Blancs au debut de la partie.**"
     ],
     chartHeight: 330,
     chartLabel: "Cellules refusees par l'eau par royaume sur la partie reelle",
+    exampleReplay: {
+      sourceTag: "Partie reelle avec joueur",
+      sourceKind: "real",
+      label: "Exemple tire d'une partie reelle",
+      description:
+        "Du tour 40 au tour 90, la camera reste fixee **quatre cases au-dessus de l'eglise centrale** pour montrer la zone de passage la plus sensible. On voit les Noirs devoir contourner plus tot et plus souvent l'eau centrale, pendant que les Blancs prennent plus vite l'initiative dans cette ouverture.",
+      viewer: {
+        replayUrl: REPLAY_CONFIG.replayUrl,
+        minTurn: 40,
+        maxTurn: 90,
+        initialTurn: 40,
+        autoplayOnMount: true,
+        autoplayIntervalMs: 240,
+        loopPlayback: true,
+        initialZoom: 2.6,
+        enablePerspective: false,
+        trackedTarget: {
+          kind: "terrain-cell",
+          x: 24,
+          y: 20
+        },
+        showStatusOverlay: false
+      }
+    },
     chartOption: buildTimelineOption({
       xAxisName: "Tour",
       yAxes: [
