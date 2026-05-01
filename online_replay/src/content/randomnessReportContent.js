@@ -1097,7 +1097,7 @@ export const randomnessReport = {
         vignetteId: "turnBudget",
         paragraphs: [
           "Un tour ne correspond pas à un seul coup. Chaque royaume reçoit un stock de **points de mouvement** pour déplacer ses pièces et un stock de **points de construction** pour poser, réparer ou lancer des bâtiments.",
-          "**Par exemple, bouger une tour coûte 4 points de mouvement, alors que bouger un pion ne coûte qu'1 point de mouvement.** Ces deux budgets imposent un arbitrage permanent. Si vous dépensez vos points pour avancer vos pièces, vous construisez moins. Si vous investissez dans les bâtiments, vous ralentissez votre pression immédiate sur la carte."
+          "**Par exemple, bouger une tour coûte 4 points de mouvement, alors que bouger un pion ne coûte qu'1 point de mouvement.** Ces deux budgets imposent des arbitrages permanents. Quelle pièce déplacer ? Quel bâtiment construire ? Faut-il privilégier les troupes à faible coût de déplacement mais moins puissantes dans sa stratégie ?"
         ]
       },
       {
