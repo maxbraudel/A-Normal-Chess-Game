@@ -2991,7 +2991,7 @@ export const processIllustrationsByKey = {
   "weather-front-direction": buildIllustrationConfig(frontDirectionReplayData),
   "infernal-targeted-spawn-option": buildIllustrationConfig(targetedSpawnOptionReplayData, {
     autoplayIntervalMs: 760,
-    initialZoom: 1.35,
+    initialZoom: 1,
     description:
       "Le terrain reste fixe pendant toute l'illustration. Une dame noire reste cinq fois au même endroit pendant que la dame infernale apparaît sur un bord choisi avec les vrais poids de proximité de chemin, puis la poursuit jusqu'à capture. Après cinq captures, la dame noire change de position, et l'expérience recommence quatre fois au total."
   }),
