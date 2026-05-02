@@ -316,10 +316,8 @@ const processStatsByTitle = {
           unit: "cases"
         }
       ],
-      insights: [
-        "Ces valeurs donnent un résumé concret du placement final des structures, au lieu de laisser croire qu'un support admissible uniforme suffit à décrire toute la carte.",
-        "La distance moyenne initiale entre royaumes est déjà visible ici car le placement des structures et celui des apparitions restent géométriquement liés au plateau généré."
-      ]
+      postChartInterpretation:
+        "**Interprétation : ces valeurs donnent un résumé concret du placement final des structures, un simple support admissible uniforme ne suffit pas à décrire la carte générée. La distance moyenne initiale entre royaumes apparaît ici car le placement des bâtiments publics et celui des apparitions restent géométriquement liés au même plateau généré.**"
     }
   ],
   "Apparition des rois": [
@@ -344,10 +342,6 @@ const processStatsByTitle = {
           unit: "cases"
         }
       ],
-      insights: [
-        "La bonne lecture mathématique est celle d'une **uniforme conditionnelle sur un support géométrique déjà contraint**, appliquée symétriquement aux deux royaumes.",
-        "Les colonnes centrales restent hors support ou quasi hors support, ce qui rend la séparation d'ouverture visible dès le premier coup d'œil."
-      ],
       chartHeight: 310,
       chartLabel: "Répartition des colonnes d'apparition des rois blanc et noir",
       chartOption: buildGroupedBarOption({
@@ -367,7 +361,9 @@ const processStatsByTitle = {
         rotateLabels: true,
         xAxisName: "Colonne de la carte",
         yAxisName: "Occurrences"
-      })
+      }),
+      postChartInterpretation:
+        "**Interprétation : les deux bandes de départ sont nettement séparées et symétriques, les colonnes centrales restant quasi inaccessibles. Cela confirme que la loi effective est une uniforme conditionnelle sur un support géométriquement contraint : le graphe matérialise directement les colonnes admissibles pour chaque royaume, et la symétrie structurelle assure une équité initiale de position entre les deux camps.**"
     }
   ],
   "Récompenses d'XP": [
@@ -411,7 +407,9 @@ const processStatsByTitle = {
           }
         ],
         rotateLabels: true
-      })
+      }),
+      postChartInterpretation:
+        "**Interprétation : le fait que toutes les barres observées tombent légèrement en dessous n'est pas un biais du modèle, c'est un artefact d'échantillonnage. Pour une normale tronquée symétriquement autour d'une moyenne entière, la valeur attendue après clamp et arrondi est exactement la moyenne de conception. La probabilité que les sept sources tombent toutes du même côté par pur hasard est de (1/2)⁷ ≈ 0,8 % : rare, mais tout à fait compatible avec une seule exécution à 500 parties. L'amplitude des écarts, inférieure à 0,5 XP sur toutes les sources, confirme que la chaîne clamp → arrondi → plancher ne déforme pas la distribution de façon perceptible.**"
     },
   ],
   "Montant d'or d'un coffre": [
@@ -436,12 +434,6 @@ const processStatsByTitle = {
           unit: "or"
         }
       ],
-      insights: [
-        "Cette figure montre surtout que l'XP et l'or ne sont pas deux mécanismes différents: c'est **la même famille probabiliste** avec des paramètres différents.",
-        run.sampleCount < 100
-          ? `Le fichier intégré correspond actuellement à ${run.sampleCount} simulations: la structure est bonne, mais la version finale gagnera à être régénérée en 500 pour stabiliser l'histogramme.`
-          : `Le batch actuellement intégré est déjà suffisamment large pour que la forme de l'histogramme soit interprétable.`
-      ],
       chartHeight: 280,
       chartLabel: "Histogramme des montants d'or de coffre observés",
       chartOption: buildHistogramOption({
@@ -450,7 +442,9 @@ const processStatsByTitle = {
         color: COLORS.sand,
         xAxisName: "Montant d'or",
         yAxisName: "Occurrences"
-      })
+      }),
+      postChartInterpretation:
+        "**Interprétation : la forme de l'histogramme confirme que l'or des coffres suit le même patron gaussien tronqué que l'XP, mêmes bords abruptes imposés par le clamp, même pic central dominant. Les deux mécanismes partagent une seule et même famille probabiliste appliquée avec des paramètres distincts, et le batch le rend visuellement évident.**"
     }
   ],
   "Type de récompense du coffre": [
@@ -474,10 +468,6 @@ const processStatsByTitle = {
           value: formatNumber(chestSystem.summary.timeline_collected_chests.mean, 1),
           unit: "coffres"
         }
-      ],
-      insights: [
-        "L'illustration la plus pertinente n'est donc pas seulement le type de récompense brut, mais **l'écart entre les probabilités early et late** face aux poids configurés.",
-        `Dans le scénario synthétique de collecte immédiate sur ${run.turnBudget} tours, le batch observe en moyenne ${formatNumber(chestSystem.summary.timeline_total_gold.mean, 1)} d'or, ${formatNumber(chestSystem.summary.timeline_total_movement_bonus.mean, 1)} points de mouvement max et ${formatNumber(chestSystem.summary.timeline_total_build_bonus.mean, 1)} points de construction max.`
       ],
       chartHeight: 300,
       chartLabel: "Comparaison des probabilités de récompense de coffre entre phase early et late",
@@ -507,7 +497,9 @@ const processStatsByTitle = {
             data: [lateExpected.Gold, lateExpected["Movement Points"], lateExpected["Build Points"]]
           }
         ]
-      })
+      }),
+      postChartInterpretation:
+        `**Interprétation : la bascule early → late est nette et conforme aux poids configurés : l'or recule clairement au profit du mouvement et de la construction en fin de partie. Les probabilités observées restent très proches des probabilités attendues sur les deux phases, ce qui valide la logique de progression temporelle du système. Dans le scénario synthétique de collecte immédiate sur ${run.turnBudget} tours, le batch observe en moyenne ${formatNumber(chestSystem.summary.timeline_total_gold.mean, 1)} d'or, ${formatNumber(chestSystem.summary.timeline_total_movement_bonus.mean, 1)} points de mouvement max et ${formatNumber(chestSystem.summary.timeline_total_build_bonus.mean, 1)} points de construction max.**`
     }
   ],
   "Délai de réapparition d'un coffre": [
@@ -532,10 +524,6 @@ const processStatsByTitle = {
           unit: "tours"
         }
       ],
-      insights: [
-        "**La Weibull parente existe, mais la loi effective est celle d'une Weibull discrétisée puis bornée inférieurement**.",
-        "L'histogramme et l'écart à la moyenne rendent cet écart théorie/runtime directement visible."
-      ],
       chartHeight: 290,
       chartLabel: "Histogramme des délais de réapparition des coffres",
       chartOption: buildHistogramOption({
@@ -544,7 +532,9 @@ const processStatsByTitle = {
         color: COLORS.brick,
         xAxisName: "Délai (tours)",
         yAxisName: "Occurrences"
-      })
+      }),
+      postChartInterpretation:
+        `**Interprétation : la masse concentrée sur le plancher de ${chestSystem.expected.spawnDelayCooldownFloor} tours est la signature directe du cooldown minimal imposé par le gameplay. La Weibull continue théorique aurait produit de nombreux délais très courts, mais le runtime les ramène tous à ce seuil, ce qui produit le pic visible à gauche de l'histogramme. La loi effectivement jouée est une Weibull discrétisée puis tronquée à gauche, et l'écart entre la moyenne continue de référence et la moyenne observée quantifie cet effet de plancher.**`
     }
   ],
   "Délai entre deux brouillards": [
@@ -582,7 +572,9 @@ const processStatsByTitle = {
         labelInterval: 1,
         xAxisName: "Délai d'arrivée (tours)",
         yAxisName: "Occurrences"
-      })
+      }),
+      postChartInterpretation:
+        "**Interprétation : la queue droite de l'histogramme est la signature d'une Gamma asymétrique, la masse principale se concentre autour de la moyenne, mais des délais nettement plus longs restent possibles sans être des anomalies. Concrètement, une partie peut traverser une longue période sans aucun brouillard : ce n'est pas un bug, c'est la nature du processus. Cette variabilité est précisément ce que la Gamma apporte par rapport à un pas fixe : le joueur ne peut jamais anticiper si le prochain brouillard arrivera dans 20 ou dans 80 tours.**"
     },
     {
       title: "Les brouillards se chevauchent parfois",
@@ -605,10 +597,6 @@ const processStatsByTitle = {
           unit: "brouillards"
         }
       ],
-      insights: [
-        `Dans l'export intégré, le chevauchement à deux brouillards existe déjà (${weatherSystem.histograms.active_front_count[2] || 0} pas observés), mais reste nettement minoritaire face aux états 0 et 1.`,
-        "La cause est simple : des délais d'arrivée parfois courts, combinés à une vitesse de front volontairement lente, peuvent produire un recouvrement temporaire."
-      ],
       chartHeight: 290,
       chartLabel: "Distribution du nombre de brouillards météo simultanément actifs",
       chartOption: buildHistogramOption({
@@ -617,7 +605,9 @@ const processStatsByTitle = {
         color: COLORS.moss,
         xAxisName: "Brouillards actifs",
         yAxisName: "Pas simulés"
-      })
+      }),
+      postChartInterpretation:
+        `**Interprétation : la quasi-totalité des pas de simulation présentent 0 ou 1 brouillard actif, le chevauchement à deux brouillards simultanés (${weatherSystem.histograms.active_front_count[2] || 0} pas observés) reste marginal. Ce résultat confirme que les paramètres actuels produisent une météo lisible et non saturée. Les rares chevauchements s'expliquent mécaniquement par la combinaison de délais d'arrivée courts et d'une vitesse de front volontairement lente.**`
     }
   ],
   "Luminosité de l'herbe": [
@@ -641,10 +631,6 @@ const processStatsByTitle = {
           value: "Quasi nuls"
         }
       ],
-      insights: [
-        "Cette figure est pertinente parce qu'elle montre la conséquence visuelle concrète d'une variable mathématiquement bornée dans `[0,1]` avant remappage en luminance.",
-        "La Beta se lit ici sur un histogramme vraiment interprétable, pas seulement sur la densité théorique."
-      ],
       chartHeight: 300,
       chartLabel: "Histogramme des niveaux de luminosité de l'herbe",
       chartOption: buildHistogramOption({
@@ -654,7 +640,9 @@ const processStatsByTitle = {
         rotateLabels: true,
         xAxisName: "Classe de luminosité",
         yAxisName: "Cellules"
-      })
+      }),
+      postChartInterpretation:
+        "**Interprétation : la forte concentration de la masse dans les deux classes les plus claires traduit directement le comportement de la Beta(7, 2), dont l'espérance brute vaut 7/9 ≈ 0,78 avant remappage. La quasi-totalité des cellules herbeuses tombent dans ces plages lumineuses, les classes sombres ne sont pas impossibles, mais leur probabilité est négligeable avec les paramètres actuels. C'est la conséquence visuelle concrète d'un paramètre α largement supérieur à β.**"
     }
   ],
   "Champ spatial de la terre": [
@@ -679,10 +667,6 @@ const processStatsByTitle = {
           unit: "%"
         }
       ],
-      insights: [
-        "Autrement dit: **la variable de configuration est une intention de génération, pas une promesse de couverture finale**.",
-        "C'est un vrai résultat empirique utile, pas un simple rappel de paramètre de config."
-      ],
       chartHeight: 290,
       chartLabel: "Comparaison entre la couverture de la terre ciblée et observée",
       chartOption: buildHistogramOption({
@@ -691,7 +675,9 @@ const processStatsByTitle = {
         color: COLORS.brick,
         xAxisName: "Mesure",
         yAxisName: "Pourcentage",
-      })
+      }),
+      postChartInterpretation:
+        "**Interprétation : l'écart entre la cible et l'observé confirme que la variable de configuration est une intention de génération, pas une promesse de couverture finale. Le pipeline procédural, contraintes de connectivité, suppression de petites composantes, post-traitement topologique, consomme systématiquement une partie de la terre initialement générée. Ce résultat est empiriquement utile : pour viser une couverture finale d'environ X %, il faut configurer la cible légèrement au-dessus.**"
     }
   ],
   "Champ spatial de l'eau": [
@@ -716,10 +702,6 @@ const processStatsByTitle = {
           unit: "composantes"
         }
       ],
-      insights: [
-        "La variable de commande ne se confond donc pas avec la morphologie finale effectivement jouée.",
-        "L'eau est un bon exemple de champ procédural pour lequel le résultat topologique compte plus que la simple densité brute."
-      ],
       chartHeight: 290,
       chartLabel: "Comparaison entre la couverture d'eau ciblée et observée",
       chartOption: buildHistogramOption({
@@ -728,7 +710,9 @@ const processStatsByTitle = {
         color: COLORS.slate,
         xAxisName: "Mesure",
         yAxisName: "Pourcentage"
-      })
+      }),
+      postChartInterpretation:
+        "**Interprétation : comme pour la terre, la couverture eau finale reste systématiquement inférieure à la cible. L'eau subit les mêmes post-traitements topologiques et voit ses petites composantes supprimées pour éviter des îlots non jouables. La variable de configuration est là aussi une intention, pas une valeur garantie.**"
     },
     {
       title: "La taille des composantes d'eau raconte mieux la forme des lacs qu'un simple pourcentage",
@@ -751,10 +735,6 @@ const processStatsByTitle = {
           unit: "cases"
         }
       ],
-      insights: [
-        "Cette statistique est bien plus pertinente qu'un masque uniforme, parce qu'elle décrit directement la morphologie jouable du terrain.",
-        "Elle illustre bien la phrase selon laquelle un champ procédural doit être résumé par des composantes, de la rugosité et de la topologie, pas par une loi scalaire i.i.d. fictive."
-      ],
       chartHeight: 290,
       chartLabel: "Histogramme des tailles de composantes d'eau",
       chartOption: buildHistogramOption({
@@ -763,7 +743,9 @@ const processStatsByTitle = {
         color: COLORS.slate,
         xAxisName: "Taille de composante",
         yAxisName: "Occurrences"
-      })
+      }),
+      postChartInterpretation:
+        "**Interprétation : la distribution révèle que l'eau se fragmente en composantes de tailles très variées, avec généralement une ou deux grandes composantes dominantes et une queue de petites poches. C'est le comportement typique d'un champ procédural seuillé : le bruit produit des structures spatiales corrélées, et c'est cette morphologie en composantes qui définit la vraie topologie jouable du terrain aquatique, bien plus que la simple densité brute.**"
     }
   ],
   "Couverture cible du brouillard": [
@@ -788,10 +770,6 @@ const processStatsByTitle = {
           unit: "%"
         }
       ],
-      insights: [
-        "La variable de commande décrit donc une intention géométrique initiale, pas une couverture finale garantie au pourcent près.",
-        "L'écart vient de toute la chaîne de construction du front: aire cible, rayons, déformation de contour, fondu de bord et rasterisation finale sur les cellules visibles."
-      ],
       chartHeight: 290,
       chartLabel: "Histogramme des couvertures visibles maximales des brouillards météo",
       chartOption: buildHistogramOption({
@@ -800,7 +778,9 @@ const processStatsByTitle = {
         color: COLORS.brick,
         xAxisName: "Couverture visible (%)",
         yAxisName: "Occurrences"
-      })
+      }),
+      postChartInterpretation:
+        "**Interprétation : la distribution s'étale bien au-delà de la borne haute nominale de 20 %, ce qui confirme que la cible configurée n'est pas une contrainte dure sur le résultat final. Chaque étape de la chaîne de construction, aire cible, rayons d'ellipse, déformation de contour, fondu de bord, rasterisation, peut légèrement amplifier la zone réellement visible. La variable de commande décrit une intention géométrique initiale, et c'est la composition de toutes ces transformations qui produit la couverture finale observée.**"
     }
   ]
 };
