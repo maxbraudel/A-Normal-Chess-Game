@@ -96,6 +96,14 @@ function getRandomnessBadgeClasses(kind) {
   ];
 }
 
+function getRelatedProcessKey(entry, index) {
+  if (!entry) {
+    return `related-${index}`;
+  }
+
+  return entry.title || entry.href || `related-${index}`;
+}
+
 defineProps({
   item: {
     type: Object,
@@ -212,6 +220,17 @@ defineProps({
     <div class="rapport-process-card__field">
       <span class="rapport-process-card__label">Structure de dépendance</span>
       <InlineRichText :text="item.dependence" />
+    </div>
+
+    <div v-if="item.relatedProcesses?.length" class="rapport-process-card__field">
+      <span class="rapport-process-card__label">Processus alimentés</span>
+      <ul class="rapport-process-card__list">
+        <li v-for="(relatedProcess, index) in item.relatedProcesses" :key="getRelatedProcessKey(relatedProcess, index)">
+          <span>{{ relatedProcess.seedLabel }} :</span>
+          <a :href="relatedProcess.href">{{ relatedProcess.title }}</a>
+          <span v-if="relatedProcess.summary">{{ ` — ${relatedProcess.summary}` }}</span>
+        </li>
+      </ul>
     </div>
 
     <div v-if="item.illustration" class="rapport-process-card__field rapport-process-card__field--illustration">

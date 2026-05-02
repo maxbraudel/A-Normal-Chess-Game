@@ -677,6 +677,283 @@ function findNearestLandCell(grid, target) {
   return { x: BOARD_RADIUS, y: BOARD_RADIUS };
 }
 
+function isIllustrationBorderCell(grid, position) {
+  if (!isInBounds(grid, position.x, position.y)) {
+    return false;
+  }
+
+  const cell = grid[position.y][position.x];
+  if (!cell.c || cell.t === TERRAIN_WATER) {
+    return false;
+  }
+
+  const offsets = [
+    { x: 1, y: 0 },
+    { x: -1, y: 0 },
+    { x: 0, y: 1 },
+    { x: 0, y: -1 }
+  ];
+
+  return offsets.some(function (offset) {
+    const nx = position.x + offset.x;
+    const ny = position.y + offset.y;
+    return !isInBounds(grid, nx, ny) || !grid[ny][nx].c;
+  });
+}
+
+function findNearestBorderLandCell(grid, target) {
+  if (isIllustrationBorderCell(grid, target)) {
+    return { x: target.x, y: target.y };
+  }
+
+  const diameter = grid.length;
+  for (let searchRadius = 1; searchRadius < diameter; searchRadius += 1) {
+    for (let dy = -searchRadius; dy <= searchRadius; dy += 1) {
+      for (let dx = -searchRadius; dx <= searchRadius; dx += 1) {
+        const nx = target.x + dx;
+        const ny = target.y + dy;
+        if (isIllustrationBorderCell(grid, { x: nx, y: ny })) {
+          return { x: nx, y: ny };
+        }
+      }
+    }
+  }
+
+  return findNearestLandCell(grid, target);
+}
+
+function collectIllustrationBorderLandCells(grid) {
+  const cells = [];
+
+  for (let y = 0; y < grid.length; y += 1) {
+    for (let x = 0; x < grid[y].length; x += 1) {
+      if (isIllustrationBorderCell(grid, { x, y })) {
+        cells.push({ x, y });
+      }
+    }
+  }
+
+  return cells;
+}
+
+const ILLUSTRATION_ROOK_DIRECTIONS = [
+  { x: 1, y: 0 },
+  { x: -1, y: 0 },
+  { x: 0, y: 1 },
+  { x: 0, y: -1 }
+];
+
+const ILLUSTRATION_QUEEN_DIRECTIONS = [
+  { x: 1, y: 0 },
+  { x: -1, y: 0 },
+  { x: 0, y: 1 },
+  { x: 0, y: -1 },
+  { x: 1, y: 1 },
+  { x: 1, y: -1 },
+  { x: -1, y: 1 },
+  { x: -1, y: -1 }
+];
+
+function enumerateIllustrationSlidingMoves(grid, start, directions) {
+  const moves = [];
+
+  directions.forEach(function (direction) {
+    let x = start.x + direction.x;
+    let y = start.y + direction.y;
+
+    while (isInBounds(grid, x, y)) {
+      const cell = grid[y][x];
+      if (!cell.c || cell.t === TERRAIN_WATER) {
+        break;
+      }
+      moves.push({ x, y });
+      x += direction.x;
+      y += direction.y;
+    }
+  });
+
+  return moves;
+}
+
+function enumerateIllustrationRookMoves(grid, start) {
+  return enumerateIllustrationSlidingMoves(grid, start, ILLUSTRATION_ROOK_DIRECTIONS);
+}
+
+function buildIllustrationShortestPath(grid, start, goal, enumerateMoves) {
+  const diameter = grid.length;
+  const distances = Array.from({ length: diameter * diameter }, function () {
+    return -1;
+  });
+  const previous = Array.from({ length: diameter * diameter }, function () {
+    return -1;
+  });
+  const frontier = [start];
+  distances[toIndex(start.x, start.y, diameter)] = 0;
+
+  if (start.x === goal.x && start.y === goal.y) {
+    return [];
+  }
+
+  while (frontier.length) {
+    const current = frontier.shift();
+    const currentDistance = distances[toIndex(current.x, current.y, diameter)];
+
+    for (const move of enumerateMoves(grid, current)) {
+      const index = toIndex(move.x, move.y, diameter);
+      if (distances[index] >= 0) {
+        continue;
+      }
+
+      distances[index] = currentDistance + 1;
+      previous[index] = toIndex(current.x, current.y, diameter);
+      if (move.x === goal.x && move.y === goal.y) {
+        const path = [];
+        let currentIndex = index;
+
+        while (currentIndex >= 0) {
+          const x = currentIndex % diameter;
+          const y = Math.floor(currentIndex / diameter);
+          path.push({ x, y });
+          currentIndex = previous[currentIndex];
+        }
+
+        path.reverse();
+        return path.slice(1);
+      }
+
+      frontier.push(move);
+    }
+  }
+
+  return [];
+}
+
+function collectIllustrationTargetLandCells(grid) {
+  const center = { x: BOARD_RADIUS, y: BOARD_RADIUS };
+
+  return getAllValidCells(grid).filter(function (cell) {
+    if (grid[cell.y][cell.x].t === TERRAIN_WATER || isIllustrationBorderCell(grid, cell)) {
+      return false;
+    }
+
+    return euclideanDistance(cell, center) <= BOARD_RADIUS * 0.78;
+  });
+}
+
+function sampleIllustrationTargetPositions(grid, sampleCount, seed) {
+  const generator = createSeededGenerator(seed >>> 0);
+  const shuffled = shuffleArray(collectIllustrationTargetLandCells(grid), generator);
+  const selections = [];
+
+  for (const candidate of shuffled) {
+    if (selections.every(function (selected) {
+      return euclideanDistance(selected, candidate) >= 8;
+    })) {
+      selections.push(candidate);
+    }
+
+    if (selections.length >= sampleCount) {
+      break;
+    }
+  }
+
+  if (selections.length < sampleCount) {
+    for (const candidate of shuffled) {
+      if (selections.some(function (selected) {
+        return selected.x === candidate.x && selected.y === candidate.y;
+      })) {
+        continue;
+      }
+
+      selections.push(candidate);
+      if (selections.length >= sampleCount) {
+        break;
+      }
+    }
+  }
+
+  return selections.slice(0, sampleCount).map(function (candidate) {
+    return { x: candidate.x, y: candidate.y };
+  });
+}
+
+function chooseInfernalRookSpawnOption(grid, targetPosition, generator) {
+  const spawnOptions = collectIllustrationBorderLandCells(grid)
+    .map(function (cell) {
+      const path = buildIllustrationShortestPath(grid, cell, targetPosition, enumerateIllustrationRookMoves);
+      return {
+        cell,
+        path,
+        weight: path.length ? Math.max(1, (grid.length * 2) - path.length + 1) : 0
+      };
+    })
+    .filter(function (option) {
+      return option.path.length > 0;
+    });
+
+  if (!spawnOptions.length) {
+    return null;
+  }
+
+  const chosenIndex = sampleWeightedIndex(
+    spawnOptions.map(function (option) {
+      return option.weight;
+    }),
+    generator
+  );
+
+  return spawnOptions[Math.max(0, Math.min(chosenIndex, spawnOptions.length - 1))];
+}
+
+function buildInfernalRookHuntFrames(grid, targetPosition, spawnOption, sessionId) {
+  const queenId = 980 + sessionId;
+  const infernalId = 1180 + sessionId;
+  const targetQueen = createPiece({
+    id: queenId,
+    type: PIECE_QUEEN,
+    kingdom: 1,
+    x: targetPosition.x,
+    y: targetPosition.y
+  });
+
+  const frames = [
+    {
+      grid,
+      blackPieces: [targetQueen],
+      autonomousUnits: [
+        createInfernalUnit({
+          id: infernalId,
+          pieceType: PIECE_ROOK,
+          x: spawnOption.cell.x,
+          y: spawnOption.cell.y,
+          targetKingdom: 1,
+          phase: INFERNAL_PHASE_HUNTING
+        })
+      ]
+    }
+  ];
+
+  spawnOption.path.forEach(function (step, stepIndex) {
+    const captured = stepIndex === spawnOption.path.length - 1;
+    frames.push({
+      grid,
+      blackPieces: captured ? [] : [targetQueen],
+      autonomousUnits: [
+        createInfernalUnit({
+          id: infernalId,
+          pieceType: PIECE_ROOK,
+          x: step.x,
+          y: step.y,
+          targetKingdom: 1,
+          phase: INFERNAL_PHASE_HUNTING
+        })
+      ]
+    });
+  });
+
+  return frames;
+}
+
 function isConnected(grid, from, to) {
   if (from.x === to.x && from.y === to.y) {
     return true;
@@ -2173,9 +2450,17 @@ const chestRewardIllustrationPickups = Array.from({ length: 10 }, function (_, i
 const chestRewardTypeIllustrationFrames = chestRewardIllustrationPickups.flatMap(function (pickup, index) {
   const pawnId = 812 + index;
   const chestId = 860 + index;
+  const pathPositions = [0, 1, 2].map(function (offset) {
+    return findNearestLandCell(chestRewardIllustrationGrid, {
+      x: chestRewardPawnStartPosition.x + offset,
+      y: chestRewardPawnStartPosition.y
+    });
+  }).concat([{ x: chestRewardChestPosition.x, y: chestRewardChestPosition.y }]);
 
-  return [
-    {
+  return pathPositions.map(function (position, stepIndex) {
+    const pickupFrame = stepIndex === pathPositions.length - 1;
+
+    return {
       grid: chestRewardIllustrationGrid,
       whitePieces: [
         chestRewardIllustrationKing,
@@ -2183,36 +2468,28 @@ const chestRewardTypeIllustrationFrames = chestRewardIllustrationPickups.flatMap
           id: pawnId,
           type: PIECE_PAWN,
           kingdom: 0,
-          x: chestRewardPawnStartPosition.x,
-          y: chestRewardPawnStartPosition.y
+          x: position.x,
+          y: position.y
         })
       ],
-      mapObjects: [createChest({ id: chestId, x: chestRewardChestPosition.x, y: chestRewardChestPosition.y })]
-    },
-    {
-      grid: chestRewardIllustrationGrid,
-      whitePieces: [
-        chestRewardIllustrationKing,
-        createPiece({
-          id: pawnId,
-          type: PIECE_PAWN,
-          kingdom: 0,
-          x: chestRewardChestPosition.x,
-          y: chestRewardChestPosition.y
-        })
-      ],
-      mapObjects: [],
-      committedTurnNumber: index + 1,
-      committedActiveKingdom: 0,
-      notifications: [
-        createChestRewardNotification({
-          kingdom: 0,
-          rewardTypeKey: pickup.rewardTypeKey,
-          amount: pickup.amount
-        })
-      ]
-    }
-  ];
+      mapObjects: pickupFrame
+        ? []
+        : [createChest({ id: chestId, x: chestRewardChestPosition.x, y: chestRewardChestPosition.y })],
+      ...(pickupFrame
+        ? {
+            committedTurnNumber: index + 1,
+            committedActiveKingdom: 0,
+            notifications: [
+              createChestRewardNotification({
+                kingdom: 0,
+                rewardTypeKey: pickup.rewardTypeKey,
+                amount: pickup.amount
+              })
+            ]
+          }
+        : {})
+    };
+  });
 });
 
 const chestRewardTypeReplayData = createReplayData({
@@ -2221,7 +2498,48 @@ const chestRewardTypeReplayData = createReplayData({
 });
 
 const chestRewardTypeStatusValues = chestRewardIllustrationPickups.flatMap(function (pickup) {
-  return [pickup.phaseLabel, pickup.phaseLabel];
+  return [pickup.phaseLabel, pickup.phaseLabel, pickup.phaseLabel, pickup.phaseLabel];
+});
+
+function buildTargetedSpawnScenario({
+  grid,
+  targetPosition,
+  generator,
+  sessionId
+}) {
+  const spawnOption = chooseInfernalRookSpawnOption(grid, targetPosition, generator);
+  return spawnOption
+    ? buildInfernalRookHuntFrames(grid, targetPosition, spawnOption, sessionId)
+    : [];
+}
+
+const targetedSpawnTerrainGrid = generateTerrainGrid({
+  terrainWorldSeed: CONTEXT_WORLD_SEED,
+  terrainVisualSeed: BASE_VISUAL_SEED
+}).grid;
+
+const targetedSpawnTargetPositions = sampleIllustrationTargetPositions(
+  targetedSpawnTerrainGrid,
+  4,
+  0x42f18e6d
+);
+
+const targetedSpawnGenerator = createSeededGenerator(0x781f2c93);
+
+const targetedSpawnOptionFrames = targetedSpawnTargetPositions.flatMap(function (targetPosition, targetIndex) {
+  return Array.from({ length: 5 }, function (_, sessionOffset) {
+    return buildTargetedSpawnScenario({
+      grid: targetedSpawnTerrainGrid,
+      targetPosition,
+      generator: targetedSpawnGenerator,
+      sessionId: (targetIndex * 5) + sessionOffset
+    });
+  }).flat();
+});
+
+const targetedSpawnOptionReplayData = createReplayData({
+  saveName: "illustration-infernal-targeted-spawn-option",
+  frames: targetedSpawnOptionFrames
 });
 
 const weatherTerrain = generateTerrainGrid({
@@ -2499,27 +2817,53 @@ const frontDensityReplayData = createReplayData({
   })
 });
 
+const frontContourComparisonSeeds = [
+  19,
+  41,
+  67,
+  89,
+  113,
+  137,
+  163,
+  191,
+  223,
+  251
+];
+
 const frontContourReplayData = createReplayData({
   saveName: "illustration-weather-front-contour-noise",
-  frames: [
-    { shapeSeed: 19, weatherOverrides: { shapeNoiseAmplitudePercent: 0 } },
-    { shapeSeed: 19, weatherOverrides: {} },
-    { shapeSeed: 97, weatherOverrides: { shapeNoiseAmplitudePercent: 0 } },
-    { shapeSeed: 97, weatherOverrides: {} }
-  ].map(function (options) {
-    return createWeatherFrame(weatherBaseGrid, {
-      directionId: WEATHER_DIRECTION_NORTH_EAST,
-      entryEdge: ENTRY_EDGE_BOTTOM,
-      edgePosition: weatherMidEdge,
-      coveragePercent: 22,
-      aspectRatio: 2.5,
-      shapeSeed: options.shapeSeed,
-      densitySeed: 53,
-      currentTurnStep: 10,
-      weatherOverrides: options.weatherOverrides,
-      centerAt: weatherIllustrationCenter
-    });
+  frames: frontContourComparisonSeeds.flatMap(function (shapeSeed) {
+    return [
+      createWeatherFrame(weatherBaseGrid, {
+        directionId: WEATHER_DIRECTION_NORTH_EAST,
+        entryEdge: ENTRY_EDGE_BOTTOM,
+        edgePosition: weatherMidEdge,
+        coveragePercent: 20,
+        aspectRatio: 1.95,
+        shapeSeed,
+        densitySeed: 53,
+        currentTurnStep: 10,
+        weatherOverrides: { shapeNoiseAmplitudePercent: 0 },
+        centerAt: weatherIllustrationCenter
+      }),
+      createWeatherFrame(weatherBaseGrid, {
+        directionId: WEATHER_DIRECTION_NORTH_EAST,
+        entryEdge: ENTRY_EDGE_BOTTOM,
+        edgePosition: weatherMidEdge,
+        coveragePercent: 20,
+        aspectRatio: 1.95,
+        shapeSeed,
+        densitySeed: 53,
+        currentTurnStep: 10,
+        weatherOverrides: {},
+        centerAt: weatherIllustrationCenter
+      })
+    ];
   })
+});
+
+const frontContourStatusValues = frontContourComparisonSeeds.flatMap(function () {
+  return ["Sans bruit", "Avec bruit"];
 });
 
 const dirtFieldReplayData = createReplayData({
@@ -2609,8 +2953,6 @@ const terrainFlipReplayData = createReplayData({
 });
 
 export const processIllustrationsByKey = {
-  "global-dirt-seed": buildIllustrationConfig(dirtFieldReplayData),
-  "global-water-seed": buildIllustrationConfig(waterFieldReplayData),
   "chest-spawn-cell": buildIllustrationConfig(chestSpawnCellReplayData, {
     autoplayIntervalMs: 900,
     description:
@@ -2644,10 +2986,15 @@ export const processIllustrationsByKey = {
       "Ticks 1 à 3 : la diagonale entre par le haut. Ticks 4 à 6 : la même diagonale entre par la gauche. On voit ainsi plus nettement que la direction reste la même, mais que le bord d'entrée change."
   }),
   "weather-front-aspect-ratio": buildIllustrationConfig(frontAspectRatioReplayData),
-  "weather-front-shape-seed": buildIllustrationConfig(frontShapeReplayData),
   "weather-front-density-seed": buildIllustrationConfig(frontDensityReplayData),
   "public-building-order": buildIllustrationConfig(placementOrderReplayData),
   "weather-front-direction": buildIllustrationConfig(frontDirectionReplayData),
+  "infernal-targeted-spawn-option": buildIllustrationConfig(targetedSpawnOptionReplayData, {
+    autoplayIntervalMs: 760,
+    initialZoom: 1.35,
+    description:
+      "Le terrain reste fixe pendant toute l'illustration. Une dame noire reste cinq fois au même endroit pendant que la dame infernale apparaît sur un bord choisi avec les vrais poids de proximité de chemin, puis la poursuit jusqu'à capture. Après cinq captures, la dame noire change de position, et l'expérience recommence quatre fois au total."
+  }),
   "infernal-searching-random-move": buildIllustrationConfig(infernalSearchingReplayData, {
     autoplayIntervalMs: 1000,
     initialZoom: 1.25,
@@ -2658,5 +3005,15 @@ export const processIllustrationsByKey = {
   "dirt-field": buildIllustrationConfig(dirtFieldReplayData),
   "water-field": buildIllustrationConfig(waterFieldReplayData),
   "terrain-flip-mask": buildIllustrationConfig(terrainFlipReplayData, { initialZoom: 1.7 }),
-  "weather-front-contour-noise": buildIllustrationConfig(frontContourReplayData)
+  "weather-front-contour-noise": buildIllustrationConfig(frontContourReplayData, {
+    autoplayIntervalMs: 780,
+    showStatusOverlay: true,
+    statusOverlay: {
+      label: "Contour",
+      values: frontContourStatusValues,
+      showShield: false
+    },
+    description:
+      "L'illustration alterne sur 20 ticks une version sans bruit puis une version bruitée. Chaque tick bruité régénère un contour différent, tandis que le tick juste avant montre la même base sans perturbation."
+  })
 };

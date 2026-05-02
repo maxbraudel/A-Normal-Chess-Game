@@ -20,46 +20,50 @@ function withProcessIllustration(process) {
 
 const uniformProcesses = [
   {
-    title: "Graine globale de la terre",
-    illustrationKey: "global-dirt-seed",
-    system: "Carte",
+    title: "Graines 32 bits des champs procéduraux",
+    system: "Carte / Météo",
     lawUse: "Uniforme discrète sur un espace de 32 bits",
-    variable: L`S_{terre} \in \{0,\dots,2^{32}-1\}`,
+    variable: L`S_i \in \{0,\dots,2^{32}-1\}, \qquad i \in \{\text{terre},\text{eau},\text{forme},\text{densité}\}`,
     phenomenon:
-      "Produit la graine intermédiaire qui alimente ensuite le champ procédural de la terre.",
+      "Ici, la seed n'est pas un phénomène gameplay en soi : c'est un outil technique pour rendre la génération du terrain et du brouillard à la fois variée et parfaitement reproductible. En pratique, on tire une graine uniforme, puis on s'en sert pour lancer une génération procédurale ou une autre loi aval, de façon à obtenir des rendus naturels différents tout en pouvant rejouer exactement le même monde.",
     parameters: [
-      "support de taille 2^32",
-      "1 tirage au début de la génération du plateau"
+      "4 graines 32 bits synthétisées ici : terre, eau, forme du brouillard, densité du brouillard",
+      "2 tirages au début de la génération de carte, puis 2 tirages supplémentaires à chaque apparition de brouillard"
     ],
     why:
-      "Une graine intermédiaire n'a aucune direction stratégique à privilégier; on cherche seulement une répartition uniforme des mondes possibles. Le choix de l'uniforme sur 32 bits s'impose par défaut : tout support plus petit créerait des collisions perceptibles entre mondes, tandis qu'un support plus grand n'apporterait aucun bénéfice gameplay. L'objectif est uniquement d'indexer de façon neutre et reproductible l'espace des cartes possibles, sans introduire de biais vers des configurations particulières.",
+      "Ces variables ne représentent ni une ressource, ni une position, ni une décision lisible par le joueur : ce sont seulement des clés d'indexation pour des transformations déterministes plus riches. La bonne abstraction est donc la même partout : une uniforme discrète sur 32 bits, suffisamment vaste pour éviter les collisions perceptibles, neutre parce qu'aucune graine n'a de signification stratégique intrinsèque, et nativement compatible avec les sorties de `mt19937`. Les différences intéressantes apparaissent seulement après transformation, quand la seed devient champ de terre, champ d'eau, bruit de contour ou texture d'opacité.",
     simulation:
-      "Le générateur `std::mt19937(worldSeed)` est interrogé une fois, puis la valeur tirée nourrit `valueNoise` et `fractalNoise`.",
+      "Le runtime consomme une sortie brute de `mt19937` chaque fois qu'il doit initialiser un champ procédural ou une texture météo, puis passe immédiatement à un traitement aval déterministe ou semi-déterministe.",
     parameterChoice:
-      "Le format 32 bits est exactement celui des sorties natives de `mt19937`, donc pas de biais de conversion supplémentaire.",
+      "Le format 32 bits reprend la granularité native du générateur sans conversion biaisée, tout en laissant un espace immense de mondes, de contours et de textures possibles.",
     dependence:
-      "Dépend complètement de `worldSeed`; aucun tirage en cours de partie."
-  },
-  {
-    title: "Graine globale de l'eau",
-    illustrationKey: "global-water-seed",
-    system: "Carte",
-    lawUse: "Uniforme discrète sur un espace de 32 bits",
-    variable: L`S_{eau} \in \{0,\dots,2^{32}-1\}`,
-    phenomenon:
-      "Produit la graine auxiliaire du champ des lacs et poches d'eau.",
-    parameters: [
-      "support de taille 2^32",
-      "1 tirage au début de la génération du plateau"
-    ],
-    why:
-      "Le système d'eau doit être décorrélé de la terre tout en restant reproductible à seed fixe. Obtenir cette décorrélation est simple : il suffit de consommer une sortie supplémentaire du générateur après la graine de la terre, ce qui garantit que les deux champs naissent d'états distincts du même `mt19937`. La loi uniforme sur 32 bits est ici aussi la seule famille pertinente : aucune forme de distribution n'a de sens pour une graine intermédiaire dont le rôle est de nourrir un champ procédural, pas d'être interprétée directement.",
-    simulation:
-      "Une sortie brute du générateur initialise la branche d'eau avant évaluation des champs spatiaux.",
-    parameterChoice:
-      "Le grand support évite des répétitions perceptibles lorsque plusieurs graines auxiliaires sont dérivées du même monde.",
-    dependence:
-      "Couplé à `worldSeed`, mais distinct de `S_{terre}` par l'ordre d'appel du générateur."
+      "Les graines de carte dépendent directement de `worldSeed`; les graines de brouillard dépendent du générateur de l'événement météo courant. Dans les deux cas, la structure intéressante est aval, pas la seed elle-même.",
+    relatedProcesses: [
+      {
+        seedLabel: "Graine terre",
+        title: "Champ spatial de la terre",
+        href: "#procedural-fields",
+        summary: "Transforme la seed en couverture de terre corrélée et en amas jouables."
+      },
+      {
+        seedLabel: "Graine eau",
+        title: "Champ spatial de l'eau",
+        href: "#procedural-fields",
+        summary: "Produit les poches d'eau et les petits lacs à partir d'un bruit distinct de la terre."
+      },
+      {
+        seedLabel: "Graine de forme",
+        title: "Bruit de contour du brouillard",
+        href: "#procedural-fields",
+        summary: "Déforme la frontière de l'ellipse pour obtenir un contour nuageux irrégulier."
+      },
+      {
+        seedLabel: "Graine de densité",
+        title: "Densité locale d'un brouillard",
+        href: "#lognormale",
+        summary: "Redérive un multiplicateur d'opacité log-normal cellule par cellule."
+      }
+    ]
   },
   {
     title: "Rotation des mines et fermes neutres",
@@ -209,42 +213,6 @@ int coveragePercent = coverageDist(generator); // ∈ [5, 20]`,
       "Partage la même seed d'événement que la couverture et les graines de contour/densité du brouillard courant."
   },
   {
-    title: "Graine de forme du brouillard",
-    illustrationKey: "weather-front-shape-seed",
-    system: "Météo",
-    lawUse: "Uniforme discrète sur 32 bits",
-    variable: L`S_{shape} \in \{0,\dots,2^{32}-1\}`,
-    phenomenon:
-      "Fournit la graine du bruit qui perturbe le bord du brouillard.",
-    parameters: ["1 tirage `generator()` par brouillard"],
-    why:
-      "Le brouillard doit posséder une signature spatiale propre sans collision visuelle trop fréquente. Réutiliser la même graine que la couverture ou la direction produirait des brouillards corrélés : un même bord d'entrée donnerait toujours la même silhouette, ce qui rendrait l'événement météo prévisible visuellement. Une graine dédiée tirée uniformément sur 32 bits garantit que deux brouillards identiques par direction et couverture peuvent avoir des contours totalement différents.",
-    simulation:
-      "Une sortie brute du `mt19937` de l'événement est recopiée dans le descripteur du brouillard.",
-    parameterChoice:
-      "Le support de 32 bits est suffisant pour différencier des milliers de brouillards sans répétition perceptible.",
-    dependence:
-      "Dépend du même générateur d'événement que la direction, l'aire et l'allongement du brouillard."
-  },
-  {
-    title: "Graine de densité du brouillard",
-    illustrationKey: "weather-front-density-seed",
-    system: "Météo",
-    lawUse: "Uniforme discrète sur 32 bits",
-    variable: L`S_{densité} \in \{0,\dots,2^{32}-1\}`,
-    phenomenon:
-      "Fournit la graine qui module localement l'opacité du brouillard via une loi log-normale.",
-    parameters: ["1 tirage `generator()` par brouillard"],
-    why:
-      "La texture d'opacité doit être reproductible mais différente du contour; il faut donc une graine propre. Si la densité d'opacité utilisait la même graine que le bruit de contour, les zones les plus opaques coïncideraient systématiquement avec les bosses de bord, créant un artefact visuel involontaire. Deux couches indépendantes, forme et densité, permettent au pipeline de séparer complètement les décisions géométriques (bord de l'ellipse) des décisions d'opacité (texture interne).",
-    simulation:
-      "Le `mt19937` du brouillard produit une seconde sortie brute stockée dans le descripteur.",
-    parameterChoice:
-      "La séparation entre la graine de forme et la graine de densité évite de coupler rigidement contour et densité locale.",
-    dependence:
-      "Couplée au même événement d'apparition que la graine de forme, elle reste exploitée dans une chaîne de hachage distincte par cellule."
-  },
-  {
     title: "Choix d'un mouvement aléatoire en phase Searching",
     illustrationKey: "infernal-searching-random-move",
     system: "Pièces du diable",
@@ -392,6 +360,7 @@ switch (dist(generator)) {
   },
   {
     title: "Option d'apparition ciblée d'une pièce du diable",
+    illustrationKey: "infernal-targeted-spawn-option",
     system: "Pièces du diable",
     lawUse: "Catégorielle pondérée par proximité de chemin",
     variable: L`O \in \{o_1,\dots,o_m\}`,
@@ -642,6 +611,7 @@ float sampleGammaTurns(std::mt19937& gen,
 const logNormalProcesses = [
   {
     title: "Densité locale d'un brouillard",
+    illustrationKey: "weather-front-density-seed",
     system: "Météo",
     lawUse: "Log-normale cellule par cellule, puis clamp d'alpha",
     variable: L`X(c) \sim \mathrm{LogNormal}(\mu,\sigma^2)`,
@@ -879,25 +849,15 @@ function makeNominalTheory({ support, law, note = "" }) {
   });
 }
 
-function makeUniform32Theory(symbol, note) {
-  return makeUniformFiniteTheory({
-    support: L`\{0,\dots,2^{32}-1\}`,
-    law: L`\mathbb{P}(${symbol}=k)=\frac{1}{2^{32}}`,
-    expectation: L`\mathbb{E}[${symbol}]=\frac{2^{32}-1}{2}`,
-    variance: L`\mathrm{Var}(${symbol})=\frac{2^{64}-1}{12}`,
-    note
-  });
-}
-
 const processTheoryByTitle = {
-  "Graine globale de la terre": makeUniform32Theory(
-    L`S_{terre}`,
-    "Les moments ci-dessus sont surtout formels: l'enjeu gameplay réel est l'uniformité de la seed et sa reproductibilité."
-  ),
-  "Graine globale de l'eau": makeUniform32Theory(
-    L`S_{eau}`,
-    "Comme pour la terre, la moyenne n'est pas interprétée directement en jeu; la seed sert à indexer un monde procédural reproductible."
-  ),
+  "Graines 32 bits des champs procéduraux": createTheory({
+    support: L`S_i\in\{0,\dots,2^{32}-1\},\qquad i\in\{\text{terre},\text{eau},\text{forme},\text{densité}\}`,
+    law: L`\mathbb{P}(S_i=k)=\frac{1}{2^{32}}`,
+    expectation: L`\mathbb{E}[S_i]=\frac{2^{32}-1}{2}`,
+    variance: L`\mathrm{Var}(S_i)=\frac{2^{64}-1}{12}`,
+    note:
+      "Ces moments sont formels : la seed n'est jamais interprétée directement, elle sert seulement d'entrée uniforme à un processus aval spatial ou météo."
+  }),
   "Rotation des mines et fermes neutres": makeUniformFiniteTheory({
     support: L`\{0,1,2,3\}`,
     law: L`\mathbb{P}(R=r)=\frac{1}{4}`,
@@ -943,14 +903,6 @@ const processTheoryByTitle = {
     variance: L`\mathrm{Var}(A)=\frac{(2.60-1.80)^2}{12}`,
     note: "La valeur échantillonnée est ensuite transformée en ellipse et trajectoire discrètes."
   }),
-  "Graine de forme du brouillard": makeUniform32Theory(
-    L`S_{forme}`,
-    "La seed n'est pas interprétée seule: elle alimente le bruit de contour et doit surtout être uniformément répartie."
-  ),
-  "Graine de densité du brouillard": makeUniform32Theory(
-    L`S_{densité}`,
-    "Cette seed conditionne tout le champ d'opacité local du brouillard."
-  ),
   "Choix d'un mouvement aléatoire en phase Searching": makeNominalTheory({
     support: L`\mathcal{M}_{adm}(t)`,
     law: L`\mathbb{P}(M=m\mid m\in \mathcal{M}_{adm}(t))=\frac{1}{|\mathcal{M}_{adm}(t)|}`,
@@ -1350,10 +1302,10 @@ export const randomnessReport = {
     {
       id: "uniformes",
       title: "Uniformes : discrètes, continues et conditionnelles",
-      badge: "15 processus",
+      badge: "15 processus, 12 cartes",
       description: [
-        "Cette section regroupe trois variantes de la loi uniforme, qui n'ont pas le même statut probabiliste. **Treize processus** utilisent une loi uniforme **discrète** (support fini, seeds 32 bits, positions sur cases admissibles, orientations…). **Deux processus** — la couverture cible et l'allongement du brouillard — utilisent une loi uniforme **continue** sur un intervalle réel : ce sont les seules lois à densité par rapport à la mesure de Lebesgue de cette section, et c'est à elles que correspond la ligne « Uniforme continue ★ » du tableau de conformité.",
-        "Dans le code, ces lois apparaissent via `std::uniform_int_distribution` pour les versions discrètes, via des appels directs à `generator()` sur 32 bits pour les seeds, et via la même distribution discrète discrétisée sur un intervalle entier pour les deux cas continus."
+        "Cette section regroupe trois variantes de la loi uniforme, qui n'ont pas le même statut probabiliste. **Treize processus runtime** utilisent une loi uniforme **discrète** (support fini, seeds 32 bits, positions sur cases admissibles, orientations…). **Deux processus** — la couverture cible et l'allongement du brouillard — utilisent une loi uniforme **continue** sur un intervalle réel : ce sont les seules lois à densité par rapport à la mesure de Lebesgue de cette section, et c'est à elles que correspond la ligne « Uniforme continue ★ » du tableau de conformité.",
+        "Les quatre seeds 32 bits de la carte et du brouillard sont maintenant regroupées dans une seule carte de synthèse parce qu'elles partagent exactement le même cadre théorique : une uniforme discrète sur 32 bits, suivie d'une transformation aval plus informative dans les sections procédurales ou log-normales. La section affiche donc moins de cartes que de processus runtime, sans rien retirer à l'inventaire probabiliste réel."
       ],
       formulaCards: [
         {
