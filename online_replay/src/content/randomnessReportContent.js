@@ -26,19 +26,20 @@ const uniformProcesses = [
     lawUse: "Uniforme discrète sur un espace de 32 bits",
     variable: L`S_i \in \{0,\dots,2^{32}-1\}, \qquad i \in \{\text{terre},\text{eau},\text{forme},\text{densité}\}`,
     phenomenon:
-      "Ici, la seed n'est pas un phénomène gameplay en soi : c'est un outil technique pour rendre la génération du terrain et du brouillard à la fois variée et parfaitement reproductible. En pratique, on tire une graine uniforme, puis on s'en sert pour lancer une génération procédurale ou une autre loi aval, de façon à obtenir des rendus naturels différents tout en pouvant rejouer exactement le même monde.",
+      "Ici, la seed n'est pas un phénomène gameplay en soi : c'est un outil technique pour rendre la génération du terrain et du brouillard à la fois variée et parfaitement reproductible. Le point important est que `worldSeed` reste la racine du monde : les quatre graines synthétisées ici ne sont pas quatre racines indépendantes, mais quatre graines filles dérivées ensuite pour piloter la terre, l'eau, la forme du brouillard et sa densité.",
     parameters: [
       "4 graines 32 bits synthétisées ici : terre, eau, forme du brouillard, densité du brouillard",
-      "2 tirages au début de la génération de carte, puis 2 tirages supplémentaires à chaque apparition de brouillard"
+      "2 tirages dérivés de `worldSeed` au début de la génération de carte, puis 2 tirages supplémentaires dérivés du générateur météo à chaque apparition de brouillard",
+      "On ne change donc pas de principe déterministe : on part toujours de `worldSeed`, puis on spécialise la génération avec des seeds auxiliaires"
     ],
     why:
       "Ces variables ne représentent ni une ressource, ni une position, ni une décision lisible par le joueur : ce sont seulement des clés d'indexation pour des transformations déterministes plus riches. La bonne abstraction est donc la même partout : une uniforme discrète sur 32 bits, suffisamment vaste pour éviter les collisions perceptibles, neutre parce qu'aucune graine n'a de signification stratégique intrinsèque, et nativement compatible avec les sorties de `mt19937`. Les différences intéressantes apparaissent seulement après transformation, quand la seed devient champ de terre, champ d'eau, bruit de contour ou texture d'opacité.",
     simulation:
-      "Le runtime consomme une sortie brute de `mt19937` chaque fois qu'il doit initialiser un champ procédural ou une texture météo, puis passe immédiatement à un traitement aval déterministe ou semi-déterministe.",
+      "Le runtime initialise d'abord un générateur parent à partir de `worldSeed` ou du couple `worldSeed + rngCounter`, puis consomme une sortie brute de `mt19937` chaque fois qu'il doit initialiser un champ procédural ou une texture météo. La seed auxiliaire obtenue sert ensuite à un traitement aval déterministe ou semi-déterministe.",
     parameterChoice:
       "Le format 32 bits reprend la granularité native du générateur sans conversion biaisée, tout en laissant un espace immense de mondes, de contours et de textures possibles.",
     dependence:
-      "Les graines de carte dépendent directement de `worldSeed`; les graines de brouillard dépendent du générateur de l'événement météo courant. Dans les deux cas, la structure intéressante est aval, pas la seed elle-même.",
+      "Les graines de carte sont tirées directement depuis un générateur initialisé par `worldSeed`; les graines de brouillard sont tirées depuis un générateur d'événement lui-même construit à partir de `worldSeed` et du `rngCounter` météo. Dans les deux cas, `worldSeed` reste donc la racine commune, et la structure intéressante est aval, pas la seed fille elle-même.",
     relatedProcesses: [
       {
         seedLabel: "Graine terre",
@@ -1195,12 +1196,12 @@ export const randomnessReport = {
     {
       value: "worldSeed",
       label: "racine déterministe",
-      detail: "complétée par des compteurs RNG sérialisés par système"
+      detail: "seed mère du monde, complétée par des compteurs RNG sérialisés puis déclinée en seeds auxiliaires selon le système"
     }
   ],
   methodology: {
     paragraphs: [
-      "Le jeu n'utilise pas l'aléatoire comme une boîte noire. Chaque système stochastique passe par un schéma récurrent: une seed de monde `worldSeed`, un compteur d'événements `rngCounter`, puis une transformation spécifique au système. L'analyse probabiliste correcte doit donc raisonner à deux niveaux: la loi brute tirée par la bibliothèque standard, puis la loi effectivement observée après conditionnement, troncature, arrondi ou filtrage de gameplay.",
+      "Le jeu n'utilise pas l'aléatoire comme une boîte noire. Chaque système stochastique passe par un schéma récurrent: une seed de monde `worldSeed`, puis soit un dérivé direct de cette seed, soit un générateur d'événement construit à partir de `worldSeed` et d'un compteur `rngCounter`, puis enfin une transformation spécifique au système. Autrement dit, la carte et la météo peuvent bien manipuler plusieurs seeds 32 bits locales, mais elles restent toutes des dérivées d'une même racine `worldSeed`. L'analyse probabiliste correcte doit donc raisonner à deux niveaux: la loi brute tirée par la bibliothèque standard, puis la loi effectivement observée après conditionnement, troncature, arrondi ou filtrage de gameplay.",
       "La classification choisie ici suit les lois plutôt que les fichiers. Cela permet de voir immédiatement que l'XP et l'or des coffres sont deux usages du même schéma de normale tronquée; que la météo combine uniforme, Gamma, log-normale et linéaire par morceaux; et que certains processus de carte ou de contour ne sont pas bien décrits par une variable scalaire classique mais par des champs spatiaux corrélés.",
       "Quand une variable est nominale, par exemple un type de récompense ou une direction, on insiste sur le fait qu'il n'existe pas d'espérance canonique sans choisir au préalable un score numérique auxiliaire. Ce point est essentiel pour ne pas écrire de formules fausses juste parce qu'une API de tirage renvoie un entier d'indice."
     ],
@@ -1220,7 +1221,7 @@ export const randomnessReport = {
     ],
     highlights: [
       "Les systèmes XP, Coffres, Météo et Pièces du diable possèdent chacun leur compteur RNG sérialisé; le déterminisme persiste donc après sauvegarde/rechargement.",
-      "Les seeds auxiliaires de météo et de génération de carte sont elles-mêmes des variables aléatoires uniformes à grand support, mais elles servent ensuite à piloter des champs non i.i.d.",
+      "Les seeds auxiliaires de météo et de génération de carte sont elles-mêmes des variables aléatoires uniformes à grand support, mais ce sont des seeds filles dérivées de `worldSeed`, pas des racines concurrentes; elles servent ensuite à piloter des champs non i.i.d.",
       "Le rapport distingue toujours la loi théorique continue de la loi runtime réellement observée quand un arrondi, un `ceil` ou un `clamp` est appliqué."
     ],
     conformityRows: [

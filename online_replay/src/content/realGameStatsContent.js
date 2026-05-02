@@ -165,12 +165,13 @@ function buildInfernalBlock(infernal) {
     description:
       "Reprise du graphe gameplay du générateur historique: dettes de sang, marqueurs d'apparition/suppression et bandes de durée de vie des pièces du diable sur la partie chargée.",
     metrics: [
-      { label: "Dette blanche moy.", value: formatStatNumber(infernal.averageWhiteDebt) },
-      { label: "Dette noire moy.", value: formatStatNumber(infernal.averageBlackDebt) },
-      { label: "Apparitions observées", value: formatInteger(infernal.spawnEvents.length) },
+      { label: "Dette blanche moy.", value: formatStatNumber(infernal.averageWhiteDebt), unit: "points" },
+      { label: "Dette noire moy.", value: formatStatNumber(infernal.averageBlackDebt), unit: "points" },
+      { label: "Apparitions observées", value: formatInteger(infernal.spawnEvents.length), unit: "apparitions" },
       {
         label: "Durée de vie moyenne",
-        value: infernal.averageLifetime ? `${formatStatNumber(infernal.averageLifetime)} tours` : "n/d"
+        value: infernal.averageLifetime ? formatStatNumber(infernal.averageLifetime) : "n/d",
+        unit: "tours"
       }
     ],
     insights: [
@@ -250,7 +251,8 @@ function buildWeatherSpawnDataBlock(weather) {
     metrics: [
       {
         label: "Intervalle moyen",
-        value: weather.averageSpawnInterval ? `${formatStatNumber(weather.averageSpawnInterval)} tours` : "n/d"
+        value: weather.averageSpawnInterval ? formatStatNumber(weather.averageSpawnInterval) : "n/d",
+        unit: "tours"
       },
       {
         label: "Brouillards observés",
@@ -362,9 +364,9 @@ function buildWaterDeniedByKingdomBlock(waterDenied) {
     description:
       "Cette métrique recompte, à chaque enregistrement de la partie, **les cases de destination qui seraient atteignables si l'eau était retirée**, puis soustrait les pseudo-coups réellement autorisés sur le plateau courant. Le résultat est ensuite **sommé sur toutes les pièces d'un royaume**: une courbe haute signifie donc que l'eau supprime beaucoup d'options de déplacement à cet instant, pas qu'un royaume est bloqué partout sur la carte. Les murs et les autres obstacles restent inchangés pendant ce recalcul; **on isole uniquement l'effet de l'eau**.",
     metrics: [
-      { label: "Eau blanche moy.", value: formatStatNumber(waterDenied.averageWhiteWaterDeniedCells) },
-      { label: "Eau noire moy.", value: formatStatNumber(waterDenied.averageBlackWaterDeniedCells) },
-      { label: "Pic total eau", value: formatInteger(waterDenied.peakWaterDeniedCells) }
+      { label: "Eau blanche moy.", value: formatStatNumber(waterDenied.averageWhiteWaterDeniedCells), unit: "cellules" },
+      { label: "Eau noire moy.", value: formatStatNumber(waterDenied.averageBlackWaterDeniedCells), unit: "cellules" },
+      { label: "Pic total eau", value: formatInteger(waterDenied.peakWaterDeniedCells), unit: "cellules" }
     ],
     insights: [
       `Le calcul repart des mouvements pseudo-légaux, comme dans le site \`statistiques-generator\`, au lieu d'utiliser une simple approximation géométrique des lacs. L'écart moyen blanc/noir est ici de ${formatStatNumber(waterDenied.averageKingdomGap)} cellules refusées par enregistrement.`

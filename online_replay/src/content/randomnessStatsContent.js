@@ -17,10 +17,6 @@ function formatNumber(value, digits = 1) {
   }).format(value);
 }
 
-function formatPercent(value, digits = 1) {
-  return `${formatNumber(value, digits)} %`;
-}
-
 function formatRange(minValue, maxValue, digits = 1) {
   return `${formatNumber(minValue, digits)} a ${formatNumber(maxValue, digits)}`;
 }
@@ -306,15 +302,18 @@ const processStatsByTitle = {
       metrics: [
         {
           label: "Mine -> lac le plus proche",
-          value: `${formatNumber(mapGeneration.summary.mine_to_nearest_lake_distance.mean, 1)} cases`
+          value: formatNumber(mapGeneration.summary.mine_to_nearest_lake_distance.mean, 1),
+          unit: "cases"
         },
         {
           label: "Ferme -> lac le plus proche",
-          value: `${formatNumber(mapGeneration.summary.farm_to_nearest_lake_distance.mean, 1)} cases`
+          value: formatNumber(mapGeneration.summary.farm_to_nearest_lake_distance.mean, 1),
+          unit: "cases"
         },
         {
           label: "Distance moyenne blanc-noir",
-          value: `${formatNumber(mapGeneration.summary.player_ai_spawn_distance.mean, 1)} cases`
+          value: formatNumber(mapGeneration.summary.player_ai_spawn_distance.mean, 1),
+          unit: "cases"
         }
       ],
       insights: [
@@ -331,15 +330,18 @@ const processStatsByTitle = {
       metrics: [
         {
           label: "Support blanc",
-          value: `${firstOccupiedBucket(playerSpawnValues)}-${lastOccupiedBucket(playerSpawnValues)}`
+          value: `${firstOccupiedBucket(playerSpawnValues)}-${lastOccupiedBucket(playerSpawnValues)}`,
+          unit: "colonnes"
         },
         {
           label: "Support noir",
-          value: `${firstOccupiedBucket(aiSpawnValues)}-${lastOccupiedBucket(aiSpawnValues)}`
+          value: `${firstOccupiedBucket(aiSpawnValues)}-${lastOccupiedBucket(aiSpawnValues)}`,
+          unit: "colonnes"
         },
         {
           label: "Distance moyenne blanc-noir",
-          value: `${formatNumber(mapGeneration.summary.player_ai_spawn_distance.mean, 1)} cases`
+          value: formatNumber(mapGeneration.summary.player_ai_spawn_distance.mean, 1),
+          unit: "cases"
         }
       ],
       insights: [
@@ -376,15 +378,18 @@ const processStatsByTitle = {
       metrics: [
         {
           label: "Pion observé / attendu",
-          value: `${formatNumber(xpRewards.sources.KillPawn.summary.amount.mean, 1)} / ${xpRewards.sources.KillPawn.expected.inputMean}`
+          value: `${formatNumber(xpRewards.sources.KillPawn.summary.amount.mean, 1)} / ${xpRewards.sources.KillPawn.expected.inputMean}`,
+          unit: "XP"
         },
         {
           label: "Tour observé / attendu",
-          value: `${formatNumber(xpRewards.sources.KillRook.summary.amount.mean, 1)} / ${xpRewards.sources.KillRook.expected.inputMean}`
+          value: `${formatNumber(xpRewards.sources.KillRook.summary.amount.mean, 1)} / ${xpRewards.sources.KillRook.expected.inputMean}`,
+          unit: "XP"
         },
         {
           label: "Reine observée / attendu",
-          value: `${formatNumber(xpRewards.sources.KillQueen.summary.amount.mean, 1)} / ${xpRewards.sources.KillQueen.expected.inputMean}`
+          value: `${formatNumber(xpRewards.sources.KillQueen.summary.amount.mean, 1)} / ${xpRewards.sources.KillQueen.expected.inputMean}`,
+          unit: "XP"
         }
       ],
       insights: [
@@ -421,15 +426,18 @@ const processStatsByTitle = {
       metrics: [
         {
           label: "Moyenne d'entrée du profil or",
-          value: chestSystem.expected.goldInputMean.toString()
+          value: chestSystem.expected.goldInputMean.toString(),
+          unit: "or"
         },
         {
           label: "Moyenne observée early",
-          value: formatNumber(chestSystem.rewardPhases.early_phase.goldAmountSummary.gold_amount.mean, 1)
+          value: formatNumber(chestSystem.rewardPhases.early_phase.goldAmountSummary.gold_amount.mean, 1),
+          unit: "or"
         },
         {
           label: "Moyenne observée late",
-          value: formatNumber(chestSystem.rewardPhases.late_phase.goldAmountSummary.gold_amount.mean, 1)
+          value: formatNumber(chestSystem.rewardPhases.late_phase.goldAmountSummary.gold_amount.mean, 1),
+          unit: "or"
         }
       ],
       insights: [
@@ -457,15 +465,18 @@ const processStatsByTitle = {
       metrics: [
         {
           label: "Or observé en début de partie",
-          value: formatPercent(earlyObserved.Gold * 100, 0)
+          value: formatNumber(earlyObserved.Gold * 100, 0),
+          unit: "%"
         },
         {
           label: "Or observé en fin de partie",
-          value: formatPercent(lateObserved.Gold * 100, 0)
+          value: formatNumber(lateObserved.Gold * 100, 0),
+          unit: "%"
         },
         {
           label: "Scénario 100 tours",
-          value: `${formatNumber(chestSystem.summary.timeline_collected_chests.mean, 1)} coffres`
+          value: formatNumber(chestSystem.summary.timeline_collected_chests.mean, 1),
+          unit: "coffres"
         }
       ],
       insights: [
@@ -511,15 +522,18 @@ const processStatsByTitle = {
       metrics: [
         {
           label: "Moyenne continue de référence",
-          value: formatNumber(chestSystem.expected.spawnDelayContinuousReferenceMean, 2)
+          value: formatNumber(chestSystem.expected.spawnDelayContinuousReferenceMean, 2),
+          unit: "tours"
         },
         {
           label: "Moyenne observée",
-          value: formatNumber(chestSystem.summary.spawn_delay_turns.mean, 2)
+          value: formatNumber(chestSystem.summary.spawn_delay_turns.mean, 2),
+          unit: "tours"
         },
         {
           label: "Plancher imposé",
-          value: `${chestSystem.expected.spawnDelayCooldownFloor} tours`
+          value: String(chestSystem.expected.spawnDelayCooldownFloor),
+          unit: "tours"
         }
       ],
       insights: [
@@ -618,11 +632,13 @@ const processStatsByTitle = {
       metrics: [
         {
           label: "Part des deux classes les plus claires",
-          value: formatPercent((grassBrightTopTwo / grassBrightnessTotal) * 100, 1)
+          value: formatNumber((grassBrightTopTwo / grassBrightnessTotal) * 100, 1),
+          unit: "%"
         },
         {
           label: "Masse totale observée",
-          value: new Intl.NumberFormat("fr-FR").format(grassBrightnessTotal)
+          value: new Intl.NumberFormat("fr-FR").format(grassBrightnessTotal),
+          unit: "cellules"
         },
         {
           label: "Classes sombres utilisées",
@@ -653,15 +669,18 @@ const processStatsByTitle = {
       metrics: [
         {
           label: "Couverture ciblée",
-          value: formatPercent(run.config.dirtCoveragePercent, 0)
+          value: formatNumber(run.config.dirtCoveragePercent, 0),
+          unit: "%"
         },
         {
           label: "Couverture observée",
-          value: formatPercent(mapGeneration.summary.dirt_coverage_percent.mean, 1)
+          value: formatNumber(mapGeneration.summary.dirt_coverage_percent.mean, 1),
+          unit: "%"
         },
         {
           label: "Écart absolu",
-          value: formatPercent(run.config.dirtCoveragePercent - mapGeneration.summary.dirt_coverage_percent.mean, 1)
+          value: formatNumber(run.config.dirtCoveragePercent - mapGeneration.summary.dirt_coverage_percent.mean, 1),
+          unit: "%"
         }
       ],
       insights: [
@@ -687,15 +706,18 @@ const processStatsByTitle = {
       metrics: [
         {
           label: "Couverture ciblée",
-          value: formatPercent(run.config.waterCoveragePercent, 0)
+          value: formatNumber(run.config.waterCoveragePercent, 0),
+          unit: "%"
         },
         {
           label: "Couverture observée",
-          value: formatPercent(mapGeneration.summary.water_coverage_percent.mean, 1)
+          value: formatNumber(mapGeneration.summary.water_coverage_percent.mean, 1),
+          unit: "%"
         },
         {
           label: "Composantes moyennes",
-          value: formatNumber(mapGeneration.summary.water_component_count.mean, 1)
+          value: formatNumber(mapGeneration.summary.water_component_count.mean, 1),
+          unit: "composantes"
         }
       ],
       insights: [
@@ -719,15 +741,18 @@ const processStatsByTitle = {
       metrics: [
         {
           label: "Plus grande composante moyenne",
-          value: `${formatNumber(mapGeneration.summary.largest_water_component.mean, 1)} cellules`
+          value: formatNumber(mapGeneration.summary.largest_water_component.mean, 1),
+          unit: "cellules"
         },
         {
           label: "Maximum observé",
-          value: `${formatNumber(mapGeneration.summary.largest_water_component.max, 0)} cellules`
+          value: formatNumber(mapGeneration.summary.largest_water_component.max, 0),
+          unit: "cellules"
         },
         {
           label: "Moyenne des lacs proches des mines",
-          value: `${formatNumber(mapGeneration.summary.mine_to_nearest_lake_distance.mean, 1)} cases`
+          value: formatNumber(mapGeneration.summary.mine_to_nearest_lake_distance.mean, 1),
+          unit: "cases"
         }
       ],
       insights: [
@@ -745,28 +770,31 @@ const processStatsByTitle = {
       })
     }
   ],
-  "Bruit de contour du brouillard": [
+  "Couverture cible du brouillard": [
     {
-      title: "La couverture visible finale des brouillards dépasse parfois la consigne nominale",
+      title: "La couverture visible finale peut dépasser un peu la couverture cible",
       description:
-        "La couverture configurée de la météo est paramétrée entre 5 % et 20 %, mais la forme réelle du brouillard après déformation de contour peut pousser la couverture visible un peu au-delà de la borne haute nominale.",
+        "La couverture cible tirée entre 5 % et 20 % n'est pas une promesse exacte sur le pourcentage final visible cellule par cellule. Le runtime commence par convertir cette cible en aire, en déduit une ellipse selon le rapport d'aspect, ajuste la géométrie du front, déforme ensuite le contour avec le bruit de forme, applique un fondu de bord (`edgeSoftness`) puis discrétise le résultat sur la grille visible. La couverture réellement observée peut donc s'écarter un peu de la cible, et parfois dépasser la borne haute nominale.",
       metrics: [
         {
           label: "Couverture de pic moyenne",
-          value: formatPercent(weatherSystem.summary.isolated_peak_visible_coverage_percent.mean, 1)
+          value: formatNumber(weatherSystem.summary.isolated_peak_visible_coverage_percent.mean, 1),
+          unit: "%"
         },
         {
           label: "q90 observé",
-          value: formatPercent(weatherSystem.summary.isolated_peak_visible_coverage_percent.q90, 1)
+          value: formatNumber(weatherSystem.summary.isolated_peak_visible_coverage_percent.q90, 1),
+          unit: "%"
         },
         {
           label: "Maximum observé",
-          value: formatPercent(weatherSystem.summary.isolated_peak_visible_coverage_percent.max, 1)
+          value: formatNumber(weatherSystem.summary.isolated_peak_visible_coverage_percent.max, 1),
+          unit: "%"
         }
       ],
       insights: [
-        "La couverture uniforme de config ne décrit que l'aire cible brute; la **forme procédurale finale** peut la déformer sensiblement.",
-        "Cela justifie de traiter le brouillard comme un champ spatial corrélé plutôt que comme une simple variable d'aire."
+        "La variable de commande décrit donc une intention géométrique initiale, pas une couverture finale garantie au pourcent près.",
+        "L'écart vient de toute la chaîne de construction du front: aire cible, rayons, déformation de contour, fondu de bord et rasterisation finale sur les cellules visibles."
       ],
       chartHeight: 290,
       chartLabel: "Histogramme des couvertures visibles maximales des brouillards météo",
@@ -792,11 +820,13 @@ export const randomnessStatsReport = {
       metrics: [
         {
           label: "Seeds intégrées",
-          value: String(run.sampleCount)
+          value: String(run.sampleCount),
+          unit: "seeds"
         },
         {
           label: "Budget temporel",
-          value: `${run.turnBudget} tours`
+          value: String(run.turnBudget),
+          unit: "tours"
         },
         {
           label: "Seed de base",
