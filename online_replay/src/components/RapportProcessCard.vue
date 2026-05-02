@@ -121,6 +121,23 @@ function getObservedBlockEntries(observedSections, observedData, observedDataLab
   });
 }
 
+function getParameterSections(item) {
+  if (Array.isArray(item?.parameterSections) && item.parameterSections.length) {
+    return item.parameterSections
+      .filter((section) => Array.isArray(section?.entries) && section.entries.length)
+      .map((section) => ({
+        label: section.label || "",
+        entries: section.entries
+      }));
+  }
+
+  if (Array.isArray(item?.parameters) && item.parameters.length) {
+    return [{ label: "", entries: item.parameters }];
+  }
+
+  return [];
+}
+
 defineProps({
   item: {
     type: Object,
@@ -229,13 +246,24 @@ defineProps({
       <InlineRichText :text="item.parameterChoice" />
     </div>
 
-    <div v-if="item.parameters?.length" class="rapport-process-card__field">
+    <div v-if="getParameterSections(item).length" class="rapport-process-card__field">
       <span class="rapport-process-card__label">Paramètres</span>
-      <ul class="rapport-process-card__list">
-        <li v-for="parameter in item.parameters" :key="parameter">
-          <InlineRichText :text="parameter" tag="span" />
-        </li>
-      </ul>
+      <div class="rapport-process-card__parameter-sections">
+        <section
+          v-for="(parameterSection, index) in getParameterSections(item)"
+          :key="`${parameterSection.label}-${index}`"
+          class="rapport-process-card__parameter-section"
+        >
+          <p v-if="parameterSection.label" class="rapport-process-card__parameter-section-label">
+            {{ parameterSection.label }}
+          </p>
+          <ul class="rapport-process-card__list rapport-process-card__parameter-list">
+            <li v-for="parameter in parameterSection.entries" :key="parameter">
+              <InlineRichText :text="parameter" tag="span" />
+            </li>
+          </ul>
+        </section>
+      </div>
     </div>
 
     <div class="rapport-process-card__field">

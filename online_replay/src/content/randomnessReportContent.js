@@ -5,18 +5,22 @@ import { buildReportProcessAnchor } from "../utils/reportAnchors.js";
 
 function withProcessIllustration(process) {
   const theory = processTheoryByTitle[process.title];
+  const parameterSections = parameterSectionsByTitle[process.title];
   const enrichedProcess = theory ? { ...process, theory } : process;
-  const illustration = enrichedProcess.illustrationKey
-    ? processIllustrationsByKey[enrichedProcess.illustrationKey]
+  const parameterizedProcess = parameterSections
+    ? { ...enrichedProcess, parameterSections }
+    : enrichedProcess;
+  const illustration = parameterizedProcess.illustrationKey
+    ? processIllustrationsByKey[parameterizedProcess.illustrationKey]
     : null;
 
-  if (import.meta.env.DEV && enrichedProcess.illustrationKey && !illustration) {
+  if (import.meta.env.DEV && parameterizedProcess.illustrationKey && !illustration) {
     console.warn(
-      `[randomness-report] Missing illustration for key "${enrichedProcess.illustrationKey}" (${enrichedProcess.title}).`
+      `[randomness-report] Missing illustration for key "${parameterizedProcess.illustrationKey}" (${parameterizedProcess.title}).`
     );
   }
 
-  return illustration ? { ...enrichedProcess, illustration } : enrichedProcess;
+  return illustration ? { ...parameterizedProcess, illustration } : parameterizedProcess;
 }
 
 const uniformProcesses = [
@@ -1041,6 +1045,281 @@ const processTheoryByTitle = {
     note:
       "`U(c)` vient d'un value noise spatialement corrélé, pas d'une uniforme i.i.d.; la variance vraiment utile est donc mesurée sur la rugosité de contour observée."
   })
+};
+
+function createParameterSection(label, entries) {
+  return { label, entries };
+}
+
+const parameterSectionsByTitle = {
+  "Graines 32 bits des champs procéduraux": [
+    createParameterSection("Paramètres de loi", [
+      "largeur de mot = `32` bits",
+      "cardinal du support par variable = `2^32`",
+      "`4` variables uniformes regroupées ici : `S_terre`, `S_eau`, `S_forme`, `S_densité`"
+    ]),
+    createParameterSection("Paramètres runtime", [
+      "carte : `2` tirages filles dérivés de `worldSeed` au début de génération",
+      "météo : `2` tirages filles supplémentaires par apparition via le générateur d'événement"
+    ])
+  ],
+  "Rotation des mines et fermes neutres": [
+    createParameterSection("Paramètres de loi", [
+      "`a = 0`, `b = 3`, donc `n = 4` états équiprobables",
+      "codage des quarts de tour : `R ∈ {0, 1, 2, 3}`"
+    ])
+  ],
+  "Retournement des mines et fermes neutres": [
+    createParameterSection("Paramètres de loi", [
+      "`a = 0`, `b = 3`, donc `n = 4` états équiprobables",
+      "codage des masques : `0 = aucun`, `1 = horizontal`, `2 = vertical`, `3 = double`"
+    ]),
+    createParameterSection("Codage runtime", [
+      "bits conservés : `kFlipHorizontalMask = 1`, `kFlipVerticalMask = 2`"
+    ])
+  ],
+  "Choix de position des bâtiments publics": [
+    createParameterSection("Paramètres de sélection", [
+      L`K = |A_{top}| = \min\!\left(n,\max\!\left(3,\left\lceil \frac{n}{6}\right\rceil\right)\right)`,
+      L`s(p)=3.5\,d_{any}(p)+2.0\,d_{same}(p)+0.35\,\bar d(p)`
+    ]),
+    createParameterSection("Support / contraintes", [
+      "support courant = origines de footprint géométriquement admissibles pour le bâtiment considéré",
+      "le tirage final est uniforme sur les `K` meilleurs candidats après tri par score"
+    ])
+  ],
+  "Apparition des rois": [
+    createParameterSection("Paramètres de support", [
+      "bandes latérales de largeur `25 %` pour chacun des deux royaumes",
+      "supports conditionnels symétriques `A_W` et `A_B`"
+    ]),
+    createParameterSection("Contraintes conditionnelles", [
+      "cellules admissibles et non bloquées par le terrain",
+      "séparation stratégique initiale conservée entre les deux royaumes"
+    ])
+  ],
+  "Bord diagonal d'entrée du brouillard": [
+    createParameterSection("Paramètres de loi", [
+      "`n = 2` bords compatibles pour une diagonale donnée",
+      "`p(e_1) = p(e_2) = 1/2`"
+    ])
+  ],
+  "Couverture cible du brouillard": [
+    createParameterSection("Paramètres de loi (modélisation théorique)", [
+      "borne basse `a = 0.05`",
+      "borne haute `b = 0.20`"
+    ]),
+    createParameterSection("Paramètres runtime (tirage effectif)", [
+      "`coverage_min_percent = 5`",
+      "`coverage_max_percent = 20`",
+      "pas de discrétisation = `1 %`"
+    ])
+  ],
+  "Allongement du brouillard": [
+    createParameterSection("Paramètres de loi (modélisation théorique)", [
+      "borne basse `a = 1.80`",
+      "borne haute `b = 2.60`"
+    ]),
+    createParameterSection("Paramètres runtime (tirage effectif)", [
+      "`aspect_ratio_min_times_100 = 180`",
+      "`aspect_ratio_max_times_100 = 260`",
+      "pas de discrétisation = `0.01`"
+    ])
+  ],
+  "Choix d'un mouvement aléatoire en phase Searching": [
+    createParameterSection("Paramètres de loi", [
+      "aucun paramètre libre hors support courant : la loi est uniforme sur `A_moves(t)`"
+    ]),
+    createParameterSection("Support / contraintes", [
+      "support courant = coups légaux générés pour la pièce au tour `t`",
+      "filtrage supplémentaire par visibilité locale et collisions interdites"
+    ])
+  ],
+  "Ordre de placement des mines et fermes neutres": [
+    createParameterSection("Paramètres de loi", [
+      "taille de la permutation `n = num_mines + num_farms = 5`",
+      "décomposition active : `2` mines et `3` fermes"
+    ])
+  ],
+  "Case d'apparition d'un coffre": [
+    createParameterSection("Poids / score", [
+      L`w(c)=1+\mathrm{centrality}(c)+\mathrm{contestation}(c)`,
+      "toute case admissible conserve un poids strictement positif"
+    ]),
+    createParameterSection("Support / contraintes", [
+      "cellules libres et admissibles sur le plateau courant",
+      "distance minimale aux rois : `min_distance_from_kings = 6`"
+    ])
+  ],
+  "Type de récompense du coffre": [
+    createParameterSection("Paramètres de loi", [
+      "début de partie : poids `(8, 3, 3)` pour `(or, mouvement, construction)`",
+      "fin de partie : poids `(4, 6, 6)` pour `(or, mouvement, construction)`",
+      "bascule de régime au tour `late_game_turn = 10`"
+    ]),
+    createParameterSection("Payoffs associés", [
+      "branche or : montant tiré par la normale tronquée dédiée de moyenne `35`",
+      "branche mouvement : `movement_bonus_amount = 1` point max par tour",
+      "branche construction : `build_bonus_amount = 1` point max par tour"
+    ]),
+    createParameterSection("Couplage runtime", [
+      "mode de rattrapage actif : `current_loot_catch_up_enabled = true`"
+    ])
+  ],
+  "Direction du brouillard": [
+    createParameterSection("Paramètres de loi", [
+      "ordre des catégories : `(N, S, E, W, NE, NW, SE, SW)`",
+      "`direction_weights = (1, 1, 1, 1, 1, 1, 1, 1)`"
+    ])
+  ],
+  "Type de cible primaire d'une pièce du diable": [
+    createParameterSection("Paramètres de loi", [
+      "poids actifs : `pawn = 8`, `knight = 14`, `bishop = 14`, `rook = 26`, `queen = 38`",
+      "les types non visibles reçoivent le poids `0`"
+    ])
+  ],
+  "Option d'apparition ciblée d'une pièce du diable": [
+    createParameterSection("Poids / score", [
+      L`w(o)=\max\!\bigl(1, 2D-\mathrm{dist}(o)+1\bigr)`,
+      "diamètre de référence : `D = board.getDiameter()`"
+    ])
+  ],
+  "Royaume cible d'une pièce du diable": [
+    createParameterSection("Paramètres de loi", [
+      L`p_t = \frac{\mathrm{debt}_{white}}{\mathrm{debt}_{white}+\mathrm{debt}_{black}}`,
+      L`p_t = 0.5\text{ si }\mathrm{debt}_{white}+\mathrm{debt}_{black}=0`
+    ])
+  ],
+  "Activation d'un mouvement aléatoire en phase Searching": [
+    createParameterSection("Paramètres de loi", [
+      "probabilité active `p = 333 / 1000 = 0.333`",
+      "implémentation discrétisée sur une grille de `1000` valeurs"
+    ])
+  ],
+  "Déclenchement d'apparition d'une pièce du diable": [
+    createParameterSection("Paramètres de loi", [
+      L`\lambda_t = \min\!\bigl(0.25, 0.02 + 0.012\,\mathrm{debt}_t\bigr)`,
+      "base `0.02`, incrément par dette `0.012`, cap `0.25`"
+    ]),
+    createParameterSection("Calendrier runtime", [
+      "tour minimal de première apparition : `min_spawn_turn = 3`",
+      "cooldown de réapparition : `respawn_cooldown_turns = 4`",
+      "nouvelle tentative après échec : `spawn_retry_turns = 1`"
+    ])
+  ],
+  "Récompenses d'XP": [
+    createParameterSection("Transformation commune", [
+      L`\sigma = \max\!\left(1, \mu\cdot \frac{\text{sigmaMultiplierTimes100}}{100}\right)`,
+      "troncature commune à `± 2σ`, puis `round`, puis plancher `minimum = 1`"
+    ]),
+    createParameterSection("Profils par source", [
+      "`kill_pawn` : `μ = 20`, `σ = 3.6`, intervalle tronqué `[12.8, 27.2]`, `minimum = 1`",
+      "`kill_knight` / `kill_bishop` : `μ = 50`, `σ = 8`, intervalle `[34, 66]`, `minimum = 1`",
+      "`kill_rook` : `μ = 100`, `σ = 12`, intervalle `[76, 124]`, `minimum = 1`",
+      "`kill_queen` : `μ = 300`, `σ = 30`, intervalle `[240, 360]`, `minimum = 1`",
+      "`destroy_block` / `arena_per_turn` : `μ = 10`, `σ = 1.5`, intervalle `[7, 13]`, `minimum = 1`"
+    ])
+  ],
+  "Montant d'or d'un coffre": [
+    createParameterSection("Paramètres de loi", [
+      "`μ = 35`",
+      "`sigma_multiplier_times_100 = 18`, donc `σ = 6.3`",
+      "`clamp_sigma_multiplier_times_100 = 200`, donc intervalle tronqué `[22.4, 47.6]`",
+      "`minimum = 1`"
+    ])
+  ],
+  "Délai de réapparition d'un coffre": [
+    createParameterSection("Paramètres de loi", [
+      "forme `k = 1.80` via `weibull_shape_times_100 = 180`",
+      "échelle `λ = 6` tours via `weibull_scale_turns = 6`"
+    ]),
+    createParameterSection("Calendrier runtime", [
+      "cooldown plancher `c = 4` tours",
+      "tour minimal de première apparition : `min_spawn_turn = 4`",
+      "nouvelle tentative après échec : `spawn_retry_turns = 1`"
+    ])
+  ],
+  "Délai entre deux brouillards": [
+    createParameterSection("Paramètres de loi", [
+      "forme `k = 4.00` via `arrival_gamma_shape_times_100 = 400`",
+      "échelle `θ = 10.00` via `arrival_gamma_scale_times_100 = 1000`",
+      "minimum additif `m = 0` via `cooldown_min_turns = 0`"
+    ]),
+    createParameterSection("Transformation runtime", [
+      "discrétisation par plafond : `D = m + ceil(T)`"
+    ])
+  ],
+  "Densité locale d'un brouillard": [
+    createParameterSection("Paramètres de loi", [
+      "`μ = -0.12` via `density_mu_times_100 = -12`",
+      "`σ = 0.35` via `density_sigma_times_100 = 35`"
+    ]),
+    createParameterSection("Transformation runtime", [
+      "alpha de base `alpha_base_percent = 48`, donc facteur `0.48`",
+      "clamp visuel : `alpha_min_percent = 22`, `alpha_max_percent = 82`"
+    ])
+  ],
+  "Luminosité de l'herbe": [
+    createParameterSection("Paramètres de loi", [
+      "`α = 7`, `β = 2`"
+    ]),
+    createParameterSection("Transformation runtime", [
+      "seuil de conservation de la luminosité par défaut : `keep_default_threshold = 0.90`",
+      "borne basse de remappage : `min_brightness = 0.68`",
+      "exposant de contraste : `contrast_exponent = 1.8`"
+    ])
+  ],
+  "Position d'entrée le long du bord d'un brouillard": [
+    createParameterSection("Paramètres de loi", [
+      L`\text{nœuds } (0, \tfrac14 M, \tfrac12 M, \tfrac34 M, M)`,
+      "poids actifs `(0.7, 1.8, 1.98, 1.8, 0.7)`"
+    ]),
+    createParameterSection("Paramètres runtime", [
+      "`entry_corner_weight_times_100 = 70`, donc `cornerW = 0.7`",
+      "`entry_center_weight_times_100 = 180`, donc `centerW = 1.8`",
+      "surpondération médiane fixée à `1.1 × centerW`, donc `1.98` au centre"
+    ])
+  ],
+  "Champ spatial de la terre": [
+    createParameterSection("Paramètres du générateur", [
+      "`terrain_noise_scale = 14`",
+      "`terrain_octaves = 3`",
+      "graine dédiée `S_terre`"
+    ]),
+    createParameterSection("Post-traitements", [
+      "couverture cible terre `dirt_coverage_percent = 14`",
+      "ajout de `6` amas locaux de rayon compris entre `2` et `5`"
+    ])
+  ],
+  "Champ spatial de l'eau": [
+    createParameterSection("Paramètres du générateur", [
+      "`terrain_noise_scale = 14`",
+      "`terrain_octaves = 3`",
+      "graine dédiée `S_eau`"
+    ]),
+    createParameterSection("Post-traitements", [
+      "couverture cible eau `water_coverage_percent = 4`",
+      "ajout de `3` lacs de rayon compris entre `2` et `3`"
+    ])
+  ],
+  "Masque de retournement des textures de terrain": [
+    createParameterSection("Paramètres du générateur", [
+      "support fini à `4` états de retournement",
+      "calcul local `F(c) = hash(worldSeed, CellType, c) mod 4`"
+    ]),
+    createParameterSection("Codage runtime", [
+      "deux bits conservés : horizontal `1`, vertical `2`"
+    ])
+  ],
+  "Bruit de contour du brouillard": [
+    createParameterSection("Paramètres du générateur", [
+      "portée spatiale `shape_noise_cell_span = 6` cellules",
+      "amplitude `shape_noise_amplitude_percent = 100`, donc `a = 1.0`"
+    ]),
+    createParameterSection("Lissage runtime", [
+      "fondu de bord `edge_softness_percent = 18`, donc `edgeSoftness = 0.18`"
+    ])
+  ]
 };
 
 const illustratedUniformProcesses = uniformProcesses.map(withProcessIllustration);

@@ -724,6 +724,29 @@ a {
   gap: 8px;
 }
 
+.rapport-process-card__parameter-sections {
+  display: grid;
+  gap: 12px;
+}
+
+.rapport-process-card__parameter-section {
+  display: grid;
+  gap: 6px;
+}
+
+.rapport-process-card__parameter-section-label {
+  margin: 0;
+  color: rgba(240, 213, 143, 0.82);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.rapport-process-card__parameter-list {
+  margin-top: 0;
+}
+
 .rapport-process-card__field--math {
   gap: 10px;
 }
@@ -1674,6 +1697,28 @@ a {
 
 .site-shell--rapport .rapport-process-card__field {
   display: block;
+}
+
+.site-shell--rapport .rapport-process-card__parameter-sections {
+  display: grid;
+  gap: 10px;
+}
+
+.site-shell--rapport .rapport-process-card__parameter-section {
+  display: block;
+}
+
+.site-shell--rapport .rapport-process-card__parameter-section-label {
+  margin: 0 0 6px;
+  color: #5f5f5f;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.site-shell--rapport .rapport-process-card__parameter-list {
+  margin-top: 0;
 }
 
 .site-shell--rapport .rapport-process-card__field + .rapport-process-card__field {
