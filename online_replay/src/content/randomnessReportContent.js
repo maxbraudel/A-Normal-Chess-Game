@@ -1179,9 +1179,9 @@ export const randomnessReport = {
   },
   summaryStats: [
     {
-      value: "32",
-      label: "processus actifs",
-      detail: "inventoriés dans l'audit runtime et reclassés ici par lois"
+      value: "29",
+      label: "Cartes de processus",
+      detail: "visibles dans le rapport et regroupées par familles de lois"
     },
     {
       value: "12",
@@ -1276,10 +1276,10 @@ export const randomnessReport = {
     {
       id: "uniformes",
       title: "Uniformes : discrètes, continues et conditionnelles",
-      badge: "15 processus, 12 cartes",
+      badge: "9 cartes",
       description: [
-        "Cette section regroupe trois variantes de la loi uniforme, qui n'ont pas le même statut probabiliste. **Treize processus runtime** utilisent une loi uniforme **discrète** (support fini, seeds 32 bits, positions sur cases admissibles, orientations…). **Deux processus** — la couverture cible et l'allongement du brouillard — utilisent une loi uniforme **continue** sur un intervalle réel : ce sont les seules lois à densité par rapport à la mesure de Lebesgue de cette section, et c'est à elles que correspond la ligne « Uniforme continue ★ » du tableau de conformité.",
-        "Les quatre seeds 32 bits de la carte et du brouillard sont maintenant regroupées dans une seule carte de synthèse parce qu'elles partagent exactement le même cadre théorique : une uniforme discrète sur 32 bits, suivie d'une transformation aval plus informative dans les sections procédurales ou log-normales. La section affiche donc moins de cartes que de processus runtime, sans rien retirer à l'inventaire probabiliste réel."
+        "Cette section réunit neuf cartes qui couvrent trois variantes de la loi uniforme. Sept cartes présentent des usages discrets ou conditionnels de l'uniforme sur un support fini ou filtré, et deux cartes présentent des uniformes continues pour la météo : la couverture cible et l'allongement du brouillard. Ce sont ces deux dernières qui correspondent à la ligne « Uniforme continue ★ » du tableau de conformité.",
+        "Les quatre seeds 32 bits de la carte et du brouillard sont volontairement regroupées dans une seule carte de synthèse parce qu'elles partagent exactement le même cadre théorique : une uniforme discrète sur 32 bits, suivie d'une transformation aval plus informative dans les sections procédurales ou log-normales. Le début du rapport compte donc ici les cartes réellement affichées, pas chaque processus runtime fusionné à l'intérieur de cette carte de synthèse."
       ],
       formulaCards: [
         {
@@ -1308,7 +1308,7 @@ export const randomnessReport = {
     {
       id: "permutation-uniforme",
       title: "Permutation uniforme",
-      badge: "1 processus",
+      badge: "1 carte",
       randomnessKind: "discrete",
       description: [
         "Le placement public ne commence pas par choisir des positions, mais par mélanger l'ordre des objets à poser. La variable naturelle n'est donc pas un entier simple, mais une permutation uniforme sur un ensemble fini.",
@@ -1333,10 +1333,10 @@ export const randomnessReport = {
     {
       id: "categorielles",
       title: "Catégorielle pondérée",
-      badge: "7 processus",
+      badge: "5 cartes",
       randomnessKind: "discrete",
       description: [
-        "Dès qu'il faut choisir entre plusieurs catégories nominales avec des poids relatifs, la bonne famille est la catégorielle pondérée. C'est le cheval de bataille des coffres, de la météo et surtout de la logique des pièces du diable.",
+        "Dès qu'il faut choisir entre plusieurs catégories nominales avec des poids relatifs, la bonne famille est la catégorielle pondérée. Elle apparaît ici dans cinq cartes : deux pour les coffres, une pour la météo et deux pour la logique des pièces du diable.",
         "Mathématiquement, l'espérance n'est pas définie tant qu'on n'a pas choisi une fonction de score `g` sur les catégories; on donne donc les moments de `g(X)` plutôt que ceux de `X` lui-même."
       ],
       formulaCards: [
@@ -1358,7 +1358,7 @@ export const randomnessReport = {
     {
       id: "bernoulli",
       title: "Bernoulli",
-      badge: "2 processus",
+      badge: "2 cartes",
       randomnessKind: "discrete",
       description: [
         "La Bernoulli intervient pour les décisions binaires: choisir un royaume plutôt que l'autre, ou activer une branche de comportement aléatoire.",
@@ -1383,7 +1383,7 @@ export const randomnessReport = {
     {
       id: "poisson",
       title: "Poisson et déclenchement d'arrivée",
-      badge: "1 processus",
+      badge: "1 carte",
       randomnessKind: "discrete",
       description: [
         "Les pièces du diable ne reposent pas sur une simple probabilité fixe d'apparition, mais sur un comptage d'arrivées potentielles modélisé par une Poisson. Le gameplay n'observe que l'événement `N >= 1`, mais la variable latente est bien un nombre entier de tentatives.",
@@ -1412,7 +1412,7 @@ export const randomnessReport = {
     {
       id: "normales-tronquees",
       title: "Normales tronquées et discrétisées",
-      badge: "2 processus",
+      badge: "2 cartes",
       randomnessKind: "density",
       isDensity: true,
       description: [
@@ -1446,7 +1446,7 @@ export const randomnessReport = {
     {
       id: "weibull",
       title: "Weibull discrétisée",
-      badge: "1 processus",
+      badge: "1 carte",
       randomnessKind: "density",
       isDensity: true,
       description: [
@@ -1475,7 +1475,7 @@ export const randomnessReport = {
     {
       id: "gamma",
       title: "Gamma discrétisée",
-      badge: "1 processus",
+      badge: "1 carte",
       randomnessKind: "density",
       isDensity: true,
       description: [
@@ -1506,7 +1506,7 @@ export const randomnessReport = {
       title: "Log-normale",
       randomnessKind: "density",
       isDensity: true,
-      badge: "1 processus",
+      badge: "1 carte",
       description: [
         "La log-normale apparaît dans la texture d'opacité des brouillards. Le choix est mathématiquement naturel dès qu'on veut des multiplicateurs strictement positifs, susceptibles d'être parfois un peu plus grands que 1 sans jamais devenir négatifs.",
         "Le runtime redérive la graine par cellule à partir de `densitySeed`, puis re-borne le résultat via des `alphaMin` et `alphaMax`."
@@ -1529,7 +1529,7 @@ export const randomnessReport = {
     {
       id: "beta",
       title: "Beta transformée",
-      badge: "1 processus",
+      badge: "1 carte",
       randomnessKind: "density",
       isDensity: true,
       description: [
@@ -1558,7 +1558,7 @@ export const randomnessReport = {
     {
       id: "piecewise-linear",
       title: "Linéaire par morceaux",
-      badge: "1 processus",
+      badge: "1 carte",
       randomnessKind: "density",
       isDensity: true,
       description: [
@@ -1583,7 +1583,7 @@ export const randomnessReport = {
     {
       id: "procedural-fields",
       title: "Variables personnalisées et champs procéduraux corrélés",
-      badge: "4 processus",
+      badge: "4 cartes",
       description: [
         "Tous les processus aléatoires du jeu ne sont pas raisonnablement résumables par une unique variable scalaire. Les champs de terrain et les déformations de contour du brouillard sont des fonctions aléatoires de la cellule et d'une seed, avec forte corrélation spatiale.",
         "**Du point de vue des contraintes (lois connues)**: ces processus reposent entièrement sur une **seed uniforme discrète sur 32 bits**, loi connue, pilotant ensuite un **post-traitement déterministe** (interpolation de hash, empilement d'octaves, seuillage). La VA de base est bien une uniforme connue; les structures spatiales émergent d'un calcul déterministe à partir de cette seed. Ils ne constituent donc pas des « lois inconnues » mais des transformations déterministes d'uniformes.",

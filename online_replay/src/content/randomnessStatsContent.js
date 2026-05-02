@@ -392,10 +392,6 @@ const processStatsByTitle = {
           unit: "XP"
         }
       ],
-      insights: [
-        "C'est une statistique pertinente parce qu'elle valide directement la **cohérence entre paramètres théoriques et runtime effectif**.",
-        "Les rotations de bâtiments ou les flips pseudo-uniformes apportent beaucoup moins d'information sur la partie que ces moyennes XP."
-      ],
       chartHeight: 320,
       chartLabel: "Comparaison des moyennes XP attendues et observées",
       chartOption: buildGroupedBarOption({
