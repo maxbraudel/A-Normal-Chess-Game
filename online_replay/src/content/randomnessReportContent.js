@@ -586,27 +586,6 @@ float sampleGammaTurns(std::mt19937& gen,
       "Le passage par la config permet de rallonger ou compresser très simplement la cadence globale des brouillards sans toucher au code.",
     dependence:
       "La tentative suivante reste aussi bloquée tant qu'un brouillard actif occupe déjà la carte."
-  },
-  {
-    title: "Durée visible d'un brouillard",
-    system: "Météo",
-    lawUse: "Gamma discrétisée par plafond",
-    variable: L`V = \max(1, \lceil T \rceil),\quad T \sim \Gamma(k,\theta)`,
-    phenomenon:
-      "Fixe le nombre de tours pendant lesquels le brouillard doit rester sensiblement visible avant de quitter la carte.",
-    parameters: [
-      "`k = 2.60` via `duration_gamma_shape_times_100 = 260`",
-      "`theta = 1.80` via `duration_gamma_scale_times_100 = 180`",
-      "minimum logique appliqué ensuite: au moins 1 tour visible"
-    ],
-    why:
-      "Une durée positive et asymétrique est mieux modélisée par une Gamma que par une loi symétrique, surtout pour éviter des vies négatives ou quasi nulles. Une uniforme discrète produirait toutes les durées avec la même probabilité, sans distinguer les durées courtes des longues : un brouillard de 1 tour serait aussi probable qu'un brouillard de 10 tours. Une normale tronquée aurait concentré la masse de façon symétrique, alors que la durée d'un événement météo est intrinsèquement asymétrique : les brouillards très courts sont possibles mais rares, et quelques brouillards exceptionnellement longs enrichissent le gameplay. La Gamma capture cette asymétrie via sa queue droite, avec un minimum logique à 1 tour pour garantir qu'un brouillard est toujours au moins brièvement visible.",
-    simulation:
-      "Le runtime tire `visibleTurnCount`, convertit en nombre de pas, puis adapte le trajet et l'élongation du brouillard pour respecter cette cible temporelle.",
-    parameterChoice:
-      "La moyenne continue `k\\theta = 4.68` tours donne des brouillards visibles mais pas permanents.",
-    dependence:
-      "La durée interagit ensuite avec la vitesse, l'aire préservée et la géométrie du plateau."
   }
 ];
 
@@ -1005,14 +984,6 @@ const processTheoryByTitle = {
     note:
       "Le plafond discrétise la variable continue. Les moments affichés sont donc des références théoriques autour desquelles le runtime se concentre."
   }),
-  "Durée visible d'un brouillard": createTheory({
-    support: L`V\in\{1,2,\dots\}`,
-    law: L`V=\max(1,\lceil T\rceil),\quad T\sim\Gamma(k,\theta)`,
-    expectation: L`\mathbb{E}[T]=k\theta,\qquad \mathbb{E}[V]\approx \max(1,k\theta)`,
-    variance: L`\mathrm{Var}(T)=k\theta^2`,
-    note:
-      "La Gamma fournit la durée cible continue, puis le runtime la convertit en nombre entier de tours visibles."
-  }),
   "Densité locale d'un brouillard": createTheory({
     support: L`A(c)\in[0.22,0.82]`,
     law: L`A(c)=\mathrm{clip}(0.48\,X(c),0.22,0.82),\quad X(c)\sim\mathrm{LogNormal}(\mu,\sigma^2)`,
@@ -1207,7 +1178,7 @@ export const randomnessReport = {
   },
   summaryStats: [
     {
-      value: "33",
+      value: "32",
       label: "processus actifs",
       detail: "inventoriés dans l'audit runtime et reclassés ici par lois"
     },
@@ -1261,7 +1232,7 @@ export const randomnessReport = {
       { law: "Poisson", kind: "discrète", isDensity: false, e: "\\lambda", v: "\\lambda", example: "Déclenchement apparition pièce du diable" },
       { law: "Normale tronquée", kind: "densité", isDensity: true, e: String.raw`\mu+\sigma\frac{\varphi(\alpha)-\varphi(\beta)}{\Phi(\beta)-\Phi(\alpha)}`, v: String.raw`\sigma^2\!\left[1+\frac{\alpha\varphi(\alpha)-\beta\varphi(\beta)}{\Phi(\beta)-\Phi(\alpha)}-\left(\frac{\varphi(\alpha)-\varphi(\beta)}{\Phi(\beta)-\Phi(\alpha)}\right)^2\right]`, example: "Récompenses XP, or des coffres" },
       { law: "Weibull", kind: "densité", isDensity: true, e: String.raw`\lambda\,\Gamma\!\left(1+\tfrac{1}{k}\right)`, v: String.raw`\lambda^2\!\left[\Gamma\!\left(1+\tfrac{2}{k}\right)-\Gamma\!\left(1+\tfrac{1}{k}\right)^2\right]`, example: "Délai réapparition coffre" },
-      { law: "Gamma", kind: "densité", isDensity: true, e: "k\\theta", v: "k\\theta^2", example: "Délai inter-brouillards, durée visible" },
+      { law: "Gamma", kind: "densité", isDensity: true, e: "k\\theta", v: "k\\theta^2", example: "Délai inter-brouillards" },
       { law: "Log-normale", kind: "densité", isDensity: true, e: "e^{\\mu+\\sigma^2/2}", v: "(e^{\\sigma^2}-1)e^{2\\mu+\\sigma^2}", example: "Densité locale brouillard" },
       { law: "Beta", kind: "densité", isDensity: true, e: String.raw`\frac{\alpha}{\alpha+\beta}`, v: String.raw`\frac{\alpha\beta}{(\alpha+\beta)^2(\alpha+\beta+1)}`, example: "Luminosité cellules d'herbe" },
       { law: "Linéaire par morceaux", kind: "densité", isDensity: true, e: "\\int_0^M x\\,f(x)\\,dx", v: "\\int_0^M x^2 f(x)\\,dx - \\mathbb{E}[X]^2", example: "Position d'entrée du brouillard sur le bord" }
@@ -1285,7 +1256,7 @@ export const randomnessReport = {
       bullets: [
         "Histogrammes d'XP par source et comparaison à la normale tronquée annoncée.",
         "Retards de réapparition des coffres et répartition des récompenses par régime initial/tardif.",
-        "Inter-arrivées météo, durées visibles, couverture, rapport d'aspect et opacités locales.",
+        "Inter-arrivées météo, couverture, rapport d'aspect et opacités locales.",
         "Dette de sang, intensité d'apparition induite et types de cibles effectivement sélectionnés."
       ]
     },
@@ -1503,11 +1474,11 @@ export const randomnessReport = {
     {
       id: "gamma",
       title: "Gamma discrétisée",
-      badge: "2 processus",
+      badge: "1 processus",
       randomnessKind: "density",
       isDensity: true,
       description: [
-        "La Gamma pilote les inter-arrivées et certaines durées météo. Son support positif et sa grande souplesse de forme en font un bon compromis entre exponentialité pure et modèle trop rigide.",
+        "La Gamma pilote ici surtout les inter-arrivées météo. Son support positif et sa grande souplesse de forme en font un bon compromis entre exponentialité pure et modèle trop rigide.",
         "Le code applique `ceil`, puis convertit en tours ou pas de simulation. La loi observée est donc une version quantifiée de la Gamma continue."
       ],
       formulaCards: [
@@ -1525,7 +1496,7 @@ export const randomnessReport = {
         }
       ],
       notes: [
-        "La météo utilise deux Gammas distinctes: l'une pour l'attente avant apparition, l'autre pour la durée visible cible."
+        "Dans la lecture retenue par ce rapport, la Gamma documentée côté météo sert avant tout à modéliser l'attente avant l'apparition d'un nouveau brouillard."
       ],
       processes: illustratedGammaProcesses
     },
@@ -1642,7 +1613,7 @@ export const randomnessReport = {
     "Le cœur du déterminisme est `worldSeed + rngCounter`; cela crée une dépendance structurelle commune à tous les tirages d'un même système, tout en rendant la suite parfaitement rejouable après sauvegarde.",
     "Les lois conditionnelles dominent le gameplay réel: une uniforme ou une catégorielle n'est presque jamais tirée sur un support absolu, mais sur un support déjà filtré par la géométrie, la visibilité, l'occupation ou l'historique des choix précédents.",
     "Le mode de rattrapage des coffres (`current_loot_catch_up_enabled`) signifie que **les deux royaumes partagent temporairement une même récompense courante**; **le tirage suivant n'apparaît que lorsque les deux l'ont déjà collectée**. Les récompenses de coffre ne sont donc **pas indépendantes** entre royaumes quand ce mode est actif.",
-    "Les brouillards portent deux graines internes, l'une pour la forme et l'autre pour la densité, qui induisent de fortes corrélations spatiales intra-brouillard, puis une dépendance temporelle via la durée Gamma et le prochain délai d'apparition.",
+    "Les brouillards portent deux graines internes, l'une pour la forme et l'autre pour la densité, qui induisent de fortes corrélations spatiales intra-brouillard, puis une dépendance temporelle via le prochain délai d'apparition et les possibles chevauchements de fronts.",
     "Les pièces du diable ne reposent pas sur un système à paramètres fixes: leur Bernoulli de royaume cible et leur Poisson d'apparition dépendent directement d'un état dynamique, la dette de sang.",
     "**Chaîne de Markov**: la dette de sang (`bloodDebt`) est un processus markovien naturel, elle dépend de l'état précédent (dettes accumulées) et évolue selon des transitions probabilistes (apparitions, destructions). Une modélisation explicite en chaîne de Markov à états discrets aurait pu formaliser la dynamique de la dette, mais le gain de précision ne justifiait pas la complexité supplémentaire face au modèle Poisson déjà en place. Ce point reste une piste d'approfondissement."
   ],
@@ -1660,7 +1631,7 @@ export const randomnessReport = {
     {
       title: "Mesurer des champs spatiaux corrélés sans les réduire à du i.i.d.",
       text:
-        "La terre, l'eau et les contours de brouillard sont produits par du bruit procédural partageant une même seed et un même post-traitement spatial. Une statistique cellule par cellule aurait masqué le vrai phénomène, qui est l'apparition de régions cohérentes, de lacs, de couloirs et de silhouettes. La difficulté a donc été de choisir comme variables observées des résumés adaptés à un champ: couverture totale, cellules refusées, rugosité de bord, durée visible ou nombre de pièces masquées, plutôt qu'une fausse Bernoulli indépendante par cellule."
+        "La terre, l'eau et les contours de brouillard sont produits par du bruit procédural partageant une même seed et un même post-traitement spatial. Une statistique cellule par cellule aurait masqué le vrai phénomène, qui est l'apparition de régions cohérentes, de lacs, de couloirs et de silhouettes. La difficulté a donc été de choisir comme variables observées des résumés adaptés à un champ: couverture totale, cellules refusées, rugosité de bord ou nombre de pièces masquées, plutôt qu'une fausse Bernoulli indépendante par cellule."
     },
     {
       title: "Instrumenter le runtime réel sans perdre le déterminisme des parties",

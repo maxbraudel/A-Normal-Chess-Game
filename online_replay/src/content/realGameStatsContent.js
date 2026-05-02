@@ -75,12 +75,10 @@ async function buildRealGameStatsReport() {
       "Royaume cible d'une pièce du diable": infernal.points.length
         ? [buildInfernalBlock(infernal)]
         : [],
-      "Délai entre deux brouillards": weather.spawnEvents.length
-        ? [buildWeatherArrivalDelayBlock(weather)]
-        : [],
-      "Durée visible d'un brouillard": weather.points.length
-        ? [buildWeatherBlock(weather)]
-        : [],
+      "Délai entre deux brouillards": [
+        ...(weather.points.length ? [buildWeatherSpawnDataBlock(weather)] : []),
+        ...(weather.points.length ? [buildWeatherVisibilityBlock(weather)] : [])
+      ],
       "Champ spatial de l'eau": waterDenied.points.length
         ? [buildWaterDeniedByKingdomBlock(waterDenied)]
         : []
@@ -163,8 +161,7 @@ function buildInfernalBlock(infernal) {
   );
 
   return {
-    eyebrow: "Partie réelle",
-    title: "Dette, apparitions et durée de vie",
+    title: "Dans la partie réelle, les pièces du diable ciblent surtout le royaume noir",
     description:
       "Reprise du graphe gameplay du générateur historique: dettes de sang, marqueurs d'apparition/suppression et bandes de durée de vie des pièces du diable sur la partie chargée.",
     metrics: [
@@ -187,7 +184,6 @@ function buildInfernalBlock(infernal) {
     postChartInterpretation:
       "**Interprétation : on remarque en effet que, de manière générale, la dette de sang pendant la partie a été beaucoup plus élevée côté noir, de manière continue et soutenue. Cela fait qu'au total, même si le processus reste aléatoire, beaucoup plus de pièces du diable ont ciblé le joueur noir plutôt que le joueur blanc. On peut le voir dans l'exemple qui suit.**",
     exampleReplay: {
-      sourceTag: "Partie réelle avec joueur",
       sourceKind: "real",
       label: "LE REPLAY MONTRE LES PIÈCES DU DIABLE CIBLER LE MÊME ROYAUME",
       description:
@@ -244,32 +240,82 @@ function buildInfernalBlock(infernal) {
   };
 }
 
-function buildWeatherBlock(weather) {
-  const ambushPoint = weather.points.find((point) => point.turn === 113) || null;
+function buildWeatherSpawnDataBlock(weather) {
+  const peakFrontCount = maxOf(weather.points.map((point) => point.frontCount), 0);
 
   return {
-    eyebrow: "Partie réelle",
-    title: "Visibilité et brouillards",
+    title: "Dans la partie réelle, les brouillards apparaissent à un rythme naturel",
     description:
-      "Courbes de visibilité pendant la partie réelle: pièces ennemies masquées par royaume, avec marqueurs d'entrée et de fin des brouillards.",
+      "Repères synthétiques sur le rythme d'apparition et de disparition des fronts météo pendant la partie réelle.",
     metrics: [
-      { label: "Couverture moyenne", value: formatStatNumber(weather.averageCloudCoverage) },
       {
         label: "Intervalle moyen",
         value: weather.averageSpawnInterval ? `${formatStatNumber(weather.averageSpawnInterval)} tours` : "n/d"
       },
-      { label: "Brouillards observés", value: formatInteger(weather.spawnEvents.length) },
-      { label: "Pic de pièces masquées", value: formatInteger(weather.peakHiddenPieces) }
+      {
+        label: "Brouillards observés",
+        value: formatInteger(weather.spawnEvents.length),
+        unit: "brouillards"
+      },
+      {
+        label: "Pic de nuages actifs",
+        value: formatInteger(peakFrontCount),
+        unit: "brouillards"
+      }
     ],
     insights: [
-      `${formatInteger(weather.spawnEvents.length)} apparitions et ${formatInteger(weather.endEvents.length)} fins de brouillards observées sur la partie réelle.`
+      peakFrontCount > 1
+        ? `La partie réelle alterne des phases sans nuage et des chevauchements ponctuels, avec jusqu'à ${formatInteger(peakFrontCount)} nuages simultanés.`
+        : "La partie réelle alterne des phases avec et sans nuage, sans accumulation excessive de nuages à l'écran."
+    ],
+    exampleReplay: {
+      sourceKind: "real",
+      label: "Apparition des nuages dans le replay de la partie réelle",
+      description:
+        "On voit sur ce replay que l'apparition des nuages est très naturelle et très fluide. De temps en temps, plusieurs nuages peuvent être présents sur la carte. À d'autres moments, il n'y en a pas, mais on n'observe jamais une saturation de nuages ni une très grande attente entre deux apparitions.",
+      viewer: {
+        replayUrl: REPLAY_CONFIG.replayUrl,
+        minTurn: 40,
+        initialTurn: 40,
+        autoplayOnMount: true,
+        autoplayIntervalMs: 100,
+        loopPlayback: true,
+        initialZoom: 1.85,
+        trackedTarget: {
+          kind: "cloud"
+        },
+        updateCameraOnEveryTick: true,
+        lockCamera: true,
+        showStatusOverlay: false
+      }
+    }
+  };
+}
+
+function buildWeatherVisibilityBlock(weather) {
+  const ambushPoint = weather.points.find((point) => point.turn === 113) || null;
+
+  return {
+    title: "Dans la partie réelle, les brouillards ont permis une embuscade décisive",
+    description:
+      "Ce graphique suit, tour après tour, combien de pièces ennemies sont effectivement masquées par les brouillards pour chaque royaume.",
+    metrics: [
+      {
+        label: "Pic de pièces masquées",
+        value: formatInteger(weather.peakHiddenPieces),
+        unit: "pièces"
+      },
+      {
+        label: "Couverture moyenne",
+        value: formatStatNumber(weather.averageCloudCoverage),
+        unit: "cellules"
+      }
     ],
     chartHeight: 360,
-    chartLabel: "Visibilité et brouillards sur la partie réelle",
+    chartLabel: "Pièces ennemies masquées par royaume sur la partie réelle",
     postChartInterpretation:
       "**Interprétation : on remarque que vers la fin de la partie, avant l'échec et mat, une partie des pièces ennemies, en pratique des pièces noires du point de vue blanc, sont masquées. Cela traduit une embuscade du joueur noir, qui va finalement lui permettre de gagner la partie, comme on peut le voir dans l'exemple qui suit.**",
     exampleReplay: {
-      sourceTag: "Partie réelle avec joueur",
       sourceKind: "real",
       label: "Replay de l'embuscade de la partie réelle",
       description:
@@ -298,9 +344,7 @@ function buildWeatherBlock(weather) {
               xIndex: ambushPoint.xIndex,
               color: REPORT_COLORS.ink,
               dashed: true,
-              label: "Embuscade du royaume noir",
-              labelPosition: "insideEndBottom",
-              labelOffset: [0, 10]
+              outsideBottomLabel: "Embuscade du royaume noir"
             }
           ]
         : [],
@@ -312,57 +356,9 @@ function buildWeatherBlock(weather) {
   };
 }
 
-function buildWeatherArrivalDelayBlock(weather) {
-  const peakFrontCount = maxOf(weather.points.map((point) => point.frontCount), 0);
-
-  return {
-    eyebrow: "Partie réelle",
-    title: "La partie réelle confirme une cadence météo fluide",
-    description:
-      "Ce replay complet montre la cadence d'apparition des nuages sur toute la partie réelle, avec une caméra verrouillée qui reste centrée sur le nuage actif et se met à jour à chaque tick.",
-    metrics: [
-      {
-        label: "Intervalle moyen",
-        value: weather.averageSpawnInterval ? `${formatStatNumber(weather.averageSpawnInterval)} tours` : "n/d"
-      },
-      { label: "Apparitions observées", value: formatInteger(weather.spawnEvents.length) },
-      { label: "Pic de nuages actifs", value: formatInteger(peakFrontCount) }
-    ],
-    insights: [
-      peakFrontCount > 1
-        ? `La partie réelle alterne bien des phases sans nuage et des chevauchements ponctuels, avec jusqu'à ${formatInteger(peakFrontCount)} nuages simultanés.`
-        : "La partie réelle alterne des phases avec et sans nuage, sans accumulation excessive de nuages à l'écran."
-    ],
-    exampleReplay: {
-      sourceTag: "Partie réelle avec joueur",
-      sourceKind: "real",
-      label: "Apparition des nuages dans le replay de la partie réelle",
-      description:
-        "On voit sur ce replay que l'apparition des nuages est très naturelle et très fluide. De temps en temps, plusieurs nuages peuvent être présents sur la carte. À d'autres moments, il n'y en a pas, mais on n'observe jamais une saturation de nuages ni une très grande attente entre deux apparitions.",
-      viewer: {
-        replayUrl: REPLAY_CONFIG.replayUrl,
-        minTurn: 0,
-        initialTurn: 0,
-        minTurn: 40,
-        autoplayOnMount: true,
-        autoplayIntervalMs: 100,
-        loopPlayback: true,
-        initialZoom: 1.85,
-        trackedTarget: {
-          kind: "cloud"
-        },
-        updateCameraOnEveryTick: true,
-        lockCamera: true,
-        showStatusOverlay: false
-      }
-    }
-  };
-}
-
 function buildWaterDeniedByKingdomBlock(waterDenied) {
   return {
-    eyebrow: "Partie réelle",
-    title: "Cellules refusées par l'eau par royaume",
+    title: "Dans la partie réelle, l'eau gêne davantage le royaume noir en ouverture",
     description:
       "Cette métrique recompte, à chaque enregistrement de la partie, **les cases de destination qui seraient atteignables si l'eau était retirée**, puis soustrait les pseudo-coups réellement autorisés sur le plateau courant. Le résultat est ensuite **sommé sur toutes les pièces d'un royaume**: une courbe haute signifie donc que l'eau supprime beaucoup d'options de déplacement à cet instant, pas qu'un royaume est bloqué partout sur la carte. Les murs et les autres obstacles restent inchangés pendant ce recalcul; **on isole uniquement l'effet de l'eau**.",
     metrics: [
@@ -378,7 +374,6 @@ function buildWaterDeniedByKingdomBlock(waterDenied) {
     postChartInterpretation:
       "**Interprétation : au début de la partie réelle, la courbe noire dépasse nettement la courbe blanche. L'eau a donc beaucoup plus empêché les premiers déplacements du royaume noir que ceux du royaume blanc. Cette contrainte initiale a freiné le développement noir et a contribué à l'avance prise par les Blancs au début de la partie.**",
     exampleReplay: {
-      sourceTag: "Partie réelle avec joueur",
       sourceKind: "real",
       label: "Exemple tiré de la partie réelle",
       description:
@@ -1649,6 +1644,7 @@ function kingdomKeyFromId(value) {
 function buildTimelineOption({ series, xAxisName, yAxes, markers = [], spans = [] }) {
   const option = baseGridOption();
   const xRows = series.length ? series[0].rows : [];
+  const outsideBottomMarkers = markers.filter((marker) => Boolean(marker.outsideBottomLabel));
 
   option.tooltip = {
     ...option.tooltip,
@@ -1661,7 +1657,7 @@ function buildTimelineOption({ series, xAxisName, yAxes, markers = [], spans = [
   option.grid = {
     ...option.grid,
     right: yAxes.length > 1 ? 72 : 18,
-    bottom: 68
+    bottom: outsideBottomMarkers.length ? 92 : 68
   };
   option.xAxis = {
     ...option.xAxis,
@@ -1688,6 +1684,17 @@ function buildTimelineOption({ series, xAxisName, yAxes, markers = [], spans = [
     index === 0 ? markers : [],
     index === 0 ? spans : []
   ));
+
+  if (outsideBottomMarkers.length) {
+    option.series.push(buildTimelineBottomMarkerLabelSeries(outsideBottomMarkers));
+  }
+
+  option.legend = {
+    ...option.legend,
+    data: option.series
+      .map((series) => series && series.name)
+      .filter((name) => typeof name === "string" && !name.startsWith("__"))
+  };
 
   return option;
 }
@@ -1793,6 +1800,9 @@ function buildTimelineSeries(spec, markers, spans) {
               formatter: marker.label,
               position: marker.labelPosition || "insideEndTop",
               offset: Array.isArray(marker.labelOffset) ? marker.labelOffset : [0, 0],
+              rotate: Number.isFinite(Number(marker.labelRotate)) ? Number(marker.labelRotate) : undefined,
+              align: marker.labelAlign || undefined,
+              verticalAlign: marker.labelVerticalAlign || undefined,
               color: marker.color || REPORT_COLORS.ink,
               fontFamily: 'Georgia, "Times New Roman", serif',
               fontSize: 11,
@@ -1830,6 +1840,52 @@ function buildTimelineSeries(spec, markers, spans) {
   }
 
   return series;
+}
+
+function buildTimelineBottomMarkerLabelSeries(markers) {
+  return {
+    name: "__timeline_bottom_marker_labels",
+    type: "custom",
+    coordinateSystem: "cartesian2d",
+    silent: true,
+    animation: false,
+    clip: false,
+    z: 30,
+    zlevel: 0,
+    tooltip: {
+      show: false
+    },
+    encode: {
+      x: 0,
+      y: 1,
+      tooltip: []
+    },
+    data: markers.map((marker) => ([
+      marker.xIndex,
+      0,
+      marker.outsideBottomLabel,
+      marker.color || REPORT_COLORS.ink
+    ])),
+    renderItem(params, api) {
+      const coordSys = params.coordSys;
+      const x = api.coord([api.value(0), api.value(1)])[0];
+      const y = coordSys.y + coordSys.height + 28;
+
+      return {
+        type: "text",
+        silent: true,
+        x,
+        y,
+        style: {
+          text: api.value(2),
+          fill: api.value(3),
+          font: '700 11px Georgia, "Times New Roman", serif',
+          textAlign: "center",
+          textVerticalAlign: "top"
+        }
+      };
+    }
+  };
 }
 
 function buildInfernalSpanOverlaySeries({ name, legendColor, spans }) {

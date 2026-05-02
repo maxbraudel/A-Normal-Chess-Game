@@ -28,7 +28,7 @@ function getObservedSourceMeta(label) {
   if (loweredLabel.includes("partie réelle") || loweredLabel.includes("partie reelle")) {
     return {
       kind: "real",
-      tag: "Partie réelle avec joueur"
+      tag: "Partie réelle"
     };
   }
 
@@ -102,6 +102,23 @@ function getRelatedProcessKey(entry, index) {
   }
 
   return entry.title || entry.href || `related-${index}`;
+}
+
+function getObservedBlockEntries(observedSections, observedData, observedDataLabel) {
+  const sections = observedSections.length
+    ? observedSections
+    : [{ label: observedDataLabel, blocks: observedData }];
+
+  return sections.flatMap((section, sectionIndex) => {
+    const sourceMeta = getObservedSourceMeta(section.label);
+
+    return (section.blocks || []).map((block, blockIndex) => ({
+      key: `${section.label}-${block.title}-${sectionIndex}-${blockIndex}`,
+      block,
+      sourceKind: sourceMeta.kind,
+      sourceTag: sourceMeta.tag
+    }));
+  });
 }
 
 defineProps({
@@ -253,21 +270,15 @@ defineProps({
       v-if="observedSections.length || observedData.length"
       class="rapport-process-card__field"
     >
-      <div
-        v-for="section in (observedSections.length ? observedSections : [{ label: observedDataLabel, blocks: observedData }])"
-        :key="section.label"
-        class="rapport-process-card__observed-section"
-      >
-        <div class="rapport-process-card__observed">
-          <RapportStatsBlock
-            v-for="block in (section.blocks || [])"
-            :key="`${section.label}-${block.title}`"
-            :block="block"
-            :source-kind="getObservedSourceMeta(section.label).kind"
-            :source-tag="getObservedSourceMeta(section.label).tag"
-            embedded
-          />
-        </div>
+      <div class="rapport-process-card__observed">
+        <RapportStatsBlock
+          v-for="entry in getObservedBlockEntries(observedSections, observedData, observedDataLabel)"
+          :key="entry.key"
+          :block="entry.block"
+          :source-kind="entry.sourceKind"
+          :source-tag="entry.sourceTag"
+          embedded
+        />
       </div>
     </div>
   </article>

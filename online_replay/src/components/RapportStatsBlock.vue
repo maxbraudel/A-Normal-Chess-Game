@@ -21,6 +21,21 @@ defineProps({
     default: false
   }
 });
+
+function formatMetricValue(metric) {
+  if (!metric) {
+    return "";
+  }
+
+  const value = metric.value ?? "";
+  const unit = typeof metric.unit === "string" ? metric.unit.trim() : "";
+
+  if (!unit || value === "" || value === "n/d") {
+    return value;
+  }
+
+  return `${value} ${unit}`;
+}
 </script>
 
 <template>
@@ -42,7 +57,7 @@ defineProps({
 
     <div v-if="block.metrics?.length" class="rapport-stats-block__metrics">
       <article v-for="metric in block.metrics" :key="metric.label" class="rapport-stats-metric">
-        <p class="rapport-stats-metric__value">{{ metric.value }}</p>
+        <p class="rapport-stats-metric__value">{{ formatMetricValue(metric) }}</p>
         <p class="rapport-stats-metric__label">{{ metric.label }}</p>
       </article>
     </div>

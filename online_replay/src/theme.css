@@ -957,12 +957,12 @@ a {
 
 .rapport-process-card__observed-section {
   display: grid;
-  gap: 12px;
+  gap: 0;
 }
 
 .rapport-process-card__observed-section + .rapport-process-card__observed-section {
-  padding-top: 18px;
-  border-top: 1px solid rgba(240, 213, 143, 0.12);
+  padding-top: 0;
+  border-top: 0;
 }
 
 .rapport-stats-collection {
@@ -1133,8 +1133,9 @@ a {
 }
 
 .rapport-stats-block--embedded + .rapport-stats-block--embedded {
-  padding-top: 18px;
-  border-top: 1px solid rgba(240, 213, 143, 0.12);
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .rapport-stats-block--embedded .rapport-stats-block__header h3 {
@@ -1534,9 +1535,9 @@ a {
 }
 
 .site-shell--rapport .rapport-stats-block--embedded + .rapport-stats-block--embedded {
-  margin-top: 22px;
-  padding-top: 22px;
-  border-top: 1px solid #e3e3e3;
+  margin-top: 0;
+  padding-top: 0;
+  border-top: 0;
 }
 
 .site-shell--rapport .rapport-process-card__observed {

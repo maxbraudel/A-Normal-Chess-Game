@@ -186,7 +186,7 @@ function buildGroupedBarOption({ categories, series, rotateLabels = false, xAxis
   return option;
 }
 
-function buildHistogramOption({ categories, values, color, rotateLabels = false, xAxisName, yAxisName }) {
+function buildHistogramOption({ categories, values, color, rotateLabels = false, xAxisName, yAxisName, labelInterval = 0 }) {
   const option = baseGridOption();
   option.legend = undefined;
   option.xAxis = {
@@ -204,7 +204,7 @@ function buildHistogramOption({ categories, values, color, rotateLabels = false,
     data: categories,
     axisLabel: {
       ...option.xAxis.axisLabel,
-      interval: 0,
+      interval: labelInterval,
       rotate: rotateLabels ? 28 : 0
     }
   };
@@ -539,25 +539,28 @@ const processStatsByTitle = {
   ],
   "Délai entre deux brouillards": [
     {
-      title: "Les inter-arrivées météo restent compatibles avec la Gamma paramétrée",
+      title: "Le jeu attend bien environ 40 tours entre deux brouillards",
       description:
-        "La comparaison la plus propre ici porte sur les temps d'attente entre brouillards. L'écart entre la moyenne empirique et la moyenne théorique reste faible dans le batch intégré, ce qui valide bien le cœur du générateur temporel de météo.",
+        "Ici, on mesure le nombre de tours qui s'écoulent entre deux apparitions de brouillards. La moyenne théorique correspond au rythme visé par la configuration du générateur : autour de 40 tours avant qu'un nouveau brouillard n'entre en moyenne sur la carte. La moyenne observée reste très proche de cette cible dans le batch intégré, ce qui montre que le rythme météo joué correspond bien au rythme prévu.",
       metrics: [
         {
-          label: "Moyenne théorique",
-          value: formatNumber(weatherSystem.expected.arrivalContinuousReferenceMean, 1)
+          label: "Délai moyen visé",
+          value: formatNumber(weatherSystem.expected.arrivalContinuousReferenceMean, 1),
+          unit: "tours"
         },
         {
-          label: "Moyenne observée",
-          value: formatNumber(weatherSystem.summary.arrival_delay_turns.mean, 1)
+          label: "Délai moyen observé",
+          value: formatNumber(weatherSystem.summary.arrival_delay_turns.mean, 1),
+          unit: "tours"
         },
         {
-          label: "Amplitude observée",
+          label: "Plage observée",
           value: formatRange(
             weatherSystem.summary.arrival_delay_turns.min,
             weatherSystem.summary.arrival_delay_turns.max,
             0
-          )
+          ),
+          unit: "tours"
         }
       ],
       chartHeight: 300,
@@ -566,33 +569,35 @@ const processStatsByTitle = {
         categories: weatherArrivalEntries.map(([value]) => String(value)),
         values: weatherArrivalEntries.map(([, count]) => count),
         color: COLORS.slate,
+        labelInterval: 1,
         xAxisName: "Délai d'arrivée (tours)",
         yAxisName: "Occurrences"
       })
-    }
-  ],
-  "Durée visible d'un brouillard": [
+    },
     {
-      title: "Les brouillards se chevauchent parfois, mais l'état dominant reste 0 ou 1 brouillard actif",
+      title: "Les brouillards se chevauchent parfois",
       description:
-        "La distribution du nombre de nuages simultanés capture une conséquence gameplay immédiate de la dynamique temporelle, sans dépendre des joueurs.",
+        "Les fronts météo avancent à vitesse fixe et plutôt lente. Si deux délais d'apparition tombent très près l'un de l'autre, un nouveau nuage peut entrer avant que le précédent soit complètement sorti : ce n'est pas fréquent, mais cela arrive.",
       metrics: [
         {
           label: "Moyenne de brouillards actifs par pas",
-          value: formatNumber(weatherSystem.summary.active_front_count_per_step.mean, 2)
+          value: formatNumber(weatherSystem.summary.active_front_count_per_step.mean, 2),
+          unit: "brouillards"
         },
         {
           label: "Maximum observé par monde",
-          value: formatNumber(weatherSystem.summary.max_active_fronts_per_world.max, 0)
+          value: formatNumber(weatherSystem.summary.max_active_fronts_per_world.max, 0),
+          unit: "brouillards"
         },
         {
           label: "Moyenne de brouillards apparus",
-          value: formatNumber(weatherSystem.summary.spawned_fronts_per_world.mean, 1)
+          value: formatNumber(weatherSystem.summary.spawned_fronts_per_world.mean, 1),
+          unit: "brouillards"
         }
       ],
       insights: [
         `Dans l'export intégré, le chevauchement à deux brouillards existe déjà (${weatherSystem.histograms.active_front_count[2] || 0} pas observés), mais reste nettement minoritaire face aux états 0 et 1.`,
-        "C'est un bon exemple de statistique émergente qui reste pourtant **entièrement indépendante des actions des joueurs**."
+        "La cause est simple : des délais d'arrivée parfois courts, combinés à une vitesse de front volontairement lente, peuvent produire un recouvrement temporaire."
       ],
       chartHeight: 290,
       chartLabel: "Distribution du nombre de brouillards météo simultanément actifs",
