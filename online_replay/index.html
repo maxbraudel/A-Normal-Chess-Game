@@ -5,9 +5,77 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="theme-color" content="#ffffff">
 <title>ANCG - Analyse probabiliste</title>
+<link rel="icon" type="image/png" href="./assets/textures/website/favicon.png">
+<style>
+html,
+body {
+	margin: 0;
+	min-height: 100%;
+	background: #ffffff;
+	color: #101010;
+}
+
+#app {
+	min-height: 100vh;
+	background: #ffffff;
+}
+
+.startup-loader {
+	position: fixed;
+	inset: 0;
+	z-index: 9999;
+	display: grid;
+	place-items: center;
+	background: #ffffff;
+	opacity: 1;
+	visibility: visible;
+	transition: opacity 220ms ease, visibility 220ms ease;
+}
+
+.startup-loader--hidden {
+	opacity: 0;
+	visibility: hidden;
+	pointer-events: none;
+}
+
+.startup-loader__content {
+	display: grid;
+	gap: 20px;
+	justify-items: center;
+}
+
+.startup-loader__icon {
+	width: 100px;
+	height: 100px;
+	display: block;
+	image-rendering: pixelated;
+	image-rendering: crisp-edges;
+	-ms-interpolation-mode: nearest-neighbor;
+}
+
+.startup-loader__label {
+	margin: 0;
+	color: #101010;
+	font-family: Georgia, "Times New Roman", serif;
+	font-size: 18px;
+	letter-spacing: 0.05em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.startup-loader {
+		transition: none;
+	}
+}
+</style>
 <script type="module" src="./src/main.js"></script>
 </head>
-<body style="margin:0;background:#ffffff;color:#101010;">
+<body>
+<div id="startup-loader" class="startup-loader" role="status" aria-live="polite" aria-label="Chargement du rapport">
+	<div class="startup-loader__content">
+		<img class="startup-loader__icon" src="./assets/textures/website/favicon.png" alt="" aria-hidden="true">
+		<p class="startup-loader__label">Chargement du rapport</p>
+	</div>
+</div>
 <div id="app" style="min-height:100vh;background:#ffffff;"></div>
 </body>
 </html>

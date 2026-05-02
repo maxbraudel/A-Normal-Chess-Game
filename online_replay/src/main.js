@@ -5,6 +5,23 @@ import "./theme.css";
 import App from "./App.vue";
 import router from "./router/index.js";
 
+function dismissStartupLoader() {
+	const startupLoader = document.getElementById("startup-loader");
+
+	if (!startupLoader || startupLoader.classList.contains("startup-loader--hidden")) {
+		return;
+	}
+
+	startupLoader.classList.add("startup-loader--hidden");
+
+	const removeLoader = () => {
+		startupLoader.remove();
+	};
+
+	startupLoader.addEventListener("transitionend", removeLoader, { once: true });
+	window.setTimeout(removeLoader, 320);
+}
+
 function stopBlockedInteraction(event) {
 	event.preventDefault();
 	event.stopPropagation();
@@ -39,3 +56,7 @@ function installInteractionGuards() {
 installInteractionGuards();
 
 createApp(App).use(router).mount("#app");
+
+window.setTimeout(() => {
+	dismissStartupLoader();
+}, 0);
