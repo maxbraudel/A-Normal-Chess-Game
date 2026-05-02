@@ -1153,9 +1153,13 @@ const parameterSectionsByTitle = {
   ],
   "Type de récompense du coffre": [
     createParameterSection("Paramètres de loi", [
-      "début de partie : poids `(8, 3, 3)` pour `(or, mouvement, construction)`",
-      "fin de partie : poids `(4, 6, 6)` pour `(or, mouvement, construction)`",
+      "début de partie : poids `(8, 3, 3)` pour `(or, mouvement, construction)`, somme = `14`",
+      "fin de partie : poids `(4, 6, 6)` pour `(or, mouvement, construction)`, somme = `16`",
       "bascule de régime au tour `late_game_turn = 10`"
+    ]),
+    createParameterSection("Probabilités associées", [
+      "early : `P(or) = 8/14 ≈ 57.1 %`, `P(mouvement) = 3/14 ≈ 21.4 %`, `P(construction) = 3/14 ≈ 21.4 %`",
+      "late : `P(or) = 4/16 = 25.0 %`, `P(mouvement) = 6/16 = 37.5 %`, `P(construction) = 6/16 = 37.5 %`"
     ]),
     createParameterSection("Payoffs associés", [
       "branche or : montant tiré par la normale tronquée dédiée de moyenne `35`",
@@ -1169,13 +1173,16 @@ const parameterSectionsByTitle = {
   "Direction du brouillard": [
     createParameterSection("Paramètres de loi", [
       "ordre des catégories : `(N, S, E, W, NE, NW, SE, SW)`",
-      "`direction_weights = (1, 1, 1, 1, 1, 1, 1, 1)`"
+      "`direction_weights = (1, 1, 1, 1, 1, 1, 1, 1)` — poids égaux = uniforme",
+      "probabilité par direction : `P(D = d) = 1/8 = 12.5 %`"
     ])
   ],
   "Type de cible primaire d'une pièce du diable": [
     createParameterSection("Paramètres de loi", [
       "poids actifs : `pawn = 8`, `knight = 14`, `bishop = 14`, `rook = 26`, `queen = 38`",
-      "les types non visibles reçoivent le poids `0`"
+      "somme des poids = `100` quand tous les types sont visibles",
+      "probabilités quand tous visibles : `P(pion) = 8 %`, `P(cavalier) = 14 %`, `P(fou) = 14 %`, `P(tour) = 26 %`, `P(reine) = 38 %`",
+      "les types non visibles reçoivent le poids `0` (support réduit dynamiquement)"
     ])
   ],
   "Option d'apparition ciblée d'une pièce du diable": [
@@ -1198,8 +1205,11 @@ const parameterSectionsByTitle = {
   ],
   "Déclenchement d'apparition d'une pièce du diable": [
     createParameterSection("Paramètres de loi", [
-      L`\lambda_t = \min\!\bigl(0.25, 0.02 + 0.012\,\mathrm{debt}_t\bigr)`,
-      "base `0.02`, incrément par dette `0.012`, cap `0.25`"
+      L`\lambda_t = \min\!\bigl(\lambda_{max},\; \lambda_{base} + \lambda_{debt}\cdot d_t\bigr),\qquad d_t = \text{dette}_{blanc}+\text{dette}_{noir}`,
+      "`poisson_lambda_base_times_1000 = 20`, soit `λ_{base} = 0.020`",
+      "`poisson_lambda_per_debt_times_1000 = 12`, soit `λ_{debt} = 0.012` par point de dette",
+      "`poisson_lambda_cap_times_1000 = 250`, soit `λ_{max} = 0.250`",
+      L`P(N\ge 1)\big|_{\lambda_{max}} = 1-e^{-0.25}\approx 22.1\,\%`
     ]),
     createParameterSection("Calendrier runtime", [
       "tour minimal de première apparition : `min_spawn_turn = 3`",
@@ -1210,7 +1220,9 @@ const parameterSectionsByTitle = {
   "Récompenses d'XP": [
     createParameterSection("Transformation commune", [
       L`\sigma = \max\!\left(1, \mu\cdot \frac{\text{sigmaMultiplierTimes100}}{100}\right)`,
-      "troncature commune à `± 2σ`, puis `round`, puis plancher `minimum = 1`"
+      "`clamp_sigma_multiplier_times_100 = 200` pour tous les profils",
+      L`\delta = \sigma\cdot\frac{200}{100} = 2\sigma\quad\Rightarrow\quad\text{troncature à }[\mu-2\sigma,\,\mu+2\sigma]`,
+      "puis `round`, puis plancher `minimum = 1`"
     ]),
     createParameterSection("Profils par source", [
       "`kill_pawn` : `μ = 20`, `σ = 3.6`, intervalle tronqué `[12.8, 27.2]`, `minimum = 1`",
