@@ -1,6 +1,7 @@
 const L = String.raw;
 
 import { processIllustrationsByKey } from "./randomnessIllustrations.js";
+import { buildReportProcessAnchor } from "../utils/reportAnchors.js";
 
 function withProcessIllustration(process) {
   const theory = processTheoryByTitle[process.title];
@@ -42,25 +43,25 @@ const uniformProcesses = [
       {
         seedLabel: "Graine terre",
         title: "Champ spatial de la terre",
-        href: "#procedural-fields",
+        href: `#${buildReportProcessAnchor("procedural-fields", "Champ spatial de la terre")}`,
         summary: "Transforme la seed en couverture de terre corrélée et en amas jouables."
       },
       {
         seedLabel: "Graine eau",
         title: "Champ spatial de l'eau",
-        href: "#procedural-fields",
+        href: `#${buildReportProcessAnchor("procedural-fields", "Champ spatial de l'eau")}`,
         summary: "Produit les poches d'eau et les petits lacs à partir d'un bruit distinct de la terre."
       },
       {
         seedLabel: "Graine de forme",
         title: "Bruit de contour du brouillard",
-        href: "#procedural-fields",
+        href: `#${buildReportProcessAnchor("procedural-fields", "Bruit de contour du brouillard")}`,
         summary: "Déforme la frontière de l'ellipse pour obtenir un contour nuageux irrégulier."
       },
       {
         seedLabel: "Graine de densité",
         title: "Densité locale d'un brouillard",
-        href: "#lognormale",
+        href: `#${buildReportProcessAnchor("lognormale", "Densité locale d'un brouillard")}`,
         summary: "Redérive un multiplicateur d'opacité log-normal cellule par cellule."
       }
     ]

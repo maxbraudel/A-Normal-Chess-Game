@@ -109,6 +109,10 @@ defineProps({
     type: Object,
     required: true
   },
+  processAnchorId: {
+    type: String,
+    default: ""
+  },
   defaultRandomnessKind: {
     type: String,
     default: ""
@@ -129,7 +133,7 @@ defineProps({
 </script>
 
 <template>
-  <article class="rapport-process-card">
+  <article :id="processAnchorId || undefined" class="rapport-process-card">
     <header class="rapport-process-card__header">
       <div>
         <p class="rapport-process-card__system">{{ item.system }}</p>

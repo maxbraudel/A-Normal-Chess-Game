@@ -702,6 +702,7 @@ a {
   display: grid;
   gap: 14px;
   align-content: start;
+  scroll-margin-top: 124px;
 }
 
 .rapport-process-card__header {

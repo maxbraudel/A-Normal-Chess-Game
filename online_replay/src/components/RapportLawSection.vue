@@ -2,6 +2,7 @@
 import InlineRichText from "./InlineRichText.vue";
 import MathFormula from "./MathFormula.vue";
 import RapportProcessCard from "./RapportProcessCard.vue";
+import { buildReportProcessAnchor } from "../utils/reportAnchors.js";
 
 function resolveRandomnessKind(kind, isDensity) {
   if (kind) {
@@ -108,6 +109,7 @@ defineProps({
         v-for="item in section.processes"
         :key="item.title"
         :item="item"
+        :process-anchor-id="buildReportProcessAnchor(section.id, item.title)"
         :default-randomness-kind="getDefaultProcessRandomnessKind(section)"
         :observed-sections="observedSectionsByTitle[item.title] || []"
         :observed-data="processStatsByTitle[item.title] || []"
