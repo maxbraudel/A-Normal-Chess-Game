@@ -130,7 +130,7 @@ placement.flipMask             = flipMaskDist(random);`,
       "Conditionne par les placements déjà retenus, donc fortement dépendante de l'historique de génération."
   },
   {
-    title: "Apparition des royaumes",
+    title: "Apparition des rois",
     illustrationKey: "kingdom-spawn-zones",
     system: "Carte",
     lawUse: "Uniforme discrète sur les zones de départ des royaumes",
@@ -146,7 +146,7 @@ placement.flipMask             = flipMaskDist(random);`,
     simulation:
       "Le générateur collecte les cellules valides de chaque bande latérale, puis tire un index uniforme dans le vecteur de candidats du royaume concerné.",
     parameterChoice:
-      "Le pourcentage 25 % vient de `player_spawn_zone_percent` et `ai_spawn_zone_percent`, gardes égaux pour ne pas introduire d'avantage structurel.",
+      "Le pourcentage 25 % vient de `player_spawn_zone_percent`, gardes égaux pour ne pas introduire d'avantage structurel. Cela permet aux rois d'apparaître relativement loin du centre et sur une portion opposée du plateau.",
     dependence:
       "Dépend du terrain déjà généré, donc du couple `worldSeed` + champs procéduraux, et de la contrainte de séparation entre royaumes."
   },
@@ -880,7 +880,7 @@ const processTheoryByTitle = {
     note:
       "La loi est uniforme sur les cellules admissibles du plateau courant, mais une position 2D n'a pas de moment scalaire canonique tant qu'on n'introduit pas une distance ou un score."
   }),
-  "Apparition des royaumes": makePositionTheory({
+  "Apparition des rois": makePositionTheory({
     support: L`A_W\cup A_B\subset \mathbb{Z}^2`,
     law: L`\mathbb{P}(P_K=p\mid p\in A_K)=\frac{1}{|A_K|}`,
     note:

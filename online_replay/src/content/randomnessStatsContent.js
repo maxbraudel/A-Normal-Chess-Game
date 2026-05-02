@@ -323,7 +323,7 @@ const processStatsByTitle = {
       ]
     }
   ],
-  "Apparition des royaumes": [
+  "Apparition des rois": [
     {
       title: "Support observé des zones d'apparition blanche et noire",
       description:
@@ -347,7 +347,7 @@ const processStatsByTitle = {
         "Les colonnes centrales restent hors support ou quasi hors support, ce qui rend la séparation d'ouverture visible dès le premier coup d'œil."
       ],
       chartHeight: 310,
-      chartLabel: "Répartition des colonnes d'apparition des royaumes blanc et noir",
+      chartLabel: "Répartition des colonnes d'apparition des rois blanc et noir",
       chartOption: buildGroupedBarOption({
         categories: spawnColumns.map(String),
         series: [
@@ -559,10 +559,6 @@ const processStatsByTitle = {
             0
           )
         }
-      ],
-      insights: [
-        "Cette statistique relie directement `E[T]=kθ+m` à un histogramme de runtime lisible.",
-        "Les indicateurs comme les directions cardinales sont moins prioritaires ici: ils montrent surtout l'absence de biais, pas une structure gameplay profonde."
       ],
       chartHeight: 300,
       chartLabel: "Histogramme des délais d'arrivée des brouillards météo",

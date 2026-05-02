@@ -2995,14 +2995,23 @@ export const processIllustrationsByKey = {
     description:
       "Sur cette illustration, on peut constater que le poids des différents types de récompenses de coffre évolue au cours de la partie. En début de partie, les récompenses sont plus orientées vers l'économie, tandis qu'en fin de partie, les récompenses sont plus axées construction et mouvement."
   }),
-  "public-building-rotation": buildIllustrationConfig(rotationReplayData),
-  "public-building-flip": buildIllustrationConfig(flipReplayData),
+  "public-building-rotation": buildIllustrationConfig(rotationReplayData, {
+    description:
+      "La position des bâtiments ne change pas. Seule leur orientation tourne d'un quart de tour à l'autre, ce qui montre que les quatre rotations sont traitées symétriquement."
+  }),
+  "public-building-flip": buildIllustrationConfig(flipReplayData, {
+    description:
+      "Le placement reste identique, mais le sprite est retourné horizontalement, verticalement ou dans les deux sens. L'idée est de varier le rendu sans modifier la carte."
+  }),
   "public-building-position": buildIllustrationConfig(placementBuildUpReplayData, {
     autoplayIntervalMs: 950,
     description:
       "À chaque tick, un bâtiment public supplémentaire est ajouté sur la même carte. Le placement privilégie les positions admissibles les mieux dispersées par rapport à l'église centrale et aux bâtiments déjà posés."
   }),
-  "kingdom-spawn-zones": buildIllustrationConfig(combinedSpawnReplayData),
+  "kingdom-spawn-zones": buildIllustrationConfig(combinedSpawnReplayData, {
+    description:
+      "On voit les bandes de départ admissibles des deux royaumes. Les rois apparaissent toujours dans leur zone latérale, sur des cases jouables et avec une séparation initiale suffisante."
+  }),
   "weather-front-diagonal-entry": buildIllustrationConfig(diagonalEntryReplayData, {
     autoplayIntervalMs: 900,
     description:
@@ -3019,15 +3028,27 @@ export const processIllustrationsByKey = {
     description:
       "La direction, le bord d'entrée et la forme générale restent fixes. Seule la couverture cible change : plus le pourcentage monte, plus la masse du brouillard cherche à occuper une grande surface du plateau."
   }),
-  "weather-front-aspect-ratio": buildIllustrationConfig(frontAspectRatioReplayData),
-  "weather-front-density-seed": buildIllustrationConfig(frontDensityReplayData),
-  "public-building-order": buildIllustrationConfig(placementOrderReplayData),
-  "weather-front-direction": buildIllustrationConfig(frontDirectionReplayData),
+  "weather-front-aspect-ratio": buildIllustrationConfig(frontAspectRatioReplayData, {
+    description:
+      "La direction et la surface restent comparables, mais le brouillard s'étire plus ou moins. L'illustration montre comment le rapport d'aspect change la silhouette générale."
+  }),
+  "weather-front-density-seed": buildIllustrationConfig(frontDensityReplayData, {
+    description:
+      "Le contour général reste le même, mais la texture interne change. La graine de densité sert à redistribuer localement l'opacité à l'intérieur d'un même brouillard."
+  }),
+  "public-building-order": buildIllustrationConfig(placementOrderReplayData, {
+    description:
+      "Les mêmes bâtiments sont posés dans des ordres différents. Comme le placement est séquentiel, changer l'ordre change aussi les emplacements finaux retenus."
+  }),
+  "weather-front-direction": buildIllustrationConfig(frontDirectionReplayData, {
+    description:
+      "Chaque tick montre une direction d'arrivée différente pour un brouillard de même type. On voit que la direction change l'orientation de la bande et le sens général de son déplacement."
+  }),
   "infernal-targeted-spawn-option": buildIllustrationConfig(targetedSpawnOptionReplayData, {
     autoplayIntervalMs: 760,
     initialZoom: 1,
     description:
-      "Le terrain reste fixe pendant toute l'illustration. Une dame noire reste cinq fois au même endroit pendant que la dame infernale apparaît sur un bord choisi avec les vrais poids de proximité de chemin, puis la poursuit jusqu'à capture. Après cinq captures, la dame noire change de position, et l'expérience recommence quatre fois au total."
+      "Le terrain reste fixe pendant toute l'illustration. Une dame noire reste cinq fois au même endroit pendant qu'une tour infernale apparaît sur un bord pondéré par proximité de chemin, puis la poursuit jusqu'à capture. Après cinq captures, la dame noire change de position, et la séquence recommence."
   }),
   "infernal-searching-random-move": buildIllustrationConfig(infernalSearchingReplayData, {
     autoplayIntervalMs: 1000,
@@ -3035,10 +3056,24 @@ export const processIllustrationsByKey = {
     description:
       "Ici, la pièce du diable vise le royaume noir. Les pièces noires restent cachées sous un brouillard fixe : elle ne retrouve donc aucune cible visible et erre aléatoirement autour du nuage jusqu'à revoir une pièce noire."
   }),
-  "grass-brightness-beta": buildIllustrationConfig(grassBrightnessReplayData, { initialZoom: 1.7 }),
-  "dirt-field": buildIllustrationConfig(dirtFieldReplayData),
-  "water-field": buildIllustrationConfig(waterFieldReplayData),
-  "terrain-flip-mask": buildIllustrationConfig(terrainFlipReplayData, { initialZoom: 1.7 }),
+  "grass-brightness-beta": buildIllustrationConfig(grassBrightnessReplayData, {
+    initialZoom: 1.7,
+    description:
+      "Le relief et les terrains restent identiques ; seule la luminosité de l'herbe varie. On voit ainsi une majorité de verts proches du ton de base, avec quelques zones plus sombres."
+  }),
+  "dirt-field": buildIllustrationConfig(dirtFieldReplayData, {
+    description:
+      "Chaque tick montre une autre réalisation du champ de terre. On voit apparaître des zones continues et des amas, pas un bruit dispersé cellule par cellule."
+  }),
+  "water-field": buildIllustrationConfig(waterFieldReplayData, {
+    description:
+      "Chaque tick montre une autre réalisation du champ d'eau. Les lacs et poches d'eau restent groupés en formes cohérentes, au lieu d'être répartis au hasard case par case."
+  }),
+  "terrain-flip-mask": buildIllustrationConfig(terrainFlipReplayData, {
+    initialZoom: 1.7,
+    description:
+      "Le type de terrain ne change pas ; seules les textures sont retournées différemment. Cela casse les répétitions visuelles sans modifier la géométrie de la carte."
+  }),
   "weather-front-contour-noise": buildIllustrationConfig(frontContourReplayData, {
     autoplayIntervalMs: 780,
     showStatusOverlay: true,
