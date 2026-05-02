@@ -170,6 +170,7 @@ placement.flipMask             = flipMaskDist(random);`,
   },
   {
     title: "Couverture cible du brouillard",
+    illustrationKey: "weather-front-coverage",
     randomnessKind: "density",
     system: "Météo",
     lawUse: "Uniforme continue sur un intervalle de pourcentage",

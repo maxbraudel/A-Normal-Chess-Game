@@ -2766,6 +2766,29 @@ const infernalSearchingReplayData = createReplayData({
   })
 });
 
+const frontCoveragePercents = [5, 10, 15, 20];
+
+const frontCoverageReplayData = createReplayData({
+  saveName: "illustration-weather-front-coverage",
+  frames: frontCoveragePercents.map(function (coveragePercent) {
+    return createWeatherFrame(weatherBaseGrid, {
+      directionId: WEATHER_DIRECTION_EAST,
+      entryEdge: ENTRY_EDGE_LEFT,
+      edgePosition: weatherMidEdge,
+      coveragePercent,
+      aspectRatio: 2.2,
+      shapeSeed: 51,
+      densitySeed: 19,
+      currentTurnStep: 8,
+      centerAt: weatherIllustrationCenter
+    });
+  })
+});
+
+const frontCoverageStatusValues = frontCoveragePercents.map(function (coveragePercent) {
+  return `${coveragePercent} %`;
+});
+
 const frontAspectRatioReplayData = createReplayData({
   saveName: "illustration-weather-front-aspect-ratio",
   frames: [1.8, 2.2, 2.6].map(function (aspectRatio) {
@@ -2956,7 +2979,7 @@ export const processIllustrationsByKey = {
   "chest-spawn-cell": buildIllustrationConfig(chestSpawnCellReplayData, {
     autoplayIntervalMs: 900,
     description:
-      "Sur la même carte générée, chaque tick montre une case d'apparition possible pour un coffre. Les positions restent sur des cellules admissibles, loin des deux rois et plutôt dans des zones centrales ou contestées."
+      "Sur cette carte générée, on peut voir plusieurs scénarios d'apparition pour un coffre. Les positions restent sur des cellules admissibles, loin des deux rois et plutôt dans des zones centrales ou contestées."
   }),
   "chest-reward-type": buildIllustrationConfig(chestRewardTypeReplayData, {
     autoplayIntervalMs: 720,
@@ -2970,7 +2993,7 @@ export const processIllustrationsByKey = {
     },
     initialZoom: 2.05,
     description:
-      "Chaque paire de ticks montre le coffre central avant puis après ramassage. Les cinq premières ouvertures restent en début de partie avec les poids 8/3/3, les cinq dernières passent en fin de partie avec les poids 4/6/6, et les toasts reprennent le format du replay."
+      "Sur cette illustration, on peut constater que le poids des différents types de récompenses de coffre évolue au cours de la partie. En début de partie, les récompenses sont plus orientées vers l'économie, tandis qu'en fin de partie, les récompenses sont plus axées construction et mouvement."
   }),
   "public-building-rotation": buildIllustrationConfig(rotationReplayData),
   "public-building-flip": buildIllustrationConfig(flipReplayData),
@@ -2984,6 +3007,17 @@ export const processIllustrationsByKey = {
     autoplayIntervalMs: 900,
     description:
       "Ticks 1 à 3 : la diagonale entre par le haut. Ticks 4 à 6 : la même diagonale entre par la gauche. On voit ainsi plus nettement que la direction reste la même, mais que le bord d'entrée change."
+  }),
+  "weather-front-coverage": buildIllustrationConfig(frontCoverageReplayData, {
+    autoplayIntervalMs: 860,
+    showStatusOverlay: true,
+    statusOverlay: {
+      label: "Couverture cible",
+      values: frontCoverageStatusValues,
+      showShield: false
+    },
+    description:
+      "La direction, le bord d'entrée et la forme générale restent fixes. Seule la couverture cible change : plus le pourcentage monte, plus la masse du brouillard cherche à occuper une grande surface du plateau."
   }),
   "weather-front-aspect-ratio": buildIllustrationConfig(frontAspectRatioReplayData),
   "weather-front-density-seed": buildIllustrationConfig(frontDensityReplayData),
