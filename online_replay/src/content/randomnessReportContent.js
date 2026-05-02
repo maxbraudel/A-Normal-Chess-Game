@@ -91,7 +91,7 @@ std::uniform_int_distribution<int> flipMaskDist(0, 3);
 placement.rotationQuarterTurns = rotationDist(random);
 placement.flipMask             = flipMaskDist(random);`,
     parameterChoice:
-      "Quatre états correspondent exactement aux orientations de 90 degrés disponibles.",
+      "Les quatre rotations (0°, 90°, 180°, 270°) épuisent exactement les isométries d'angle discret sur grille carrée; aucune n'est visuellement préférable, donc `P(R = r) = 1/4 = 25 %` pour tout `r ∈ {0, 1, 2, 3}`.",
     dependence:
       "Dépend du flux de génération initial, mais plus du tout après sérialisation de la carte."
   },
@@ -109,7 +109,7 @@ placement.flipMask             = flipMaskDist(random);`,
     simulation:
       "Le code utilise `std::uniform_int_distribution<int>(0, 3)` et transmet le masque à la footprint du bâtiment.",
     parameterChoice:
-      "La cardinalité 4 vient de `kFlipHorizontalMask | kFlipVerticalMask`.",
+      "Les deux axes de retournement (horizontal et vertical) sont indépendants, ce qui engendre exactement `2² = 4` combinaisons d'égale légitimité visuelle : `P(F = f) = 1/4 = 25 %` pour chaque masque.",
     dependence:
       "Statiquement dérivé de la génération de carte."
   },
@@ -341,7 +341,7 @@ switch (dist(generator)) {
     simulation:
       "Le runtime lit `direction_weights`, puis passe le tableau d'entiers a `std::discrete_distribution<int>`.",
     parameterChoice:
-      "Les huit poids unitaires font de cette catégorielle une uniforme deguisement, tout en gardant un point d'extension clair.",
+      "Les huit poids unitaires font de cette catégorielle une uniforme déguisée, tout en gardant un point d'extension clair si on voulait biaiser certaines directions dans une configuration future.",
     dependence:
       "La direction pilote ensuite le bord d'entrée, la trajectoire et les rayons du brouillard."
   },
@@ -361,7 +361,7 @@ switch (dist(generator)) {
     simulation:
       "Le système construit `typeWeights`, met à zéro les types indisponibles, puis tire via `std::discrete_distribution<std::size_t>`.",
     parameterChoice:
-      "Les poids croissants codent un ordre de valeur tactique sans rendre le choix déterministe.",
+      "Les poids (8, 14, 14, 26, 38) reproduisent approximativement la hiérarchie de valeur aux échecs (pion ≈ 1, cavalier/fou ≈ 3, tour ≈ 5, reine ≈ 9) en les resserrant : la reine est `38/8 ≈ 4.75×` plus probable que le pion, mais reste non certaine, ce qui empêche une contre-stratégie triviale.",
     dependence:
       "Dépend de la visibilité courante et des types réellement présents chez le royaume cible."
   },
@@ -430,7 +430,7 @@ return dist(generator) ? KingdomId::White : KingdomId::Black;`,
     simulation:
       "Le système tire un entier uniforme sur `[0, 999]` et compare au seuil 333, ce qui réalise une Bernoulli discrétisée.",
     parameterChoice:
-      "Une probabilité proche de 1/3 maintient de la pression sans rendre la branche erratique dominante.",
+      "Avec `p = 1/3`, la pièce effectue en espérance `1 mouvement aléatoire tous les 3 tours` en phase `Searching`, ce qui maintient une pression perceptible sans que l'errance domine le retour potentiel en `Hunting`.",
     dependence:
       "Conditionné par l'entrée préalable en phase `Searching` et par l'existence d'au moins un coup admissible après filtrage; si une cible visible est retrouvée avant cela, la pièce repasse en `Hunting` et cette Bernoulli ne s'applique plus."
   }
@@ -499,7 +499,7 @@ return std::max(minimum, static_cast<int>(std::lround(x)));`,
     simulationFromUniform:
       "La STL implémente la normale par l'algorithme de **Box-Muller** : à partir de deux uniformes `U1, U2 ∈ (0,1)`, on calcule `Z = sqrt(−2 ln U1) · cos(2π U2)`, puis `X = μ + σZ`. Si X sort de `[a, b]` (troncature), on recommence (`rejection sampling`). Cette méthode tire deux uniformes pour produire deux valeurs gaussiennes indépendantes simultanément.",
     parameterChoice:
-      "Le sigma est proportionnel à la moyenne via `sigma_multiplier_times_100`, ce qui garde une volatilité relative comparable entre petites et grosses récompenses.",
+      "La dispersion est calibrée de façon inversement proportionnelle à la valeur de la récompense : le coefficient `σ/μ` est plus élevé pour les petites sources (≈ 15–18 %) que pour les grosses (≈ 10–12 %), ce qui maintient une variabilité perceptible à chaque échelle sans créer d'écarts absolus déstabilisants pour l'économie d'XP. La troncature à ±2σ et le plancher à 1 sont communs à tous les profils.",
     dependence:
       "Les tirages sont indépendants conditionnellement au profil choisi, mais le profil dépend du type d'événement de jeu."
   },
@@ -521,7 +521,7 @@ return std::max(minimum, static_cast<int>(std::lround(x)));`,
     simulation:
       "Le chemin `sampleGoldRewardAmount -> sampleTruncatedNormal` réutilisé exactement le moteur commun de profils de récompense.",
     parameterChoice:
-      "La moyenne 35 est cohérente avec l'économie initiale et reste bien au-dessus du minimum même après troncature.",
+      "La moyenne `μ = 35` est calibrée sur l'économie initiale; avec `σ = 6.3`, l'intervalle de troncature `[22.4, 47.6]` représente une variabilité de ±36 % autour de la valeur centrale. Tout tirage dans cet intervalle donnant un entier ≥ 22 après arrondi, le plancher `minimum = 1` n'est jamais actif.",
     dependence:
       "Conditionne par le fait que la catégorielle de type de récompense ait déjà choisi la branche or."
   }
@@ -554,7 +554,7 @@ return std::max(config.getChestRespawnCooldownTurns(), delay);`,
     simulationFromUniform:
       "La Weibull admet une **CDF inversible** en forme close : `F(t) = 1 − e^{−(t/λ)^k}`. La méthode de la transformée inverse donne directement `T = λ · (−ln U)^{1/k}` à partir d'une seule uniforme `U ∈ (0,1)`. C'est l'une des lois les plus simples à simuler par inversion exacte.",
     parameterChoice:
-      "`k = 1.8` garde des délais variables tout en évitant une concentration trop forte près de zéro.",
+      "Les paramètres `k = 1.8` et `λ = 6` donnent `E[T] = λ·Γ(1+1/k) ≈ 5.3 tours` et `σ[T] ≈ 3.1 tours`. Avec le plancher `c = 4`, l'espérance effective est `E[D] ≈ 5.3 tours`. La forme `k = 1.8 > 1` concentre la masse sans accumulation excessive près de zéro.",
     dependence:
       "Le délai est resamplé à chaque collecte ou échec d'apparition, mais la logique de placement peut encore reporter l'apparition."
   }
@@ -588,7 +588,7 @@ float sampleGammaTurns(std::mt19937& gen,
     simulationFromUniform:
       "La STL utilise l'algorithme de **Marsaglia-Tsang** (2000) : pour `k ≥ 1`, on pose `d = k − 1/3`, `c = 1/√(9d)`, puis on tire `Z ~ N(0,1)` (via Box-Muller) et on forme `x = d(1 + cZ)³`. Le candidat est accepté avec probabilité `exp(x/d − 1 − ln(x/d)) · exp(−Z²/2)`. Ce test d'accept/reject donne un taux d'acceptation proche de 1 pour les paramètres courants.",
     parameterChoice:
-      "Le passage par la config permet de rallonger ou compresser très simplement la cadence globale des brouillards sans toucher au code.",
+      "Les paramètres `k = 4` et `θ = 10` fixent directement `E[T] = kθ = 40 tours`, `σ[T] = θ√k = 20 tours` et le mode `(k−1)θ = 30 tours` : la cadence gravite autour de 40 tours avec une dispersion notable de ±20 tours. Le passage par la config permet d'ajuster θ pour resserrer ou étirer cette échelle sans toucher au code.",
     dependence:
       "La tentative suivante reste aussi bloquée tant qu'un brouillard actif occupe déjà la carte."
   }
@@ -624,7 +624,7 @@ float multiplier = (float)dist(gen);
     simulationFromUniform:
       "Si `Z ~ N(0,1)` est obtenu via Box-Muller à partir de deux uniformes, alors `X = e^{μ + σZ} ~ LogNormal(μ, σ²)`. La transformation `exp` garantit `X > 0` sans aucun accept/reject. La STL compose directement Box-Muller et l'exponentielle en une seule passe.",
     parameterChoice:
-      "La moyenne géométrique légèrement sous 1 et un sigma modéré donnent surtout des variations fines, ensuite bornées par l'alpha min/max.",
+      "Avec `μ = −0.12` et `σ = 0.35`, la moyenne log-normale est `E[X] = exp(μ + σ²/2) ≈ 0.94` (légèrement sous 1) et la médiane `exp(μ) ≈ 0.89`. Ces valeurs concentrent les multiplicateurs autour de 1 tout en laissant une queue à droite pour des poches très opaques, ensuite bornées par le clamp d'alpha.",
     dependence:
       "Toutes les cellules d'un même brouillard partagent la même graine de densité; le champ n'est donc pas i.i.d. (**indépendant et identiquement distribué**) à l'échelle du brouillard."
   }
@@ -661,7 +661,7 @@ float sampleBeta(std::mt19937& rng, float alpha, float beta) {
     simulationFromUniform:
       "La **représentation de normalisation** de la Beta : si `G1 ~ Γ(α, 1)` et `G2 ~ Γ(β, 1)` sont indépendantes (chacune simulée par Marsaglia-Tsang), alors `X = G1/(G1 + G2) ~ Beta(α, β)`. Le dénominateur `G1 + G2 ~ Γ(α+β, 1)` assure la normalisation. Le code implémente exactement cette construction avec deux `std::gamma_distribution`.",
     parameterChoice:
-      "Le couple (7, 2) et le seuil 0.90 donnent un plateau majoritairement clair, avec juste assez d'irrégularité pour casser la répétition.",
+      "Pour `Beta(7, 2)`, `E[B] = 7/9 ≈ 0.78` et mode `= 6/7 ≈ 0.86`. La masse se concentre dans `[0.6, 1.0]`; le seuil à 0.90 sépare les cellules dont la luminosité est remapée vers `[0.68, 1]` (majorité) de celles qui conservent la valeur nominale (minorité, autour du mode). Le choix `β = 2` crée une queue gauche modérée pour quelques assombrissements visibles sans assombrir uniformitément le plateau.",
     dependence:
       "Chaque cellule dérive son seed d'un hachage de `worldSeed` et de sa position, donc le rendu est fixe pour un monde donné."
   }
@@ -794,7 +794,7 @@ if (dirtScore > dirtThreshold)
     simulation:
       "Le code évalue `valueNoise(shapeSeed, x, y, span)`, déforme la limite effective du brouillard, puis applique un fondu par `edgeSoftness`.",
     parameterChoice:
-      "Une amplitude de 100 % autorise des bosses visibles, ensuite lisses par là grande échelle `span = 6` et le fondu de bord.",
+      "Une amplitude de 100 % autorise des bosses visibles, ensuite lissées par la grande échelle `span = 6` (les déformations couvrent plusieurs cellules) et atténuées au bord par le fondu `edge_softness_percent = 18`.",
     dependence:
       "Toutes les cellules du même brouillard partagent la même graine de forme, donc la corrélation spatiale est intentionnellement forte."
   }
@@ -1081,7 +1081,10 @@ const parameterSectionsByTitle = {
   "Choix de position des bâtiments publics": [
     createParameterSection("Paramètres de sélection", [
       L`K = |A_{top}| = \min\!\left(n,\max\!\left(3,\left\lceil \frac{n}{6}\right\rceil\right)\right)`,
-      L`s(p)=3.5\,d_{any}(p)+2.0\,d_{same}(p)+0.35\,\bar d(p)`
+      L`s(p)=3.5\,d_{any}(p)+2.0\,d_{same}(p)+0.35\,\bar d(p)`,
+      "`d_any(p)` = distance au bâtiment existant le plus proche (tout type)",
+      "`d_same(p)` = distance au bâtiment du même type le plus proche",
+      "`d̄(p)` = distance moyenne à tous les bâtiments existants"
     ]),
     createParameterSection("Support / contraintes", [
       "support courant = origines de footprint géométriquement admissibles pour le bâtiment considéré",
@@ -1144,6 +1147,8 @@ const parameterSectionsByTitle = {
   "Case d'apparition d'un coffre": [
     createParameterSection("Poids / score", [
       L`w(c)=1+\mathrm{centrality}(c)+\mathrm{contestation}(c)`,
+      "`centrality(c) = max(0, 2R − dist(c, centre))` où `R = board.getRadius()`",
+      "`contestation(c) = max(0, 2R − |dist(c, roi_B) − dist(c, roi_N)|)` (distances Manhattan)",
       "toute case admissible conserve un poids strictement positif"
     ]),
     createParameterSection("Support / contraintes", [
@@ -1173,7 +1178,7 @@ const parameterSectionsByTitle = {
   "Direction du brouillard": [
     createParameterSection("Paramètres de loi", [
       "ordre des catégories : `(N, S, E, W, NE, NW, SE, SW)`",
-      "`direction_weights = (1, 1, 1, 1, 1, 1, 1, 1)` — poids égaux = uniforme",
+      "`direction_weights = (1, 1, 1, 1, 1, 1, 1, 1)`, poids égaux = uniforme",
       "probabilité par direction : `P(D = d) = 1/8 = 12.5 %`"
     ])
   ],
@@ -1188,7 +1193,8 @@ const parameterSectionsByTitle = {
   "Option d'apparition ciblée d'une pièce du diable": [
     createParameterSection("Poids / score", [
       L`w(o)=\max\!\bigl(1, 2D-\mathrm{dist}(o)+1\bigr)`,
-      "diamètre de référence : `D = board.getDiameter()`"
+      "diamètre de référence : `D = board.getDiameter()`",
+      "`dist(o)` = longueur du plus court chemin de l'option d'entrée `o` vers la cible"
     ])
   ],
   "Royaume cible d'une pièce du diable": [
@@ -1225,11 +1231,11 @@ const parameterSectionsByTitle = {
       "puis `round`, puis plancher `minimum = 1`"
     ]),
     createParameterSection("Profils par source", [
-      "`kill_pawn` : `μ = 20`, `σ = 3.6`, intervalle tronqué `[12.8, 27.2]`, `minimum = 1`",
-      "`kill_knight` / `kill_bishop` : `μ = 50`, `σ = 8`, intervalle `[34, 66]`, `minimum = 1`",
-      "`kill_rook` : `μ = 100`, `σ = 12`, intervalle `[76, 124]`, `minimum = 1`",
-      "`kill_queen` : `μ = 300`, `σ = 30`, intervalle `[240, 360]`, `minimum = 1`",
-      "`destroy_block` / `arena_per_turn` : `μ = 10`, `σ = 1.5`, intervalle `[7, 13]`, `minimum = 1`"
+      "`kill_pawn` : `μ = 20`, `sigma_multiplier = 18 %`, `σ = 3.6`, intervalle `[12.8, 27.2]`, `minimum = 1`",
+      "`kill_knight` / `kill_bishop` : `μ = 50`, `sigma_multiplier = 16 %`, `σ = 8`, intervalle `[34, 66]`, `minimum = 1`",
+      "`kill_rook` : `μ = 100`, `sigma_multiplier = 12 %`, `σ = 12`, intervalle `[76, 124]`, `minimum = 1`",
+      "`kill_queen` : `μ = 300`, `sigma_multiplier = 10 %`, `σ = 30`, intervalle `[240, 360]`, `minimum = 1`",
+      "`destroy_block` / `arena_per_turn` : `μ = 10`, `sigma_multiplier = 15 %`, `σ = 1.5`, intervalle `[7, 13]`, `minimum = 1`"
     ])
   ],
   "Montant d'or d'un coffre": [

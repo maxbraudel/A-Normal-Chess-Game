@@ -147,7 +147,7 @@ function renderMath(value, displayMode) {
 
 function renderPlainChunk(value) {
   if (looksLikeStandaloneMath(value)) {
-    return renderMath(value.trim(), true);
+    return renderMath(value.trim(), false);
   }
 
   return escapeHtml(value).replace(/\*\*([\s\S]+?)\*\*/g, "<strong>$1</strong>");

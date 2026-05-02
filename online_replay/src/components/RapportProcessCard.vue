@@ -241,11 +241,6 @@ defineProps({
       <InlineRichText :text="item.simulationFromUniform" />
     </div>
 
-    <div class="rapport-process-card__field">
-      <span class="rapport-process-card__label">Choix des paramètres</span>
-      <InlineRichText :text="item.parameterChoice" />
-    </div>
-
     <div v-if="getParameterSections(item).length" class="rapport-process-card__field">
       <span class="rapport-process-card__label">Paramètres</span>
       <div class="rapport-process-card__parameter-sections">
@@ -264,6 +259,11 @@ defineProps({
           </ul>
         </section>
       </div>
+    </div>
+
+    <div class="rapport-process-card__field">
+      <span class="rapport-process-card__label">Choix des paramètres</span>
+      <InlineRichText :text="item.parameterChoice" />
     </div>
 
     <div class="rapport-process-card__field">
