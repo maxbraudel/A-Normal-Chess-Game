@@ -1,6 +1,7 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { mountReplayViewer } from "../../app.js";
+import ReplayToast from "./ReplayToast.vue";
 import { registerViewerVisibility, unregisterViewerVisibility } from "../utils/viewerVisibilityController.js";
 
 const props = defineProps({
@@ -27,6 +28,10 @@ const props = defineProps({
   autoplayOnMount: {
     type: Boolean,
     default: true
+  },
+  toastCooldownMs: {
+    type: Number,
+    default: 0
   },
   loopPlayback: {
     type: Boolean,
@@ -67,6 +72,18 @@ const props = defineProps({
     type: Object,
     default: null
   },
+  showToasts: {
+    type: Boolean,
+    default: false
+  },
+  showStatusOverlay: {
+    type: Boolean,
+    default: false
+  },
+  statusOverlay: {
+    type: Object,
+    default: undefined
+  },
   description: {
     type: String,
     default: undefined
@@ -74,6 +91,8 @@ const props = defineProps({
 });
 
 const viewerRoot = ref(null);
+const toastItems = ref([]);
+const currentFrameIndex = ref(0);
 const showInteractionTooltip = ref(false);
 let viewerInstance = null;
 
@@ -91,6 +110,35 @@ const interactionTooltipItems = computed(() => {
   return items;
 });
 
+const customStatusOverlay = computed(() => {
+  if (!props.statusOverlay || typeof props.statusOverlay !== "object") {
+    return null;
+  }
+
+  const values = Array.isArray(props.statusOverlay.values) ? props.statusOverlay.values : [];
+  const fallbackValue = props.statusOverlay.initialValue ?? null;
+  const safeIndex = Math.min(currentFrameIndex.value, Math.max(0, values.length - 1));
+  const value = values.length ? values[safeIndex] : fallbackValue;
+  const kingdomKey = props.statusOverlay.kingdom === "black" ? "black" : "white";
+  const assetRoot = props.assetRoot || "/assets";
+  const showShield = props.statusOverlay.showShield !== false;
+
+  return {
+    label: typeof props.statusOverlay.label === "string" ? props.statusOverlay.label : "Statut",
+    value: value ?? "-",
+    showShield,
+    shieldAlt: kingdomKey === "black" ? "Bouclier Noirs" : "Bouclier Blancs",
+    shieldSrc: showShield
+      ? `${assetRoot}/textures/ui/${kingdomKey === "black" ? "shield_black" : "shield_white"}.png`
+      : null
+  };
+});
+
+const rootClasses = computed(() => ({
+  "illustration-map--show-toasts": props.showToasts,
+  "illustration-map--show-status-overlay": props.showStatusOverlay && !!customStatusOverlay.value
+}));
+
 const watchedProps = computed(() => [
   props.replayData,
   props.replayUrl,
@@ -98,6 +146,7 @@ const watchedProps = computed(() => [
   props.masterConfigUrl,
   props.autoplayIntervalMs,
   props.autoplayOnMount,
+  props.toastCooldownMs,
   props.loopPlayback,
   props.initialZoom,
   props.minTurn,
@@ -106,7 +155,10 @@ const watchedProps = computed(() => [
   props.enableCellDebug,
   props.enablePerspective,
   props.perspectiveKingdom,
-  props.trackedTarget
+  props.trackedTarget,
+  props.showToasts,
+  props.showStatusOverlay,
+  props.statusOverlay
 ]);
 
 function buildMountOptions() {
@@ -117,7 +169,9 @@ function buildMountOptions() {
     perspectiveEnabled: props.enablePerspective,
     perspectiveKingdom: props.perspectiveKingdom,
     trackedTarget: props.trackedTarget,
-    recenterTrackedTargetOnFrameChange: false
+    recenterTrackedTargetOnFrameChange: false,
+    onToastStateChange: handleToastStateChange,
+    onFrameStateChange: handleFrameStateChange
   };
 
   if (props.replayData) {
@@ -135,6 +189,9 @@ function buildMountOptions() {
   if (typeof props.autoplayIntervalMs === "number") {
     options.autoplayIntervalMs = props.autoplayIntervalMs;
   }
+  if (typeof props.toastCooldownMs === "number") {
+    options.toastCooldownMs = props.toastCooldownMs;
+  }
   if (typeof props.initialZoom === "number") {
     options.initialZoom = props.initialZoom;
   }
@@ -151,6 +208,16 @@ function buildMountOptions() {
   return options;
 }
 
+function handleToastStateChange(nextToasts) {
+  toastItems.value = props.showToasts && Array.isArray(nextToasts) ? nextToasts : [];
+}
+
+function handleFrameStateChange(nextFrameState) {
+  currentFrameIndex.value = Number.isFinite(nextFrameState && nextFrameState.frameIndex)
+    ? Math.max(0, Math.trunc(nextFrameState.frameIndex))
+    : 0;
+}
+
 function showReplayTooltip() {
   showInteractionTooltip.value = true;
 }
@@ -165,12 +232,16 @@ function destroyViewer() {
   }
 
   if (!viewerInstance) {
+    toastItems.value = [];
+    currentFrameIndex.value = 0;
     showInteractionTooltip.value = false;
     return;
   }
 
   viewerInstance.destroy();
   viewerInstance = null;
+  toastItems.value = [];
+  currentFrameIndex.value = 0;
   showInteractionTooltip.value = false;
 }
 
@@ -199,7 +270,7 @@ watch(watchedProps, async () => {
 </script>
 
 <template>
-  <div class="illustration-map">
+  <div :class="['illustration-map', rootClasses]">
     <div
       ref="viewerRoot"
       class="replay-root replay-root--hide-timeline replay-root--hide-turn-overlay illustration-map__viewer"
@@ -248,6 +319,43 @@ watch(watchedProps, async () => {
           </div>
         </div>
       </div>
+
+      <div
+        v-if="customStatusOverlay"
+        class="status-overlay-group status-overlay-group-left illustration-map__custom-overlay-group"
+        aria-hidden="true"
+      >
+        <div class="status-overlay illustration-map__custom-overlay">
+          <img
+            v-if="customStatusOverlay.showShield"
+            class="turn-indicator-icon"
+            :src="customStatusOverlay.shieldSrc"
+            :alt="customStatusOverlay.shieldAlt"
+          >
+          <div class="overlay-meta">
+            <span class="overlay-label">{{ customStatusOverlay.label }}</span>
+            <strong class="overlay-value">{{ customStatusOverlay.value }}</strong>
+          </div>
+        </div>
+      </div>
+
+      <TransitionGroup
+        v-if="props.showToasts"
+        name="replay-toast-list"
+        tag="div"
+        class="replay-toast-stack"
+        aria-live="polite"
+      >
+        <ReplayToast
+          v-for="toast in toastItems"
+          :key="toast.id"
+          :shield-src="toast.shieldSrc"
+          :shield-alt="toast.shieldAlt"
+          :label="toast.label"
+          :message="toast.message"
+          :tone="toast.tone"
+        />
+      </TransitionGroup>
 
       <div class="zoom-controls" aria-label="Contrôles de zoom">
         <button

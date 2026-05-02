@@ -22,6 +22,10 @@ const PIECE_ROOK = 3;
 const PIECE_QUEEN = 4;
 const PIECE_KING = 5;
 
+const CHEST_REWARD_GOLD = 0;
+const CHEST_REWARD_MOVEMENT_MAX_BONUS = 1;
+const CHEST_REWARD_BUILD_MAX_BONUS = 2;
+
 const WEATHER_DIRECTION_NORTH = 0;
 const WEATHER_DIRECTION_SOUTH = 1;
 const WEATHER_DIRECTION_EAST = 2;
@@ -135,6 +139,45 @@ const publicStructureTemplates = {
     anchorSourceLocal: { x: 2, y: 1 }
   }
 };
+
+const CHEST_REWARD_TYPES = Object.freeze({
+  gold: {
+    id: CHEST_REWARD_GOLD,
+    key: "gold",
+    label: "Gold",
+    buildDescription(amount) {
+      return `+${amount} gold`;
+    },
+    buildMessage(kingdomLabel, amount) {
+      return `${kingdomLabel} gained +${amount} gold.`;
+    }
+  },
+  movement_points_max_bonus: {
+    id: CHEST_REWARD_MOVEMENT_MAX_BONUS,
+    key: "movement_points_max_bonus",
+    label: "Movement Points",
+    buildDescription(amount) {
+      return `+${amount} max movement point per turn`;
+    },
+    buildMessage(kingdomLabel, amount) {
+      return `${kingdomLabel} permanently gained +${amount} max movement point per turn.`;
+    }
+  },
+  build_points_max_bonus: {
+    id: CHEST_REWARD_BUILD_MAX_BONUS,
+    key: "build_points_max_bonus",
+    label: "Build Points",
+    buildDescription(amount) {
+      return `+${amount} max build point per turn`;
+    },
+    buildMessage(kingdomLabel, amount) {
+      return `${kingdomLabel} permanently gained +${amount} max build point per turn.`;
+    }
+  }
+});
+
+const CHEST_EARLY_REWARD_WEIGHTS = Object.freeze([8, 3, 3]);
+const CHEST_LATE_REWARD_WEIGHTS = Object.freeze([4, 6, 6]);
 
 function deepClone(value) {
   return JSON.parse(JSON.stringify(value));
@@ -1030,6 +1073,42 @@ function createInfernalUnit({ id, pieceType, x, y, targetKingdom = 0, phase = IN
   };
 }
 
+function createChest({ id, x, y }) {
+  return {
+    id,
+    type: 0,
+    x,
+    y
+  };
+}
+
+function createChestRewardNotification({ kingdom = 0, rewardTypeKey = "gold", amount = 0 }) {
+  const rewardType = CHEST_REWARD_TYPES[rewardTypeKey] || CHEST_REWARD_TYPES.gold;
+  const kingdomKey = kingdom === 1 ? "black" : "white";
+  const kingdomLabel = kingdomKey === "black" ? "Black" : "White";
+
+  return {
+    kind: 0,
+    kindKey: "chest_reward",
+    kindLabel: "Chest Reward",
+    kingdom,
+    kingdomKey,
+    kingdomLabel,
+    chestRewardType: rewardType.id,
+    chestRewardTypeKey: rewardType.key,
+    chestRewardAmount: amount,
+    chestReward: {
+      typeId: rewardType.id,
+      typeKey: rewardType.key,
+      typeLabel: rewardType.label,
+      amount,
+      description: rewardType.buildDescription(amount)
+    },
+    title: "Chest Opened",
+    message: rewardType.buildMessage(kingdomLabel, amount)
+  };
+}
+
 function resolveBuildingFootprint(building) {
   return {
     width: getFootprintWidthFor(building.w, building.h, building.rot || 0),
@@ -1283,6 +1362,137 @@ function buildPlacementBuildUpFrames(terrainWorldSeed, placementRequests, order)
   }
 
   return frames;
+}
+
+function euclideanDistance(left, right) {
+  const dx = left.x - right.x;
+  const dy = left.y - right.y;
+  return Math.sqrt((dx * dx) + (dy * dy));
+}
+
+function cellOccupiedByBuildings(buildings, x, y) {
+  return buildings.some(function (building) {
+    return buildingOccupiesCell(building, x, y);
+  });
+}
+
+function buildChestSpawnCandidates(grid, publicBuildings, whiteKing, blackKing) {
+  const center = getIllustrationBoardCenter(grid);
+  const candidates = [];
+
+  for (let y = 0; y < grid.length; y += 1) {
+    for (let x = 0; x < grid[y].length; x += 1) {
+      const cell = grid[y][x];
+      if (!cell.c || cell.t === TERRAIN_WATER) {
+        continue;
+      }
+      if (cellOccupiedByBuildings(publicBuildings, x, y)) {
+        continue;
+      }
+      if ((x === whiteKing.x && y === whiteKing.y) || (x === blackKing.x && y === blackKing.y)) {
+        continue;
+      }
+
+      const current = { x, y };
+      const whiteDistance = euclideanDistance(current, whiteKing);
+      const blackDistance = euclideanDistance(current, blackKing);
+      if (Math.min(whiteDistance, blackDistance) < 6) {
+        continue;
+      }
+
+      const radialDistance = euclideanDistance(current, center);
+      const centrality = Math.max(0, Math.round((BOARD_RADIUS - radialDistance) * 1.6));
+      const contestation = Math.max(0, Math.round((BOARD_RADIUS * 0.7) - Math.abs(whiteDistance - blackDistance)));
+      const weight = Math.max(1, 1 + centrality + contestation);
+      candidates.push({ x, y, weight });
+    }
+  }
+
+  return candidates;
+}
+
+function sampleWeightedUniqueCells(candidates, sampleCount, seed) {
+  const generator = createSeededGenerator(seed >>> 0);
+  const pool = candidates.slice();
+  const selections = [];
+
+  while (pool.length && selections.length < sampleCount) {
+    const totalWeight = pool.reduce(function (sum, candidate) {
+      return sum + candidate.weight;
+    }, 0);
+    let threshold = generator.nextFloat() * Math.max(totalWeight, EPSILON);
+    let pickedIndex = 0;
+
+    for (let index = 0; index < pool.length; index += 1) {
+      threshold -= pool[index].weight;
+      if (threshold <= 0) {
+        pickedIndex = index;
+        break;
+      }
+    }
+
+    const [picked] = pool.splice(pickedIndex, 1);
+    selections.push({ x: picked.x, y: picked.y });
+  }
+
+  return selections;
+}
+
+function sampleWeightedIndex(weights, generator) {
+  const safeWeights = Array.isArray(weights)
+    ? weights.map(function (weight) {
+      return Math.max(0, weight);
+    })
+    : [1];
+  const totalWeight = safeWeights.reduce(function (sum, weight) {
+    return sum + weight;
+  }, 0);
+
+  if (totalWeight <= EPSILON) {
+    return 0;
+  }
+
+  let threshold = generator.nextFloat() * totalWeight;
+  for (let index = 0; index < safeWeights.length; index += 1) {
+    threshold -= safeWeights[index];
+    if (threshold <= 0) {
+      return index;
+    }
+  }
+
+  return Math.max(0, safeWeights.length - 1);
+}
+
+function sampleTruncatedNormalAmount(generator, { mean, sigma, clampMultiplier = 2, minimum = 1 }) {
+  const safeSigma = Math.max(0.01, sigma);
+  const delta = safeSigma * clampMultiplier;
+  const raw = mean + (safeSigma * sampleStandardNormal(generator));
+  const clipped = clamp(raw, mean - delta, mean + delta);
+  return Math.max(minimum, Math.round(clipped));
+}
+
+function sampleChestRewardPickup(generator, lateGame) {
+  const rewardIndex = sampleWeightedIndex(
+    lateGame ? CHEST_LATE_REWARD_WEIGHTS : CHEST_EARLY_REWARD_WEIGHTS,
+    generator
+  );
+
+  switch (rewardIndex) {
+    case CHEST_REWARD_MOVEMENT_MAX_BONUS:
+      return { rewardTypeKey: "movement_points_max_bonus", amount: 1 };
+    case CHEST_REWARD_BUILD_MAX_BONUS:
+      return { rewardTypeKey: "build_points_max_bonus", amount: 1 };
+    default:
+      return {
+        rewardTypeKey: "gold",
+        amount: sampleTruncatedNormalAmount(generator, {
+          mean: 35,
+          sigma: 35 * 0.18,
+          clampMultiplier: 2,
+          minimum: 1
+        })
+      };
+  }
 }
 
 function hashUnitFloat(seed, x, y, salt = 0) {
@@ -1672,6 +1882,7 @@ function createSnapshot({
   whitePieces = EMPTY_PIECES,
   blackPieces = EMPTY_PIECES,
   publicBuildings = EMPTY_BUILDINGS,
+  mapObjects = [],
   autonomousUnits = EMPTY_AUTONOMOUS_UNITS,
   weatherState = null
 } = {}) {
@@ -1687,7 +1898,7 @@ function createSnapshot({
       buildings: []
     },
     publicBuildings: deepClone(publicBuildings),
-    mapObjects: [],
+    mapObjects: deepClone(mapObjects),
     autonomousUnits: deepClone(autonomousUnits)
   };
 
@@ -1711,13 +1922,18 @@ function createReplayData({ saveName, frames }) {
     referenceData: deepClone(illustrationReferenceData),
     initialSnapshot: snapshots[0],
     turnHistory: snapshots.slice(1).map(function (snapshot, index) {
+      const frame = frames[index + 1] || {};
       return {
-        committedTurnNumber: index + 1,
-        committedActiveKingdom: index % 2,
+        committedTurnNumber: Number.isFinite(frame.committedTurnNumber)
+          ? Math.max(1, Math.trunc(frame.committedTurnNumber))
+          : index + 1,
+        committedActiveKingdom: Number.isFinite(frame.committedActiveKingdom)
+          ? Math.max(0, Math.trunc(frame.committedActiveKingdom))
+          : (Number.isFinite(snapshot.activeKingdom) ? Math.max(0, Math.trunc(snapshot.activeKingdom)) : (index % 2)),
         capturedAtUnix: index + 1,
         snapshot,
-        newEvents: [],
-        notifications: []
+        newEvents: Array.isArray(frame.newEvents) ? deepClone(frame.newEvents) : [],
+        notifications: Array.isArray(frame.notifications) ? deepClone(frame.notifications) : []
       };
     })
   };
@@ -1884,6 +2100,128 @@ const placementOrderReplayData = createReplayData({
 const placementBuildUpReplayData = createReplayData({
   saveName: "illustration-public-building-position",
   frames: buildPlacementBuildUpFrames(CONTEXT_WORLD_SEED, placementRequests, canonicalPlacementOrder)
+});
+
+const chestIllustrationWhiteKing = createKing({
+  id: 601,
+  kingdom: 0,
+  x: whiteSpawnPositions[0].x,
+  y: whiteSpawnPositions[0].y
+});
+
+const chestIllustrationBlackKing = createKing({
+  id: 602,
+  kingdom: 1,
+  x: blackSpawnPositions[0].x,
+  y: blackSpawnPositions[0].y
+});
+
+const chestSpawnIllustrationFrames = sampleWeightedUniqueCells(
+  buildChestSpawnCandidates(
+    contextualTerrainGrid,
+    staticContextBuildings,
+    chestIllustrationWhiteKing,
+    chestIllustrationBlackKing
+  ),
+  10,
+  0x3a5f91c7
+).map(function (position, index) {
+  return {
+    grid: contextualTerrainGrid,
+    whitePieces: [chestIllustrationWhiteKing],
+    blackPieces: [chestIllustrationBlackKing],
+    publicBuildings: staticContextBuildings,
+    mapObjects: [createChest({ id: 700 + index, x: position.x, y: position.y })]
+  };
+});
+
+const chestSpawnCellReplayData = createReplayData({
+  saveName: "illustration-chest-spawn-cell",
+  frames: chestSpawnIllustrationFrames
+});
+
+const chestRewardIllustrationGrid = createGameLikeBoardGrid();
+const chestRewardChestPosition = createLandPosition(chestRewardIllustrationGrid, {
+  x: BOARD_RADIUS,
+  y: BOARD_RADIUS
+});
+const chestRewardPawnStartPosition = createLandPosition(chestRewardIllustrationGrid, {
+  x: chestRewardChestPosition.x - 3,
+  y: chestRewardChestPosition.y
+});
+const chestRewardWhiteKingPosition = createLandPosition(chestRewardIllustrationGrid, {
+  x: BOARD_RADIUS - 7,
+  y: BOARD_RADIUS + 7
+});
+
+const chestRewardIllustrationKing = createKing({
+  id: 811,
+  kingdom: 0,
+  x: chestRewardWhiteKingPosition.x,
+  y: chestRewardWhiteKingPosition.y
+});
+
+const chestRewardIllustrationGenerator = createSeededGenerator(0x4b9d31c7);
+const chestRewardIllustrationPickups = Array.from({ length: 10 }, function (_, index) {
+  const lateGame = index >= 5;
+  return {
+    phaseLabel: lateGame ? "Fin de partie" : "Début de partie",
+    ...sampleChestRewardPickup(chestRewardIllustrationGenerator, lateGame)
+  };
+});
+
+const chestRewardTypeIllustrationFrames = chestRewardIllustrationPickups.flatMap(function (pickup, index) {
+  const pawnId = 812 + index;
+  const chestId = 860 + index;
+
+  return [
+    {
+      grid: chestRewardIllustrationGrid,
+      whitePieces: [
+        chestRewardIllustrationKing,
+        createPiece({
+          id: pawnId,
+          type: PIECE_PAWN,
+          kingdom: 0,
+          x: chestRewardPawnStartPosition.x,
+          y: chestRewardPawnStartPosition.y
+        })
+      ],
+      mapObjects: [createChest({ id: chestId, x: chestRewardChestPosition.x, y: chestRewardChestPosition.y })]
+    },
+    {
+      grid: chestRewardIllustrationGrid,
+      whitePieces: [
+        chestRewardIllustrationKing,
+        createPiece({
+          id: pawnId,
+          type: PIECE_PAWN,
+          kingdom: 0,
+          x: chestRewardChestPosition.x,
+          y: chestRewardChestPosition.y
+        })
+      ],
+      mapObjects: [],
+      committedTurnNumber: index + 1,
+      committedActiveKingdom: 0,
+      notifications: [
+        createChestRewardNotification({
+          kingdom: 0,
+          rewardTypeKey: pickup.rewardTypeKey,
+          amount: pickup.amount
+        })
+      ]
+    }
+  ];
+});
+
+const chestRewardTypeReplayData = createReplayData({
+  saveName: "illustration-chest-reward-type",
+  frames: chestRewardTypeIllustrationFrames
+});
+
+const chestRewardTypeStatusValues = chestRewardIllustrationPickups.flatMap(function (pickup) {
+  return [pickup.phaseLabel, pickup.phaseLabel];
 });
 
 const weatherTerrain = generateTerrainGrid({
@@ -2273,6 +2611,25 @@ const terrainFlipReplayData = createReplayData({
 export const processIllustrationsByKey = {
   "global-dirt-seed": buildIllustrationConfig(dirtFieldReplayData),
   "global-water-seed": buildIllustrationConfig(waterFieldReplayData),
+  "chest-spawn-cell": buildIllustrationConfig(chestSpawnCellReplayData, {
+    autoplayIntervalMs: 900,
+    description:
+      "Sur la même carte générée, chaque tick montre une case d'apparition possible pour un coffre. Les positions restent sur des cellules admissibles, loin des deux rois et plutôt dans des zones centrales ou contestées."
+  }),
+  "chest-reward-type": buildIllustrationConfig(chestRewardTypeReplayData, {
+    autoplayIntervalMs: 720,
+    toastCooldownMs: 1450,
+    showToasts: true,
+    showStatusOverlay: true,
+    statusOverlay: {
+      label: "Régime",
+      values: chestRewardTypeStatusValues,
+      showShield: false
+    },
+    initialZoom: 2.05,
+    description:
+      "Chaque paire de ticks montre le coffre central avant puis après ramassage. Les cinq premières ouvertures restent en début de partie avec les poids 8/3/3, les cinq dernières passent en fin de partie avec les poids 4/6/6, et les toasts reprennent le format du replay."
+  }),
   "public-building-rotation": buildIllustrationConfig(rotationReplayData),
   "public-building-flip": buildIllustrationConfig(flipReplayData),
   "public-building-position": buildIllustrationConfig(placementBuildUpReplayData, {

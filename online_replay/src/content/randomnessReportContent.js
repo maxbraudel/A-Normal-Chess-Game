@@ -294,6 +294,7 @@ std::shuffle(placements.begin(), placements.end(), random);`,
 const categoricalProcesses = [
   {
     title: "Case d'apparition d'un coffre",
+    illustrationKey: "chest-spawn-cell",
     system: "Coffres",
     lawUse: "Catégorielle pondérée sur les cellules admissibles",
     variable: L`C \in \{c_1,\dots,c_n\}`,
@@ -315,6 +316,7 @@ const categoricalProcesses = [
   },
   {
     title: "Type de récompense du coffre",
+    illustrationKey: "chest-reward-type",
     system: "Coffres",
     lawUse: "Catégorielle pondérée à deux régimes temporels",
     variable: L`R \in \{\text{gold},\text{move},\text{build}\}`,
@@ -374,7 +376,7 @@ switch (dist(generator)) {
     lawUse: "Catégorielle pondérée sur les types de pièces visibles",
     variable: L`T \in \{\text{pawn},\text{knight},\text{bishop},\text{rook},\text{queen}\}`,
     phenomenon:
-      "Choisit quel type de pièce ennemie la pièce du diable va chercher en priorité.",
+      "Quand une pièce du diable repère plusieurs types de pièces dans le royaume qu'elle poursuit, cette loi détermine quelle famille elle considère comme sa proie prioritaire pour la suite de la chasse. Elle ne choisit donc pas encore une pièce précise ni une case d'apparition, mais d'abord la catégorie de cible à privilégier, par exemple pion, cavalier ou reine.",
     parameters: [
       "poids actifs: pawn 8, knight 14, bishop 14, rook 26, queen 38",
       "les types absents du champ visible recoivent le poids 0"
@@ -394,7 +396,7 @@ switch (dist(generator)) {
     lawUse: "Catégorielle pondérée par proximité de chemin",
     variable: L`O \in \{o_1,\dots,o_m\}`,
     phenomenon:
-      "Choisit, parmi plusieurs options de projection vers une cible visible, celle qui sera retenue au moment de l'apparition.",
+      "Une fois la cible repérée, le système recense plusieurs points d'entrée possibles sur le bord du plateau pour faire apparaître la pièce du diable. Cette loi choisit laquelle de ces options d'apparition sera utilisée, en privilégiant celles qui mènent plus vite vers la cible sans rendre l'entrée complètement prévisible.",
     parameters: [
       L`w(o)=\max\bigl(1, 2D-\mathrm{dist}(o)+1\bigr)`,
       "`D = board.getDiameter()`"
@@ -408,46 +410,6 @@ switch (dist(generator)) {
     dependence:
       "Conditionné par le type de pièce infernale manifestée et par le graphe de déplacements accessible."
   },
-  {
-    title: "Type de remplacement d'une pièce du diable",
-    system: "Pièces du diable",
-    lawUse: "Catégorielle pondérée avec bonus de persistance",
-    variable: L`T \in \{\text{pawn},\text{knight},\text{bishop},\text{rook},\text{queen}\}`,
-    phenomenon:
-      "Quand la cible initiale devient impossible, choisit un nouveau type de cible visible.",
-    parameters: [
-      "même base de poids (8, 14, 14, 26, 38)",
-        "si le type correspond au type de cible précédemment privilégié, son poids est doublé"
-    ],
-    why:
-      "Le remplacement doit rester cohérent avec la priorité précédente tout en laissant une vraie possibilité de redirection. Réinitialiser complètement la distribution rendrait le changement de cible trop imprévisible et difficile à lire pour les joueurs. Conserver les mêmes poids de base avec un bonus sur le type précédemment poursuivi modélise une inertie comportementale réaliste : la pièce du diable tend à persister dans sa stratégie, mais peut l'abandonner. Ce bonus est suffisamment simple pour être compris dans un rapport de debug et ajustable sans changer la logique du code.",
-    simulation:
-      "La boucle de remplacement reconstruit les poids restants puis applique `std::discrete_distribution<std::size_t>`.",
-    parameterChoice:
-      "Le doublement du poids mémorise une inertie comportementale simple à expliquer et facile à régler.",
-    dependence:
-      "Dépend du type précédemment poursuivi et des types encore visibles."
-  },
-  {
-    title: "Cible de remplacement d'une pièce du diable",
-    system: "Pièces du diable",
-    lawUse: "Catégorielle pondérée parmi les cibles atteignables du type retenu",
-    variable: L`Y \in \{y_1,\dots,y_r\}`,
-    phenomenon:
-      "Choisit la cible concrète une fois le type de remplacement fixe.",
-    parameters: [
-      L`w(y)=\max\bigl(1, 2D-\mathrm{dist}(y)+1\bigr)`,
-      "seules les cibles atteignables sont conservées"
-    ],
-    why:
-      "La priorité reste donnée aux cibles rapides d'accès, mais le tirage conserve de la diversité tactique. Utiliser le même schéma de pondération par proximité que pour la sélection d'option d'apparition maintient une logique cohérente à travers tout le système des pièces du diable : la distance de chemin est le critère unique de pondération, qu'il s'agisse du choix d'entrée ou de la sélection de cible. Appliquer un schéma différent à ce stade aurait introduit une incohérence comportementale difficile à expliquer et à régler.",
-    simulation:
-      "Le code reconstruit `reachableTargets` et `reachableWeights`, puis échantillonne une cible par `std::discrete_distribution`.",
-    parameterChoice:
-      "Le même schéma de poids que pour les options d'apparition maintient une logique unique de proximité pour les pièces du diable.",
-    dependence:
-      "Fortement couplé à l'état du plateau, au type retenu juste avant et au masque de visibilité météo."
-  }
 ];
 
 const bernoulliProcesses = [
@@ -1033,18 +995,6 @@ const processTheoryByTitle = {
     note:
       "Cette catégorielle arbitre entre plusieurs heuristiques d'apparition cible. Les poids varient avec l'état tactique."
   }),
-  "Type de remplacement d'une pièce du diable": makeNominalTheory({
-    support: L`\{\text{pawn},\text{knight},\text{bishop},\text{rook},\text{queen}\}`,
-    law: L`\mathbb{P}(T=t_i)=\frac{w_i}{\sum_j w_j}`,
-    note:
-      "Le tirage porte sur une catégorie de pièce, pas sur une valeur numérique ordonnée."
-  }),
-  "Cible de remplacement d'une pièce du diable": makeNominalTheory({
-    support: L`\{c_1,\dots,c_m\}`,
-    law: L`\mathbb{P}(C=c_i)=\frac{w_i}{\sum_j w_j}`,
-    note:
-      "Le support regroupe les cibles admissibles pour le remplacement. On compare donc des poids et non des moyennes."
-  }),
   "Royaume cible d'une pièce du diable": createTheory({
     support: L`K_t\in\{0,1\}`,
     law: L`K_t\sim\mathrm{Bernoulli}(p_t)`,
@@ -1303,7 +1253,7 @@ export const randomnessReport = {
   },
   summaryStats: [
     {
-      value: "38",
+      value: "33",
       label: "processus actifs",
       detail: "inventoriés dans l'audit runtime et reclassés ici par lois"
     },

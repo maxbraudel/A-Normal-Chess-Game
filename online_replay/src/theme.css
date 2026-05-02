@@ -888,6 +888,62 @@ a {
   display: none !important;
 }
 
+.illustration-map--show-toasts .replay-toast-stack {
+  display: flex !important;
+  top: 10px;
+  right: 10px;
+  left: auto;
+  bottom: auto;
+  align-items: stretch;
+  gap: 8px;
+  max-width: min(320px, calc(100% - 20px));
+}
+
+.illustration-map--show-toasts .replay-toast {
+  width: 100%;
+  max-width: none;
+  min-height: 0;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+}
+
+.illustration-map--show-toasts .turn-indicator-icon,
+.illustration-map--show-status-overlay .illustration-map__custom-overlay .turn-indicator-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.illustration-map--show-toasts .overlay-label,
+.illustration-map--show-status-overlay .illustration-map__custom-overlay .overlay-label {
+  font-size: 10px;
+}
+
+.illustration-map--show-toasts .overlay-value,
+.illustration-map--show-status-overlay .illustration-map__custom-overlay .overlay-value {
+  font-size: 13px;
+}
+
+.illustration-map__custom-overlay-group {
+  display: none !important;
+}
+
+.illustration-map--show-status-overlay .illustration-map__custom-overlay-group,
+.illustration-map--show-status-overlay .illustration-map__custom-overlay {
+  display: flex !important;
+}
+
+.illustration-map--show-status-overlay .illustration-map__custom-overlay-group {
+  top: 10px;
+  left: 10px;
+}
+
+.illustration-map--show-status-overlay .illustration-map__custom-overlay {
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 14px;
+}
+
 .rapport-intro-vignette .zoom-controls,
 .illustration-map .zoom-controls {
   pointer-events: auto;
