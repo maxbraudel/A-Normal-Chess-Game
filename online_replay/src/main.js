@@ -5,6 +5,27 @@ import "./theme.css";
 import App from "./App.vue";
 import router from "./router/index.js";
 
+function waitForCriticalFonts(timeoutMs = 2500) {
+	const fontSet = document.fonts;
+
+	if (!fontSet?.load) {
+		return Promise.resolve();
+	}
+
+	const criticalFonts = [
+		fontSet.load('400 16px "Rapport Inter"'),
+		fontSet.load('700 16px "Rapport Inter"'),
+		fontSet.load('500 24px "Rapport Handwriting"')
+	];
+
+	return Promise.race([
+		Promise.allSettled(criticalFonts).then(() => fontSet.ready),
+		new Promise((resolve) => {
+			window.setTimeout(resolve, timeoutMs);
+		})
+	]);
+}
+
 function dismissStartupLoader() {
 	const startupLoader = document.getElementById("startup-loader");
 
@@ -53,10 +74,13 @@ function installInteractionGuards() {
 	}, true);
 }
 
-installInteractionGuards();
+async function bootstrap() {
+	installInteractionGuards();
+	createApp(App).use(router).mount("#app");
+	await waitForCriticalFonts();
+	window.requestAnimationFrame(() => {
+		dismissStartupLoader();
+	});
+}
 
-createApp(App).use(router).mount("#app");
-
-window.setTimeout(() => {
-	dismissStartupLoader();
-}, 0);
+bootstrap();
