@@ -1360,7 +1360,7 @@ export const randomnessReport = {
     kicker: "",
     title: "A Normal Chess Game",
     lead:
-      "Un jeu d'échecs de conquête où le territoire, l'économie, la météo et le brouillard recomposent chaque partie.",
+      "Un jeu d'échecs de conquête où le territoire, l'économie, la météo et le brouillard redéfinissent chaque partie.",
     source: ""
   },
   gameIntroduction: {

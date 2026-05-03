@@ -4,9 +4,25 @@ body,
   min-height: 100%;
 }
 
+@font-face {
+  font-family: "Rapport Inter";
+  src: url("../assets/fonts/manrope.ttf");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Rapport Handwriting";
+  src: url("../assets/fonts/handwriting.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   color-scheme: light;
-  font-family: "Trebuchet MS", "Segoe UI Variable Text", sans-serif;
+  font-family: "Rapport Inter", "Inter", "Segoe UI Variable Text", sans-serif;
   --surface-900: #090d0a;
   --surface-850: #101811;
   --surface-800: #151d16;
@@ -61,7 +77,7 @@ button,
 input,
 textarea,
 select {
-  font-family: "Trebuchet MS", "Segoe UI Variable Text", sans-serif;
+  font-family: "Rapport Inter", "Inter", "Segoe UI Variable Text", sans-serif;
 }
 
 h1,
@@ -70,7 +86,7 @@ h3,
 h4,
 h5,
 h6 {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Rapport Inter", "Inter", "Segoe UI Variable Text", sans-serif;
   letter-spacing: 0.01em;
 }
 
@@ -109,13 +125,25 @@ a {
 
 .rapport-hero__intro-note {
   justify-self: end;
-  width: min(34ch, 100%);
+  width: min(50ch, 100%);
   margin: 0;
   color: rgba(239, 229, 199, 0.84);
+  font-family: "Rapport Handwriting", "Segoe Print", "Bradley Hand", cursive;
   font-size: clamp(20px, 2.3vw, 30px);
   font-weight: 500;
   line-height: 1.25;
   text-align: right;
+}
+
+.rapport-page__closing-note {
+  width: min(20ch, 100%);
+  margin: 44px 0 0;
+  color: rgba(239, 229, 199, 0.84);
+  font-family: "Rapport Handwriting", "Segoe Print", "Bradley Hand", cursive;
+  font-size: clamp(20px, 2.3vw, 30px);
+  font-weight: 500;
+  line-height: 1.25;
+  text-align: left;
 }
 
 .rapport-hero__kicker {
@@ -129,6 +157,7 @@ a {
 .rapport-hero h1 {
   max-width: 11ch;
   margin: 0;
+  font-weight: 600;
   font-size: clamp(46px, 7vw, 86px);
   line-height: 0.95;
 }
@@ -1224,7 +1253,7 @@ a {
 .site-shell--rapport .rapport-page p,
 .site-shell--rapport .rapport-page li,
 .site-shell--rapport .rapport-page a {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Rapport Inter", "Inter", "Segoe UI Variable Text", sans-serif;
 }
 
 .site-shell--rapport .rapport-hero__kicker,
@@ -1236,7 +1265,7 @@ a {
 .site-shell--rapport .rapport-formula-card__label {
   font-weight: 800;
   color: #3455cd;
-  font-family: "Trebuchet MS", "Segoe UI Variable Text", sans-serif;
+  font-family: "Rapport Inter", "Inter", "Segoe UI Variable Text", sans-serif;
 }
 
 .site-shell--rapport .rapport-hero {
@@ -1249,12 +1278,19 @@ a {
 .site-shell--rapport .rapport-hero h1 {
   max-width: none;
   color: #111111;
+  font-weight: 700;
   font-size: clamp(40px, 5.8vw, 60px);
   line-height: 1.06;
 }
 
-.site-shell--rapport .rapport-hero__intro-note {
+.site-shell--rapport .rapport-page p.rapport-hero__intro-note {
   color: #4e493d;
+  font-family: "Rapport Handwriting", "Segoe Print", "Bradley Hand", cursive;
+}
+
+.site-shell--rapport .rapport-page p.rapport-page__closing-note {
+  color: #4e493d;
+  font-family: "Rapport Handwriting", "Segoe Print", "Bradley Hand", cursive;
 }
 
 .site-shell--rapport .rapport-hero__lead,
@@ -1294,7 +1330,7 @@ a {
 
 .site-shell--rapport .rapport-summary-card__label {
   color: #1f1f1f;
-  font-family: "Trebuchet MS", "Segoe UI Variable Text", sans-serif;
+  font-family: "Rapport Inter", "Inter", "Segoe UI Variable Text", sans-serif;
   font-size: 12px;
   letter-spacing: 0.14em;
 }
@@ -1336,7 +1372,7 @@ a {
 
 .site-shell--rapport .rapport-toc__number {
   color: #7a7a7a;
-  font-family: "Trebuchet MS", "Segoe UI Variable Text", sans-serif;
+  font-family: "Rapport Inter", "Inter", "Segoe UI Variable Text", sans-serif;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -1470,7 +1506,7 @@ a {
   min-width: 2.2em;
   margin-right: 0.18em;
   color: #6b6b6b;
-  font-family: "Trebuchet MS", "Segoe UI Variable Text", sans-serif;
+  font-family: "Rapport Inter", "Inter", "Segoe UI Variable Text", sans-serif;
   font-size: 0.72em;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -1586,13 +1622,13 @@ a {
 }
 
 .site-shell--rapport .rapport-source-tag {
-  font-family: "Trebuchet MS", "Segoe UI Variable Text", sans-serif;
+  font-family: "Rapport Inter", "Inter", "Segoe UI Variable Text", sans-serif;
 }
 
 .site-shell--rapport .rapport-stats-block__eyebrow,
 .site-shell--rapport .rapport-stats-metric__label {
   color: #6e6e6e;
-  font-family: "Trebuchet MS", "Segoe UI Variable Text", sans-serif;
+  font-family: "Rapport Inter", "Inter", "Segoe UI Variable Text", sans-serif;
 }
 
 .site-shell--rapport .rapport-stats-block__description,
@@ -1605,7 +1641,7 @@ a {
 
 .site-shell--rapport .rapport-stats-example__label {
   color: #6e6e6e;
-  font-family: "Trebuchet MS", "Segoe UI Variable Text", sans-serif;
+  font-family: "Rapport Inter", "Inter", "Segoe UI Variable Text", sans-serif;
 }
 
 .site-shell--rapport .rapport-stats-example__description,
