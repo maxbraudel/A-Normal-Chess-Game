@@ -86,6 +86,10 @@ defineProps({
       </h2>
     </header>
 
+    <div v-if="section.disclaimer" class="rapport-section-disclaimer">
+      <strong><InlineRichText :text="section.disclaimer" tag="span" /></strong>
+    </div>
+
     <div class="rapport-richtext">
       <InlineRichText v-for="paragraph in section.description" :key="paragraph" :text="paragraph" />
     </div>
@@ -118,3 +122,15 @@ defineProps({
     </div>
   </section>
 </template>
+
+<style scoped>
+.rapport-section-disclaimer {
+  background: #fee2e2;
+  color: #7f1d1d;
+  padding: 10px 16px;
+  border-radius: 4px;
+  margin-top: 12px;
+  margin-bottom: 4px;
+  line-height: 1.6;
+}
+</style>

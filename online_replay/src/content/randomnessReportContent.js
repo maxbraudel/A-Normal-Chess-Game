@@ -130,7 +130,7 @@ placement.flipMask             = flipMaskDist(random);`,
     simulation:
       "`selectDispersedCandidate` trie les candidats, calcule `topCount`, puis tire uniformément un index dans ce sous-ensemble.",
     parameterChoice:
-      "Le sous-ensemble de qualité `K = min(n, max(3, ⌈n/6⌉))` retient environ un sixième des candidats : pour 60 candidats admissibles cela donne `K = 10`, soit les 10 meilleures positions, ni une seule position (déterministe), ni la moitié (trop de bruit). Le plancher à 3 préserve un minimum de variété même quand peu de candidats sont disponibles, par exemple en fin de génération avec peu de place libre. Le score `3.5 × dist_existants + 2.0 × dist_bord + 0.35 × dist_centre` encode trois objectifs distincts : la dispersion entre bâtiments publics (coefficient 3.5, objectif principal), l'éloignement du bord pour éviter les placements en coin peu accessibles (coefficient 2.0), et une légère attraction vers le centre (coefficient 0.35, rôle secondaire d'équilibrage). Le coefficient de distance au bord est délibérément inférieur à celui de la dispersion pour ne pas sacrifier la répartition spatiale au profit d'une attraction trop forte vers le centre.",
+      "Le sous-ensemble de qualité `K = min(n, max(3, ⌈n/6⌉))` retient environ un sixième des candidats : pour 60 candidats admissibles cela donne `K = 10`, soit les 10 meilleures positions, ni une seule position (déterministe), ni la moitié (trop de bruit). Le plancher à 3 préserve un minimum de variété même quand peu de candidats sont disponibles, par exemple en fin de génération avec peu de place libre. Le score `3.5 × d_any(p) + 2.0 × d_same(p) + 0.35 × d̄(p)` encode trois objectifs distincts : maximiser la distance au bâtiment existant le plus proche quel que soit son type (coefficient 3.5, objectif principal de dispersion générale), maximiser la distance au bâtiment du même type le plus proche (coefficient 2.0, évite le regroupement des mines entre elles et des fermes entre elles), et maximiser la distance moyenne à tous les bâtiments existants (coefficient 0.35, contribution secondaire à l'étalement global). Le coefficient du terme de même type est plus faible que celui de la dispersion générale : si peu de bâtiments du même type ont déjà été placés, cette contrainte reste souple et laisse priorité à la séparation générale.",
     dependence:
       "Conditionne par les placements déjà retenus, donc fortement dépendante de l'historique de génération."
   },
@@ -492,9 +492,11 @@ const truncatedNormalProcesses = [
 `// RewardProfileSampling.hpp
 const double sigma = std::max(1.0, mean * sigmaMultiplier);
 const double delta = sigma * clampMultiplier;
-// Normale centrée sur mean, tronquée dans [mean-delta, mean+delta] :
+// La borne basse intègre le plancher minimum :
+const double minValue = std::max((double)minimum, mean - delta);
+const double maxValue = std::max(minValue, mean + delta);
 std::normal_distribution<double> dist(mean, sigma);
-const double x = std::clamp(dist(gen), mean - delta, mean + delta);
+const double x = std::clamp(dist(gen), minValue, maxValue);
 return std::max(minimum, static_cast<int>(std::lround(x)));`,
     simulationFromUniform:
       "La STL implémente la normale par l'algorithme de **Box-Muller** : à partir de deux uniformes `U1, U2 ∈ (0,1)`, on calcule `Z = sqrt(−2 ln U1) · cos(2π U2)`, puis `X = μ + σZ`. Si X sort de `[a, b]` (troncature), on recommence (`rejection sampling`). Cette méthode tire deux uniformes pour produire deux valeurs gaussiennes indépendantes simultanément.",
@@ -624,7 +626,7 @@ float multiplier = (float)dist(gen);
     simulationFromUniform:
       "Si `Z ~ N(0,1)` est obtenu via Box-Muller à partir de deux uniformes, alors `X = e^{μ + σZ} ~ LogNormal(μ, σ²)`. La transformation `exp` garantit `X > 0` sans aucun accept/reject. La STL compose directement Box-Muller et l'exponentielle en une seule passe.",
     parameterChoice:
-      "La valeur `μ = −0.12` place la médiane à `exp(−0.12) ≈ 0.89`, légèrement sous 1 : la plupart des cellules reçoivent un multiplicateur proche mais légèrement inférieur à la valeur nominale, évitant que le brouillard soit en moyenne plus opaque que prévu. La valeur `σ = 0.35` donne une dispersion modérée : l'intervalle `[exp(μ − σ), exp(μ + σ)] ≈ [0.63, 1.32]` couvre la majorité des multiplicateurs, avec une queue droite permettant quelques poches très opaques. Le clamp d'alpha `[0.22, 0.82]` traduit les multiplicateurs en opakités visuellement admissibles : `0.22` correspond à un brouillard fin (presque transparent), `0.82` à un brouillard épais sans être complètement solide. Ce clamp est une décision de design visuel indépendante de la loi statistique : son double rôle est d'éviter les cellules quasi-transparentes (inutiles tactiquement) et quasi-solides (non lisibles).",
+      "La valeur `μ = −0.12` place la médiane à `exp(−0.12) ≈ 0.89`, légèrement sous 1 : la plupart des cellules reçoivent un multiplicateur proche mais légèrement inférieur à la valeur nominale, évitant que le brouillard soit en moyenne plus opaque que prévu. La valeur `σ = 0.35` donne une dispersion modérée : l'intervalle `[exp(μ − σ), exp(μ + σ)] ≈ [0.63, 1.26]` couvre la majorité des multiplicateurs, avec une queue droite permettant quelques poches très opaques. Le clamp d'alpha `[0.22, 0.82]` traduit les multiplicateurs en opakités visuellement admissibles : `0.22` correspond à un brouillard fin (presque transparent), `0.82` à un brouillard épais sans être complètement solide. Ce clamp est une décision de design visuel indépendante de la loi statistique : son double rôle est d'éviter les cellules quasi-transparentes (inutiles tactiquement) et quasi-solides (non lisibles).",
     dependence:
       "Toutes les cellules d'un même brouillard partagent la même graine de densité; le champ n'est donc pas i.i.d. (**indépendant et identiquement distribué**) à l'échelle du brouillard."
   }
@@ -1881,9 +1883,11 @@ export const randomnessReport = {
       id: "procedural-fields",
       title: "Variables personnalisées et champs procéduraux corrélés",
       badge: "4 cartes",
+      disclaimer:
+        "Ces processus ne sont pas des « lois connues » au sens probabiliste strict. Ils reposent sur une seed uniforme 32 bits (loi connue) suivie d'un post-traitement déterministe (interpolation de hash, empilement d'octaves, seuillage). Ils ne comptent donc pas dans le minimum de 8 variables aléatoires de loi connue exigé par les contraintes du projet, minimum qui est pleinement satisfait par les 25 autres cartes.",
       description: [
         "Tous les processus aléatoires du jeu ne sont pas raisonnablement résumables par une unique variable scalaire. Les champs de terrain et les déformations de contour du brouillard sont des fonctions aléatoires de la cellule et d'une seed, avec forte corrélation spatiale.",
-        "**Du point de vue des contraintes (lois connues)**: ces processus reposent entièrement sur une **seed uniforme discrète sur 32 bits**, loi connue, pilotant ensuite un **post-traitement déterministe** (interpolation de hash, empilement d'octaves, seuillage). La VA de base est bien une uniforme connue; les structures spatiales émergent d'un calcul déterministe à partir de cette seed. Ils ne constituent donc pas des « lois inconnues » mais des transformations déterministes d'uniformes.",
+        "Du point de vue des contraintes, ne constituent pas des « lois inconnues » mais des transformations déterministes d'uniformes. ",
         "Les traiter comme des Bernoulli i.i.d. (**indépendantes et identiquement distribuées**), serait mathématiquement faux et trompeur au niveau du gameplay: on perdrait exactement la structure de régions, de bords et de textures que le code cherche à produire."
       ],
       formulaCards: [
@@ -1901,7 +1905,7 @@ export const randomnessReport = {
         }
       ],
       notes: [
-        "Ici, la bonne unité mathématique n'est plus 'une réalisation d'une loi scalaire', mais 'une réalisation d'un champ spatial'.",
+        "Ici, la bonne unité mathématique n'est plus \"une réalisation d'une loi scalaire\", mais \"une réalisation d'un champ spatial\".",
         "Les statistiques pertinentes sont alors la couverture, la taille des composantes, la corrélation spatiale, la rugosité de bord ou la distribution des rayons effectifs."
       ],
       processes: illustratedProceduralProcesses
